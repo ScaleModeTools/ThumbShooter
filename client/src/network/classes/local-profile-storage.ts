@@ -6,6 +6,7 @@ import {
 } from "@thumbshooter/shared";
 import type {
   AudioSettingsSnapshot,
+  AffineAimTransformSnapshot,
   CalibrationShotSample,
   PlayerProfileSnapshot
 } from "@thumbshooter/shared";
@@ -82,6 +83,25 @@ function isCalibrationShotSample(
   );
 }
 
+function isAffineAimTransformSnapshot(
+  value: unknown
+): value is AffineAimTransformSnapshot {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { xCoefficients, yCoefficients } = value;
+
+  return (
+    Array.isArray(xCoefficients) &&
+    xCoefficients.length === 3 &&
+    xCoefficients.every((entry) => typeof entry === "number") &&
+    Array.isArray(yCoefficients) &&
+    yCoefficients.length === 3 &&
+    yCoefficients.every((entry) => typeof entry === "number")
+  );
+}
+
 function parseStoredPlayerProfileRecord(
   rawValue: string | null
 ): StoredPlayerProfileRecord | null {
@@ -112,12 +132,29 @@ function parseStoredPlayerProfileRecord(
 }
 
 function parseStoredCalibrationRecord(
-  rawValue: string | null
+  rawValue: string | null,
+  expectedVersion: ProfileStoragePlan["calibrationRecordVersion"]
 ): StoredCalibrationRecord | null {
   const parsedValue = readParsedStorageValue(rawValue);
 
+  if (!isRecord(parsedValue)) {
+    return null;
+  }
+
   if (
-    !isRecord(parsedValue) ||
+    parsedValue.version === undefined &&
+    Array.isArray(parsedValue.calibrationSamples) &&
+    parsedValue.calibrationSamples.every(isCalibrationShotSample)
+  ) {
+    return {
+      version: expectedVersion,
+      aimCalibration: null,
+      calibrationSamples: parsedValue.calibrationSamples
+    };
+  }
+
+  if (
+    parsedValue.version !== expectedVersion ||
     !Array.isArray(parsedValue.calibrationSamples) ||
     !parsedValue.calibrationSamples.every(isCalibrationShotSample)
   ) {
@@ -125,6 +162,12 @@ function parseStoredCalibrationRecord(
   }
 
   return {
+    version: expectedVersion,
+    aimCalibration:
+      parsedValue.aimCalibration === null ||
+      isAffineAimTransformSnapshot(parsedValue.aimCalibration)
+        ? parsedValue.aimCalibration
+        : null,
     calibrationSamples: parsedValue.calibrationSamples
   };
 }
@@ -156,7 +199,8 @@ export class LocalProfileStorage {
       storage.getItem(this.#plan.profileStorageKey)
     );
     const storedCalibrationRecord = parseStoredCalibrationRecord(
-      storage.getItem(this.#plan.calibrationStorageKey)
+      storage.getItem(this.#plan.calibrationStorageKey),
+      this.#plan.calibrationRecordVersion
     );
 
     if (storedProfileRecord !== null) {
@@ -165,6 +209,7 @@ export class LocalProfileStorage {
           username: storedProfileRecord.username,
           selectedReticleId: storedProfileRecord.selectedReticleId,
           audioSettings: storedProfileRecord.audioSettings,
+          aimCalibration: storedCalibrationRecord?.aimCalibration ?? null,
           calibrationSamples: storedCalibrationRecord?.calibrationSamples ?? []
         }),
         source: "profile-record"
@@ -204,6 +249,8 @@ export class LocalProfileStorage {
       audioSettings: snapshot.audioSettings
     };
     const storedCalibrationRecord: StoredCalibrationRecord = {
+      version: this.#plan.calibrationRecordVersion,
+      aimCalibration: snapshot.aimCalibration,
       calibrationSamples: snapshot.calibrationSamples
     };
 

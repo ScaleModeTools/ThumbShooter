@@ -51,10 +51,10 @@ export function GameMenuDialog({
               Entry: {gameMenuPlan.entryActions.join(" / ")}
             </Badge>
           </div>
-          <DialogTitle>In-game menu shell</DialogTitle>
+          <DialogTitle>In-game menu</DialogTitle>
           <DialogDescription>
-            This milestone keeps the menu overlay real while the live tracking,
-            arena runtime, and weapon loop stay deferred.
+            The calibrated WebGPU runtime is live. Enemies, bird behavior, and
+            the weapon fire loop remain deferred to the next milestone.
           </DialogDescription>
         </DialogHeader>
 
@@ -64,7 +64,8 @@ export function GameMenuDialog({
               <div>
                 <p className="text-sm font-medium">Controls</p>
                 <p className="text-sm text-muted-foreground">
-                  Current shell guidance before live aim mapping exists.
+                  Live calibrated aim is active; the firing and reload loop is
+                  still deferred.
                 </p>
               </div>
               <Badge variant="outline">{gameMenuPlan.sections[0]?.label}</Badge>
@@ -145,7 +146,7 @@ export function GameMenuDialog({
             </div>
 
             <Button onClick={onRecalibrationRequest} variant="outline">
-              Restart calibration shell
+              Restart nine-point calibration
             </Button>
           </section>
         </div>

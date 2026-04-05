@@ -1,4 +1,5 @@
 import type {
+  AffineAimTransformSnapshot,
   AudioChannelId,
   AudioSettingsSnapshot,
   BackgroundMusicEngine,
@@ -57,6 +58,9 @@ type PlayerProfileReticleUsesReticleId = AssertTrue<
 type PlayerProfileAudioUsesAudioSettings = AssertTrue<
   IsEqual<PlayerProfileSnapshot["audioSettings"], AudioSettingsSnapshot>
 >;
+type PlayerProfileAimCalibrationUsesSharedTransform = AssertTrue<
+  IsEqual<PlayerProfileSnapshot["aimCalibration"], AffineAimTransformSnapshot | null>
+>;
 type NormalizedPointXAxisUsesBrandedScalar = AssertTrue<
   IsEqual<NormalizedViewportPoint["x"], NormalizedViewportScalar>
 >;
@@ -75,6 +79,7 @@ export type SharedContractTypeTests =
   | ReticleIdMatches
   | PlayerProfileReticleUsesReticleId
   | PlayerProfileAudioUsesAudioSettings
+  | PlayerProfileAimCalibrationUsesSharedTransform
   | NormalizedPointXAxisUsesBrandedScalar
   | NormalizedPointYAxisUsesBrandedScalar
   | CreateUsernameReturnMatches;

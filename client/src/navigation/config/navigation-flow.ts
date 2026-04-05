@@ -11,12 +11,12 @@ export const navigationFlow = {
     },
     {
       id: "calibration",
-      label: "Review calibration shell",
+      label: "Capture nine-point calibration",
       requiresPrevious: ["permissions"]
     },
     {
       id: "gameplay",
-      label: "Open the gameplay shell",
+      label: "Boot WebGPU gameplay",
       requiresPrevious: ["calibration"]
     },
     {

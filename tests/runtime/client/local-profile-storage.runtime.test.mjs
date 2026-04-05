@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
-import { AudioSettings, PlayerProfile, createCalibrationShotSample } from "@thumbshooter/shared";
+import {
+  AffineAimTransform,
+  AudioSettings,
+  PlayerProfile,
+  createCalibrationShotSample
+} from "@thumbshooter/shared";
 
 import { createClientModuleLoader } from "./load-client-module.mjs";
 
@@ -52,7 +57,13 @@ test("LocalProfileStorage saves and reloads a persisted player profile", async (
     username: "thumbshooter-user"
   })
     .withAudioSettings(AudioSettings.create({ musicVolume: 0.3, sfxVolume: 0.6 }).snapshot)
-    .withCalibrationShot(createCalibrationFixture());
+    .withCalibrationShot(createCalibrationFixture())
+    .withAimCalibration(
+      AffineAimTransform.fromSnapshot({
+        xCoefficients: [1, 0, 0],
+        yCoefficients: [0, 1, 0]
+      }).snapshot
+    );
 
   profileStorage.saveProfile(storage, profile.snapshot);
 
@@ -62,6 +73,10 @@ test("LocalProfileStorage saves and reloads a persisted player profile", async (
   assert.equal(hydration.profile?.snapshot.username, "thumbshooter-user");
   assert.equal(hydration.profile?.snapshot.audioSettings.mix.musicVolume, 0.3);
   assert.equal(hydration.profile?.calibrationSampleCount, 1);
+  assert.deepEqual(hydration.profile?.snapshot.aimCalibration, {
+    xCoefficients: [1, 0, 0],
+    yCoefficients: [0, 1, 0]
+  });
 });
 
 test("LocalProfileStorage rehydrates username-only storage into a fresh profile", async () => {
@@ -79,7 +94,39 @@ test("LocalProfileStorage rehydrates username-only storage into a fresh profile"
 
   assert.equal(hydration.source, "username-only");
   assert.equal(hydration.profile?.snapshot.username, "shell-user");
+  assert.equal(hydration.profile?.snapshot.aimCalibration, null);
   assert.equal(hydration.profile?.calibrationSampleCount, 0);
+});
+
+test("LocalProfileStorage hydrates legacy calibration records without a persisted fit", async () => {
+  const { LocalProfileStorage } = await clientLoader.load(
+    "/src/network/classes/local-profile-storage.ts"
+  );
+  const { profileStoragePlan } = await clientLoader.load(
+    "/src/network/config/profile-storage.ts"
+  );
+  const storage = new MemoryStorage();
+
+  storage.setItem(
+    profileStoragePlan.profileStorageKey,
+    JSON.stringify({
+      username: "legacy-user",
+      selectedReticleId: "default-ring",
+      audioSettings: AudioSettings.create().snapshot
+    })
+  );
+  storage.setItem(
+    profileStoragePlan.calibrationStorageKey,
+    JSON.stringify({
+      calibrationSamples: [createCalibrationFixture()]
+    })
+  );
+
+  const hydration = new LocalProfileStorage().loadProfile(storage);
+
+  assert.equal(hydration.profile?.snapshot.username, "legacy-user");
+  assert.equal(hydration.profile?.snapshot.aimCalibration, null);
+  assert.equal(hydration.profile?.calibrationSampleCount, 1);
 });
 
 test("LocalProfileStorage clears all persisted keys", async () => {

@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
+    chunkSizeWarningLimit: 650,
     rolldownOptions: {
       output: {
         codeSplitting: {
@@ -14,6 +15,11 @@ export default defineConfig({
               maxSize: 240 * 1024,
               name: "strudel",
               test: /node_modules[\\/](?:@strudel|superdough)[\\/]/
+            },
+            {
+              maxSize: 280 * 1024,
+              name: "three",
+              test: /node_modules[\\/]three[\\/]/
             }
           ]
         }
@@ -24,6 +30,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@mediapipe/tasks-vision": fileURLToPath(
+        new URL("../node_modules/@mediapipe/tasks-vision/vision_bundle.mjs", import.meta.url)
+      ),
       "@thumbshooter/shared": fileURLToPath(
         new URL("../packages/shared/src/index.ts", import.meta.url)
       )

@@ -1,4 +1,10 @@
 export { gameFoundationConfig } from "./config/game-foundation";
+export { calibrationCaptureConfig } from "./config/calibration-capture";
+export { gameplayRuntimeConfig } from "./config/gameplay-runtime";
+export { handTrackingRuntimeConfig } from "./config/hand-tracking-runtime";
+export { HandTrackingRuntime } from "./classes/hand-tracking-runtime";
+export { NinePointCalibrationSession } from "./classes/nine-point-calibration-session";
+export { WebGpuGameplayRuntime } from "./classes/webgpu-gameplay-runtime";
 export { WebGpuGameplayCapabilityProbe } from "./classes/webgpu-gameplay-capability-probe";
 export {
   calibrationTransformModels,
@@ -10,6 +16,12 @@ export {
   triggerGestureModes,
   webGpuFallbackPolicies
 } from "./types/game-foundation";
+export { calibrationCaptureStates } from "./types/calibration-session";
+export { gameplayRuntimeLifecycleStates } from "./types/gameplay-runtime";
+export {
+  handTrackingLifecycleStates,
+  handTrackingPoseStates
+} from "./types/hand-tracking";
 export {
   webGpuGameplayCapabilityReasons,
   webGpuGameplayCapabilityStatuses
@@ -27,6 +39,36 @@ export type {
   TriggerGestureMode,
   WebGpuFallbackPolicy
 } from "./types/game-foundation";
+export type {
+  HandTrackingRuntimeSnapshot,
+  HandTrackingLifecycleState,
+  HandTrackingPoseCandidate,
+  HandTrackingPoseState,
+  HandTrackingRuntimeConfig,
+  HandTrackingWorkerBootMessage,
+  HandTrackingWorkerErrorEvent,
+  HandTrackingWorkerEvent,
+  HandTrackingWorkerMessage,
+  HandTrackingWorkerProcessFrameMessage,
+  HandTrackingWorkerReadyEvent,
+  HandTrackingWorkerShutdownMessage,
+  HandTrackingWorkerSnapshotEvent,
+  LatestHandTrackingSnapshot,
+  NoHandTrackingSnapshot,
+  TrackedHandTrackingSnapshot,
+  UnavailableHandTrackingSnapshot
+} from "./types/hand-tracking";
+export type {
+  CalibrationCaptureConfig,
+  CalibrationCaptureState,
+  NinePointCalibrationAdvanceResult,
+  NinePointCalibrationSnapshot
+} from "./types/calibration-session";
+export type {
+  GameplayHudSnapshot,
+  GameplayRuntimeConfig,
+  GameplayRuntimeLifecycleState
+} from "./types/gameplay-runtime";
 export type { GameRuntimeStage } from "./states/game-runtime-state";
 export type {
   WebGpuGameplayCapabilityReason,

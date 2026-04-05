@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  AffineAimTransform,
   AudioSettings,
   PlayerProfile,
   calibrationAnchorIds,
-  createUsername,
   createCalibrationShotSample,
   createNormalizedViewportPoint,
+  createUsername,
   reticleIds
 } from "@thumbshooter/shared";
 
@@ -32,6 +33,7 @@ test("PlayerProfile.create uses the default reticle and zero calibration samples
   assert.equal(profile.snapshot.audioSettings.sfxEngine, "web-audio-api");
   assert.equal(profile.snapshot.audioSettings.mix.musicVolume, 0.55);
   assert.equal(profile.snapshot.audioSettings.mix.sfxVolume, 0.8);
+  assert.equal(profile.snapshot.aimCalibration, null);
   assert.equal(profile.calibrationSampleCount, 0);
 });
 
@@ -86,6 +88,64 @@ test("PlayerProfile.withAudioSettings returns a new immutable snapshot", () => {
   assert.equal(updatedProfile.snapshot.audioSettings.mix.sfxVolume, 0.9);
 });
 
+test("AffineAimTransform.fit reconstructs an affine screen-space mapping", () => {
+  const transform = AffineAimTransform.fit([
+    createCalibrationShotSample({
+      anchorId: "center",
+      intendedTarget: { x: 0.3, y: 0.25 },
+      observedPose: {
+        thumbTip: { x: 0.1, y: 0.3 },
+        indexTip: { x: 0.2, y: 0.2 }
+      }
+    }),
+    createCalibrationShotSample({
+      anchorId: "top-left",
+      intendedTarget: { x: 0.7, y: 0.25 },
+      observedPose: {
+        thumbTip: { x: 0.5, y: 0.3 },
+        indexTip: { x: 0.6, y: 0.2 }
+      }
+    }),
+    createCalibrationShotSample({
+      anchorId: "top-right",
+      intendedTarget: { x: 0.3, y: 0.65 },
+      observedPose: {
+        thumbTip: { x: 0.1, y: 0.7 },
+        indexTip: { x: 0.2, y: 0.6 }
+      }
+    }),
+    createCalibrationShotSample({
+      anchorId: "bottom-left",
+      intendedTarget: { x: 0.7, y: 0.65 },
+      observedPose: {
+        thumbTip: { x: 0.5, y: 0.7 },
+        indexTip: { x: 0.6, y: 0.6 }
+      }
+    })
+  ]);
+
+  assert.notEqual(transform, null);
+  assert.equal(transform?.apply({ x: 0.4, y: 0.4 }).x, 0.5);
+  assert.ok(
+    Math.abs((transform?.apply({ x: 0.4, y: 0.4 }).y ?? 0) - 0.45) < 1e-9
+  );
+});
+
+test("PlayerProfile.withAimCalibration stores an immutable fitted transform", () => {
+  const baseProfile = PlayerProfile.create({
+    username: "thumbshooter-test-user"
+  });
+  const transform = AffineAimTransform.fromSnapshot({
+    xCoefficients: [1, 0, 0],
+    yCoefficients: [0, 1, 0]
+  });
+  const updatedProfile = baseProfile.withAimCalibration(transform.snapshot);
+
+  assert.equal(baseProfile.snapshot.aimCalibration, null);
+  assert.deepEqual(updatedProfile.snapshot.aimCalibration, transform.snapshot);
+  assert.equal(Object.isFrozen(updatedProfile.snapshot.aimCalibration), true);
+});
+
 test("shared calibration anchors and reticle ids are unique", () => {
   assert.equal(new Set(calibrationAnchorIds).size, calibrationAnchorIds.length);
   assert.equal(new Set(reticleIds).size, reticleIds.length);
@@ -104,6 +164,10 @@ test("PlayerProfile.fromSnapshot rehydrates an immutable cloned snapshot", () =>
     username: "thumbshooter-test-user",
     selectedReticleId: "default-ring",
     audioSettings: AudioSettings.create({ musicVolume: 3, sfxVolume: -2 }).snapshot,
+    aimCalibration: {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
     calibrationSamples: mutableCalibrationSamples
   });
 
@@ -111,6 +175,7 @@ test("PlayerProfile.fromSnapshot rehydrates an immutable cloned snapshot", () =>
 
   assert.equal(profile.calibrationSampleCount, 1);
   assert.equal(Object.isFrozen(profile.snapshot), true);
+  assert.equal(Object.isFrozen(profile.snapshot.aimCalibration), true);
   assert.equal(Object.isFrozen(profile.snapshot.calibrationSamples), true);
   assert.equal(Object.isFrozen(profile.snapshot.audioSettings), true);
 });
@@ -125,8 +190,13 @@ test("PlayerProfile.resetCalibration clears stored calibration samples", () => {
     username: "thumbshooter-test-user"
   })
     .withCalibrationShot(createCalibrationSampleFixture())
+    .withAimCalibration({
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    })
     .resetCalibration();
 
   assert.equal(resetProfile.calibrationSampleCount, 0);
+  assert.equal(resetProfile.snapshot.aimCalibration, null);
   assert.deepEqual(resetProfile.snapshot.calibrationSamples, []);
 });

@@ -1,4 +1,4 @@
-import { gameFoundationConfig } from "../../game";
+import { gameFoundationConfig } from "../../game/config/game-foundation";
 import type { WebcamPermissionState } from "../../navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,9 @@ export function PermissionStageScreen({
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
                 ThumbShooter requests a user-facing webcam stream and releases it
-                immediately after the permission boundary succeeds.
+                immediately after the permission boundary succeeds. The
+                worker-owned Hand Landmarker boots lazily on the calibration
+                screen.
               </p>
               <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
                 {capabilityReasonLabel}

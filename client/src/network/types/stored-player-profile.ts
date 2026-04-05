@@ -5,6 +5,8 @@ import type {
   Username
 } from "@thumbshooter/shared";
 
+import type { CalibrationRecordVersion } from "./profile-storage";
+
 export interface StoredPlayerProfileRecord {
   readonly username: Username;
   readonly selectedReticleId: PlayerProfileSnapshot["selectedReticleId"];
@@ -12,6 +14,8 @@ export interface StoredPlayerProfileRecord {
 }
 
 export interface StoredCalibrationRecord {
+  readonly version: CalibrationRecordVersion;
+  readonly aimCalibration: PlayerProfileSnapshot["aimCalibration"];
   readonly calibrationSamples: readonly CalibrationShotSample[];
 }
 
