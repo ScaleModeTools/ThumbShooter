@@ -2,6 +2,7 @@ import type {
   FirstPlayableWeaponId
 } from "./game-foundation";
 import type { HandTrackingPoseState } from "./hand-tracking";
+import type { LocalCombatSessionConfig, LocalCombatSessionSnapshot } from "./local-combat-session";
 import type { NormalizedViewportPoint } from "@thumbshooter/shared";
 
 export const localArenaEnemyBehaviorStates = [
@@ -76,6 +77,7 @@ export interface LocalArenaTargetFeedbackSnapshot {
 export interface LocalArenaHudSnapshot {
   readonly aimPoint: NormalizedViewportPoint | null;
   readonly arena: LocalArenaArenaSnapshot;
+  readonly session: LocalCombatSessionSnapshot;
   readonly targetFeedback: LocalArenaTargetFeedbackSnapshot;
   readonly trackingState: HandTrackingPoseState;
   readonly weapon: LocalArenaWeaponSnapshot;
@@ -96,6 +98,7 @@ export interface LocalArenaSimulationConfig {
     readonly scatterSpeed: number;
     readonly downedDurationMs: number;
   };
+  readonly session: LocalCombatSessionConfig;
   readonly targeting: {
     readonly acquireRadius: number;
     readonly hitRadius: number;

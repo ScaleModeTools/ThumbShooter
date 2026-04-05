@@ -11,38 +11,28 @@ import { Card } from "@/components/ui/card";
 interface GameplayStageScreenProps {
   readonly aimCalibration: AffineAimTransformSnapshot;
   readonly audioStatusLabel: string;
+  readonly bestScore: number;
   readonly handTrackingRuntime: HandTrackingRuntime;
+  readonly onBestScoreChange: (bestScore: number) => void;
   readonly onOpenMenu: () => void;
   readonly selectedReticleLabel: string;
   readonly username: string;
   readonly weaponLabel: string;
 }
 
-function aimPointMatches(
-  currentValue: { readonly x: number; readonly y: number } | null,
-  nextValue: { readonly x: number; readonly y: number } | null
-): boolean {
-  if (currentValue === nextValue) {
-    return true;
-  }
-
-  if (currentValue === null || nextValue === null) {
-    return false;
-  }
-
-  return currentValue.x === nextValue.x && currentValue.y === nextValue.y;
-}
-
 export function GameplayStageScreen({
   aimCalibration,
   audioStatusLabel,
+  bestScore,
   handTrackingRuntime,
+  onBestScoreChange,
   onOpenMenu,
   selectedReticleLabel,
   username,
   weaponLabel
 }: GameplayStageScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bestScoreRef = useRef(bestScore);
   const [arenaSimulation] = useState(
     () => new LocalArenaSimulation(aimCalibration)
   );
@@ -78,24 +68,20 @@ export function GameplayStageScreen({
     void handleStartRuntime();
   });
 
+  const handleRestartSession = useEffectEvent(() => {
+    setRuntimeError(null);
+    setHudSnapshot(gameplayRuntime.restartSession());
+  });
+
+  useEffect(() => {
+    bestScoreRef.current = bestScore;
+  }, [bestScore]);
+
   useEffect(() => {
     void handleStartRuntime();
 
     const intervalHandle = window.setInterval(() => {
-      const nextSnapshot = gameplayRuntime.hudSnapshot;
-
-      setHudSnapshot((currentSnapshot) => {
-        if (
-          currentSnapshot.lifecycle === nextSnapshot.lifecycle &&
-          currentSnapshot.trackingState === nextSnapshot.trackingState &&
-          currentSnapshot.failureReason === nextSnapshot.failureReason &&
-          aimPointMatches(currentSnapshot.aimPoint, nextSnapshot.aimPoint)
-        ) {
-          return currentSnapshot;
-        }
-
-        return nextSnapshot;
-      });
+      setHudSnapshot(gameplayRuntime.hudSnapshot);
     }, 150);
 
     return () => {
@@ -104,14 +90,27 @@ export function GameplayStageScreen({
     };
   }, [gameplayRuntime, handleStartRuntime]);
 
+  useEffect(() => {
+    const nextBestScore = hudSnapshot.session.score;
+
+    if (nextBestScore <= bestScoreRef.current) {
+      return;
+    }
+
+    bestScoreRef.current = nextBestScore;
+    onBestScoreChange(nextBestScore);
+  }, [hudSnapshot.session.score, onBestScoreChange]);
+
   return (
     <Card className="relative min-h-[36rem] overflow-hidden rounded-[2rem] border-border/70 bg-card/88 shadow-[0_28px_90px_rgb(15_23_42_/_0.2)] backdrop-blur-xl">
       <canvas className="absolute inset-0 h-full w-full" ref={canvasRef} />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.08),_transparent_28%)]" />
       <GameplayHudOverlay
         audioStatusLabel={audioStatusLabel}
+        bestScore={bestScore}
         hudSnapshot={hudSnapshot}
         onOpenMenu={onOpenMenu}
+        onRestartSession={handleRestartSession}
         onRetryRuntime={handleRetryRuntime}
         runtimeError={runtimeError}
         selectedReticleLabel={selectedReticleLabel}

@@ -39,6 +39,10 @@ function createArenaConfig() {
       downedDurationMs: 520,
       downedDriftVelocityY: 0.18
     },
+    session: {
+      roundDurationMs: 4_000,
+      scorePerKill: 100
+    },
     targeting: {
       acquireRadius: 0.1,
       hitRadius: 0.1,
@@ -87,12 +91,13 @@ test("LocalArenaSimulation publishes calibrated aim, arena counts, and early sca
 
   assert.deepEqual(snapshot.aimPoint, { x: 0.25, y: 0.4 });
   assert.equal(snapshot.arena.liveEnemyCount, 1);
+  assert.equal(snapshot.session.phase, "active");
   assert.equal(snapshot.targetFeedback.state, "targeted");
   assert.equal(snapshot.targetFeedback.enemyLabel, "Bird 1");
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "scatter");
 });
 
-test("LocalArenaSimulation enforces the semiautomatic trigger reset loop and local hit reaction", async () => {
+test("LocalArenaSimulation completes the round on a kill and reset starts a fresh session", async () => {
   const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
   const simulation = new LocalArenaSimulation(
     {
@@ -111,25 +116,31 @@ test("LocalArenaSimulation enforces the semiautomatic trigger reset loop and loc
 
   assert.equal(firedSnapshot.weapon.shotsFired, 1);
   assert.equal(firedSnapshot.weapon.hitsLanded, 1);
-  assert.equal(firedSnapshot.weapon.requiresTriggerReset, true);
+  assert.equal(firedSnapshot.session.score, 100);
+  assert.equal(firedSnapshot.session.killsThisSession, 1);
+  assert.equal(firedSnapshot.session.streak, 1);
+  assert.equal(firedSnapshot.session.phase, "completed");
+  assert.equal(firedSnapshot.session.restartReady, true);
   assert.equal(firedSnapshot.targetFeedback.state, "hit");
   assert.equal(firedSnapshot.targetFeedback.enemyLabel, "Bird 1");
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "downed");
 
-  const heldSnapshot = simulation.advance(
+  const postCompletionSnapshot = simulation.advance(
     createTrackedSnapshot(3, 0.25, 0.4, 0.08),
-    48
+    1_200
   );
 
-  assert.equal(heldSnapshot.weapon.shotsFired, 1);
-  assert.equal(heldSnapshot.weapon.triggerHeld, true);
+  assert.equal(postCompletionSnapshot.weapon.shotsFired, 1);
+  assert.equal(simulation.enemyRenderStates[0]?.behavior, "downed");
 
-  const resetSnapshot = simulation.advance(
-    createTrackedSnapshot(4, 0.25, 0.4),
-    320
-  );
+  simulation.reset();
 
+  const resetSnapshot = simulation.hudSnapshot;
+
+  assert.equal(resetSnapshot.session.phase, "active");
+  assert.equal(resetSnapshot.session.score, 0);
+  assert.equal(resetSnapshot.session.killsThisSession, 0);
+  assert.equal(resetSnapshot.arena.liveEnemyCount, 1);
   assert.equal(resetSnapshot.weapon.triggerHeld, false);
-  assert.equal(resetSnapshot.weapon.isFireReady, true);
-  assert.equal(resetSnapshot.weapon.hitsLanded, 1);
+  assert.equal(resetSnapshot.weapon.hitsLanded, 0);
 });

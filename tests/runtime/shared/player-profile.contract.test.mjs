@@ -34,6 +34,7 @@ test("PlayerProfile.create uses the default reticle and zero calibration samples
   assert.equal(profile.snapshot.audioSettings.mix.musicVolume, 0.55);
   assert.equal(profile.snapshot.audioSettings.mix.sfxVolume, 0.8);
   assert.equal(profile.snapshot.aimCalibration, null);
+  assert.equal(profile.snapshot.bestScore, 0);
   assert.equal(profile.calibrationSampleCount, 0);
 });
 
@@ -86,6 +87,18 @@ test("PlayerProfile.withAudioSettings returns a new immutable snapshot", () => {
   assert.equal(baseProfile.snapshot.audioSettings.mix.musicVolume, 0.55);
   assert.equal(updatedProfile.snapshot.audioSettings.mix.musicVolume, 0.25);
   assert.equal(updatedProfile.snapshot.audioSettings.mix.sfxVolume, 0.9);
+});
+
+test("PlayerProfile.withRaisedBestScore only raises the persisted best score", () => {
+  const baseProfile = PlayerProfile.create({
+    username: "thumbshooter-test-user"
+  });
+  const raisedProfile = baseProfile.withRaisedBestScore(250.8);
+  const unchangedProfile = raisedProfile.withRaisedBestScore(180);
+
+  assert.equal(baseProfile.snapshot.bestScore, 0);
+  assert.equal(raisedProfile.snapshot.bestScore, 250);
+  assert.equal(unchangedProfile, raisedProfile);
 });
 
 test("AffineAimTransform.fit reconstructs an affine screen-space mapping", () => {
@@ -168,12 +181,14 @@ test("PlayerProfile.fromSnapshot rehydrates an immutable cloned snapshot", () =>
       xCoefficients: [1, 0, 0],
       yCoefficients: [0, 1, 0]
     },
+    bestScore: 325.4,
     calibrationSamples: mutableCalibrationSamples
   });
 
   mutableCalibrationSamples.push(createCalibrationSampleFixture());
 
   assert.equal(profile.calibrationSampleCount, 1);
+  assert.equal(profile.snapshot.bestScore, 325);
   assert.equal(Object.isFrozen(profile.snapshot), true);
   assert.equal(Object.isFrozen(profile.snapshot.aimCalibration), true);
   assert.equal(Object.isFrozen(profile.snapshot.calibrationSamples), true);

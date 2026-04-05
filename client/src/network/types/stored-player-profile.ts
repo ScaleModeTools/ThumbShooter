@@ -11,6 +11,7 @@ export interface StoredPlayerProfileRecord {
   readonly username: Username;
   readonly selectedReticleId: PlayerProfileSnapshot["selectedReticleId"];
   readonly audioSettings: PlayerProfileSnapshot["audioSettings"];
+  readonly bestScore: PlayerProfileSnapshot["bestScore"];
 }
 
 export interface StoredCalibrationRecord {

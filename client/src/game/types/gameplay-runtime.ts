@@ -3,6 +3,7 @@ import type {
 } from "@thumbshooter/shared";
 
 import type { HandTrackingPoseState } from "./hand-tracking";
+import type { LocalCombatSessionSnapshot } from "./local-combat-session";
 import type {
   LocalArenaArenaSnapshot,
   LocalArenaTargetFeedbackSnapshot,
@@ -24,6 +25,7 @@ export interface GameplayHudSnapshot {
   readonly arena: LocalArenaArenaSnapshot;
   readonly failureReason: string | null;
   readonly lifecycle: GameplayRuntimeLifecycleState;
+  readonly session: LocalCombatSessionSnapshot;
   readonly targetFeedback: LocalArenaTargetFeedbackSnapshot;
   readonly trackingState: HandTrackingPoseState;
   readonly weapon: LocalArenaWeaponSnapshot;

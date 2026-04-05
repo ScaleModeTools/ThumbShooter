@@ -1,4 +1,5 @@
 import { calibrationCaptureConfig } from "./calibration-capture";
+import { localCombatSessionConfig } from "./local-combat-session";
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 
 export const localArenaSimulationConfig = {
@@ -53,6 +54,7 @@ export const localArenaSimulationConfig = {
     downedDurationMs: 960,
     downedDriftVelocityY: 0.18
   },
+  session: localCombatSessionConfig,
   targeting: {
     acquireRadius: 0.1,
     hitRadius: 0.09,

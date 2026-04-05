@@ -56,6 +56,7 @@ test("LocalProfileStorage saves and reloads a persisted player profile", async (
   const profile = PlayerProfile.create({
     username: "thumbshooter-user"
   })
+    .withRaisedBestScore(400)
     .withAudioSettings(AudioSettings.create({ musicVolume: 0.3, sfxVolume: 0.6 }).snapshot)
     .withCalibrationShot(createCalibrationFixture())
     .withAimCalibration(
@@ -72,6 +73,7 @@ test("LocalProfileStorage saves and reloads a persisted player profile", async (
   assert.equal(hydration.source, "profile-record");
   assert.equal(hydration.profile?.snapshot.username, "thumbshooter-user");
   assert.equal(hydration.profile?.snapshot.audioSettings.mix.musicVolume, 0.3);
+  assert.equal(hydration.profile?.snapshot.bestScore, 400);
   assert.equal(hydration.profile?.calibrationSampleCount, 1);
   assert.deepEqual(hydration.profile?.snapshot.aimCalibration, {
     xCoefficients: [1, 0, 0],
@@ -95,6 +97,7 @@ test("LocalProfileStorage rehydrates username-only storage into a fresh profile"
   assert.equal(hydration.source, "username-only");
   assert.equal(hydration.profile?.snapshot.username, "shell-user");
   assert.equal(hydration.profile?.snapshot.aimCalibration, null);
+  assert.equal(hydration.profile?.snapshot.bestScore, 0);
   assert.equal(hydration.profile?.calibrationSampleCount, 0);
 });
 
@@ -126,6 +129,7 @@ test("LocalProfileStorage hydrates legacy calibration records without a persiste
 
   assert.equal(hydration.profile?.snapshot.username, "legacy-user");
   assert.equal(hydration.profile?.snapshot.aimCalibration, null);
+  assert.equal(hydration.profile?.snapshot.bestScore, 0);
   assert.equal(hydration.profile?.calibrationSampleCount, 1);
 });
 

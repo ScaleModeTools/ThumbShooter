@@ -31,6 +31,7 @@ export interface PlayerProfileSnapshot {
   readonly selectedReticleId: ReticleId;
   readonly audioSettings: AudioSettingsSnapshot;
   readonly aimCalibration: AffineAimTransformSnapshot | null;
+  readonly bestScore: number;
   readonly calibrationSamples: readonly CalibrationShotSample[];
 }
 
@@ -51,10 +52,19 @@ function freezePlayerProfileSnapshot(
       snapshot.aimCalibration === null
         ? null
         : AffineAimTransform.fromSnapshot(snapshot.aimCalibration).snapshot,
+    bestScore: normalizeBestScore(snapshot.bestScore),
     calibrationSamples: Object.freeze(
       snapshot.calibrationSamples.map((sample) => createCalibrationShotSample(sample))
     )
   });
+}
+
+function normalizeBestScore(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(value));
 }
 
 export class PlayerProfile {
@@ -70,6 +80,7 @@ export class PlayerProfile {
       selectedReticleId: input.selectedReticleId ?? "default-ring",
       audioSettings: AudioSettings.create(input.audioSettings).snapshot,
       aimCalibration: null,
+      bestScore: 0,
       calibrationSamples: []
     });
   }
@@ -92,6 +103,10 @@ export class PlayerProfile {
 
   get hasAimCalibration(): boolean {
     return this.#snapshot.aimCalibration !== null;
+  }
+
+  get bestScore(): number {
+    return this.#snapshot.bestScore;
   }
 
   resetCalibration(): PlayerProfile {
@@ -133,6 +148,19 @@ export class PlayerProfile {
     return new PlayerProfile({
       ...this.#snapshot,
       audioSettings: AudioSettings.fromSnapshot(audioSettings).snapshot
+    });
+  }
+
+  withRaisedBestScore(bestScore: number): PlayerProfile {
+    const normalizedBestScore = normalizeBestScore(bestScore);
+
+    if (normalizedBestScore <= this.#snapshot.bestScore) {
+      return this;
+    }
+
+    return new PlayerProfile({
+      ...this.#snapshot,
+      bestScore: normalizedBestScore
     });
   }
 }

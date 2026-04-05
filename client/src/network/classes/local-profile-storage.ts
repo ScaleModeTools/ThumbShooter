@@ -127,7 +127,11 @@ function parseStoredPlayerProfileRecord(
   return {
     username,
     selectedReticleId: parsedValue.selectedReticleId,
-    audioSettings: parsedValue.audioSettings
+    audioSettings: parsedValue.audioSettings,
+    bestScore:
+      typeof parsedValue.bestScore === "number" && Number.isFinite(parsedValue.bestScore)
+        ? Math.max(0, Math.floor(parsedValue.bestScore))
+        : 0
   };
 }
 
@@ -210,6 +214,7 @@ export class LocalProfileStorage {
           selectedReticleId: storedProfileRecord.selectedReticleId,
           audioSettings: storedProfileRecord.audioSettings,
           aimCalibration: storedCalibrationRecord?.aimCalibration ?? null,
+          bestScore: storedProfileRecord.bestScore,
           calibrationSamples: storedCalibrationRecord?.calibrationSamples ?? []
         }),
         source: "profile-record"
@@ -246,7 +251,8 @@ export class LocalProfileStorage {
     const storedProfileRecord: StoredPlayerProfileRecord = {
       username: snapshot.username,
       selectedReticleId: snapshot.selectedReticleId,
-      audioSettings: snapshot.audioSettings
+      audioSettings: snapshot.audioSettings,
+      bestScore: snapshot.bestScore
     };
     const storedCalibrationRecord: StoredCalibrationRecord = {
       version: this.#plan.calibrationRecordVersion,

@@ -67,6 +67,10 @@ function createArenaConfig() {
       downedDurationMs: 520,
       downedDriftVelocityY: 0.18
     },
+    session: {
+      roundDurationMs: 4_000,
+      scorePerKill: 100
+    },
     targeting: {
       acquireRadius: 0.1,
       hitRadius: 0.1,
@@ -191,9 +195,31 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
   });
 
   trackingSource.latestPose = {
-    trackingState: "no-hand",
+    trackingState: "tracked",
     sequenceNumber: 2,
     timestampMs: 20,
+    pose: {
+      thumbTip: { x: 0.25, y: 0.48 },
+      indexTip: { x: 0.25, y: 0.4 }
+    }
+  };
+
+  scheduledFrame();
+
+  assert.equal(runtime.hudSnapshot.session.phase, "completed");
+  assert.equal(runtime.hudSnapshot.session.score, 100);
+
+  const restartSnapshot = runtime.restartSession(500);
+
+  assert.equal(restartSnapshot.lifecycle, "running");
+  assert.equal(restartSnapshot.session.phase, "active");
+  assert.equal(restartSnapshot.session.score, 0);
+  assert.equal(restartSnapshot.arena.liveEnemyCount, 1);
+
+  trackingSource.latestPose = {
+    trackingState: "no-hand",
+    sequenceNumber: 3,
+    timestampMs: 30,
     pose: null
   };
 

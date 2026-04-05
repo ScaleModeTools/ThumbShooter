@@ -25,6 +25,7 @@ const GameplayStageScreen = lazy(async () =>
 interface ShellStageRouterProps {
   readonly activeStep: NavigationStepId;
   readonly audioStatusLabel: string;
+  readonly bestScore: number;
   readonly capabilityReasonLabel: string;
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
   readonly handTrackingRuntime: HandTrackingRuntime;
@@ -39,6 +40,7 @@ interface ShellStageRouterProps {
     nextProfile: PlayerProfile,
     progress: "captured" | "completed"
   ) => void;
+  readonly onBestScoreChange: (bestScore: number) => void;
   readonly onClearProfile: () => void;
   readonly onEditProfile: () => void;
   readonly onLoginSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -65,6 +67,7 @@ function GameplayStageFallback() {
 export function ShellStageRouter({
   activeStep,
   audioStatusLabel,
+  bestScore,
   capabilityReasonLabel,
   capabilityStatus,
   handTrackingRuntime,
@@ -76,6 +79,7 @@ export function ShellStageRouter({
   selectedReticleLabel,
   usernameDraft,
   onCalibrationProgress,
+  onBestScoreChange,
   onClearProfile,
   onEditProfile,
   onLoginSubmit,
@@ -130,7 +134,9 @@ export function ShellStageRouter({
           <GameplayStageScreen
             aimCalibration={profile.snapshot.aimCalibration}
             audioStatusLabel={audioStatusLabel}
+            bestScore={bestScore}
             handTrackingRuntime={handTrackingRuntime}
+            onBestScoreChange={onBestScoreChange}
             onOpenMenu={onOpenGameplayMenu}
             selectedReticleLabel={selectedReticleLabel}
             username={profile.snapshot.username}

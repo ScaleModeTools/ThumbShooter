@@ -1,24 +1,50 @@
 # ThumbShooter
 
-ThumbShooter is a type-first monorepo for a browser FPS controlled by hand
-tracking.
+ThumbShooter is a browser FPS prototype where the player aims with a webcam-
+tracked hand pose and fires by dropping the thumb relative to the index finger.
+The current shipped build is milestone 4: the first local combat progression
+loop.
 
-Current implemented milestone:
+## What Ships Now
 
-- login and local profile persistence
-- webcam permission flow
-- unsupported WebGPU gameplay route
-- calibration shell placeholder
-- gameplay shell with in-game menu, recalibration entry point, and music/SFX
-  sliders
+- local username, profile, calibration, audio, and best-score persistence
+- explicit webcam permission flow plus worker-first MediaPipe Hand Landmarker
+- nine-point affine aim calibration
+- WebGPU arena gameplay with readable bird targets and semiautomatic thumb-drop
+  firing
+- local hit, kill, score, streak, and round-phase tracking
+- completed / failed local rounds with restart-ready flow
+- HUD and in-game menu support for score, streak, kills, recalibration, and
+  music/SFX controls
 
-## Workspaces
+Still intentionally deferred:
 
-- `client`: React + Vite + shadcn browser shell
-- `server`: TypeScript headless service boundary
-- `packages/shared`: cross-workspace contracts
-- `docs`: dependency and setup notes
-- `examples`: reference material only
+- server-authoritative gameplay
+- multiplayer/network sync
+- automatic weapons
+- off-screen reload behavior
+
+## Repo Map
+
+- `client`: React + Vite shell, WebGPU gameplay runtime, worker tracking, HUD
+- `server`: TypeScript service boundary for future authority/network slices
+- `packages/shared`: cross-workspace contracts and invariant-bearing value
+  objects
+- `tests`: runtime and contract coverage
+- `tools`: non-interactive build, test, bench, and verify entrypoints
+- `docs`: dependency baseline and bundle-budget references
+- `examples`: reference material only, never product code
+
+## Main Runtime Owners
+
+- `ThumbShooterShell`: top-level browser-shell composition
+- `HandTrackingRuntime`: webcam boot, worker lifecycle, latest validated hand
+  snapshots
+- `LocalArenaSimulation`: calibrated aim, weapon loop, HUD snapshots, combat
+  integration
+- `LocalCombatSession`: local score, streak, timer, and active/completed/failed
+  round phases
+- `WebGpuGameplayRuntime`: renderer lifecycle, frame loop, and scene draw path
 
 ## Commands
 
@@ -32,12 +58,19 @@ npm run dev:client
 npm run start:server
 ```
 
-To review the current client shell locally:
+To review the current client locally:
 
 ```bash
 npm install
 npm run dev:client
 ```
+
+## Fast Orientation
+
+- `README.md` is the public blank-slate orientation surface.
+- `docs/dependencies.md` is the public dependency baseline.
+- local/private steering for autonomous contributors lives outside this public
+  README and can be more detailed than what belongs here.
 
 ## Locked Runtime
 
@@ -48,10 +81,3 @@ npm run dev:client
 - fallback: explicit unsupported state, not silent renderer downgrade
 - first calibration model: 2D affine
 - first weapon: semiautomatic pistol
-
-## Main Docs
-
-- [AGENTS.md](./AGENTS.md)
-- [spec.md](./spec.md)
-- [docs/dependencies.md](./docs/dependencies.md)
-- [progress.md](./progress.md)

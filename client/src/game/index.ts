@@ -1,9 +1,11 @@
 export { gameFoundationConfig } from "./config/game-foundation";
 export { calibrationCaptureConfig } from "./config/calibration-capture";
+export { localCombatSessionConfig } from "./config/local-combat-session";
 export { localArenaSimulationConfig } from "./config/local-arena-simulation";
 export { gameplayRuntimeConfig } from "./config/gameplay-runtime";
 export { handTrackingRuntimeConfig } from "./config/hand-tracking-runtime";
 export { HandTrackingRuntime } from "./classes/hand-tracking-runtime";
+export { LocalCombatSession } from "./classes/local-combat-session";
 export { LocalArenaSimulation } from "./classes/local-arena-simulation";
 export { NinePointCalibrationSession } from "./classes/nine-point-calibration-session";
 export { WebGpuGameplayRuntime } from "./classes/webgpu-gameplay-runtime";
@@ -20,6 +22,7 @@ export {
 } from "./types/game-foundation";
 export { calibrationCaptureStates } from "./types/calibration-session";
 export { gameplayRuntimeLifecycleStates } from "./types/gameplay-runtime";
+export { localCombatSessionPhases } from "./types/local-combat-session";
 export {
   handTrackingLifecycleStates,
   handTrackingPoseStates
@@ -75,6 +78,12 @@ export type {
   GameplayRuntimeConfig,
   GameplayRuntimeLifecycleState
 } from "./types/gameplay-runtime";
+export type {
+  LocalCombatSessionConfig,
+  LocalCombatSessionPhase,
+  LocalCombatSessionSnapshot,
+  LocalCombatShotOutcome
+} from "./types/local-combat-session";
 export type {
   LocalArenaArenaSnapshot,
   LocalArenaEnemyBehaviorState,
