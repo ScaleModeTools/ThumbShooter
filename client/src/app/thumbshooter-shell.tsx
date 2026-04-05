@@ -1,43 +1,25 @@
-import {
-  Suspense,
-  lazy,
-  startTransition,
-  useEffect,
-  useEffectEvent,
-  useState
-} from "react";
+import { startTransition, useEffect, useEffectEvent, useState } from "react";
 import type { FormEvent } from "react";
 
-import { AudioSettings, PlayerProfile, createUsername } from "@thumbshooter/shared";
+import { PlayerProfile, createUsername } from "@thumbshooter/shared";
 
-import { reticleManifest } from "../assets";
 import { BrowserAudioSession, audioFoundationConfig } from "../audio";
-import type { AudioSessionSnapshot } from "../audio";
 import { WebGpuGameplayCapabilityProbe } from "../game/classes/webgpu-gameplay-capability-probe";
 import { HandTrackingRuntime } from "../game/classes/hand-tracking-runtime";
-import { gameFoundationConfig } from "../game/config/game-foundation";
 import type { WebGpuGameplayCapabilitySnapshot } from "../game/types/webgpu-capability";
 import { LocalProfileStorage } from "../network";
-import {
-  WebcamPermissionGateway,
-  resolveShellNavigation
-} from "../navigation";
-import type { CalibrationShellState, WebcamPermissionState } from "../navigation";
+import { WebcamPermissionGateway, resolveShellNavigation } from "../navigation";
+import type { WebcamPermissionState } from "../navigation";
 import { GameMenuDialog } from "../ui";
 
-import { CalibrationStageScreen } from "./components/calibration-stage-screen";
-import { LoginStageScreen } from "./components/login-stage-screen";
-import { MilestoneBoundariesCard } from "./components/milestone-boundaries-card";
-import { PermissionStageScreen } from "./components/permission-stage-screen";
-import { ProfileSummaryCard } from "./components/profile-summary-card";
 import { ShellProgressHeader } from "./components/shell-progress-header";
-import { UnsupportedStageScreen } from "./components/unsupported-stage-screen";
-
-const GameplayStageScreen = lazy(async () =>
-  import("./components/gameplay-stage-screen").then((module) => ({
-    default: module.GameplayStageScreen
-  }))
-);
+import { ShellStageRouter } from "./components/shell-stage-router";
+import { ShellStatusRail } from "./components/shell-status-rail";
+import {
+  buildThumbShooterShellView,
+  resolveCalibrationShellState,
+  updateProfileMix
+} from "./states/thumbshooter-shell-view";
 
 const initialCapabilitySnapshot: WebGpuGameplayCapabilitySnapshot = {
   status: "checking",
@@ -52,70 +34,15 @@ function readBrowserStorage(): Storage | null {
   }
 }
 
-function toPercent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
-function toSliderValue(value: number): [number] {
-  return [Math.round(value * 100)];
-}
-
-function describeCapabilityReason(
-  snapshot: WebGpuGameplayCapabilitySnapshot
-): string {
-  switch (snapshot.reason) {
-    case "adapter-ready":
-      return "Gameplay WebGPU adapter ready.";
-    case "navigator-gpu-missing":
-      return "The browser does not expose navigator.gpu.";
-    case "adapter-unavailable":
-      return "A WebGPU adapter was not returned for gameplay.";
-    case "probe-failed":
-      return "The WebGPU probe failed before gameplay could start.";
-    case "pending":
-      return "Checking gameplay WebGPU support.";
-  }
-}
-
-function describeAudioStatus(snapshot: AudioSessionSnapshot): string {
-  if (snapshot.unlockState === "unlocked") {
-    return snapshot.backgroundMusicState === "primed"
-      ? "Audio unlocked, Strudel primed"
-      : "Audio unlocked";
-  }
-
-  if (snapshot.unlockState === "unsupported") {
-    return "Audio unavailable";
-  }
-
-  if (snapshot.unlockState === "failed") {
-    return "Audio unlock failed";
-  }
-
-  if (snapshot.unlockState === "unlocking") {
-    return "Unlocking audio";
-  }
-
-  return "Awaiting user gesture";
-}
-
-function updateProfileMix(
-  profile: PlayerProfile,
-  updater: (audioSettings: AudioSettings) => AudioSettings
-): PlayerProfile {
-  return profile.withAudioSettings(
-    updater(AudioSettings.fromSnapshot(profile.snapshot.audioSettings)).snapshot
-  );
-}
-
 export function ThumbShooterShell() {
+  const [browserStorage] = useState(() => readBrowserStorage());
   const [profileStorage] = useState(() => new LocalProfileStorage());
   const [capabilityProbe] = useState(() => new WebGpuGameplayCapabilityProbe());
   const [handTrackingRuntime] = useState(() => new HandTrackingRuntime());
   const [permissionGateway] = useState(() => new WebcamPermissionGateway());
   const [audioSession] = useState(() => new BrowserAudioSession());
   const [hydratedProfile] = useState(() =>
-    profileStorage.loadProfile(readBrowserStorage())
+    profileStorage.loadProfile(browserStorage)
   );
   const [profile, setProfile] = useState<PlayerProfile | null>(
     hydratedProfile.profile
@@ -131,19 +58,21 @@ export function ThumbShooterShell() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [capabilitySnapshot, setCapabilitySnapshot] =
     useState<WebGpuGameplayCapabilitySnapshot>(initialCapabilitySnapshot);
-  const [audioSnapshot, setAudioSnapshot] = useState<AudioSessionSnapshot>(
-    audioSession.snapshot
-  );
+  const [audioSnapshot, setAudioSnapshot] = useState(audioSession.snapshot);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hasAutoOpenedMenu, setHasAutoOpenedMenu] = useState(false);
-  const calibrationStatus: CalibrationShellState =
-    profile?.hasAimCalibration === true ? "reviewed" : "pending";
 
+  const calibrationStatus = resolveCalibrationShellState(profile);
   const navigationSnapshot = resolveShellNavigation({
     hasConfirmedProfile,
     webcamPermission: permissionState,
     gameplayCapability: capabilitySnapshot.status,
     calibrationShell: calibrationStatus
+  });
+  const shellView = buildThumbShooterShellView({
+    audioSnapshot,
+    capabilitySnapshot,
+    profile
   });
 
   const handleEscapeToggle = useEffectEvent(() => {
@@ -168,15 +97,11 @@ export function ThumbShooterShell() {
   useEffect(() => {
     let didCancel = false;
 
-    async function probeGameplayCapability() {
-      const nextSnapshot = await capabilityProbe.probe(window.navigator);
-
+    void capabilityProbe.probe(window.navigator).then((nextSnapshot) => {
       if (!didCancel) {
         setCapabilitySnapshot(nextSnapshot);
       }
-    }
-
-    void probeGameplayCapability();
+    });
 
     return () => {
       didCancel = true;
@@ -188,8 +113,8 @@ export function ThumbShooterShell() {
       return;
     }
 
-    profileStorage.saveProfile(readBrowserStorage(), profile.snapshot);
-  }, [profile, profileStorage]);
+    profileStorage.saveProfile(browserStorage, profile.snapshot);
+  }, [browserStorage, profile, profileStorage]);
 
   useEffect(() => {
     if (profile === null) {
@@ -271,7 +196,7 @@ export function ThumbShooterShell() {
 
   function handleClearProfile(): void {
     handTrackingRuntime.dispose();
-    profileStorage.clearProfile(readBrowserStorage());
+    profileStorage.clearProfile(browserStorage);
     setAudioSnapshot(audioSession.syncMix(audioFoundationConfig.defaultMix));
 
     startTransition(() => {
@@ -341,7 +266,9 @@ export function ThumbShooterShell() {
   ): void {
     setProfile(nextProfile);
     setAudioSnapshot(
-      audioSession.playCue(progress === "completed" ? "ui-confirm" : "calibration-shot")
+      audioSession.playCue(
+        progress === "completed" ? "ui-confirm" : "calibration-shot"
+      )
     );
   }
 
@@ -380,136 +307,69 @@ export function ThumbShooterShell() {
     });
   }
 
-  const runtimeLocks = [
-    `Renderer: ${gameFoundationConfig.renderer.target}`,
-    `Imports: ${gameFoundationConfig.renderer.threeImportSurface}`,
-    `Shaders: ${gameFoundationConfig.renderer.shaderAuthoringModel}`,
-    `Tracking: ${gameFoundationConfig.runtime.handTrackingExecutionModel}`,
-    `Transport: ${gameFoundationConfig.runtime.handTrackingTransport}`,
-    `BGM: ${audioFoundationConfig.music.engine}`,
-    `SFX: ${audioFoundationConfig.soundEffects.engine}`
-  ] as const;
-  const audioMix =
-    profile?.snapshot.audioSettings.mix ?? audioFoundationConfig.defaultMix;
-  const capabilityReasonLabel = describeCapabilityReason(capabilitySnapshot);
-  const selectedReticleLabel =
-    reticleManifest.reticles.find(
-      (reticle) => reticle.id === profile?.snapshot.selectedReticleId
-    )?.label ?? "Default ring";
-
   return (
     <div className="min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(14_165_233_/_0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgb(251_146_60_/_0.14),_transparent_32%)]" />
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
         <ShellProgressHeader
-          audioStatusLabel={describeAudioStatus(audioSnapshot)}
-          capabilityReasonLabel={capabilityReasonLabel}
+          audioStatusLabel={shellView.audioStatusLabel}
+          capabilityReasonLabel={shellView.capabilityReasonLabel}
           currentStepId={navigationSnapshot.activeStep}
-          musicVolumeLabel={toPercent(Number(audioMix.musicVolume))}
-          runtimeLocks={runtimeLocks}
-          sfxVolumeLabel={toPercent(Number(audioMix.sfxVolume))}
+          musicVolumeLabel={shellView.musicVolumeLabel}
+          runtimeLocks={shellView.runtimeLocks}
+          sfxVolumeLabel={shellView.sfxVolumeLabel}
         />
 
         <main className="grid flex-1 gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-          <aside className="grid gap-6">
-            <ProfileSummaryCard
-              calibrationSampleCount={profile?.calibrationSampleCount ?? 0}
-              hasAimCalibration={profile?.hasAimCalibration ?? false}
-              hydrationSource={hydrationSource}
-              reticleCatalogLabel={reticleManifest.reticles
-                .map((reticle) => reticle.label)
-                .join(" / ")}
-              username={profile?.snapshot.username ?? "not confirmed"}
-            />
+          <ShellStatusRail
+            calibrationSampleCount={profile?.calibrationSampleCount ?? 0}
+            hasAimCalibration={profile?.hasAimCalibration ?? false}
+            hydrationSource={hydrationSource}
+            reticleCatalogLabel={shellView.reticleCatalogLabel}
+            username={profile?.snapshot.username ?? "not confirmed"}
+          />
 
-            <MilestoneBoundariesCard />
-          </aside>
-
-          <section>
-            {navigationSnapshot.activeStep === "login" ? (
-              <LoginStageScreen
-                hasStoredProfile={hydrationSource !== "empty"}
-                loginError={loginError}
-                onClearProfile={handleClearProfile}
-                onSubmit={(event) => {
-                  void handleLoginSubmit(event);
-                }}
-                setUsernameDraft={setUsernameDraft}
-                usernameDraft={usernameDraft}
-              />
-            ) : null}
-
-            {navigationSnapshot.activeStep === "permissions" ? (
-              <PermissionStageScreen
-                capabilityReasonLabel={capabilityReasonLabel}
-                capabilityStatus={capabilitySnapshot.status}
-                permissionError={permissionError}
-                permissionState={permissionState}
-                onRequestPermission={() => {
-                  void handleRequestPermission();
-                }}
-              />
-            ) : null}
-
-            {navigationSnapshot.activeStep === "calibration" && profile !== null ? (
-              <CalibrationStageScreen
-                handTrackingRuntime={handTrackingRuntime}
-                onCalibrationProgress={handleCalibrationProgress}
-                profile={profile}
-              />
-            ) : null}
-
-            {navigationSnapshot.activeStep === "unsupported" ? (
-              <UnsupportedStageScreen
-                capabilityReasonLabel={capabilityReasonLabel}
-                onEditProfile={handleEditProfile}
-                onRetry={handleRetryCapabilityProbe}
-              />
-            ) : null}
-
-            {navigationSnapshot.activeStep === "gameplay" &&
-            profile !== null &&
-            profile.snapshot.aimCalibration !== null ? (
-              <Suspense
-                fallback={
-                  <section className="min-h-[36rem] rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-[0_28px_90px_rgb(15_23_42_/_0.18)] backdrop-blur-xl">
-                    <p className="text-sm font-medium text-foreground">
-                      Booting WebGPU gameplay runtime
-                    </p>
-                    <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-                      Loading the live renderer and calibrated reticle path for the
-                      current session.
-                    </p>
-                  </section>
-                }
-              >
-                <GameplayStageScreen
-                  aimCalibration={profile.snapshot.aimCalibration}
-                  audioStatusLabel={describeAudioStatus(audioSnapshot)}
-                  handTrackingRuntime={handTrackingRuntime}
-                  onOpenMenu={() => handleGameplayMenuOpen(true)}
-                  selectedReticleLabel={selectedReticleLabel}
-                  username={profile.snapshot.username}
-                  weaponLabel={gameFoundationConfig.weapon.firstPlayableWeapon}
-                />
-              </Suspense>
-            ) : null}
-          </section>
+          <ShellStageRouter
+            activeStep={navigationSnapshot.activeStep}
+            audioStatusLabel={shellView.audioStatusLabel}
+            capabilityReasonLabel={shellView.capabilityReasonLabel}
+            capabilityStatus={capabilitySnapshot.status}
+            handTrackingRuntime={handTrackingRuntime}
+            hasStoredProfile={hydrationSource !== "empty"}
+            loginError={loginError}
+            permissionError={permissionError}
+            permissionState={permissionState}
+            profile={profile}
+            selectedReticleLabel={shellView.selectedReticleLabel}
+            usernameDraft={usernameDraft}
+            onCalibrationProgress={handleCalibrationProgress}
+            onClearProfile={handleClearProfile}
+            onEditProfile={handleEditProfile}
+            onLoginSubmit={(event) => {
+              void handleLoginSubmit(event);
+            }}
+            onOpenGameplayMenu={() => handleGameplayMenuOpen(true)}
+            onRequestPermission={() => {
+              void handleRequestPermission();
+            }}
+            onRetryCapabilityProbe={handleRetryCapabilityProbe}
+            setUsernameDraft={setUsernameDraft}
+          />
         </main>
       </div>
 
       {profile !== null ? (
         <GameMenuDialog
-          audioStatusLabel={describeAudioStatus(audioSnapshot)}
+          audioStatusLabel={shellView.audioStatusLabel}
           gameplayStatusLabel="Gameplay runtime live"
-          musicVolume={toSliderValue(Number(audioMix.musicVolume))}
+          musicVolume={shellView.musicVolumeSliderValue}
           onMusicVolumeChange={handleMusicVolumeChange}
           onOpenChange={handleGameplayMenuOpen}
           onRecalibrationRequest={handleRecalibrationRequest}
           onSfxVolumeChange={handleSfxVolumeChange}
           open={navigationSnapshot.activeStep === "gameplay" && isMenuOpen}
-          sfxVolume={toSliderValue(Number(audioMix.sfxVolume))}
+          sfxVolume={shellView.sfxVolumeSliderValue}
         />
       ) : null}
     </div>

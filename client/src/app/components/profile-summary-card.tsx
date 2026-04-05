@@ -1,3 +1,5 @@
+import type { StoredProfileHydrationResult } from "../../network";
+
 import {
   Card,
   CardContent,
@@ -9,7 +11,7 @@ import {
 interface ProfileSummaryCardProps {
   readonly calibrationSampleCount: number;
   readonly hasAimCalibration: boolean;
-  readonly hydrationSource: string;
+  readonly hydrationSource: StoredProfileHydrationResult["source"];
   readonly reticleCatalogLabel: string;
   readonly username: string;
 }
