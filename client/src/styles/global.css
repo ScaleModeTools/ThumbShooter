@@ -1,0 +1,70 @@
+:root {
+  color-scheme: dark;
+  font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(159, 255, 227, 0.18), transparent 38%),
+    radial-gradient(circle at bottom, rgba(255, 98, 71, 0.16), transparent 32%),
+    #081019;
+  color: #f5f6f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.shell {
+  min-height: 100vh;
+  padding: 4vh 4vw;
+}
+
+.hero {
+  max-width: 56rem;
+  margin-bottom: 3rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #7bd8ff;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lede {
+  max-width: 46rem;
+  color: #d8dee7;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(5, 12, 20, 0.72);
+  backdrop-filter: blur(10px);
+  padding: 1rem 1.1rem;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.panel ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}

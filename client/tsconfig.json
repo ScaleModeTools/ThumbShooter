@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "vite/client",
+      "@webgpu/types"
+    ],
+    "useDefineForClassFields": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "vite.config.ts"
+  ]
+}

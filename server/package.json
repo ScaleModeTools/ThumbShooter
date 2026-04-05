@@ -1,0 +1,13 @@
+{
+  "name": "@thumbshooter/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch:build": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "start": "node dist/index.js",
+    "start:watch": "node --watch --watch-path dist dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

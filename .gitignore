@@ -3,6 +3,18 @@
 Thumbs.db
 Desktop.ini
 
+# Node and build output
+node_modules/
+dist/
+coverage/
+.vite/
+*.log
+
+# Local-only developer helpers
+.local-dev/
+.agents/skills/
+skills-lock.json
+
 # Editor folders and swap files
 .idea/
 .vscode/
