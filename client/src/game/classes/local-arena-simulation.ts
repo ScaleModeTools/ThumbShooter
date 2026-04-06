@@ -1,5 +1,6 @@
 import {
   AffineAimTransform,
+  createNormalizedViewportPoint,
   type AffineAimTransformSnapshot,
   type NormalizedViewportPoint
 } from "@thumbshooter/shared";
@@ -28,25 +29,7 @@ import type {
   LocalArenaWeaponSnapshot
 } from "../types/local-arena-simulation";
 import { LocalCombatSession } from "./local-combat-session";
-
-function freezeWeaponSnapshot(
-  weaponId: LocalArenaWeaponSnapshot["weaponId"],
-  shotsFired: number,
-  hitsLanded: number,
-  triggerHeld: boolean,
-  isFireReady: boolean,
-  cooldownRemainingMs: number
-): LocalArenaWeaponSnapshot {
-  return Object.freeze({
-    cooldownRemainingMs,
-    hitsLanded,
-    isFireReady,
-    requiresTriggerReset: triggerHeld,
-    shotsFired,
-    triggerHeld,
-    weaponId
-  });
-}
+import { WeaponRuntime } from "./weapon-runtime";
 
 function freezeTargetFeedbackSnapshot(
   state: LocalArenaTargetFeedbackState,
@@ -86,6 +69,11 @@ interface LocalArenaSimulationDependencies {
   readonly emitGameplaySignal?: (signal: GameplaySignal) => void;
 }
 
+interface ProjectedAimPoint {
+  readonly aimPoint: NormalizedViewportPoint | null;
+  readonly isReticleOffscreen: boolean;
+}
+
 export class LocalArenaSimulation {
   readonly #affineAimTransform: AffineAimTransform;
   readonly #combatSession: LocalCombatSession;
@@ -93,6 +81,7 @@ export class LocalArenaSimulation {
   readonly #enemyRenderStates: readonly LocalArenaEnemyRenderState[];
   readonly #enemyRuntimeStates: readonly LocalArenaEnemyRuntimeState[];
   readonly #emitGameplaySignal: ((signal: GameplaySignal) => void) | null;
+  readonly #weaponRuntime: WeaponRuntime;
 
   #feedbackEnemyId: string | null = null;
   #feedbackEnemyLabel: string | null = null;
@@ -100,11 +89,7 @@ export class LocalArenaSimulation {
   #feedbackState: LocalArenaTargetFeedbackState = "tracking-lost";
   #hudSnapshot: LocalArenaHudSnapshot;
   #lastStepAtMs: number | null = null;
-  #nextFireAtMs = 0;
-  #shotsFired = 0;
-  #triggerHeld = false;
   #worldTimeMs = 0;
-  #hitsLanded = 0;
 
   constructor(
     aimCalibration: AffineAimTransformSnapshot,
@@ -118,6 +103,7 @@ export class LocalArenaSimulation {
       config.enemySeeds.length,
       config.session
     );
+    this.#weaponRuntime = new WeaponRuntime(config.weapon);
 
     const enemyField = createEnemyField(config);
 
@@ -154,46 +140,65 @@ export class LocalArenaSimulation {
     this.#lastStepAtMs = safeNowMs;
     this.#worldTimeMs += deltaMs;
 
-    const aimPoint =
+    const projectedAimPoint =
       trackingSnapshot.trackingState === "tracked"
-        ? this.#affineAimTransform.apply(trackingSnapshot.pose.indexTip)
-        : null;
+        ? this.#projectAimPoint(trackingSnapshot)
+        : { aimPoint: null, isReticleOffscreen: false };
     const triggerPressed =
       trackingSnapshot.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
         : false;
     const sessionPhase = this.#combatSession.beginFrame(safeNowMs).phase;
     const sessionActive = sessionPhase === "active";
+    const weaponFrame = this.#weaponRuntime.advance({
+      hasTrackedHand: trackingSnapshot.trackingState === "tracked",
+      isReticleOffscreen: projectedAimPoint.isReticleOffscreen,
+      nowMs: safeNowMs,
+      sessionActive,
+      triggerPressed
+    });
 
-    if (sessionActive && aimPoint !== null) {
-      applyReticleScatter(this.#enemyRuntimeStates, this.#config, aimPoint.x, aimPoint.y);
-    } else if (aimPoint === null || !sessionActive) {
-      this.#triggerHeld = false;
+    if (sessionActive && projectedAimPoint.aimPoint !== null) {
+      applyReticleScatter(
+        this.#enemyRuntimeStates,
+        this.#config,
+        projectedAimPoint.aimPoint.x,
+        projectedAimPoint.aimPoint.y
+      );
     }
 
-    if (
-      sessionActive &&
-      aimPoint !== null &&
-      triggerPressed &&
-      !this.#triggerHeld &&
-      safeNowMs >= this.#nextFireAtMs
-    ) {
-      this.#resolveShot(aimPoint.x, aimPoint.y, safeNowMs);
+    if (weaponFrame.fired && projectedAimPoint.aimPoint !== null) {
+      this.#resolveShot(
+        projectedAimPoint.aimPoint.x,
+        projectedAimPoint.aimPoint.y,
+        safeNowMs
+      );
     }
 
-    this.#triggerHeld = sessionActive ? triggerPressed : false;
+    if (weaponFrame.reloaded) {
+      this.#emitGameplaySignal?.({
+        type: "weapon-reloaded",
+        weaponId: this.#weaponRuntime.definition.weaponId
+      });
+    }
 
     if (sessionActive) {
       stepEnemyField(this.#enemyRuntimeStates, this.#config, deltaMs);
       this.#combatSession.syncEnemyProgress(
         countDownedEnemies(this.#enemyRuntimeStates)
       );
-      this.#updateFeedback(aimPoint, safeNowMs);
+      this.#updateFeedback(
+        trackingSnapshot.trackingState,
+        projectedAimPoint.aimPoint,
+        projectedAimPoint.isReticleOffscreen,
+        safeNowMs
+      );
     }
 
     this.#hudSnapshot = this.#buildHudSnapshot(
       trackingSnapshot.trackingState,
-      aimPoint,
+      projectedAimPoint.aimPoint,
+      projectedAimPoint.isReticleOffscreen,
       safeNowMs
     );
 
@@ -207,14 +212,12 @@ export class LocalArenaSimulation {
     this.#feedbackHoldUntilMs = 0;
     this.#feedbackState = "tracking-lost";
     this.#lastStepAtMs = null;
-    this.#nextFireAtMs = 0;
-    this.#shotsFired = 0;
-    this.#triggerHeld =
+    this.#weaponRuntime.reset(
       trackingSnapshot?.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
-        : false;
+        : false
+    );
     this.#worldTimeMs = 0;
-    this.#hitsLanded = 0;
 
     resetEnemyField(this.#enemyRuntimeStates, this.#config);
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
@@ -223,20 +226,16 @@ export class LocalArenaSimulation {
   #buildHudSnapshot(
     trackingState: LocalArenaHudSnapshot["trackingState"],
     aimPoint: NormalizedViewportPoint | null,
+    isReticleOffscreen = false,
     nowMs: number = this.#worldTimeMs
   ): LocalArenaHudSnapshot {
-    const weapon = freezeWeaponSnapshot(
-      this.#config.weapon.weaponId,
-      this.#shotsFired,
-      this.#hitsLanded,
-      this.#triggerHeld,
-      this.#combatSession.phase === "active" &&
-        trackingState === "tracked" &&
-        aimPoint !== null &&
-        !this.#triggerHeld &&
-        nowMs >= this.#nextFireAtMs,
-      Math.max(0, this.#nextFireAtMs - nowMs)
-    );
+    const weapon = this.#weaponRuntime.createHudSnapshot({
+      hasTrackedHand: trackingState === "tracked",
+      isReticleOffscreen,
+      nowMs,
+      sessionActive: this.#combatSession.phase === "active",
+      triggerPressed: trackingState === "tracked" && this.#weaponRuntime.triggerHeld
+    });
 
     return freezeHudSnapshot(
       trackingState,
@@ -258,17 +257,15 @@ export class LocalArenaSimulation {
     const thumbDropDistance =
       trackingSnapshot.pose.thumbTip.y - trackingSnapshot.pose.indexTip.y;
 
-    return this.#triggerHeld
-      ? thumbDropDistance >= this.#config.weapon.releaseThreshold
-      : thumbDropDistance >= this.#config.weapon.pressThreshold;
+    return this.#weaponRuntime.triggerHeld
+      ? thumbDropDistance >= this.#config.trigger.releaseThreshold
+      : thumbDropDistance >= this.#config.trigger.pressThreshold;
   }
 
   #resolveShot(aimX: number, aimY: number, nowMs: number): void {
-    this.#shotsFired += 1;
-    this.#nextFireAtMs = nowMs + this.#config.weapon.fireCooldownMs;
     this.#emitGameplaySignal?.({
       type: "weapon-fired",
-      weaponId: this.#config.weapon.weaponId
+      weaponId: this.#weaponRuntime.definition.weaponId
     });
 
     const hitEnemy = findNearestEnemyState(
@@ -279,7 +276,7 @@ export class LocalArenaSimulation {
     );
 
     if (hitEnemy !== null) {
-      this.#hitsLanded += 1;
+      this.#weaponRuntime.recordConfirmedHit();
       setEnemyDowned(hitEnemy, this.#config);
       this.#combatSession.recordShotOutcome({
         hitConfirmed: true,
@@ -311,19 +308,35 @@ export class LocalArenaSimulation {
     this.#feedbackState = state;
     this.#feedbackEnemyId = enemyId;
     this.#feedbackEnemyLabel = enemyLabel;
-    this.#feedbackHoldUntilMs = nowMs + this.#config.weapon.feedbackHoldMs;
+    this.#feedbackHoldUntilMs = nowMs + this.#config.feedback.holdDurationMs;
   }
 
   #updateFeedback(
+    trackingState: LocalArenaHudSnapshot["trackingState"],
     aimPoint: NormalizedViewportPoint | null,
+    isReticleOffscreen: boolean,
     nowMs: number
   ): void {
     if (this.#feedbackHoldUntilMs > nowMs) {
       return;
     }
 
-    if (aimPoint === null) {
+    if (trackingState !== "tracked") {
       this.#feedbackState = "tracking-lost";
+      this.#feedbackEnemyId = null;
+      this.#feedbackEnemyLabel = null;
+      return;
+    }
+
+    if (isReticleOffscreen) {
+      this.#feedbackState = "offscreen";
+      this.#feedbackEnemyId = null;
+      this.#feedbackEnemyLabel = null;
+      return;
+    }
+
+    if (aimPoint === null) {
+      this.#feedbackState = "clear";
       this.#feedbackEnemyId = null;
       this.#feedbackEnemyLabel = null;
       return;
@@ -346,5 +359,27 @@ export class LocalArenaSimulation {
     this.#feedbackState = "targeted";
     this.#feedbackEnemyId = targetedEnemy.renderState.id;
     this.#feedbackEnemyLabel = targetedEnemy.renderState.label;
+  }
+
+  #projectAimPoint(
+    trackingSnapshot: Extract<LatestHandTrackingSnapshot, {
+      readonly trackingState: "tracked";
+    }>
+  ): ProjectedAimPoint {
+    const rawAimPoint = this.#affineAimTransform.projectUnclamped(
+      trackingSnapshot.pose.indexTip
+    );
+    const isReticleOffscreen =
+      rawAimPoint.x < 0 ||
+      rawAimPoint.x > 1 ||
+      rawAimPoint.y < 0 ||
+      rawAimPoint.y > 1;
+
+    return Object.freeze({
+      aimPoint: isReticleOffscreen
+        ? null
+        : createNormalizedViewportPoint(rawAimPoint),
+      isReticleOffscreen
+    });
   }
 }

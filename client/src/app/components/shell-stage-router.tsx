@@ -3,9 +3,11 @@ import type { FormEvent } from "react";
 
 import type { PlayerProfile } from "@thumbshooter/shared";
 
-import type { GameplaySignal } from "../../game";
+import {
+  firstPlayableWeaponDefinition,
+  type GameplaySignal
+} from "../../game";
 import type { HandTrackingRuntime } from "../../game/classes/hand-tracking-runtime";
-import { gameFoundationConfig } from "../../game/config/game-foundation";
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
 import type {
   NavigationStepId,
@@ -144,7 +146,7 @@ export function ShellStageRouter({
             onOpenMenu={onOpenGameplayMenu}
             selectedReticleLabel={selectedReticleLabel}
             username={profile.snapshot.username}
-            weaponLabel={gameFoundationConfig.weapon.firstPlayableWeapon}
+            weaponLabel={firstPlayableWeaponDefinition.displayName}
           />
         </Suspense>
       ) : null}

@@ -15,7 +15,7 @@ const requiredEntrypoints = [
   "tools/bench",
   "tools/verify"
 ];
-const requiredRepoFiles = [
+const requiredLocalRepoFiles = [
   "AGENTS.md",
   "README.md",
   "spec.md",
@@ -946,8 +946,8 @@ export function collectRepoVerificationErrors({
     assertExists(repoRoot, requiredEntrypoint, errors);
   }
 
-  for (const requiredRepoFile of requiredRepoFiles) {
-    assertExists(repoRoot, requiredRepoFile, errors);
+  for (const requiredLocalRepoFile of requiredLocalRepoFiles) {
+    assertExists(repoRoot, requiredLocalRepoFile, errors);
   }
 
   verifyProductImports(repoRoot, sourceFiles, errors);

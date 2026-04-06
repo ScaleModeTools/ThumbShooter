@@ -4,12 +4,17 @@ export { localCombatSessionConfig } from "./config/local-combat-session";
 export { localArenaSimulationConfig } from "./config/local-arena-simulation";
 export { gameplayRuntimeConfig } from "./config/gameplay-runtime";
 export { handTrackingRuntimeConfig } from "./config/hand-tracking-runtime";
+export {
+  firstPlayableWeaponDefinition,
+  weaponManifest
+} from "./config/weapon-manifest";
 export { HandTrackingRuntime } from "./classes/hand-tracking-runtime";
 export { LocalCombatSession } from "./classes/local-combat-session";
 export { LocalArenaSimulation } from "./classes/local-arena-simulation";
 export { NinePointCalibrationSession } from "./classes/nine-point-calibration-session";
 export { WebGpuGameplayRuntime } from "./classes/webgpu-gameplay-runtime";
 export { WebGpuGameplayCapabilityProbe } from "./classes/webgpu-gameplay-capability-probe";
+export { WeaponRuntime } from "./classes/weapon-runtime";
 export {
   calibrationTransformModels,
   firstPlayableWeaponIds,
@@ -18,6 +23,7 @@ export {
   shaderAuthoringModels,
   threeGameplayImportSurfaces,
   triggerGestureModes,
+  weaponReloadRules,
   webGpuFallbackPolicies
 } from "./types/game-foundation";
 export { calibrationCaptureStates } from "./types/calibration-session";
@@ -33,6 +39,10 @@ export {
 } from "./types/local-arena-simulation";
 export { gameplaySignalTypes } from "./types/gameplay-signal";
 export {
+  weaponReadinessStates,
+  weaponReloadStates
+} from "./types/weapon-contract";
+export {
   webGpuGameplayCapabilityReasons,
   webGpuGameplayCapabilityStatuses
 } from "./types/webgpu-capability";
@@ -47,6 +57,7 @@ export type {
   ShaderAuthoringModel,
   ThreeGameplayImportSurface,
   TriggerGestureMode,
+  WeaponReloadRule,
   WebGpuFallbackPolicy
 } from "./types/game-foundation";
 export type {
@@ -100,6 +111,16 @@ export type {
   LocalArenaTargetFeedbackState,
   LocalArenaWeaponSnapshot
 } from "./types/local-arena-simulation";
+export type {
+  WeaponCadenceConfig,
+  WeaponDefinition,
+  WeaponHudSnapshot,
+  WeaponReadinessState,
+  WeaponReloadConfig,
+  WeaponReloadSnapshot,
+  WeaponReloadState,
+  WeaponSpreadConfig
+} from "./types/weapon-contract";
 export type { GameRuntimeStage } from "./states/game-runtime-state";
 export type {
   WebGpuGameplayCapabilityReason,

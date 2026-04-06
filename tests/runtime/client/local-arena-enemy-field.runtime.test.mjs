@@ -41,6 +41,9 @@ function createArenaConfig() {
         wingSpeed: 7
       }
     ],
+    feedback: {
+      holdDurationMs: 280
+    },
     movement: {
       maxStepMs: 64,
       scatterDurationMs: 120,
@@ -58,12 +61,28 @@ function createArenaConfig() {
       reticleScatterRadius: 0.14,
       shotScatterRadius: 0.2
     },
+    trigger: {
+      pressThreshold: 0.055,
+      releaseThreshold: 0.02
+    },
     weapon: {
       weaponId: "semiautomatic-pistol",
-      pressThreshold: 0.055,
-      releaseThreshold: 0.02,
-      fireCooldownMs: 220,
-      feedbackHoldMs: 280
+      displayName: "Semiautomatic pistol",
+      triggerMode: "single",
+      cadence: {
+        shotIntervalMs: 220
+      },
+      reload: {
+        clipCapacity: 6,
+        durationMs: 240,
+        rule: "reticle-offscreen"
+      },
+      spread: {
+        baseRadius: 0,
+        maxRadius: 0.02,
+        sprayGrowthPerShot: 0.0025,
+        sprayRecoveryPerSecond: 6
+      }
     }
   };
 }

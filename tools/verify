@@ -10,4 +10,5 @@ npm run clean:generated
 npm run build:workspaces
 npm run typecheck
 npm run test:runtime
+npm run bench
 node ./tools/internal/verify-repo.mjs

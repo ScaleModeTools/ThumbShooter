@@ -11,7 +11,15 @@ import {
   type GameplaySignal,
   type GameplaySignalType,
   type LocalArenaEnemyBehaviorState,
-  type LocalArenaTargetFeedbackState
+  type LocalArenaTargetFeedbackState,
+  type TriggerGestureMode,
+  type WeaponDefinition,
+  type WeaponReadinessState,
+  type WeaponReloadRule,
+  type WeaponReloadState,
+  weaponReadinessStates,
+  weaponReloadRules,
+  weaponReloadStates
 } from "../../client/src/game/index";
 import type { AssertTrue, IsEqual } from "./type-assertions";
 
@@ -48,10 +56,21 @@ type ExpectedLocalArenaEnemyBehaviorState =
   | "downed";
 type ExpectedLocalArenaTargetFeedbackState =
   | "tracking-lost"
+  | "offscreen"
   | "clear"
   | "targeted"
   | "hit"
   | "miss";
+type ExpectedWeaponReadinessState =
+  | "ready"
+  | "tracking-unavailable"
+  | "round-paused"
+  | "trigger-reset-required"
+  | "cooldown"
+  | "reload-required"
+  | "reloading";
+type ExpectedWeaponReloadState = "full" | "blocked" | "reloading";
+type ExpectedWeaponReloadRule = "reticle-offscreen";
 
 type ShellActionTypesMatch = AssertTrue<
   IsEqual<ThumbShooterShellControllerActionType, ExpectedShellActionType>
@@ -104,6 +123,42 @@ type GameplayHudFeedbackUsesTargetFeedbackState = AssertTrue<
 type GameplayHudWeaponUsesFirstPlayableWeaponId = AssertTrue<
   IsEqual<GameplayHudSnapshot["weapon"]["weaponId"], FirstPlayableWeaponId>
 >;
+type WeaponReadinessMatches = AssertTrue<
+  IsEqual<WeaponReadinessState, ExpectedWeaponReadinessState>
+>;
+type WeaponReadinessCatalogMatches = AssertTrue<
+  IsEqual<(typeof weaponReadinessStates)[number], WeaponReadinessState>
+>;
+type GameplayHudWeaponReadinessMatches = AssertTrue<
+  IsEqual<GameplayHudSnapshot["weapon"]["readiness"], WeaponReadinessState>
+>;
+type WeaponReloadStateMatches = AssertTrue<
+  IsEqual<WeaponReloadState, ExpectedWeaponReloadState>
+>;
+type WeaponReloadStateCatalogMatches = AssertTrue<
+  IsEqual<(typeof weaponReloadStates)[number], WeaponReloadState>
+>;
+type GameplayHudReloadStateMatches = AssertTrue<
+  IsEqual<GameplayHudSnapshot["weapon"]["reload"]["state"], WeaponReloadState>
+>;
+type WeaponReloadRuleMatches = AssertTrue<
+  IsEqual<WeaponReloadRule, ExpectedWeaponReloadRule>
+>;
+type WeaponReloadRuleCatalogMatches = AssertTrue<
+  IsEqual<(typeof weaponReloadRules)[number], WeaponReloadRule>
+>;
+type GameplayHudReloadRuleMatches = AssertTrue<
+  IsEqual<GameplayHudSnapshot["weapon"]["reload"]["rule"], WeaponReloadRule>
+>;
+type WeaponDefinitionClipCapacityIsNumber = AssertTrue<
+  IsEqual<WeaponDefinition["reload"]["clipCapacity"], number>
+>;
+type WeaponDefinitionTriggerModeMatchesFoundation = AssertTrue<
+  IsEqual<WeaponDefinition["triggerMode"], TriggerGestureMode>
+>;
+type WeaponDefinitionSpreadFieldIsNumber = AssertTrue<
+  IsEqual<WeaponDefinition["spread"]["sprayGrowthPerShot"], number>
+>;
 type MusicVolumePayloadIsNumber = AssertTrue<
   IsEqual<
     Extract<
@@ -132,7 +187,7 @@ type ProfileConfirmedPayloadUsesPlayerProfile = AssertTrue<
   >
 >;
 type GameplaySignalTypeMatches = AssertTrue<
-  IsEqual<GameplaySignalType, "weapon-fired">
+  IsEqual<GameplaySignalType, "weapon-fired" | "weapon-reloaded">
 >;
 type GameplaySignalWeaponIdMatches = AssertTrue<
   IsEqual<GameplaySignal["weaponId"], FirstPlayableWeaponId>
@@ -149,6 +204,18 @@ export type ClientShellGameplayTypeTests =
   | LocalArenaTargetFeedbackCatalogMatches
   | GameplayHudFeedbackUsesTargetFeedbackState
   | GameplayHudWeaponUsesFirstPlayableWeaponId
+  | WeaponReadinessMatches
+  | WeaponReadinessCatalogMatches
+  | GameplayHudWeaponReadinessMatches
+  | WeaponReloadStateMatches
+  | WeaponReloadStateCatalogMatches
+  | GameplayHudReloadStateMatches
+  | WeaponReloadRuleMatches
+  | WeaponReloadRuleCatalogMatches
+  | GameplayHudReloadRuleMatches
+  | WeaponDefinitionClipCapacityIsNumber
+  | WeaponDefinitionTriggerModeMatchesFoundation
+  | WeaponDefinitionSpreadFieldIsNumber
   | MusicVolumePayloadIsNumber
   | GameplayMenuTogglePayloadIsBoolean
   | ProfileConfirmedPayloadUsesPlayerProfile

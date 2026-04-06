@@ -31,6 +31,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/game/classes/weapon-runtime.ts",
+      "testPaths": [
+        "tests/runtime/client/weapon-runtime.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/game/classes/webgpu-gameplay-capability-probe.ts",
       "testPaths": [
         "tests/runtime/client/game-runtime.test.mjs"

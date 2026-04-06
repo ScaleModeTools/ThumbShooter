@@ -20,8 +20,7 @@ export const gameFoundationConfig = {
   },
   input: {
     tracker: "mediapipe-hand-landmarker",
-    primaryLandmarks: ["thumb-tip", "index-fingertip"],
-    reloadRule: "reticle-offscreen"
+    primaryLandmarks: ["thumb-tip", "index-fingertip"]
   },
   calibration: {
     transformModel: "affine-2d",
@@ -75,6 +74,7 @@ export const gameFoundationConfig = {
   },
   weapon: {
     firstPlayableWeapon: "semiautomatic-pistol",
+    supportedReloadRules: ["reticle-offscreen"],
     supportedTriggerModes: ["single", "auto"],
     automaticWeaponsStatus: "planned-after-first-playable"
   },

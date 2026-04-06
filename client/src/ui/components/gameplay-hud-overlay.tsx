@@ -29,6 +29,10 @@ function formatTargetFeedback(hudSnapshot: GameplayHudSnapshot): string {
     return "Tracking lost";
   }
 
+  if (hudSnapshot.targetFeedback.state === "offscreen") {
+    return "Reticle off-screen";
+  }
+
   if (hudSnapshot.targetFeedback.state === "clear") {
     return "Clear lane";
   }
@@ -49,23 +53,42 @@ function formatTargetFeedback(hudSnapshot: GameplayHudSnapshot): string {
 }
 
 function formatWeaponReadiness(hudSnapshot: GameplayHudSnapshot): string {
-  if (hudSnapshot.session.phase !== "active") {
-    return "Round paused for restart";
+  switch (hudSnapshot.weapon.readiness) {
+    case "round-paused":
+      return "Round paused for restart";
+    case "tracking-unavailable":
+      return "Awaiting tracked hand";
+    case "trigger-reset-required":
+      return "Release thumb to reset";
+    case "cooldown":
+      return `Recovering ${Math.ceil(hudSnapshot.weapon.cooldownRemainingMs)} ms`;
+    case "reload-required":
+      return hudSnapshot.weapon.reload.isReloadReady
+        ? "Move farther off-screen to reload"
+        : "Move reticle off-screen to reload";
+    case "reloading":
+      return `Reloading ${Math.ceil(hudSnapshot.weapon.reload.reloadRemainingMs)} ms`;
+    case "ready":
+      return "Ready";
+  }
+}
+
+function formatClipState(hudSnapshot: GameplayHudSnapshot): string {
+  const {
+    clipCapacity,
+    clipRoundsRemaining,
+    state
+  } = hudSnapshot.weapon.reload;
+
+  if (state === "reloading") {
+    return `Clip ${clipRoundsRemaining} / ${clipCapacity} • Reloading`;
   }
 
-  if (hudSnapshot.trackingState !== "tracked") {
-    return "Awaiting tracked hand";
+  if (state === "blocked") {
+    return `Clip ${clipRoundsRemaining} / ${clipCapacity} • Reload required`;
   }
 
-  if (hudSnapshot.weapon.triggerHeld) {
-    return "Release thumb to reset";
-  }
-
-  if (hudSnapshot.weapon.cooldownRemainingMs > 0) {
-    return `Recovering ${Math.ceil(hudSnapshot.weapon.cooldownRemainingMs)} ms`;
-  }
-
-  return "Ready";
+  return `Clip ${clipRoundsRemaining} / ${clipCapacity}`;
 }
 
 function formatRoundTime(roundTimeRemainingMs: number): string {
@@ -224,6 +247,9 @@ export function GameplayHudOverlay({
           <p className="text-sm font-medium text-white">{weaponLabel}</p>
           <p className="mt-2 text-sm text-white/82">
             {formatWeaponReadiness(hudSnapshot)}
+          </p>
+          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
+            {formatClipState(hudSnapshot)}
           </p>
           <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
             {`${hudSnapshot.weapon.shotsFired} shots / ${hudSnapshot.weapon.hitsLanded} hits`}

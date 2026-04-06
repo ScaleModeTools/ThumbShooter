@@ -183,18 +183,24 @@ export class AffineAimTransform {
     return this.#snapshot;
   }
 
+  projectUnclamped(
+    observedPoint: NormalizedViewportPoint | NormalizedViewportPointInput
+  ): NormalizedViewportPointInput {
+    return Object.freeze({
+      x:
+        observedPoint.x * this.#snapshot.xCoefficients[0] +
+        observedPoint.y * this.#snapshot.xCoefficients[1] +
+        this.#snapshot.xCoefficients[2],
+      y:
+        observedPoint.x * this.#snapshot.yCoefficients[0] +
+        observedPoint.y * this.#snapshot.yCoefficients[1] +
+        this.#snapshot.yCoefficients[2]
+    });
+  }
+
   apply(
     observedPoint: NormalizedViewportPoint | NormalizedViewportPointInput
   ): NormalizedViewportPoint {
-    const x =
-      observedPoint.x * this.#snapshot.xCoefficients[0] +
-      observedPoint.y * this.#snapshot.xCoefficients[1] +
-      this.#snapshot.xCoefficients[2];
-    const y =
-      observedPoint.x * this.#snapshot.yCoefficients[0] +
-      observedPoint.y * this.#snapshot.yCoefficients[1] +
-      this.#snapshot.yCoefficients[2];
-
-    return createNormalizedViewportPoint({ x, y });
+    return createNormalizedViewportPoint(this.projectUnclamped(observedPoint));
   }
 }

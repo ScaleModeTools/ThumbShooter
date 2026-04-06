@@ -1,5 +1,6 @@
 import { calibrationCaptureConfig } from "./calibration-capture";
 import { localCombatSessionConfig } from "./local-combat-session";
+import { firstPlayableWeaponDefinition } from "./weapon-manifest";
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 
 export const localArenaSimulationConfig = {
@@ -47,6 +48,9 @@ export const localArenaSimulationConfig = {
       wingSpeed: 6.1
     }
   ],
+  feedback: {
+    holdDurationMs: 380
+  },
   movement: {
     maxStepMs: 48,
     scatterDurationMs: 820,
@@ -61,11 +65,9 @@ export const localArenaSimulationConfig = {
     reticleScatterRadius: 0.17,
     shotScatterRadius: 0.24
   },
-  weapon: {
-    weaponId: "semiautomatic-pistol",
+  trigger: {
     pressThreshold: calibrationCaptureConfig.pressThreshold,
-    releaseThreshold: calibrationCaptureConfig.releaseThreshold,
-    fireCooldownMs: 260,
-    feedbackHoldMs: 380
-  }
+    releaseThreshold: calibrationCaptureConfig.releaseThreshold
+  },
+  weapon: firstPlayableWeaponDefinition
 } as const satisfies LocalArenaSimulationConfig;

@@ -26,9 +26,6 @@ export function MilestoneBoundariesCard() {
         <div className="rounded-xl border border-border/70 bg-muted/35 px-3 py-3">
           Automatic weapons
         </div>
-        <div className="rounded-xl border border-border/70 bg-muted/35 px-3 py-3">
-          Off-screen reload behavior
-        </div>
       </CardContent>
     </Card>
   );

@@ -1,72 +1,3 @@
-function createArenaConfig() {
-  return {
-    arenaBounds: {
-      minX: 0.05,
-      maxX: 0.95,
-      minY: 0.05,
-      maxY: 0.95
-    },
-    enemySeeds: [
-      {
-        id: "bird-1",
-        label: "Bird 1",
-        spawn: { x: 0.22, y: 0.28 },
-        glideVelocity: { x: 0.12, y: 0.03 },
-        radius: 0.08,
-        scale: 1.05,
-        wingSpeed: 6.4
-      },
-      {
-        id: "bird-2",
-        label: "Bird 2",
-        spawn: { x: 0.78, y: 0.24 },
-        glideVelocity: { x: -0.11, y: 0.04 },
-        radius: 0.082,
-        scale: 0.98,
-        wingSpeed: 5.8
-      },
-      {
-        id: "bird-3",
-        label: "Bird 3",
-        spawn: { x: 0.32, y: 0.7 },
-        glideVelocity: { x: 0.1, y: -0.05 },
-        radius: 0.078,
-        scale: 1.1,
-        wingSpeed: 6.9
-      },
-      {
-        id: "bird-4",
-        label: "Bird 4",
-        spawn: { x: 0.74, y: 0.74 },
-        glideVelocity: { x: -0.12, y: -0.03 },
-        radius: 0.08,
-        scale: 1.02,
-        wingSpeed: 6.1
-      }
-    ],
-    movement: {
-      maxStepMs: 48,
-      scatterDurationMs: 820,
-      scatterSpeed: 0.24,
-      downedDurationMs: 960,
-      downedDriftVelocityY: 0.18
-    },
-    targeting: {
-      acquireRadius: 0.1,
-      hitRadius: 0.09,
-      reticleScatterRadius: 0.17,
-      shotScatterRadius: 0.24
-    },
-    weapon: {
-      weaponId: "semiautomatic-pistol",
-      pressThreshold: 0.055,
-      releaseThreshold: 0.02,
-      fireCooldownMs: 260,
-      feedbackHoldMs: 380
-    }
-  };
-}
-
 function createTrackedSnapshot(sequenceNumber, x, y, thumbDrop = 0) {
   return {
     trackingState: "tracked",
@@ -86,7 +17,12 @@ function createTrackedSnapshot(sequenceNumber, x, y, thumbDrop = 0) {
 }
 
 export async function createBenchmarkSuites({ clientLoader }) {
-  const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
+  const {
+    LocalArenaSimulation,
+    WeaponRuntime,
+    firstPlayableWeaponDefinition,
+    localArenaSimulationConfig
+  } = await clientLoader.load("/src/game/index.ts");
   const { createLatestHandTrackingSnapshot } = await clientLoader.load(
     "/src/game/types/hand-tracking.ts"
   );
@@ -102,7 +38,7 @@ export async function createBenchmarkSuites({ clientLoader }) {
             xCoefficients: [1, 0, 0],
             yCoefficients: [0, 1, 0]
           },
-          createArenaConfig()
+          localArenaSimulationConfig
         );
         const snapshots = [
           createTrackedSnapshot(1, 0.22, 0.3),
@@ -146,6 +82,63 @@ export async function createBenchmarkSuites({ clientLoader }) {
                 y: 0.37
               }
             }
+          });
+        };
+      }
+    },
+    {
+      id: "weapon-runtime.advance-plus-hud",
+      iterations: 120000,
+      maxMeanNs: 9000,
+      setup() {
+        const weaponRuntime = new WeaponRuntime(firstPlayableWeaponDefinition);
+        const frameInputs = [
+          {
+            hasTrackedHand: true,
+            isReticleOffscreen: false,
+            sessionActive: true,
+            triggerPressed: false
+          },
+          {
+            hasTrackedHand: true,
+            isReticleOffscreen: false,
+            sessionActive: true,
+            triggerPressed: true
+          },
+          {
+            hasTrackedHand: true,
+            isReticleOffscreen: false,
+            sessionActive: true,
+            triggerPressed: false
+          },
+          {
+            hasTrackedHand: true,
+            isReticleOffscreen: false,
+            sessionActive: true,
+            triggerPressed: true
+          },
+          {
+            hasTrackedHand: true,
+            isReticleOffscreen: true,
+            sessionActive: true,
+            triggerPressed: false
+          }
+        ];
+        let frameIndex = 0;
+        let nowMs = 0;
+
+        return () => {
+          const frameInput = frameInputs[frameIndex % frameInputs.length];
+
+          frameIndex += 1;
+          nowMs += 160;
+          weaponRuntime.advance({
+            ...frameInput,
+            nowMs
+          });
+          weaponRuntime.createHudSnapshot({
+            ...frameInput,
+            nowMs
           });
         };
       }

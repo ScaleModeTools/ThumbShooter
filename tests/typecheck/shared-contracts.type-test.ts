@@ -1,10 +1,12 @@
 import type {
+  AffineAimTransform,
   AffineAimTransformSnapshot,
   AudioChannelId,
   AudioSettingsSnapshot,
   BackgroundMusicEngine,
   CalibrationAnchorId,
   NormalizedViewportScalar,
+  NormalizedViewportPointInput,
   NormalizedViewportPoint,
   PlayerProfileSnapshot,
   ReticleId,
@@ -63,6 +65,12 @@ type NormalizedPointYAxisUsesBrandedScalar = AssertTrue<
 type CreateUsernameReturnMatches = AssertTrue<
   IsEqual<ReturnType<typeof createUsername>, Username | null>
 >;
+type SharedProjectUnclampedReturnMatches = AssertTrue<
+  IsEqual<
+    ReturnType<AffineAimTransform["projectUnclamped"]>,
+    NormalizedViewportPointInput
+  >
+>;
 
 export type SharedContractTypeTests =
   | CalibrationAnchorIdMatches
@@ -75,4 +83,5 @@ export type SharedContractTypeTests =
   | PlayerProfileAimCalibrationUsesSharedTransform
   | NormalizedPointXAxisUsesBrandedScalar
   | NormalizedPointYAxisUsesBrandedScalar
-  | CreateUsernameReturnMatches;
+  | CreateUsernameReturnMatches
+  | SharedProjectUnclampedReturnMatches;

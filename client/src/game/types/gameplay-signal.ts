@@ -1,10 +1,15 @@
 import type { LocalArenaWeaponSnapshot } from "./local-arena-simulation";
 
-export const gameplaySignalTypes = ["weapon-fired"] as const;
+export const gameplaySignalTypes = ["weapon-fired", "weapon-reloaded"] as const;
 
 export type GameplaySignalType = (typeof gameplaySignalTypes)[number];
 
-export type GameplaySignal = {
-  readonly type: "weapon-fired";
-  readonly weaponId: LocalArenaWeaponSnapshot["weaponId"];
-};
+export type GameplaySignal =
+  | {
+      readonly type: "weapon-fired";
+      readonly weaponId: LocalArenaWeaponSnapshot["weaponId"];
+    }
+  | {
+      readonly type: "weapon-reloaded";
+      readonly weaponId: LocalArenaWeaponSnapshot["weaponId"];
+    };

@@ -38,6 +38,8 @@ export function resolveGameplaySignalCue(
       return signal.weaponId === "semiautomatic-pistol"
         ? "weapon-pistol-shot"
         : null;
+    case "weapon-reloaded":
+      return "weapon-reload";
   }
 }
 

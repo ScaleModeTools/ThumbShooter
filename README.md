@@ -2,8 +2,8 @@
 
 ThumbShooter is a browser FPS prototype where the player aims with a webcam-
 tracked hand pose and fires by dropping the thumb relative to the index finger.
-The current shipped build is milestone 4 local combat progression with the
-phase 5 audio prototype live on top of it.
+The current shipped build is the phase 7 local combat loop with the phase 5
+audio prototype live on top of it.
 
 ## What Ships Now
 
@@ -13,18 +13,19 @@ phase 5 audio prototype live on top of it.
 - nine-point affine aim calibration
 - WebGPU arena gameplay with readable bird targets and semiautomatic thumb-drop
   firing
+- clip-aware semiautomatic weapon behavior with off-screen reload
 - local hit, kill, score, streak, and round-phase tracking
 - completed / failed local rounds with restart-ready flow
-- typed Web Audio cues for UI, calibration, and the semiautomatic pistol
-- HUD and in-game menu support for score, streak, kills, recalibration, and
-  music/SFX controls
+- typed Web Audio cues for UI, calibration, semiautomatic pistol fire, and
+  reload completion
+- HUD and in-game menu support for score, streak, kills, clip/reload state,
+  recalibration, and music/SFX controls
 
 Still intentionally deferred:
 
 - server-authoritative gameplay
 - multiplayer/network sync
 - automatic weapons
-- off-screen reload behavior
 
 ## Repo Map
 
@@ -44,6 +45,7 @@ Still intentionally deferred:
   snapshots
 - `LocalArenaSimulation`: calibrated aim, weapon loop, HUD snapshots, combat
   integration
+- `WeaponRuntime`: clip, cadence, reload timing, and weapon HUD state
 - `LocalCombatSession`: local score, streak, timer, and active/completed/failed
   round phases
 - `WebGpuGameplayRuntime`: renderer lifecycle, frame loop, and scene draw path

@@ -144,6 +144,22 @@ test("AffineAimTransform.fit reconstructs an affine screen-space mapping", () =>
   );
 });
 
+test("AffineAimTransform.projectUnclamped preserves off-screen projections", () => {
+  const transform = AffineAimTransform.fromSnapshot({
+    xCoefficients: [2, 0, -0.5],
+    yCoefficients: [0, 1, 0]
+  });
+
+  assert.deepEqual(transform.projectUnclamped({ x: 0.9, y: 0.2 }), {
+    x: 1.3,
+    y: 0.2
+  });
+  assert.deepEqual(transform.apply({ x: 0.9, y: 0.2 }), {
+    x: 1,
+    y: 0.2
+  });
+});
+
 test("PlayerProfile.withAimCalibration stores an immutable fitted transform", () => {
   const baseProfile = PlayerProfile.create({
     username: "thumbshooter-test-user"

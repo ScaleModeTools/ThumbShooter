@@ -1,8 +1,6 @@
-import type {
-  FirstPlayableWeaponId
-} from "./game-foundation";
 import type { HandTrackingPoseState } from "./hand-tracking";
 import type { LocalCombatSessionConfig, LocalCombatSessionSnapshot } from "./local-combat-session";
+import type { WeaponDefinition, WeaponHudSnapshot } from "./weapon-contract";
 import type { NormalizedViewportPoint } from "@thumbshooter/shared";
 
 export const localArenaEnemyBehaviorStates = [
@@ -12,6 +10,7 @@ export const localArenaEnemyBehaviorStates = [
 ] as const;
 export const localArenaTargetFeedbackStates = [
   "tracking-lost",
+  "offscreen",
   "clear",
   "targeted",
   "hit",
@@ -58,15 +57,7 @@ export interface LocalArenaArenaSnapshot {
   readonly scatterEnemyCount: number;
 }
 
-export interface LocalArenaWeaponSnapshot {
-  readonly cooldownRemainingMs: number;
-  readonly hitsLanded: number;
-  readonly isFireReady: boolean;
-  readonly requiresTriggerReset: boolean;
-  readonly shotsFired: number;
-  readonly triggerHeld: boolean;
-  readonly weaponId: FirstPlayableWeaponId;
-}
+export type LocalArenaWeaponSnapshot = WeaponHudSnapshot;
 
 export interface LocalArenaTargetFeedbackSnapshot {
   readonly enemyId: string | null;
@@ -91,6 +82,9 @@ export interface LocalArenaSimulationConfig {
     readonly minY: number;
   };
   readonly enemySeeds: readonly LocalArenaEnemySeed[];
+  readonly feedback: {
+    readonly holdDurationMs: number;
+  };
   readonly movement: {
     readonly downedDriftVelocityY: number;
     readonly maxStepMs: number;
@@ -105,11 +99,9 @@ export interface LocalArenaSimulationConfig {
     readonly reticleScatterRadius: number;
     readonly shotScatterRadius: number;
   };
-  readonly weapon: {
-    readonly feedbackHoldMs: number;
-    readonly fireCooldownMs: number;
+  readonly trigger: {
     readonly pressThreshold: number;
     readonly releaseThreshold: number;
-    readonly weaponId: FirstPlayableWeaponId;
   };
+  readonly weapon: WeaponDefinition;
 }

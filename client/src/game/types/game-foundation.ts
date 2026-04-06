@@ -6,6 +6,7 @@ import type {
 export const handTrackingExecutionModels = ["worker-first"] as const;
 export const handTrackingTransportModes = ["latest-snapshot"] as const;
 export const triggerGestureModes = ["single", "auto"] as const;
+export const weaponReloadRules = ["reticle-offscreen"] as const;
 export const webGpuFallbackPolicies = ["capability-gate"] as const;
 export const calibrationTransformModels = ["affine-2d"] as const;
 export const firstPlayableWeaponIds = ["semiautomatic-pistol"] as const;
@@ -19,6 +20,7 @@ export type HandTrackingExecutionModel =
 export type HandTrackingTransportMode =
   (typeof handTrackingTransportModes)[number];
 export type TriggerGestureMode = (typeof triggerGestureModes)[number];
+export type WeaponReloadRule = (typeof weaponReloadRules)[number];
 export type WebGpuFallbackPolicy = (typeof webGpuFallbackPolicies)[number];
 export type CalibrationTransformModel =
   (typeof calibrationTransformModels)[number];
@@ -49,7 +51,6 @@ export interface GameFoundationConfig {
   readonly input: {
     readonly tracker: "mediapipe-hand-landmarker";
     readonly primaryLandmarks: readonly ["thumb-tip", "index-fingertip"];
-    readonly reloadRule: "reticle-offscreen";
   };
   readonly calibration: {
     readonly transformModel: CalibrationTransformModel;
@@ -57,6 +58,7 @@ export interface GameFoundationConfig {
   };
   readonly weapon: {
     readonly firstPlayableWeapon: FirstPlayableWeaponId;
+    readonly supportedReloadRules: readonly WeaponReloadRule[];
     readonly supportedTriggerModes: readonly TriggerGestureMode[];
     readonly automaticWeaponsStatus: "planned-after-first-playable";
   };

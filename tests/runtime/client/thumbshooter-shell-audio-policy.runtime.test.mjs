@@ -35,4 +35,11 @@ test("shell audio policy maps first-weapon gameplay signals to typed audio cues"
     }),
     "weapon-pistol-shot"
   );
+  assert.equal(
+    resolveGameplaySignalCue({
+      type: "weapon-reloaded",
+      weaponId: "semiautomatic-pistol"
+    }),
+    "weapon-reload"
+  );
 });
