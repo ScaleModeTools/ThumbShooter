@@ -1,4 +1,5 @@
 import type { HandTrackingPoseState } from "./hand-tracking";
+import type { HandTriggerGestureConfig } from "./hand-trigger-gesture";
 import type { LocalCombatSessionConfig, LocalCombatSessionSnapshot } from "./local-combat-session";
 import type { WeaponDefinition, WeaponHudSnapshot } from "./weapon-contract";
 import type { NormalizedViewportPoint } from "@thumbshooter/shared";
@@ -99,9 +100,6 @@ export interface LocalArenaSimulationConfig {
     readonly reticleScatterRadius: number;
     readonly shotScatterRadius: number;
   };
-  readonly trigger: {
-    readonly pressThreshold: number;
-    readonly releaseThreshold: number;
-  };
+  readonly trigger: HandTriggerGestureConfig;
   readonly weapon: WeaponDefinition;
 }

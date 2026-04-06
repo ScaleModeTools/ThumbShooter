@@ -16,6 +16,7 @@ import type {
 } from "../../navigation";
 
 import { CalibrationStageScreen } from "./calibration-stage-screen";
+import { ImmersiveStageFrame } from "./immersive-stage-frame";
 import { LoginStageScreen } from "./login-stage-screen";
 import { PermissionStageScreen } from "./permission-stage-screen";
 import { UnsupportedStageScreen } from "./unsupported-stage-screen";
@@ -58,15 +59,19 @@ interface ShellStageRouterProps {
 
 function GameplayStageFallback() {
   return (
-    <section className="min-h-[36rem] rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-[0_28px_90px_rgb(15_23_42_/_0.18)] backdrop-blur-xl">
-      <p className="text-sm font-medium text-foreground">
-        Booting WebGPU gameplay runtime
-      </p>
-      <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-        Loading the live renderer and calibrated reticle path for the current
-        session.
-      </p>
-    </section>
+    <ImmersiveStageFrame>
+      <section className="flex flex-1 flex-col justify-end bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.08),_transparent_28%),linear-gradient(180deg,rgb(15_23_42_/_0.06),transparent_32%)] p-6 sm:p-8">
+        <div className="max-w-xl rounded-[1.5rem] border border-border/70 bg-card/72 p-5 backdrop-blur-md">
+          <p className="text-sm font-medium text-foreground">
+            Booting WebGPU gameplay runtime
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Loading the live renderer and calibrated reticle path for the current
+            session.
+          </p>
+        </div>
+      </section>
+    </ImmersiveStageFrame>
   );
 }
 

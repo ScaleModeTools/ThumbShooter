@@ -1,3 +1,4 @@
+import type { HandTriggerGestureConfig } from "./hand-trigger-gesture";
 import type {
   AffineAimTransformSnapshot,
   CalibrationAnchorId,
@@ -16,8 +17,7 @@ export type CalibrationCaptureState =
   (typeof calibrationCaptureStates)[number];
 
 export interface CalibrationCaptureConfig {
-  readonly pressThreshold: number;
-  readonly releaseThreshold: number;
+  readonly triggerGesture: HandTriggerGestureConfig;
 }
 
 export interface NinePointCalibrationSnapshot {

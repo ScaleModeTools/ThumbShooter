@@ -20,7 +20,7 @@ export const gameFoundationConfig = {
   },
   input: {
     tracker: "mediapipe-hand-landmarker",
-    primaryLandmarks: ["thumb-tip", "index-fingertip"]
+    primaryLandmarks: ["hand-pivot", "thumb-chain", "index-chain"]
   },
   calibration: {
     transformModel: "affine-2d",

@@ -6,6 +6,7 @@ import {
 
 import { gameFoundationConfig } from "../config/game-foundation";
 import { calibrationCaptureConfig } from "../config/calibration-capture";
+import { evaluateHandTriggerGesture } from "../types/hand-trigger-gesture";
 import type {
   CalibrationCaptureConfig,
   NinePointCalibrationAdvanceResult,
@@ -97,15 +98,18 @@ export class NinePointCalibrationSession {
       };
     }
 
-    const thumbDropDistance =
-      trackingSnapshot.pose.thumbTip.y - trackingSnapshot.pose.indexTip.y;
-    const nextTriggerHeld = this.#triggerHeld
-      ? thumbDropDistance >= this.#captureConfig.releaseThreshold
-      : thumbDropDistance >= this.#captureConfig.pressThreshold;
+    const triggerGesture = evaluateHandTriggerGesture(
+      trackingSnapshot.pose,
+      this.#triggerHeld,
+      this.#captureConfig.triggerGesture
+    );
+    const nextTriggerHeld = triggerGesture.triggerPressed;
 
     if (!nextTriggerHeld) {
       this.#triggerHeld = false;
-      this.#captureState = "ready-to-capture";
+      this.#captureState = triggerGesture.triggerReady
+        ? "ready-to-capture"
+        : "release-trigger";
 
       return {
         didChange: previousSnapshotKey !== createSnapshotKey(this.snapshot),

@@ -5,10 +5,11 @@ import type { PlayerProfile } from "@thumbshooter/shared";
 import { HandTrackingRuntime } from "../../game/classes/hand-tracking-runtime";
 import { NinePointCalibrationSession } from "../../game/classes/nine-point-calibration-session";
 import { gameFoundationConfig } from "../../game/config/game-foundation";
+import type { HandTrackingPoseSnapshot } from "../../game/types/hand-tracking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import { StageScreenLayout } from "./stage-screen-layout";
+import { ImmersiveStageFrame } from "./immersive-stage-frame";
 
 interface CalibrationStageScreenProps {
   readonly handTrackingRuntime: HandTrackingRuntime;
@@ -21,6 +22,74 @@ interface CalibrationStageScreenProps {
 
 function toPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function resolveCaptureGuidance(input: {
+  readonly captureState: string;
+  readonly trackingState: string;
+}): string {
+  if (input.trackingState === "unavailable") {
+    return "Keep the camera on.";
+  }
+
+  if (input.trackingState === "no-hand") {
+    return "Move one hand into view.";
+  }
+
+  if (input.captureState === "ready-to-capture") {
+    return "Hold on target, then drop your thumb.";
+  }
+
+  if (input.captureState === "release-trigger") {
+    return "Release your thumb.";
+  }
+
+  if (input.captureState === "complete") {
+    return "All nine samples are locked.";
+  }
+
+  return "Point at the target and settle.";
+}
+
+const indexDebugPointIds = [
+  "handPivot",
+  "indexBase",
+  "indexKnuckle",
+  "indexJoint",
+  "indexTip"
+] as const satisfies readonly (keyof HandTrackingPoseSnapshot)[];
+const thumbDebugPointIds = [
+  "handPivot",
+  "thumbTip"
+] as const satisfies readonly (keyof HandTrackingPoseSnapshot)[];
+const handDebugPointIds = [
+  "handPivot",
+  "thumbTip",
+  "indexBase",
+  "indexKnuckle",
+  "indexJoint",
+  "indexTip"
+] as const satisfies readonly (keyof HandTrackingPoseSnapshot)[];
+
+function formatOverlayPolyline(
+  pose: HandTrackingPoseSnapshot,
+  pointIds: readonly (keyof HandTrackingPoseSnapshot)[]
+): string {
+  return pointIds
+    .map((pointId) => `${pose[pointId].x * 100},${pose[pointId].y * 100}`)
+    .join(" ");
+}
+
+function setOverlayPoint(
+  node: SVGCircleElement | null | undefined,
+  point: HandTrackingPoseSnapshot[keyof HandTrackingPoseSnapshot]
+): void {
+  if (node == null) {
+    return;
+  }
+
+  node.setAttribute("cx", String(point.x * 100));
+  node.setAttribute("cy", String(point.y * 100));
 }
 
 export function CalibrationStageScreen({
@@ -41,8 +110,13 @@ export function CalibrationStageScreen({
   const [runtimeFailureReason, setRuntimeFailureReason] = useState<string | null>(
     handTrackingRuntime.snapshot.failureReason
   );
-  const rawPoseRef = useRef<HTMLDivElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const handOverlayRef = useRef<SVGSVGElement | null>(null);
   const profileRef = useRef(profile);
+  const captureGuidance = resolveCaptureGuidance({
+    captureState: captureSnapshot.captureState,
+    trackingState
+  });
 
   useEffect(() => {
     profileRef.current = profile;
@@ -68,10 +142,36 @@ export function CalibrationStageScreen({
 
   useEffect(() => {
     let animationFrameHandle = 0;
+    const handOverlay = handOverlayRef.current;
+    const indexOverlay = handOverlay?.querySelector<SVGPolylineElement>(
+      '[data-skeleton="index"]'
+    );
+    const thumbOverlay = handOverlay?.querySelector<SVGPolylineElement>(
+      '[data-skeleton="thumb"]'
+    );
+    const handPivotPoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="handPivot"]'
+    );
+    const thumbTipPoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="thumbTip"]'
+    );
+    const indexBasePoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="indexBase"]'
+    );
+    const indexKnucklePoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="indexKnuckle"]'
+    );
+    const indexJointPoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="indexJoint"]'
+    );
+    const indexTipPoint = handOverlay?.querySelector<SVGCircleElement>(
+      '[data-point="indexTip"]'
+    );
 
     const updateLoop = () => {
       const runtimeSnapshot = handTrackingRuntime.snapshot;
       const latestPose = handTrackingRuntime.latestPose;
+      const cameraStream = handTrackingRuntime.cameraStream;
 
       setRuntimeLifecycle((currentValue) =>
         currentValue === runtimeSnapshot.lifecycle
@@ -89,13 +189,36 @@ export function CalibrationStageScreen({
           : latestPose.trackingState
       );
 
-      if (rawPoseRef.current !== null) {
+      if (
+        previewVideoRef.current !== null &&
+        previewVideoRef.current.srcObject !== cameraStream
+      ) {
+        previewVideoRef.current.srcObject = cameraStream;
+      }
+
+      if (previewVideoRef.current !== null) {
+        previewVideoRef.current.style.opacity = cameraStream === null ? "0" : "1";
+      }
+
+      if (handOverlay !== null) {
         if (latestPose.trackingState === "tracked") {
-          rawPoseRef.current.style.opacity = "1";
-          rawPoseRef.current.style.left = toPercent(latestPose.pose.indexTip.x);
-          rawPoseRef.current.style.top = toPercent(latestPose.pose.indexTip.y);
+          handOverlay.style.opacity = "1";
+          indexOverlay?.setAttribute(
+            "points",
+            formatOverlayPolyline(latestPose.pose, indexDebugPointIds)
+          );
+          thumbOverlay?.setAttribute(
+            "points",
+            formatOverlayPolyline(latestPose.pose, thumbDebugPointIds)
+          );
+          setOverlayPoint(handPivotPoint, latestPose.pose.handPivot);
+          setOverlayPoint(thumbTipPoint, latestPose.pose.thumbTip);
+          setOverlayPoint(indexBasePoint, latestPose.pose.indexBase);
+          setOverlayPoint(indexKnucklePoint, latestPose.pose.indexKnuckle);
+          setOverlayPoint(indexJointPoint, latestPose.pose.indexJoint);
+          setOverlayPoint(indexTipPoint, latestPose.pose.indexTip);
         } else {
-          rawPoseRef.current.style.opacity = "0";
+          handOverlay.style.opacity = "0";
         }
       }
 
@@ -129,121 +252,125 @@ export function CalibrationStageScreen({
 
     return () => {
       window.cancelAnimationFrame(animationFrameHandle);
+
+      if (previewVideoRef.current !== null) {
+        previewVideoRef.current.srcObject = null;
+      }
     };
   }, [handleCalibrationProgressEvent, handTrackingRuntime, session]);
 
   return (
-    <StageScreenLayout
-      description="Capture nine trigger-confirmed samples, fit the first affine aim transform, and persist it into the local player profile before gameplay boots."
-      eyebrow="Stage 3"
-      title="Nine-point calibration runtime"
-    >
-      <div className="flex flex-wrap gap-2">
-        <Badge>{`Tracking runtime: ${runtimeLifecycle}`}</Badge>
-        <Badge variant="secondary">{`Hand state: ${trackingState}`}</Badge>
-        <Badge variant="secondary">
-          {`${captureSnapshot.capturedSampleCount}/${captureSnapshot.totalAnchorCount} captured`}
-        </Badge>
-        <Badge variant="outline">
-          Transform model: {gameFoundationConfig.calibration.transformModel}
-        </Badge>
-      </div>
+    <ImmersiveStageFrame className="bg-slate-950">
+      <section className="relative min-h-0 flex-1 overflow-hidden">
+        <video
+          autoPlay
+          className="absolute inset-0 h-full w-full"
+          muted
+          playsInline
+          ref={previewVideoRef}
+          style={{ objectFit: "fill", opacity: 0 }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: "rgb(2 6 23 / 0.38)" }}
+        />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="relative min-h-[30rem] overflow-hidden rounded-[1.75rem] border border-border/70 bg-slate-950/92 shadow-[0_24px_80px_rgb(15_23_42_/_0.28)]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgb(251_146_60_/_0.14),_transparent_36%)]" />
-          <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgb(255_255_255_/_0.06)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255_/_0.06)_1px,transparent_1px)] [background-size:3rem_3rem]" />
-
-          {gameFoundationConfig.calibration.anchors.map((anchor, anchorIndex) => {
-            const isCaptured = anchorIndex < captureSnapshot.capturedSampleCount;
-            const isCurrent = captureSnapshot.currentAnchorId === anchor.id;
-
-            return (
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                key={anchor.id}
-                style={{
-                  left: toPercent(anchor.normalizedTarget.x),
-                  top: toPercent(anchor.normalizedTarget.y)
-                }}
-              >
-                <div
-                  className={[
-                    "flex size-12 items-center justify-center rounded-full border text-xs font-semibold transition",
-                    isCaptured
-                      ? "border-emerald-300/80 bg-emerald-300/18 text-emerald-100"
-                      : isCurrent
-                        ? "border-sky-300 bg-sky-300/16 text-sky-100 shadow-[0_0_0_10px_rgb(56_189_248_/_0.12)]"
-                        : "border-white/28 bg-white/6 text-white/72"
-                  ].join(" ")}
-                >
-                  {anchorIndex + 1}
-                </div>
-              </div>
-            );
-          })}
-
-          <div
-            className="pointer-events-none absolute z-10 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-200 bg-amber-300/70 opacity-0 shadow-[0_0_0_8px_rgb(251_191_36_/_0.16)] transition-opacity"
-            ref={rawPoseRef}
-          />
-
-          <div className="absolute inset-x-5 bottom-5 rounded-[1.25rem] border border-white/12 bg-slate-950/72 p-4 backdrop-blur-md">
-            <div className="flex flex-wrap gap-2">
-              <Badge>{`Current anchor: ${captureSnapshot.currentAnchorLabel ?? "complete"}`}</Badge>
-              <Badge variant="secondary">
-                {captureSnapshot.captureState.replaceAll("-", " ")}
-              </Badge>
-            </div>
-            <p className="mt-3 text-sm text-white/82">
-              Point your index fingertip at the highlighted target, then drop your
-              thumb to capture. Release the thumb before moving to the next point.
-            </p>
+        <div className="absolute left-3 top-3 z-10 max-w-xs rounded-[1.25rem] border border-white/10 bg-slate-950/78 p-4 backdrop-blur-md sm:left-4 sm:top-4">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">Stage 3</Badge>
+            <Badge variant="secondary">
+              {`${captureSnapshot.capturedSampleCount}/${captureSnapshot.totalAnchorCount}`}
+            </Badge>
+            <Badge variant="outline">{runtimeLifecycle}</Badge>
           </div>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="rounded-[1.5rem] border border-border/70 bg-muted/30 p-5">
-            <p className="text-sm font-medium">Calibration guidance</p>
-            <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-              <div className="rounded-xl border border-border/70 bg-background/72 px-4 py-3">
-                Worker-owned MediaPipe boot begins lazily when this screen mounts.
-              </div>
-              <div className="rounded-xl border border-border/70 bg-background/72 px-4 py-3">
-                Latest validated hand pose snapshots stay on the game boundary and
-                do not wait on old frames.
-              </div>
-              <div className="rounded-xl border border-border/70 bg-background/72 px-4 py-3">
-                Captured samples persist immediately into the local player profile.
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-border/70 bg-muted/30 p-5">
-            <p className="text-sm font-medium">Current status</p>
-            <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-              <div className="rounded-xl border border-border/70 bg-background/72 px-4 py-3">
-                Sample progress: {captureSnapshot.capturedSampleCount} of{" "}
-                {captureSnapshot.totalAnchorCount}
-              </div>
-              <div className="rounded-xl border border-border/70 bg-background/72 px-4 py-3">
-                Stored fit: {profile.hasAimCalibration ? "ready" : "pending"}
-              </div>
-              {runtimeFailureReason !== null ? (
-                <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive">
-                  {runtimeFailureReason}
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <p className="mt-3 text-lg font-semibold text-white">
+            Nine-point calibration
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-200">{captureGuidance}</p>
+          <p className="mt-2 text-xs uppercase tracking-[0.28em] text-slate-400">
+            {`Hand ${trackingState}`}
+          </p>
 
           {runtimeFailureReason !== null ? (
-            <Button onClick={handleRetryRuntime} type="button" variant="outline">
-              Retry tracking runtime
-            </Button>
+            <div className="mt-4 flex flex-col gap-3 rounded-[1rem] border border-destructive/40 bg-destructive/10 p-3">
+              <p className="text-sm font-medium text-destructive">Tracking failed</p>
+              <p className="text-sm leading-6 text-destructive">
+                {runtimeFailureReason}
+              </p>
+              <Button onClick={handleRetryRuntime} type="button" variant="outline">
+                Retry tracking
+              </Button>
+            </div>
           ) : null}
         </div>
-      </div>
-    </StageScreenLayout>
+
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap justify-end gap-2 sm:inset-x-4 sm:top-4">
+          <Badge variant="secondary">
+            {captureSnapshot.currentAnchorLabel ?? "complete"}
+          </Badge>
+          <Badge variant="outline">{captureSnapshot.captureState}</Badge>
+          <Badge variant="outline">
+            {gameFoundationConfig.calibration.transformModel}
+          </Badge>
+        </div>
+
+        {gameFoundationConfig.calibration.anchors.map((anchor, anchorIndex) => {
+          const isCaptured = anchorIndex < captureSnapshot.capturedSampleCount;
+          const isCurrent = captureSnapshot.currentAnchorId === anchor.id;
+
+          return (
+            <div
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+              key={anchor.id}
+              style={{
+                left: toPercent(anchor.normalizedTarget.x),
+                top: toPercent(anchor.normalizedTarget.y)
+              }}
+            >
+              <div
+                className={[
+                  "flex size-12 items-center justify-center rounded-full border text-xs font-semibold transition sm:size-14 sm:text-sm",
+                  isCaptured
+                    ? "border-emerald-300/80 bg-emerald-300/18 text-emerald-100"
+                    : isCurrent
+                      ? "border-sky-300 bg-sky-300/16 text-sky-100"
+                      : "border-white/28 bg-white/6 text-white/72"
+                ].join(" ")}
+              >
+                {anchorIndex + 1}
+              </div>
+            </div>
+          );
+        })}
+
+        <svg
+          className="pointer-events-none absolute inset-0 z-10 opacity-0 transition-opacity"
+          preserveAspectRatio="none"
+          ref={handOverlayRef}
+          viewBox="0 0 100 100"
+        >
+          <polyline
+            className="fill-none stroke-sky-300/80"
+            data-skeleton="index"
+            strokeWidth="0.42"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            className="fill-none stroke-amber-300/85"
+            data-skeleton="thumb"
+            strokeWidth="0.36"
+            vectorEffect="non-scaling-stroke"
+          />
+          {handDebugPointIds.map((pointId) => (
+            <circle
+              className="fill-white/90"
+              data-point={pointId}
+              key={pointId}
+              r={pointId === "handPivot" ? "0.7" : "0.9"}
+            />
+          ))}
+        </svg>
+      </section>
+    </ImmersiveStageFrame>
   );
 }

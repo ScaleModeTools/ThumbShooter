@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
 import { createClientModuleLoader } from "./load-client-module.mjs";
+import { createTrackedHandSnapshot } from "./tracked-hand-pose-fixture.mjs";
 
 let clientLoader;
 
@@ -53,8 +54,10 @@ function createArenaConfig() {
       shotScatterRadius: 0.2
     },
     trigger: {
-      pressThreshold: 0.055,
-      releaseThreshold: 0.02
+      pressAxisAngleDegrees: 38,
+      pressEngagementRatio: 0.72,
+      releaseAxisAngleDegrees: 52,
+      releaseEngagementRatio: 0.92
     },
     weapon: {
       weaponId: "semiautomatic-pistol",
@@ -78,24 +81,6 @@ function createArenaConfig() {
   };
 }
 
-function createTrackedSnapshot(sequenceNumber, x, y, thumbDrop = 0) {
-  return {
-    trackingState: "tracked",
-    sequenceNumber,
-    timestampMs: sequenceNumber * 10,
-    pose: {
-      thumbTip: {
-        x,
-        y: y + thumbDrop
-      },
-      indexTip: {
-        x,
-        y
-      }
-    }
-  };
-}
-
 test("LocalArenaSimulation publishes calibrated aim, arena counts, and early scatter state", async () => {
   const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
   const simulation = new LocalArenaSimulation(
@@ -106,7 +91,7 @@ test("LocalArenaSimulation publishes calibrated aim, arena counts, and early sca
     createArenaConfig()
   );
 
-  const snapshot = simulation.advance(createTrackedSnapshot(1, 0.25, 0.4), 0);
+  const snapshot = simulation.advance(createTrackedHandSnapshot(1, 0.25, 0.4), 0);
 
   assert.deepEqual(snapshot.aimPoint, { x: 0.25, y: 0.4 });
   assert.equal(snapshot.arena.liveEnemyCount, 1);
@@ -134,10 +119,10 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
     }
   );
 
-  simulation.advance(createTrackedSnapshot(1, 0.25, 0.4), 0);
+  simulation.advance(createTrackedHandSnapshot(1, 0.25, 0.4), 0);
 
   const firedSnapshot = simulation.advance(
-    createTrackedSnapshot(2, 0.25, 0.4, 0.08),
+    createTrackedHandSnapshot(2, 0.25, 0.4, 1),
     16
   );
 
@@ -164,7 +149,7 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "downed");
 
   const postCompletionSnapshot = simulation.advance(
-    createTrackedSnapshot(3, 0.25, 0.4, 0.08),
+    createTrackedHandSnapshot(3, 0.25, 0.4, 1),
     1_200
   );
 
@@ -210,10 +195,10 @@ test("LocalArenaSimulation exposes reload state and completes off-screen reloads
     }
   );
 
-  simulation.advance(createTrackedSnapshot(1, 0.8, 0.8), 0);
+  simulation.advance(createTrackedHandSnapshot(1, 0.8, 0.8), 0);
 
   const emptyClipSnapshot = simulation.advance(
-    createTrackedSnapshot(2, 0.8, 0.8, 0.08),
+    createTrackedHandSnapshot(2, 0.8, 0.8, 1),
     16
   );
 
@@ -224,7 +209,7 @@ test("LocalArenaSimulation exposes reload state and completes off-screen reloads
   assert.equal(emptyClipSnapshot.weapon.readiness, "reload-required");
 
   const reloadingSnapshot = simulation.advance(
-    createTrackedSnapshot(3, 1.15, 0.4),
+    createTrackedHandSnapshot(3, 1.15, 0.4),
     200
   );
 
@@ -235,14 +220,14 @@ test("LocalArenaSimulation exposes reload state and completes off-screen reloads
   assert.equal(reloadingSnapshot.weapon.readiness, "reloading");
 
   const offscreenSnapshot = simulation.advance(
-    createTrackedSnapshot(4, 1.15, 0.4),
+    createTrackedHandSnapshot(4, 1.15, 0.4),
     320
   );
 
   assert.equal(offscreenSnapshot.targetFeedback.state, "offscreen");
 
   const reloadedSnapshot = simulation.advance(
-    createTrackedSnapshot(5, 1.15, 0.4),
+    createTrackedHandSnapshot(5, 1.15, 0.4),
     400
   );
 

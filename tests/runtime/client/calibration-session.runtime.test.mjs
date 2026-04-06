@@ -4,6 +4,7 @@ import test, { after, before } from "node:test";
 import { createCalibrationShotSample } from "@thumbshooter/shared";
 
 import { createClientModuleLoader } from "./load-client-module.mjs";
+import { createTrackedHandSnapshot } from "./tracked-hand-pose-fixture.mjs";
 
 let clientLoader;
 
@@ -14,24 +15,6 @@ before(async () => {
 after(async () => {
   await clientLoader?.close();
 });
-
-function createTrackedSnapshot(sequenceNumber, x, y, thumbDrop = 0) {
-  return {
-    trackingState: "tracked",
-    sequenceNumber,
-    timestampMs: sequenceNumber * 10,
-    pose: {
-      thumbTip: {
-        x,
-        y: y + thumbDrop
-      },
-      indexTip: {
-        x,
-        y
-      }
-    }
-  };
-}
 
 test("NinePointCalibrationSession captures one sample per trigger press and completes on the ninth anchor", async () => {
   const { NinePointCalibrationSession, gameFoundationConfig } = await clientLoader.load(
@@ -44,15 +27,19 @@ test("NinePointCalibrationSession captures one sample per trigger press and comp
 
   for (const anchor of gameFoundationConfig.calibration.anchors) {
     session.ingestTrackingSnapshot(
-      createTrackedSnapshot(sequenceNumber += 1, anchor.normalizedTarget.x, anchor.normalizedTarget.y)
+      createTrackedHandSnapshot(
+        (sequenceNumber += 1),
+        anchor.normalizedTarget.x,
+        anchor.normalizedTarget.y
+      )
     );
 
     const pressedResult = session.ingestTrackingSnapshot(
-      createTrackedSnapshot(
-        sequenceNumber += 1,
+      createTrackedHandSnapshot(
+        (sequenceNumber += 1),
         anchor.normalizedTarget.x,
         anchor.normalizedTarget.y,
-        0.08
+        1
       )
     );
 
@@ -65,18 +52,22 @@ test("NinePointCalibrationSession captures one sample per trigger press and comp
     }
 
     const heldResult = session.ingestTrackingSnapshot(
-      createTrackedSnapshot(
-        sequenceNumber += 1,
+      createTrackedHandSnapshot(
+        (sequenceNumber += 1),
         anchor.normalizedTarget.x,
         anchor.normalizedTarget.y,
-        0.08
+        1
       )
     );
 
     assert.equal(heldResult.capturedSample, null);
 
     session.ingestTrackingSnapshot(
-      createTrackedSnapshot(sequenceNumber += 1, anchor.normalizedTarget.x, anchor.normalizedTarget.y)
+      createTrackedHandSnapshot(
+        (sequenceNumber += 1),
+        anchor.normalizedTarget.x,
+        anchor.normalizedTarget.y
+      )
     );
   }
 

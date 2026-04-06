@@ -65,9 +65,6 @@ export const localArenaSimulationConfig = {
     reticleScatterRadius: 0.17,
     shotScatterRadius: 0.24
   },
-  trigger: {
-    pressThreshold: calibrationCaptureConfig.pressThreshold,
-    releaseThreshold: calibrationCaptureConfig.releaseThreshold
-  },
+  trigger: calibrationCaptureConfig.triggerGesture,
   weapon: firstPlayableWeaponDefinition
 } as const satisfies LocalArenaSimulationConfig;

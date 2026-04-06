@@ -6,6 +6,7 @@ import {
 } from "@thumbshooter/shared";
 
 import { localArenaSimulationConfig } from "../config/local-arena-simulation";
+import { evaluateHandTriggerGesture } from "../types/hand-trigger-gesture";
 import {
   applyReticleScatter,
   countDownedEnemies,
@@ -254,12 +255,11 @@ export class LocalArenaSimulation {
   #readTriggerPressed(trackingSnapshot: Extract<LatestHandTrackingSnapshot, {
     readonly trackingState: "tracked";
   }>): boolean {
-    const thumbDropDistance =
-      trackingSnapshot.pose.thumbTip.y - trackingSnapshot.pose.indexTip.y;
-
-    return this.#weaponRuntime.triggerHeld
-      ? thumbDropDistance >= this.#config.trigger.releaseThreshold
-      : thumbDropDistance >= this.#config.trigger.pressThreshold;
+    return evaluateHandTriggerGesture(
+      trackingSnapshot.pose,
+      this.#weaponRuntime.triggerHeld,
+      this.#config.trigger
+    ).triggerPressed;
   }
 
   #resolveShot(aimX: number, aimY: number, nowMs: number): void {

@@ -38,6 +38,7 @@ export {
   handTrackingLifecycleStates,
   handTrackingPoseStates
 } from "./types/hand-tracking";
+export { evaluateHandTriggerGesture } from "./types/hand-trigger-gesture";
 export {
   localArenaEnemyBehaviorStates,
   localArenaTargetFeedbackStates
@@ -70,9 +71,16 @@ export type {
   GameplaySignalType
 } from "./types/gameplay-signal";
 export type {
+  HandTriggerGestureConfig,
+  HandTriggerGestureSnapshot
+} from "./types/hand-trigger-gesture";
+export type {
   HandTrackingRuntimeSnapshot,
+  HandTrackingLandmarkCandidate,
+  HandTrackingLandmarkPoint,
   HandTrackingLifecycleState,
   HandTrackingPoseCandidate,
+  HandTrackingPoseSnapshot,
   HandTrackingPoseState,
   HandTrackingRuntimeConfig,
   HandTrackingWorkerBootMessage,

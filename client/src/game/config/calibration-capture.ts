@@ -1,6 +1,10 @@
 import type { CalibrationCaptureConfig } from "../types/calibration-session";
 
 export const calibrationCaptureConfig = {
-  pressThreshold: 0.055,
-  releaseThreshold: 0.02
+  triggerGesture: {
+    pressAxisAngleDegrees: 18,
+    pressEngagementRatio: 0.72,
+    releaseAxisAngleDegrees: 32,
+    releaseEngagementRatio: 0.92
+  }
 } as const satisfies CalibrationCaptureConfig;

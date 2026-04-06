@@ -12,7 +12,8 @@ import { HandTrackingRuntime } from "../../game/classes/hand-tracking-runtime";
 import { LocalArenaSimulation } from "../../game/classes/local-arena-simulation";
 import { WebGpuGameplayRuntime } from "../../game/classes/webgpu-gameplay-runtime";
 import { GameplayDebugOverlay, GameplayHudOverlay } from "../../ui";
-import { Card } from "@/components/ui/card";
+
+import { ImmersiveStageFrame } from "./immersive-stage-frame";
 
 interface GameplayStageScreenProps {
   readonly aimCalibration: AffineAimTransformSnapshot;
@@ -133,26 +134,28 @@ export function GameplayStageScreen({
   }, [hudSnapshot.session.score, onBestScoreChange]);
 
   return (
-    <Card className="relative min-h-[36rem] overflow-hidden rounded-[2rem] border-border/70 bg-card/88 shadow-[0_28px_90px_rgb(15_23_42_/_0.2)] backdrop-blur-xl">
-      <canvas className="absolute inset-0 h-full w-full" ref={canvasRef} />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.08),_transparent_28%)]" />
-      <GameplayDebugOverlay
-        gameplayTelemetry={gameplayTelemetry}
-        mode={debugPanelMode}
-        trackingTelemetry={trackingTelemetry}
-      />
-      <GameplayHudOverlay
-        audioStatusLabel={audioStatusLabel}
-        bestScore={bestScore}
-        hudSnapshot={hudSnapshot}
-        onOpenMenu={onOpenMenu}
-        onRestartSession={handleRestartSession}
-        onRetryRuntime={handleRetryRuntime}
-        runtimeError={runtimeError}
-        selectedReticleLabel={selectedReticleLabel}
-        username={username}
-        weaponLabel={weaponLabel}
-      />
-    </Card>
+    <ImmersiveStageFrame>
+      <div className="relative flex-1 overflow-hidden">
+        <canvas className="absolute inset-0 h-full w-full" ref={canvasRef} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.08),_transparent_28%)]" />
+        <GameplayDebugOverlay
+          gameplayTelemetry={gameplayTelemetry}
+          mode={debugPanelMode}
+          trackingTelemetry={trackingTelemetry}
+        />
+        <GameplayHudOverlay
+          audioStatusLabel={audioStatusLabel}
+          bestScore={bestScore}
+          hudSnapshot={hudSnapshot}
+          onOpenMenu={onOpenMenu}
+          onRestartSession={handleRestartSession}
+          onRetryRuntime={handleRetryRuntime}
+          runtimeError={runtimeError}
+          selectedReticleLabel={selectedReticleLabel}
+          username={username}
+          weaponLabel={weaponLabel}
+        />
+      </div>
+    </ImmersiveStageFrame>
   );
 }

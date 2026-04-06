@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
 import { createClientModuleLoader } from "./load-client-module.mjs";
+import { createTrackedHandPose } from "./tracked-hand-pose-fixture.mjs";
 
 let clientLoader;
 
@@ -81,8 +82,10 @@ function createArenaConfig() {
       shotScatterRadius: 0.2
     },
     trigger: {
-      pressThreshold: 0.055,
-      releaseThreshold: 0.02
+      pressAxisAngleDegrees: 38,
+      pressEngagementRatio: 0.72,
+      releaseAxisAngleDegrees: 52,
+      releaseEngagementRatio: 0.92
     },
     weapon: {
       weaponId: "semiautomatic-pistol",
@@ -154,10 +157,7 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
       trackingState: "tracked",
       sequenceNumber: 1,
       timestampMs: 10,
-      pose: {
-        thumbTip: { x: 0.3, y: 0.42 },
-        indexTip: { x: 0.25, y: 0.4 }
-      }
+      pose: createTrackedHandPose(0.25, 0.4, 0)
     }
   };
   const renderer = new FakeRenderer();
@@ -215,7 +215,8 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
   assert.equal(runtime.telemetrySnapshot.reticleVisualState, "targeted");
   assert.deepEqual(runtime.telemetrySnapshot.observedIndexPoint, {
     x: 0.25,
-    y: 0.4
+    y: 0.4,
+    z: 0
   });
   assert.equal(runtime.telemetrySnapshot.trackingSequenceNumber, 1);
 
@@ -223,10 +224,7 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
     trackingState: "tracked",
     sequenceNumber: 2,
     timestampMs: 20,
-    pose: {
-      thumbTip: { x: 0.25, y: 0.48 },
-      indexTip: { x: 0.25, y: 0.4 }
-    }
+    pose: createTrackedHandPose(0.25, 0.4, 1)
   };
 
   scheduledFrame();

@@ -44,6 +44,19 @@ interface HandTrackingRuntimeDependencies {
   readonly requestAnimationFrame?: typeof globalThis.requestAnimationFrame;
 }
 
+function createVideoFrameFromElement(
+  videoElement: TrackingVideoElement,
+  timestampMs: number
+): VideoFrame | null {
+  if (typeof globalThis.VideoFrame !== "function") {
+    return null;
+  }
+
+  return new globalThis.VideoFrame(videoElement as never, {
+    timestamp: Math.round(timestampMs * 1000)
+  });
+}
+
 function createDefaultWorker(): HandTrackingWorkerHost {
   return new Worker(new URL("../workers/hand-tracking-worker.ts", import.meta.url), {
     type: "module"
@@ -137,7 +150,8 @@ export class HandTrackingRuntime {
   ) {
     this.#config = config;
     this.#cancelAnimationFrame =
-      dependencies.cancelAnimationFrame ?? globalThis.cancelAnimationFrame;
+      dependencies.cancelAnimationFrame ??
+      ((frameHandle: number) => globalThis.cancelAnimationFrame(frameHandle));
     this.#createImageBitmap =
       dependencies.createImageBitmap ?? globalThis.createImageBitmap;
     this.#createVideoElement =
@@ -146,7 +160,8 @@ export class HandTrackingRuntime {
     this.#mediaDevices =
       dependencies.mediaDevices ?? globalThis.navigator?.mediaDevices ?? null;
     this.#requestAnimationFrame =
-      dependencies.requestAnimationFrame ?? globalThis.requestAnimationFrame;
+      dependencies.requestAnimationFrame ??
+      ((callback: FrameRequestCallback) => globalThis.requestAnimationFrame(callback));
   }
 
   get snapshot(): HandTrackingRuntimeSnapshot {
@@ -155,6 +170,10 @@ export class HandTrackingRuntime {
 
   get latestPose(): LatestHandTrackingSnapshot {
     return this.#runtimeSnapshot.latestPose;
+  }
+
+  get cameraStream(): MediaStream | null {
+    return this.#stream;
   }
 
   get telemetrySnapshot(): HandTrackingTelemetrySnapshot {
@@ -324,6 +343,8 @@ export class HandTrackingRuntime {
       const error = new Error(event.reason);
       const rejectBoot = this.#pendingBootReject;
 
+      this.#pendingBootResolve = null;
+      this.#pendingBootReject = null;
       this.dispose();
       this.#setRuntimeSnapshot(
         "failed",
@@ -331,8 +352,6 @@ export class HandTrackingRuntime {
         event.reason
       );
       rejectBoot?.(error);
-      this.#pendingBootResolve = null;
-      this.#pendingBootReject = null;
       return;
     }
 
@@ -405,7 +424,9 @@ export class HandTrackingRuntime {
     this.#lastDispatchedFrameAt = timestampMs;
 
     try {
-      const frame = await this.#createImageBitmap(this.#videoElement as never);
+      const frame =
+        createVideoFrameFromElement(this.#videoElement, timestampMs) ??
+        (await this.#createImageBitmap(this.#videoElement as never));
 
       this.#worker.postMessage(
         {

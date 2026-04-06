@@ -62,8 +62,10 @@ function createArenaConfig() {
       shotScatterRadius: 0.2
     },
     trigger: {
-      pressThreshold: 0.055,
-      releaseThreshold: 0.02
+      pressAxisAngleDegrees: 38,
+      pressEngagementRatio: 0.72,
+      releaseAxisAngleDegrees: 52,
+      releaseEngagementRatio: 0.92
     },
     weapon: {
       weaponId: "semiautomatic-pistol",

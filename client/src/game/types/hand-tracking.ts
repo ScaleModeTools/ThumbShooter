@@ -1,6 +1,6 @@
 import {
-  createHandTriggerPoseSample,
-  type HandTriggerPoseSample
+  createNormalizedViewportPoint,
+  type NormalizedViewportPoint
 } from "@thumbshooter/shared";
 
 export const handTrackingLifecycleStates = [
@@ -19,15 +19,40 @@ export type HandTrackingLifecycleState =
   (typeof handTrackingLifecycleStates)[number];
 export type HandTrackingPoseState = (typeof handTrackingPoseStates)[number];
 
+export interface HandTrackingLandmarkCandidate {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface HandTrackingLandmarkPoint {
+  readonly x: NormalizedViewportPoint["x"];
+  readonly y: NormalizedViewportPoint["y"];
+  readonly z: number;
+}
+
 export interface HandTrackingPoseCandidate {
-  readonly thumbTip: {
-    readonly x: number;
-    readonly y: number;
-  };
-  readonly indexTip: {
-    readonly x: number;
-    readonly y: number;
-  };
+  readonly handPivot: HandTrackingLandmarkCandidate;
+  readonly thumbBase: HandTrackingLandmarkCandidate;
+  readonly thumbKnuckle: HandTrackingLandmarkCandidate;
+  readonly thumbJoint: HandTrackingLandmarkCandidate;
+  readonly thumbTip: HandTrackingLandmarkCandidate;
+  readonly indexBase: HandTrackingLandmarkCandidate;
+  readonly indexKnuckle: HandTrackingLandmarkCandidate;
+  readonly indexJoint: HandTrackingLandmarkCandidate;
+  readonly indexTip: HandTrackingLandmarkCandidate;
+}
+
+export interface HandTrackingPoseSnapshot {
+  readonly handPivot: HandTrackingLandmarkPoint;
+  readonly thumbBase: HandTrackingLandmarkPoint;
+  readonly thumbKnuckle: HandTrackingLandmarkPoint;
+  readonly thumbJoint: HandTrackingLandmarkPoint;
+  readonly thumbTip: HandTrackingLandmarkPoint;
+  readonly indexBase: HandTrackingLandmarkPoint;
+  readonly indexKnuckle: HandTrackingLandmarkPoint;
+  readonly indexJoint: HandTrackingLandmarkPoint;
+  readonly indexTip: HandTrackingLandmarkPoint;
 }
 
 export interface UnavailableHandTrackingSnapshot {
@@ -48,7 +73,7 @@ export interface TrackedHandTrackingSnapshot {
   readonly trackingState: "tracked";
   readonly sequenceNumber: number;
   readonly timestampMs: number;
-  readonly pose: HandTriggerPoseSample;
+  readonly pose: HandTrackingPoseSnapshot;
 }
 
 export type LatestHandTrackingSnapshot =
@@ -70,7 +95,14 @@ export interface HandTrackingRuntimeConfig {
     readonly runningMode: "video";
   };
   readonly landmarks: {
+    readonly handPivotIndex: 0;
+    readonly thumbBaseIndex: 1;
+    readonly thumbKnuckleIndex: 2;
+    readonly thumbJointIndex: 3;
     readonly thumbTipIndex: 4;
+    readonly indexBaseIndex: 5;
+    readonly indexKnuckleIndex: 6;
+    readonly indexJointIndex: 7;
     readonly indexTipIndex: 8;
   };
   readonly framePump: {
@@ -85,14 +117,43 @@ export interface HandTrackingWorkerBootMessage {
   readonly numHands: 1;
   readonly runningMode: "video";
   readonly landmarks: {
+    readonly handPivotIndex: 0;
+    readonly thumbBaseIndex: 1;
+    readonly thumbKnuckleIndex: 2;
+    readonly thumbJointIndex: 3;
     readonly thumbTipIndex: 4;
+    readonly indexBaseIndex: 5;
+    readonly indexKnuckleIndex: 6;
+    readonly indexJointIndex: 7;
     readonly indexTipIndex: 8;
   };
 }
 
+function normalizeLandmarkDepth(rawValue: number | undefined): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  return rawValue ?? 0;
+}
+
+function createHandTrackingLandmarkPoint(input: {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}): HandTrackingLandmarkPoint {
+  const normalizedPoint = createNormalizedViewportPoint(input);
+
+  return Object.freeze({
+    x: normalizedPoint.x,
+    y: normalizedPoint.y,
+    z: normalizeLandmarkDepth(input.z)
+  });
+}
+
 export interface HandTrackingWorkerProcessFrameMessage {
   readonly kind: "process-frame";
-  readonly frame: ImageBitmap;
+  readonly frame: ImageBitmap | VideoFrame;
   readonly sequenceNumber: number;
   readonly timestampMs: number;
 }
@@ -173,7 +234,17 @@ export function createLatestHandTrackingSnapshot(input: {
     trackingState: "tracked",
     sequenceNumber,
     timestampMs,
-    pose: createHandTriggerPoseSample(input.pose)
+    pose: Object.freeze({
+      handPivot: createHandTrackingLandmarkPoint(input.pose.handPivot),
+      thumbBase: createHandTrackingLandmarkPoint(input.pose.thumbBase),
+      thumbKnuckle: createHandTrackingLandmarkPoint(input.pose.thumbKnuckle),
+      thumbJoint: createHandTrackingLandmarkPoint(input.pose.thumbJoint),
+      thumbTip: createHandTrackingLandmarkPoint(input.pose.thumbTip),
+      indexBase: createHandTrackingLandmarkPoint(input.pose.indexBase),
+      indexKnuckle: createHandTrackingLandmarkPoint(input.pose.indexKnuckle),
+      indexJoint: createHandTrackingLandmarkPoint(input.pose.indexJoint),
+      indexTip: createHandTrackingLandmarkPoint(input.pose.indexTip)
+    })
   });
 }
 
