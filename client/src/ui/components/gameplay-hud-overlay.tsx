@@ -1,5 +1,4 @@
 import type { GameplayHudSnapshot } from "../../game";
-import { viewportOverlayPlan } from "../config/viewport-overlay-plan";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -160,26 +159,8 @@ export function GameplayHudOverlay({
 
   return (
     <div className="relative flex h-full flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-xl rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <div className="flex flex-wrap gap-2">
-            <Badge>{`Instructions: ${viewportOverlayPlan.instructionsPlacement}`}</Badge>
-            <Badge variant="secondary">{`HUD: ${viewportOverlayPlan.hudPlacement}`}</Badge>
-            <Badge variant="outline">{audioStatusLabel}</Badge>
-            <Badge variant="secondary">{`Tracking: ${hudSnapshot.trackingState}`}</Badge>
-            <Badge variant="secondary">{`Phase: ${formatSessionPhase(hudSnapshot.session.phase)}`}</Badge>
-          </div>
-          <p className="mt-4 text-sm text-white/82">
-            Local combat progression now runs inside the gameplay loop with
-            client-owned scoring, streaks, and restart-ready round phases.
-          </p>
-          {runtimeError !== null ? (
-            <div className="mt-4 rounded-xl border border-red-300/30 bg-red-500/12 px-3 py-3 text-sm text-red-100">
-              {runtimeError}
-            </div>
-          ) : null}
-        </div>
-
+      <div className="flex flex-wrap items-start justify-end gap-3">
+        <Badge variant="outline">{audioStatusLabel}</Badge>
         <div className="flex gap-3">
           {runtimeError !== null ? (
             <Button onClick={onRetryRuntime} type="button" variant="outline">
@@ -191,6 +172,12 @@ export function GameplayHudOverlay({
           </Button>
         </div>
       </div>
+
+      {runtimeError !== null ? (
+        <div className="ml-auto max-w-lg rounded-[1.5rem] border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm text-red-100 backdrop-blur-md">
+          {runtimeError}
+        </div>
+      ) : null}
 
       <div className="flex-1" />
 

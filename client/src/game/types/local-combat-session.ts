@@ -1,3 +1,5 @@
+import type { Milliseconds } from "@thumbshooter/shared";
+
 export const localCombatSessionPhases = [
   "active",
   "completed",
@@ -12,14 +14,14 @@ export interface LocalCombatSessionSnapshot {
   readonly killsThisSession: number;
   readonly phase: LocalCombatSessionPhase;
   readonly restartReady: boolean;
-  readonly roundDurationMs: number;
-  readonly roundTimeRemainingMs: number;
+  readonly roundDurationMs: Milliseconds;
+  readonly roundTimeRemainingMs: Milliseconds;
   readonly score: number;
   readonly streak: number;
 }
 
 export interface LocalCombatSessionConfig {
-  readonly roundDurationMs: number;
+  readonly roundDurationMs: Milliseconds;
   readonly scorePerKill: number;
 }
 

@@ -54,7 +54,6 @@ export interface ThumbShooterShellControllerState {
   readonly audioSnapshot: AudioSessionSnapshot;
   readonly capabilitySnapshot: WebGpuGameplayCapabilitySnapshot;
   readonly debugPanelMode: GameplayDebugPanelMode;
-  readonly hasAutoOpenedMenu: boolean;
   readonly hasConfirmedProfile: boolean;
   readonly hydrationSource: StoredProfileHydrationResult["source"];
   readonly isMenuOpen: boolean;
@@ -99,10 +98,6 @@ export type ThumbShooterShellControllerAction =
   | {
       readonly mode: GameplayDebugPanelMode;
       readonly type: "gameplayDebugPanelModeChanged";
-    }
-  | {
-      readonly type: "gameplayMenuAutoOpened";
-      readonly audioSnapshot: AudioSessionSnapshot;
     }
   | {
       readonly type: "gameplayMenuSetOpen";

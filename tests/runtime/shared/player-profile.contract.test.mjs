@@ -7,8 +7,11 @@ import {
   PlayerProfile,
   calibrationAnchorIds,
   createCalibrationShotSample,
+  createDegrees,
   createHandTriggerCalibrationSnapshot,
+  createMilliseconds,
   createNormalizedViewportPoint,
+  createRadians,
   createUsername,
   reticleIds
 } from "@thumbshooter/shared";
@@ -277,6 +280,15 @@ test("normalized viewport values clamp into the supported range", () => {
 
   assert.equal(point.x, 0);
   assert.equal(point.y, 1);
+});
+
+test("shared unit constructors normalize finite gameplay measurements", () => {
+  assert.equal(createMilliseconds(-14), 0);
+  assert.equal(createMilliseconds(12.5), 12.5);
+  assert.equal(createDegrees(Number.NaN), 0);
+  assert.equal(createDegrees(-18), -18);
+  assert.equal(createRadians(Number.POSITIVE_INFINITY), 0);
+  assert.equal(createRadians(-Math.PI / 2), -Math.PI / 2);
 });
 
 test("PlayerProfile.fromSnapshot rehydrates an immutable cloned snapshot", () => {

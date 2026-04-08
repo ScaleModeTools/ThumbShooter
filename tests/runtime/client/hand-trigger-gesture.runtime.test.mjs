@@ -19,6 +19,63 @@ after(async () => {
   await clientLoader?.close();
 });
 
+function createFocusedTriggerPose(pose) {
+  return {
+    thumbBase: pose.thumbBase ?? pose.thumbKnuckle,
+    thumbKnuckle: pose.thumbKnuckle,
+    thumbJoint: pose.thumbJoint,
+    thumbTip: pose.thumbTip,
+    indexBase: pose.indexBase,
+    indexKnuckle: pose.indexKnuckle,
+    indexJoint: pose.indexJoint,
+    indexTip: pose.indexTip,
+    middlePip: pose.middlePip
+  };
+}
+
+function distortPoseAlongIndexAxis(pose, factor) {
+  const anchor = pose.indexKnuckle;
+  const axisVector = {
+    x: pose.indexTip.x - pose.indexKnuckle.x,
+    y: pose.indexTip.y - pose.indexKnuckle.y,
+    z: pose.indexTip.z - pose.indexKnuckle.z
+  };
+  const axisMagnitude = Math.hypot(axisVector.x, axisVector.y, axisVector.z) || 1;
+  const axis = {
+    x: axisVector.x / axisMagnitude,
+    y: axisVector.y / axisMagnitude,
+    z: axisVector.z / axisMagnitude
+  };
+
+  return Object.fromEntries(
+    Object.entries(pose).map(([landmarkId, point]) => {
+      const relativePoint = {
+        x: point.x - anchor.x,
+        y: point.y - anchor.y,
+        z: point.z - anchor.z
+      };
+      const alongAxis =
+        relativePoint.x * axis.x +
+        relativePoint.y * axis.y +
+        relativePoint.z * axis.z;
+      const orthogonalPoint = {
+        x: relativePoint.x - axis.x * alongAxis,
+        y: relativePoint.y - axis.y * alongAxis,
+        z: relativePoint.z - axis.z * alongAxis
+      };
+
+      return [
+        landmarkId,
+        {
+          x: anchor.x + orthogonalPoint.x + axis.x * alongAxis * factor,
+          y: anchor.y + orthogonalPoint.y + axis.y * alongAxis * factor,
+          z: anchor.z + orthogonalPoint.z + axis.z * alongAxis * factor
+        }
+      ];
+    })
+  );
+}
+
 test("evaluateHandTriggerGesture uses the thumb and index chains without a wrist pivot", async () => {
   const { calibrationCaptureConfig, evaluateHandTriggerGesture } = await clientLoader.load(
     "/src/game/index.ts"
@@ -32,11 +89,8 @@ test("evaluateHandTriggerGesture uses the thumb and index chains without a wrist
   assert.equal(openGesture.triggerPressed, false);
   assert.equal(openGesture.triggerReady, true);
   assert.equal(
-    openGesture.axisAngleDegrees >= triggerConfig.releaseAxisAngleDegrees,
-    true
-  );
-  assert.equal(
-    openGesture.engagementRatio >= triggerConfig.releaseEngagementRatio,
+    openGesture.axisAngleDegrees >= triggerConfig.releaseAxisAngleDegrees ||
+      openGesture.engagementRatio >= triggerConfig.releaseEngagementRatio,
     true
   );
 
@@ -59,6 +113,100 @@ test("evaluateHandTriggerGesture uses the thumb and index chains without a wrist
 
   assert.equal(releasedGesture.triggerPressed, false);
   assert.equal(releasedGesture.triggerReady, true);
+});
+
+test("evaluateHandTriggerGesture fires from either index-base or middle-PIP contact", async () => {
+  const { calibrationCaptureConfig, evaluateHandTriggerGesture } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const triggerConfig = calibrationCaptureConfig.triggerGesture;
+  const readyPose = createFocusedTriggerPose({
+    thumbBase: { x: 0.36, y: 0.58, z: 0.01 },
+    thumbKnuckle: { x: 0.39, y: 0.54, z: 0.008 },
+    thumbJoint: { x: 0.38, y: 0.48, z: 0.006 },
+    thumbTip: { x: 0.34, y: 0.38, z: 0.004 },
+    indexBase: { x: 0.48, y: 0.62, z: 0.01 },
+    indexKnuckle: { x: 0.49, y: 0.56, z: 0.008 },
+    indexJoint: { x: 0.53, y: 0.5, z: 0.006 },
+    indexTip: { x: 0.57, y: 0.46, z: 0.004 },
+    middlePip: { x: 0.43, y: 0.49, z: 0.008 }
+  });
+  const indexBaseContactPose = createFocusedTriggerPose({
+    thumbBase: { x: 0.42, y: 0.59, z: 0.01 },
+    thumbKnuckle: { x: 0.42, y: 0.55, z: 0.008 },
+    thumbJoint: { x: 0.44, y: 0.57, z: 0.006 },
+    thumbTip: { x: 0.48, y: 0.61, z: 0.004 },
+    indexBase: { x: 0.48, y: 0.62, z: 0.01 },
+    indexKnuckle: { x: 0.49, y: 0.56, z: 0.008 },
+    indexJoint: { x: 0.53, y: 0.5, z: 0.006 },
+    indexTip: { x: 0.57, y: 0.46, z: 0.004 },
+    middlePip: { x: 0.31, y: 0.41, z: 0.008 }
+  });
+  const middlePipContactPose = createFocusedTriggerPose({
+    thumbBase: { x: 0.42, y: 0.59, z: 0.01 },
+    thumbKnuckle: { x: 0.42, y: 0.55, z: 0.008 },
+    thumbJoint: { x: 0.4, y: 0.49, z: 0.006 },
+    thumbTip: { x: 0.43, y: 0.485, z: 0.004 },
+    indexBase: { x: 0.48, y: 0.62, z: 0.01 },
+    indexKnuckle: { x: 0.49, y: 0.56, z: 0.008 },
+    indexJoint: { x: 0.53, y: 0.5, z: 0.006 },
+    indexTip: { x: 0.57, y: 0.46, z: 0.004 },
+    middlePip: { x: 0.43, y: 0.49, z: 0.008 }
+  });
+
+  const readyGesture = evaluateHandTriggerGesture(readyPose, false, triggerConfig);
+  const indexBaseContactGesture = evaluateHandTriggerGesture(
+    indexBaseContactPose,
+    false,
+    triggerConfig
+  );
+  const middlePipContactGesture = evaluateHandTriggerGesture(
+    middlePipContactPose,
+    false,
+    triggerConfig
+  );
+
+  assert.equal(readyGesture.triggerPressed, false);
+  assert.equal(readyGesture.triggerReady, true);
+  assert.equal(indexBaseContactGesture.triggerPressed, true);
+  assert.equal(indexBaseContactGesture.triggerReady, false);
+  assert.equal(middlePipContactGesture.triggerPressed, true);
+  assert.equal(middlePipContactGesture.triggerReady, false);
+  assert.equal(
+    readyGesture.engagementRatio > indexBaseContactGesture.engagementRatio,
+    true
+  );
+  assert.equal(
+    readyGesture.engagementRatio > middlePipContactGesture.engagementRatio,
+    true
+  );
+});
+
+test("evaluateHandTriggerGesture keeps ready and pressed states stable under index-axis foreshortening", async () => {
+  const { calibrationCaptureConfig, evaluateHandTriggerGesture } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const triggerConfig = calibrationCaptureConfig.triggerGesture;
+  const readyPose = createTrackedHandPose(0.5, 0.4, 0);
+  const pressedPose = createTrackedHandPose(0.5, 0.4, 1);
+
+  for (const foreshorteningFactor of [1, 0.75, 0.5, 0.25]) {
+    const readyGesture = evaluateHandTriggerGesture(
+      distortPoseAlongIndexAxis(readyPose, foreshorteningFactor),
+      false,
+      triggerConfig
+    );
+    const pressedGesture = evaluateHandTriggerGesture(
+      distortPoseAlongIndexAxis(pressedPose, foreshorteningFactor),
+      false,
+      triggerConfig
+    );
+
+    assert.equal(readyGesture.triggerPressed, false);
+    assert.equal(readyGesture.triggerReady, true);
+    assert.equal(pressedGesture.triggerPressed, true);
+    assert.equal(pressedGesture.triggerReady, false);
+  }
 });
 
 test("readObservedAimPoint projects from the index chain instead of using the raw tip", async () => {
@@ -139,7 +287,7 @@ test("evaluateHandTriggerGesture tightens press detection when calibration shows
     readyAxisAngleDegreesMin: 34,
     readyEngagementRatioMin: 0.75
   });
-  const borderlinePose = createTrackedHandPose(0.5, 0.4, 0.9);
+  const borderlinePose = createTrackedHandPose(0.5, 0.4, 0.75);
   const baseGesture = evaluateHandTriggerGesture(borderlinePose, false, triggerConfig);
   const calibratedGesture = evaluateHandTriggerGesture(
     borderlinePose,

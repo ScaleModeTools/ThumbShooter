@@ -28,6 +28,7 @@ interface GameMenuDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onRecalibrationRequest: () => void;
   readonly onSfxVolumeChange: (nextValue: number) => void;
+  readonly showDebugControls: boolean;
 }
 
 export function GameMenuDialog({
@@ -42,7 +43,8 @@ export function GameMenuDialog({
   onMusicVolumeChange,
   onOpenChange,
   onRecalibrationRequest,
-  onSfxVolumeChange
+  onSfxVolumeChange,
+  showDebugControls
 }: GameMenuDialogProps) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -142,44 +144,49 @@ export function GameMenuDialog({
             </div>
           </section>
 
-          <Separator />
+          {showDebugControls ? (
+            <>
+              <Separator />
 
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Debug view</p>
-                <p className="text-sm text-muted-foreground">
-                  Sampled telemetry stays optional and shell-owned instead of
-                  leaking into the gameplay loop.
-                </p>
-              </div>
-              <Badge variant="outline">{gameMenuPlan.sections[2]?.label}</Badge>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              {gameMenuPlan.debugModes.map((mode) => (
-                <div
-                  className="rounded-xl border border-border/70 bg-muted/30 p-3"
-                  key={mode.mode}
-                >
-                  <p className="text-sm font-medium text-foreground">{mode.label}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {mode.description}
-                  </p>
-                  <Button
-                    className="mt-3 w-full"
-                    onClick={() => onDebugPanelModeChange(mode.mode)}
-                    type="button"
-                    variant={debugPanelMode === mode.mode ? "secondary" : "outline"}
-                  >
-                    {debugPanelMode === mode.mode ? "Active" : "Enable"}
-                  </Button>
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Developer overlays</p>
+                    <p className="text-sm text-muted-foreground">
+                      Development-only telemetry stays separate from the player HUD.
+                    </p>
+                  </div>
+                  <Badge variant="outline">{gameMenuPlan.sections[2]?.label}</Badge>
                 </div>
-              ))}
-            </div>
-          </section>
 
-          <Separator />
+                <div className="grid gap-3 md:grid-cols-3">
+                  {gameMenuPlan.debugModes.map((mode) => (
+                    <div
+                      className="rounded-xl border border-border/70 bg-muted/30 p-3"
+                      key={mode.mode}
+                    >
+                      <p className="text-sm font-medium text-foreground">{mode.label}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {mode.description}
+                      </p>
+                      <Button
+                        className="mt-3 w-full"
+                        onClick={() => onDebugPanelModeChange(mode.mode)}
+                        type="button"
+                        variant={debugPanelMode === mode.mode ? "secondary" : "outline"}
+                      >
+                        {debugPanelMode === mode.mode ? "Active" : "Enable"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <Separator />
+            </>
+          ) : (
+            <Separator />
+          )}
 
           <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-1">

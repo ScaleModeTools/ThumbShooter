@@ -1,6 +1,6 @@
 import { AudioSettings } from "@thumbshooter/shared";
 
-import type { AudioFoundationConfig } from "../types/audio-foundation";
+import { audioCueIds } from "../types/audio-foundation";
 
 export const audioFoundationConfig = {
   runtime: {
@@ -19,16 +19,7 @@ export const audioFoundationConfig = {
   soundEffects: {
     engine: "web-audio-api",
     synthesisStrategy: "typed-procedural-cues",
-    cueIds: [
-      "ui-confirm",
-      "ui-menu-open",
-      "ui-menu-close",
-      "calibration-shot",
-      "weapon-pistol-shot",
-      "weapon-reload",
-      "enemy-hit",
-      "enemy-scatter"
-    ]
+    cueIds: audioCueIds
   },
   defaultMix: AudioSettings.create().snapshot.mix
-} as const satisfies AudioFoundationConfig;
+} as const;

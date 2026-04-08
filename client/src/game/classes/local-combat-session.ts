@@ -1,3 +1,5 @@
+import { createMilliseconds } from "@thumbshooter/shared";
+
 import { localCombatSessionConfig } from "../config/local-combat-session";
 import type {
   LocalCombatSessionConfig,
@@ -16,7 +18,7 @@ function normalizeCount(value: number): number {
 
 function freezeSessionSnapshot(
   phase: LocalCombatSessionPhase,
-  roundDurationMs: number,
+  roundDurationMs: LocalCombatSessionSnapshot["roundDurationMs"],
   roundTimeRemainingMs: number,
   hitsThisSession: number,
   killsThisSession: number,
@@ -29,7 +31,7 @@ function freezeSessionSnapshot(
     phase,
     restartReady: phase !== "active",
     roundDurationMs,
-    roundTimeRemainingMs,
+    roundTimeRemainingMs: createMilliseconds(roundTimeRemainingMs),
     score,
     streak
   });

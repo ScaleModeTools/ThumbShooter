@@ -56,20 +56,6 @@ export function useThumbShooterShellGameplayMenuPolicy({
   }, [dispatch, navigationSnapshot.activeStep, state.isMenuOpen]);
 
   useEffect(() => {
-    if (
-      navigationSnapshot.activeStep !== "gameplay" ||
-      state.hasAutoOpenedMenu
-    ) {
-      return;
-    }
-
-    dispatch({
-      type: "gameplayMenuAutoOpened",
-      audioSnapshot: audioSession.playCue("ui-menu-open")
-    });
-  }, [audioSession, dispatch, navigationSnapshot.activeStep, state.hasAutoOpenedMenu]);
-
-  useEffect(() => {
     if (navigationSnapshot.activeStep !== "gameplay") {
       return;
     }

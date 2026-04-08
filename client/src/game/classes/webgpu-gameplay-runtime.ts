@@ -32,6 +32,13 @@ interface GameplayTrackingSource {
 }
 
 interface GameplayRendererHost {
+  readonly info?: {
+    readonly render?: {
+      readonly calls?: number;
+      readonly drawCalls?: number;
+      readonly triangles?: number;
+    };
+  };
   init(): Promise<void | GameplayRendererHost>;
   render(scene: Scene, camera: OrthographicCamera): void;
   setPixelRatio(pixelRatio: number): void;
@@ -122,6 +129,29 @@ function resolveRuntimeFailureReason(error: unknown): string {
   return "WebGPU gameplay failed to initialize.";
 }
 
+function resolveRenderLoopFailureReason(error: unknown): string {
+  if (
+    error instanceof Error &&
+    typeof error.message === "string" &&
+    error.message.trim().length > 0
+  ) {
+    return `WebGPU gameplay failed during rendering: ${error.message}`;
+  }
+
+  return "WebGPU gameplay failed during rendering.";
+}
+
+function freezeRendererTelemetrySnapshot(
+  snapshot: GameplayTelemetrySnapshot["renderer"]
+): GameplayTelemetrySnapshot["renderer"] {
+  return Object.freeze({
+    devicePixelRatio: snapshot.devicePixelRatio,
+    drawCallCount: snapshot.drawCallCount,
+    label: snapshot.label,
+    triangleCount: snapshot.triangleCount
+  });
+}
+
 function freezeGameplayTelemetrySnapshot(
   snapshot: GameplayTelemetrySnapshot
 ): GameplayTelemetrySnapshot {
@@ -130,6 +160,7 @@ function freezeGameplayTelemetrySnapshot(
     frameDeltaMs: snapshot.frameDeltaMs,
     frameRate: snapshot.frameRate,
     observedAimPoint: snapshot.observedAimPoint,
+    renderer: freezeRendererTelemetrySnapshot(snapshot.renderer),
     renderedFrameCount: snapshot.renderedFrameCount,
     reticleVisualState: snapshot.reticleVisualState,
     sessionPhase: snapshot.sessionPhase,
@@ -140,6 +171,32 @@ function freezeGameplayTelemetrySnapshot(
     weaponReadiness: snapshot.weaponReadiness,
     worldTimeMs: snapshot.worldTimeMs
   });
+}
+
+let pendingGameplayBoot: Promise<void> | null = null;
+
+async function withGameplayBootLock<T>(task: () => Promise<T>): Promise<T> {
+  const previousBoot = pendingGameplayBoot;
+  let releaseBoot!: () => void;
+  const currentBoot = new Promise<void>((resolve) => {
+    releaseBoot = resolve;
+  });
+
+  pendingGameplayBoot = currentBoot;
+
+  if (previousBoot !== null) {
+    await previousBoot;
+  }
+
+  try {
+    return await task();
+  } finally {
+    releaseBoot();
+
+    if (pendingGameplayBoot === currentBoot) {
+      pendingGameplayBoot = null;
+    }
+  }
 }
 
 export class WebGpuGameplayRuntime {
@@ -165,6 +222,7 @@ export class WebGpuGameplayRuntime {
   #renderer: GameplayRendererHost | null = null;
   #reticleVisualState: GameplayReticleVisualState = "hidden";
   #runtimeEpoch = 0;
+  #startPromise: Promise<GameplayHudSnapshot> | null = null;
   #trackingPoseAgeMs: number | null = null;
 
   constructor(
@@ -196,11 +254,19 @@ export class WebGpuGameplayRuntime {
   }
 
   get telemetrySnapshot(): GameplayTelemetrySnapshot {
+    const renderInfo = this.#renderer?.info?.render;
+
     return freezeGameplayTelemetrySnapshot({
       aimPoint: this.#hudSnapshot.aimPoint,
       frameDeltaMs: this.#frameDeltaMs,
       frameRate: this.#frameRate,
       observedAimPoint: this.#lastObservedAimPoint,
+      renderer: {
+        devicePixelRatio: this.#devicePixelRatio,
+        drawCallCount: renderInfo?.drawCalls ?? renderInfo?.calls ?? 0,
+        label: "WebGPU",
+        triangleCount: renderInfo?.triangles ?? 0
+      },
       renderedFrameCount: this.#renderedFrameCount,
       reticleVisualState: this.#reticleVisualState,
       sessionPhase: this.#hudSnapshot.session.phase,
@@ -241,6 +307,34 @@ export class WebGpuGameplayRuntime {
   async start(
     canvas: HTMLCanvasElement,
     navigatorLike: Navigator | null | undefined = globalThis.window?.navigator
+  ): Promise<GameplayHudSnapshot> {
+    if (this.#startPromise !== null) {
+      this.dispose();
+
+      try {
+        await this.#startPromise;
+      } catch {
+        // Disposal makes stale boot failures non-actionable for the next start.
+      }
+    }
+
+    const startPromise = withGameplayBootLock(() =>
+      this.#startInternal(canvas, navigatorLike)
+    );
+    this.#startPromise = startPromise;
+
+    try {
+      return await startPromise;
+    } finally {
+      if (this.#startPromise === startPromise) {
+        this.#startPromise = null;
+      }
+    }
+  }
+
+  async #startInternal(
+    canvas: HTMLCanvasElement,
+    navigatorLike: Navigator | null | undefined
   ): Promise<GameplayHudSnapshot> {
     this.dispose();
     const runtimeEpoch = ++this.#runtimeEpoch;
@@ -368,8 +462,13 @@ export class WebGpuGameplayRuntime {
 
     this.#animationFrameHandle = this.#requestAnimationFrame(() => {
       this.#animationFrameHandle = 0;
-      this.#renderFrame();
-      this.#queueNextFrame();
+
+      try {
+        this.#renderFrame();
+        this.#queueNextFrame();
+      } catch (error) {
+        this.#handleRenderLoopFailure(error);
+      }
     });
   }
 
@@ -430,6 +529,20 @@ export class WebGpuGameplayRuntime {
       this.#renderer,
       this.#canvasHost,
       this.#devicePixelRatio
+    );
+  }
+
+  #handleRenderLoopFailure(error: unknown): void {
+    const failureReason = resolveRenderLoopFailureReason(error);
+
+    this.#renderer?.dispose();
+    this.#renderer = null;
+    this.#canvasHost = null;
+    this.#reticleVisualState = "hidden";
+    this.#hudSnapshot = freezeHudSnapshot(
+      "failed",
+      failureReason,
+      this.#arenaSimulation.hudSnapshot
     );
   }
 }

@@ -16,6 +16,13 @@ after(async () => {
 
 class FakeRenderer {
   disposed = false;
+  info = {
+    render: {
+      calls: 0,
+      drawCalls: 0,
+      triangles: 0
+    }
+  };
   initCalls = 0;
   pixelRatio = null;
   renderCalls = 0;
@@ -27,6 +34,9 @@ class FakeRenderer {
 
   render() {
     this.renderCalls += 1;
+    this.info.render.calls = 60;
+    this.info.render.drawCalls = 6;
+    this.info.render.triangles = 24;
   }
 
   setPixelRatio(pixelRatio) {
@@ -53,6 +63,13 @@ class DeferredRenderer extends FakeRenderer {
   async init() {
     this.initCalls += 1;
     await this.initPromise;
+  }
+}
+
+class ThrowingRenderer extends FakeRenderer {
+  render() {
+    super.render();
+    throw new Error("render boom");
   }
 }
 
@@ -100,10 +117,10 @@ function createArenaConfig() {
       displayName: "Semiautomatic pistol",
       triggerMode: "single",
       triggerGesture: {
-        pressAxisAngleDegrees: 26,
+        pressAxisAngleDegrees: 68,
         pressEngagementRatio: 0.72,
-        releaseAxisAngleDegrees: 32,
-        releaseEngagementRatio: 0.92,
+        releaseAxisAngleDegrees: 72,
+        releaseEngagementRatio: 0.95,
         calibration: {
           pressAxisWindowFraction: 0.4,
           pressEngagementWindowFraction: 0.4,
@@ -240,6 +257,10 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
   assert.deepEqual(runtime.hudSnapshot.aimPoint, expectedObservedAimPoint);
   assert.equal(runtime.telemetrySnapshot.reticleVisualState, "targeted");
   assert.deepEqual(runtime.telemetrySnapshot.observedAimPoint, expectedObservedAimPoint);
+  assert.equal(runtime.telemetrySnapshot.renderer.label, "WebGPU");
+  assert.equal(runtime.telemetrySnapshot.renderer.devicePixelRatio, 1.5);
+  assert.equal(runtime.telemetrySnapshot.renderer.drawCallCount, 6);
+  assert.equal(runtime.telemetrySnapshot.renderer.triangleCount, 24);
   assert.equal(runtime.telemetrySnapshot.trackingSequenceNumber, 1);
 
   trackingSource.latestPose = {
@@ -339,6 +360,149 @@ test("WebGpuGameplayRuntime ignores stale async boots after disposal", async () 
   assert.equal(runtime.telemetrySnapshot.renderedFrameCount, 0);
 });
 
+test("WebGpuGameplayRuntime serializes overlapping start requests", async () => {
+  const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const firstRenderer = new DeferredRenderer();
+  const secondRenderer = new FakeRenderer();
+  const arenaSimulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+  const createdRenderers = [];
+  const runtime = new WebGpuGameplayRuntime(
+    {
+      latestPose: {
+        trackingState: "unavailable",
+        sequenceNumber: 0,
+        timestampMs: null,
+        pose: null
+      }
+    },
+    arenaSimulation,
+    undefined,
+    {
+      cancelAnimationFrame() {},
+      createRenderer: () => {
+        const renderer =
+          createdRenderers.length === 0 ? firstRenderer : secondRenderer;
+
+        createdRenderers.push(renderer);
+        return renderer;
+      },
+      devicePixelRatio: 1,
+      requestAnimationFrame() {
+        return 1;
+      }
+    }
+  );
+
+  const canvasHost = {
+    clientHeight: 720,
+    clientWidth: 1280
+  };
+  const firstStartPromise = runtime.start(canvasHost, {
+    gpu: {}
+  });
+  const secondStartPromise = runtime.start(canvasHost, {
+    gpu: {}
+  });
+
+  await Promise.resolve();
+
+  assert.equal(createdRenderers.length, 1);
+
+  firstRenderer.resolveInit();
+
+  const [firstSnapshot, secondSnapshot] = await Promise.all([
+    firstStartPromise,
+    secondStartPromise
+  ]);
+
+  assert.equal(firstSnapshot.lifecycle, "idle");
+  assert.equal(secondSnapshot.lifecycle, "running");
+  assert.equal(createdRenderers.length, 2);
+  assert.equal(firstRenderer.disposed, true);
+  assert.equal(secondRenderer.initCalls, 1);
+});
+
+test("WebGpuGameplayRuntime serializes overlapping start requests across runtime instances", async () => {
+  const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const firstRenderer = new DeferredRenderer();
+  const secondRenderer = new FakeRenderer();
+  const createdRenderers = [];
+  const createRenderer = () => {
+    const renderer = createdRenderers.length === 0 ? firstRenderer : secondRenderer;
+
+    createdRenderers.push(renderer);
+    return renderer;
+  };
+  const createRuntime = () =>
+    new WebGpuGameplayRuntime(
+      {
+        latestPose: {
+          trackingState: "unavailable",
+          sequenceNumber: 0,
+          timestampMs: null,
+          pose: null
+        }
+      },
+      new LocalArenaSimulation(
+        {
+          xCoefficients: [1, 0, 0],
+          yCoefficients: [0, 1, 0]
+        },
+        createArenaConfig()
+      ),
+      undefined,
+      {
+        cancelAnimationFrame() {},
+        createRenderer,
+        devicePixelRatio: 1,
+        requestAnimationFrame() {
+          return 1;
+        }
+      }
+    );
+
+  const firstRuntime = createRuntime();
+  const secondRuntime = createRuntime();
+  const canvasHost = {
+    clientHeight: 720,
+    clientWidth: 1280
+  };
+  const firstStartPromise = firstRuntime.start(canvasHost, {
+    gpu: {}
+  });
+  const secondStartPromise = secondRuntime.start(canvasHost, {
+    gpu: {}
+  });
+
+  await Promise.resolve();
+
+  assert.equal(createdRenderers.length, 1);
+
+  firstRuntime.dispose();
+  firstRenderer.resolveInit();
+
+  const [firstSnapshot, secondSnapshot] = await Promise.all([
+    firstStartPromise,
+    secondStartPromise
+  ]);
+
+  assert.equal(firstSnapshot.lifecycle, "idle");
+  assert.equal(secondSnapshot.lifecycle, "running");
+  assert.equal(createdRenderers.length, 2);
+  assert.equal(firstRenderer.disposed, true);
+  assert.equal(secondRenderer.initCalls, 1);
+});
+
 test("WebGpuGameplayRuntime binds browser frame APIs before scheduling gameplay", async () => {
   const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
     "/src/game/index.ts"
@@ -411,4 +575,59 @@ test("WebGpuGameplayRuntime binds browser frame APIs before scheduling gameplay"
   } finally {
     globalThis.window = originalWindow;
   }
+});
+
+test("WebGpuGameplayRuntime surfaces render-loop failures as runtime failures", async () => {
+  const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const renderer = new ThrowingRenderer();
+  const arenaSimulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+  let scheduledFrame = null;
+  const runtime = new WebGpuGameplayRuntime(
+    {
+      latestPose: {
+        trackingState: "unavailable",
+        sequenceNumber: 0,
+        timestampMs: null,
+        pose: null
+      }
+    },
+    arenaSimulation,
+    undefined,
+    {
+      cancelAnimationFrame() {},
+      createRenderer: () => renderer,
+      devicePixelRatio: 1,
+      requestAnimationFrame(callback) {
+        scheduledFrame = callback;
+        return 1;
+      }
+    }
+  );
+
+  const snapshot = await runtime.start(
+    {
+      clientHeight: 720,
+      clientWidth: 1280
+    },
+    {
+      gpu: {}
+    }
+  );
+
+  assert.equal(snapshot.lifecycle, "running");
+  assert.equal(typeof scheduledFrame, "function");
+
+  scheduledFrame();
+
+  assert.equal(runtime.hudSnapshot.lifecycle, "failed");
+  assert.match(runtime.hudSnapshot.failureReason ?? "", /render boom/);
+  assert.equal(renderer.disposed, true);
 });

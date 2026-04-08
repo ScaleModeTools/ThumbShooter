@@ -1,3 +1,5 @@
+import type { Radians } from "@thumbshooter/shared";
+
 import type {
   LocalArenaEnemyBehaviorState,
   LocalArenaSimulationConfig
@@ -5,7 +7,7 @@ import type {
 
 export interface MutableEnemyRenderState {
   behavior: LocalArenaEnemyBehaviorState;
-  headingRadians: number;
+  headingRadians: Radians;
   id: string;
   label: string;
   positionX: number;

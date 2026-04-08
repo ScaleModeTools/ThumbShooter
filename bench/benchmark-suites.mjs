@@ -21,7 +21,8 @@ function createTrackedPose(x, y, triggerCurl = 0) {
     indexBase: { x: x - 0.015, y: y + 0.11, z: 0.03 },
     indexKnuckle: { x: x - 0.01, y: y + 0.075, z: 0.018 },
     indexJoint: { x: x - 0.005, y: y + 0.038, z: 0.008 },
-    indexTip: { x, y, z: 0 }
+    indexTip: { x, y, z: 0 },
+    middlePip: { x: x - 0.03, y: y + 0.02, z: 0.02 }
   };
   const pressedPose = {
     handPivot: openPose.handPivot,
@@ -32,7 +33,8 @@ function createTrackedPose(x, y, triggerCurl = 0) {
     indexBase: openPose.indexBase,
     indexKnuckle: openPose.indexKnuckle,
     indexJoint: openPose.indexJoint,
-    indexTip: openPose.indexTip
+    indexTip: openPose.indexTip,
+    middlePip: openPose.middlePip
   };
 
   return {
@@ -79,6 +81,11 @@ function createTrackedPose(x, y, triggerCurl = 0) {
     indexTip: interpolatePoint(
       openPose.indexTip,
       pressedPose.indexTip,
+      normalizedTriggerCurl
+    ),
+    middlePip: interpolatePoint(
+      openPose.middlePip,
+      pressedPose.middlePip,
       normalizedTriggerCurl
     )
   };

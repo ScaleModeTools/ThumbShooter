@@ -15,7 +15,8 @@ export const handTrackingRuntimeConfig = {
     indexBaseIndex: 5,
     indexKnuckleIndex: 6,
     indexJointIndex: 7,
-    indexTipIndex: 8
+    indexTipIndex: 8,
+    middlePipIndex: 10
   },
   framePump: {
     targetFps: 30

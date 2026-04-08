@@ -1,3 +1,5 @@
+import { createRadians } from "@thumbshooter/shared";
+
 import type {
   LocalArenaArenaSnapshot,
   LocalArenaEnemyRenderState,
@@ -31,7 +33,9 @@ function createEnemyRuntimeState(
     homeVelocityY: seed.glideVelocity.y,
     renderState: {
       behavior: "glide",
-      headingRadians: Math.atan2(seed.glideVelocity.y, seed.glideVelocity.x),
+      headingRadians: createRadians(
+        Math.atan2(seed.glideVelocity.y, seed.glideVelocity.x)
+      ),
       id: seed.id,
       label: seed.label,
       positionX: seed.spawn.x,
@@ -115,9 +119,8 @@ export function resetEnemyField(
     enemyState.velocityX = enemyState.homeVelocityX;
     enemyState.velocityY = enemyState.homeVelocityY;
     enemyState.renderState.behavior = "glide";
-    enemyState.renderState.headingRadians = Math.atan2(
-      enemyState.homeVelocityY,
-      enemyState.homeVelocityX
+    enemyState.renderState.headingRadians = createRadians(
+      Math.atan2(enemyState.homeVelocityY, enemyState.homeVelocityX)
     );
     enemyState.renderState.positionX = seed.spawn.x;
     enemyState.renderState.positionY = seed.spawn.y;

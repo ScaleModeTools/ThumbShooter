@@ -24,7 +24,8 @@ export function createTrackedHandPose(
     indexBase: { x: indexTipX - 0.015, y: indexTipY + 0.11, z: 0.03 },
     indexKnuckle: { x: indexTipX - 0.01, y: indexTipY + 0.075, z: 0.018 },
     indexJoint: { x: indexTipX - 0.005, y: indexTipY + 0.038, z: 0.008 },
-    indexTip: { x: indexTipX, y: indexTipY, z: 0 }
+    indexTip: { x: indexTipX, y: indexTipY, z: 0 },
+    middlePip: { x: indexTipX - 0.03, y: indexTipY + 0.02, z: 0.02 }
   };
   const pressedPose = {
     thumbBase: { x: indexTipX - 0.078, y: indexTipY + 0.097, z: 0.02 },
@@ -34,7 +35,8 @@ export function createTrackedHandPose(
     indexBase: openPose.indexBase,
     indexKnuckle: openPose.indexKnuckle,
     indexJoint: openPose.indexJoint,
-    indexTip: openPose.indexTip
+    indexTip: openPose.indexTip,
+    middlePip: openPose.middlePip
   };
 
   return {
@@ -76,6 +78,11 @@ export function createTrackedHandPose(
     indexTip: interpolatePoint(
       openPose.indexTip,
       pressedPose.indexTip,
+      normalizedTriggerCurl
+    ),
+    middlePip: interpolatePoint(
+      openPose.middlePip,
+      pressedPose.middlePip,
       normalizedTriggerCurl
     )
   };

@@ -1,7 +1,9 @@
 import {
   createHandTriggerCalibrationSnapshot,
   createHandTriggerMetricSnapshot,
+  createDegrees,
   type CalibrationShotSample,
+  type Degrees,
   type HandTriggerCalibrationSnapshot,
   type HandTriggerMetricSnapshot
 } from "@thumbshooter/shared";
@@ -9,9 +11,9 @@ import {
 import type { HandTrackingPoseSnapshot } from "./hand-tracking";
 
 export interface HandTriggerGestureConfig {
-  readonly pressAxisAngleDegrees: number;
+  readonly pressAxisAngleDegrees: Degrees;
   readonly pressEngagementRatio: number;
-  readonly releaseAxisAngleDegrees: number;
+  readonly releaseAxisAngleDegrees: Degrees;
   readonly releaseEngagementRatio: number;
   readonly calibration: {
     readonly pressAxisWindowFraction: number;
@@ -22,7 +24,7 @@ export interface HandTriggerGestureConfig {
 }
 
 export interface HandTriggerGestureSnapshot {
-  readonly axisAngleDegrees: number;
+  readonly axisAngleDegrees: Degrees;
   readonly engagementRatio: number;
   readonly triggerPressed: boolean;
   readonly triggerReady: boolean;
@@ -35,9 +37,9 @@ interface HandVector3 {
 }
 
 interface ResolvedHandTriggerGestureThresholds {
-  readonly pressAxisAngleDegrees: number;
+  readonly pressAxisAngleDegrees: Degrees;
   readonly pressEngagementRatio: number;
-  readonly releaseAxisAngleDegrees: number;
+  readonly releaseAxisAngleDegrees: Degrees;
   readonly releaseEngagementRatio: number;
 }
 
@@ -60,25 +62,12 @@ function readDistance(pointA: HandVector3, pointB: HandVector3): number {
   return readVectorMagnitude(subtractPoints(pointA, pointB));
 }
 
-function readNearestDistance(
-  point: HandVector3,
-  candidates: readonly HandVector3[]
-): number {
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  for (const candidate of candidates) {
-    nearestDistance = Math.min(nearestDistance, readDistance(point, candidate));
-  }
-
-  return nearestDistance;
-}
-
-function readAxisAngleDegrees(vectorA: HandVector3, vectorB: HandVector3): number {
+function readAxisAngleDegrees(vectorA: HandVector3, vectorB: HandVector3): Degrees {
   const magnitudeA = readVectorMagnitude(vectorA);
   const magnitudeB = readVectorMagnitude(vectorB);
 
   if (magnitudeA === 0 || magnitudeB === 0) {
-    return 180;
+    return createDegrees(180);
   }
 
   const normalizedDotProduct =
@@ -86,36 +75,32 @@ function readAxisAngleDegrees(vectorA: HandVector3, vectorB: HandVector3): numbe
     (magnitudeA * magnitudeB);
   const clampedDotProduct = Math.min(1, Math.max(-1, normalizedDotProduct));
 
-  return (Math.acos(clampedDotProduct) * 180) / Math.PI;
+  return createDegrees((Math.acos(clampedDotProduct) * 180) / Math.PI);
 }
 
 function readTriggerEngagementRatio(
   pose: HandTrackingPoseSnapshot
 ): number {
-  const indexAxisLength = Math.max(
-    readDistance(pose.indexBase, pose.indexTip),
+  const triggerScale = Math.max(
+    readDistance(pose.thumbKnuckle, pose.indexKnuckle),
     0.0001
   );
-  const thumbChain = [
-    pose.thumbBase,
-    pose.thumbKnuckle,
-    pose.thumbJoint,
-    pose.thumbTip
-  ];
-  const indexChain = [pose.indexBase, pose.indexKnuckle, pose.indexJoint, pose.indexTip];
-  const totalNearestDistance = thumbChain.reduce((distanceSum, thumbPoint) => {
-    return distanceSum + readNearestDistance(thumbPoint, indexChain);
-  }, 0);
+  const thumbTipTriggerContactDistance = Math.min(
+    readDistance(pose.thumbTip, pose.indexBase),
+    readDistance(pose.thumbTip, pose.middlePip)
+  );
 
-  return totalNearestDistance / thumbChain.length / indexAxisLength;
+  // Use the nearest trigger contact target so pitch and foreshortening matter
+  // less than the actual thumb-to-trigger contact motion.
+  return thumbTipTriggerContactDistance / triggerScale;
 }
 
 function readTriggerAxisAngleDegrees(
   pose: HandTrackingPoseSnapshot
-): number {
+): Degrees {
   return readAxisAngleDegrees(
-    subtractPoints(pose.thumbTip, pose.thumbBase),
-    subtractPoints(pose.indexTip, pose.indexBase)
+    subtractPoints(pose.thumbTip, pose.thumbKnuckle),
+    subtractPoints(pose.indexJoint, pose.thumbKnuckle)
   );
 }
 
@@ -256,13 +241,15 @@ export function resolveHandTriggerGestureThresholds(
   );
 
   return Object.freeze({
-    pressAxisAngleDegrees,
+    pressAxisAngleDegrees: createDegrees(pressAxisAngleDegrees),
     pressEngagementRatio,
-    releaseAxisAngleDegrees: resolveReleaseThreshold(
-      config.releaseAxisAngleDegrees,
-      calibration.pressedAxisAngleDegreesMax,
-      calibration.readyAxisAngleDegreesMin,
-      config.calibration.releaseAxisWindowFraction
+    releaseAxisAngleDegrees: createDegrees(
+      resolveReleaseThreshold(
+        config.releaseAxisAngleDegrees,
+        calibration.pressedAxisAngleDegreesMax,
+        calibration.readyAxisAngleDegreesMin,
+        config.calibration.releaseAxisWindowFraction
+      )
     ),
     releaseEngagementRatio: resolveReleaseThreshold(
       config.releaseEngagementRatio,
@@ -281,9 +268,13 @@ export function evaluateHandTriggerGesture(
 ): HandTriggerGestureSnapshot {
   const metrics = readHandTriggerMetrics(pose);
   const thresholds = resolveHandTriggerGestureThresholds(config, calibration);
-  const pressSatisfied =
+  const hardContactPressSatisfied =
+    metrics.engagementRatio <= thresholds.pressEngagementRatio * 0.6;
+  const alignedContactPressSatisfied =
     metrics.engagementRatio <= thresholds.pressEngagementRatio &&
     metrics.axisAngleDegrees <= thresholds.pressAxisAngleDegrees;
+  const pressSatisfied =
+    hardContactPressSatisfied || alignedContactPressSatisfied;
   const releaseSatisfied =
     metrics.engagementRatio >= thresholds.releaseEngagementRatio ||
     metrics.axisAngleDegrees >= thresholds.releaseAxisAngleDegrees;

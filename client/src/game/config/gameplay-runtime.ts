@@ -1,3 +1,5 @@
+import { createRadians } from "@thumbshooter/shared";
+
 import type { GameplayRuntimeConfig } from "../types/gameplay-runtime";
 
 export const gameplayRuntimeConfig = {
@@ -18,7 +20,7 @@ export const gameplayRuntimeConfig = {
       width: 0.12,
       height: 0.024
     },
-    wingSweepRadians: 0.58
+    wingSweepRadians: createRadians(0.58)
   },
   reticle: {
     haloInnerRadius: 0.071,

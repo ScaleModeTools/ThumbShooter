@@ -4,6 +4,19 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const strudelBrowserEntrypoint = fileURLToPath(
+  new URL("../node_modules/@strudel/web/web.mjs", import.meta.url)
+);
+const strudelOptimizeDeps = [
+  "@strudel/core",
+  "@strudel/mini",
+  "@strudel/tonal",
+  "@strudel/transpiler",
+  "@strudel/web",
+  "@strudel/web/web.mjs",
+  "@strudel/webaudio"
+] as const;
+
 export default defineConfig({
   build: {
     chunkSizeWarningLimit: 650,
@@ -26,6 +39,9 @@ export default defineConfig({
       }
     }
   },
+  optimizeDeps: {
+    exclude: [...strudelOptimizeDeps]
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -33,6 +49,7 @@ export default defineConfig({
       "@mediapipe/tasks-vision": fileURLToPath(
         new URL("../node_modules/@mediapipe/tasks-vision/vision_bundle.mjs", import.meta.url)
       ),
+      "@strudel/web/web.mjs": strudelBrowserEntrypoint,
       "@thumbshooter/shared": fileURLToPath(
         new URL("../packages/shared/src/index.ts", import.meta.url)
       )

@@ -1,5 +1,15 @@
 export type { TypeBrand } from "./type-branding.js";
 export {
+  createDegrees,
+  createMilliseconds,
+  createRadians
+} from "./unit-measurements.js";
+export type {
+  Degrees,
+  Milliseconds,
+  Radians
+} from "./unit-measurements.js";
+export {
   AffineAimTransform,
   affineAimTransformFitQualities
 } from "./affine-aim-transform.js";
@@ -11,9 +21,7 @@ export type {
 export {
   AudioSettings,
   audioChannelIds,
-  backgroundMusicEngines,
-  createAudioLevel,
-  soundEffectEngines
+  createAudioLevel
 } from "./audio-settings.js";
 export type {
   AudioChannelId,
@@ -53,8 +61,7 @@ export type {
 } from "./hand-trigger-calibration.js";
 export {
   reticleColors,
-  reticleIds,
-  reticleStyles
+  reticleIds
 } from "./reticle-types.js";
 export type {
   ReticleColor,

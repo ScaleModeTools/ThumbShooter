@@ -60,10 +60,10 @@ function createArenaConfig() {
       displayName: "Semiautomatic pistol",
       triggerMode: "single",
       triggerGesture: {
-        pressAxisAngleDegrees: 26,
+        pressAxisAngleDegrees: 68,
         pressEngagementRatio: 0.72,
-        releaseAxisAngleDegrees: 32,
-        releaseEngagementRatio: 0.92,
+        releaseAxisAngleDegrees: 72,
+        releaseEngagementRatio: 0.95,
         calibration: {
           pressAxisWindowFraction: 0.4,
           pressEngagementWindowFraction: 0.4,
@@ -197,9 +197,9 @@ test("LocalArenaSimulation applies trigger calibration before a shot becomes val
     {
       triggerCalibration: createHandTriggerCalibrationSnapshot({
         sampleCount: 9,
-        pressedAxisAngleDegreesMax: 20,
+        pressedAxisAngleDegreesMax: 30,
         pressedEngagementRatioMax: 0.31,
-        readyAxisAngleDegreesMin: 34,
+        readyAxisAngleDegreesMin: 55,
         readyEngagementRatioMin: 0.75
       })
     }
@@ -208,7 +208,7 @@ test("LocalArenaSimulation applies trigger calibration before a shot becomes val
   simulation.advance(createTrackedHandSnapshot(1, 0.25, 0.4), 0);
 
   const borderlineSnapshot = simulation.advance(
-    createTrackedHandSnapshot(2, 0.25, 0.4, 0.9),
+    createTrackedHandSnapshot(2, 0.25, 0.4, 0.75),
     16
   );
 
@@ -220,6 +220,35 @@ test("LocalArenaSimulation applies trigger calibration before a shot becomes val
   const firedSnapshot = simulation.advance(
     createTrackedHandSnapshot(4, 0.25, 0.4, 1),
     64
+  );
+
+  assert.equal(firedSnapshot.weapon.shotsFired, 1);
+  assert.equal(firedSnapshot.session.score, 100);
+});
+
+test("LocalArenaSimulation requires a ready state before a tracked press can fire", async () => {
+  const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
+  const simulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+
+  const reacquiredPressedSnapshot = simulation.advance(
+    createTrackedHandSnapshot(1, 0.25, 0.4, 1),
+    0
+  );
+
+  assert.equal(reacquiredPressedSnapshot.weapon.shotsFired, 0);
+  assert.equal(reacquiredPressedSnapshot.session.score, 0);
+
+  simulation.advance(createTrackedHandSnapshot(2, 0.25, 0.4), 16);
+
+  const firedSnapshot = simulation.advance(
+    createTrackedHandSnapshot(3, 0.25, 0.4, 1),
+    32
   );
 
   assert.equal(firedSnapshot.weapon.shotsFired, 1);

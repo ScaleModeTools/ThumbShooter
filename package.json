@@ -18,7 +18,7 @@
     "test": "./tools/test",
     "bench": "./tools/bench",
     "verify": "./tools/verify",
-    "dev:client": "npm run dev --workspace client",
+    "dev:client": "npm --workspace client run dev --",
     "start:server": "npm run start --workspace server",
     "watch:server": "npm run watch:build --workspace server",
     "start:server:watch": "npm run start:watch --workspace server",

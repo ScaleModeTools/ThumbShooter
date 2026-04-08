@@ -1,3 +1,5 @@
+import type { Milliseconds } from "@thumbshooter/shared";
+
 import type { HandTriggerGestureConfig } from "./hand-trigger-gesture";
 import type {
   FirstPlayableWeaponId,
@@ -20,12 +22,12 @@ export type WeaponReadinessState = (typeof weaponReadinessStates)[number];
 export type WeaponReloadState = (typeof weaponReloadStates)[number];
 
 export interface WeaponCadenceConfig {
-  readonly shotIntervalMs: number;
+  readonly shotIntervalMs: Milliseconds;
 }
 
 export interface WeaponReloadConfig {
   readonly clipCapacity: number;
-  readonly durationMs: number;
+  readonly durationMs: Milliseconds;
   readonly rule: WeaponReloadRule;
 }
 
@@ -50,14 +52,14 @@ export interface WeaponReloadSnapshot {
   readonly clipCapacity: number;
   readonly clipRoundsRemaining: number;
   readonly isReloadReady: boolean;
-  readonly reloadRemainingMs: number;
+  readonly reloadRemainingMs: Milliseconds;
   readonly requiresReload: boolean;
   readonly rule: WeaponReloadRule;
   readonly state: WeaponReloadState;
 }
 
 export interface WeaponHudSnapshot {
-  readonly cooldownRemainingMs: number;
+  readonly cooldownRemainingMs: Milliseconds;
   readonly hitsLanded: number;
   readonly readiness: WeaponReadinessState;
   readonly reload: WeaponReloadSnapshot;

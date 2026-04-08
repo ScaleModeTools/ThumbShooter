@@ -40,6 +40,7 @@ export interface HandTrackingPoseCandidate {
   readonly indexKnuckle: HandTrackingLandmarkCandidate;
   readonly indexJoint: HandTrackingLandmarkCandidate;
   readonly indexTip: HandTrackingLandmarkCandidate;
+  readonly middlePip: HandTrackingLandmarkCandidate;
 }
 
 export interface HandTrackingPoseSnapshot {
@@ -51,6 +52,7 @@ export interface HandTrackingPoseSnapshot {
   readonly indexKnuckle: HandTrackingLandmarkPoint;
   readonly indexJoint: HandTrackingLandmarkPoint;
   readonly indexTip: HandTrackingLandmarkPoint;
+  readonly middlePip: HandTrackingLandmarkPoint;
 }
 
 export interface UnavailableHandTrackingSnapshot {
@@ -101,6 +103,7 @@ export interface HandTrackingRuntimeConfig {
     readonly indexKnuckleIndex: 6;
     readonly indexJointIndex: 7;
     readonly indexTipIndex: 8;
+    readonly middlePipIndex: 10;
   };
   readonly framePump: {
     readonly targetFps: number;
@@ -122,6 +125,7 @@ export interface HandTrackingWorkerBootMessage {
     readonly indexKnuckleIndex: 6;
     readonly indexJointIndex: 7;
     readonly indexTipIndex: 8;
+    readonly middlePipIndex: 10;
   };
 }
 
@@ -140,11 +144,11 @@ function createHandTrackingLandmarkPoint(input: {
 }): HandTrackingLandmarkPoint {
   const normalizedPoint = createNormalizedViewportPoint(input);
 
-  return Object.freeze({
+  return {
     x: normalizedPoint.x,
     y: normalizedPoint.y,
     z: normalizeLandmarkDepth(input.z)
-  });
+  };
 }
 
 export interface HandTrackingWorkerProcessFrameMessage {
@@ -201,12 +205,12 @@ function normalizeTimestamp(rawValue: number): number {
 }
 
 export function createUnavailableHandTrackingSnapshot(): UnavailableHandTrackingSnapshot {
-  return Object.freeze({
+  return {
     trackingState: "unavailable",
     sequenceNumber: 0,
     timestampMs: null,
     pose: null
-  });
+  };
 }
 
 export function createLatestHandTrackingSnapshot(input: {
@@ -218,19 +222,19 @@ export function createLatestHandTrackingSnapshot(input: {
   const timestampMs = normalizeTimestamp(input.timestampMs);
 
   if (input.pose === null) {
-    return Object.freeze({
+    return {
       trackingState: "no-hand",
       sequenceNumber,
       timestampMs,
       pose: null
-    });
+    };
   }
 
-  return Object.freeze({
+  return {
     trackingState: "tracked",
     sequenceNumber,
     timestampMs,
-    pose: Object.freeze({
+    pose: {
       thumbBase: createHandTrackingLandmarkPoint(input.pose.thumbBase),
       thumbKnuckle: createHandTrackingLandmarkPoint(input.pose.thumbKnuckle),
       thumbJoint: createHandTrackingLandmarkPoint(input.pose.thumbJoint),
@@ -238,9 +242,10 @@ export function createLatestHandTrackingSnapshot(input: {
       indexBase: createHandTrackingLandmarkPoint(input.pose.indexBase),
       indexKnuckle: createHandTrackingLandmarkPoint(input.pose.indexKnuckle),
       indexJoint: createHandTrackingLandmarkPoint(input.pose.indexJoint),
-      indexTip: createHandTrackingLandmarkPoint(input.pose.indexTip)
-    })
-  });
+      indexTip: createHandTrackingLandmarkPoint(input.pose.indexTip),
+      middlePip: createHandTrackingLandmarkPoint(input.pose.middlePip)
+    }
+  };
 }
 
 export function isTrackedHandTrackingSnapshot(

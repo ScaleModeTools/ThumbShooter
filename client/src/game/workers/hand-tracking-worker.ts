@@ -4,6 +4,7 @@ import {
   type HandLandmarkerResult
 } from "@mediapipe/tasks-vision";
 
+import { installMediaPipeConsoleFilter } from "./mediapipe-console-filter";
 import { buildMediaPipeLoaderScript } from "./mediapipe-loader-bridge";
 
 import type {
@@ -64,9 +65,11 @@ let landmarkIndices: HandTrackingWorkerBootMessage["landmarks"] = {
   indexBaseIndex: 5,
   indexKnuckleIndex: 6,
   indexJointIndex: 7,
-  indexTipIndex: 8
+  indexTipIndex: 8,
+  middlePipIndex: 10
 };
 
+installMediaPipeConsoleFilter();
 ensureWorkerDynamicImportBridge();
 
 function postWorkerEvent(event: HandTrackingWorkerEvent): void {
@@ -123,6 +126,7 @@ function extractPoseCandidate(
   const indexKnuckle = readLandmarkPoint(landmarks?.[landmarkIndices.indexKnuckleIndex]);
   const indexJoint = readLandmarkPoint(landmarks?.[landmarkIndices.indexJointIndex]);
   const indexTip = readLandmarkPoint(landmarks?.[landmarkIndices.indexTipIndex]);
+  const middlePip = readLandmarkPoint(landmarks?.[landmarkIndices.middlePipIndex]);
 
   if (
     thumbBase === null ||
@@ -132,7 +136,8 @@ function extractPoseCandidate(
     indexBase === null ||
     indexKnuckle === null ||
     indexJoint === null ||
-    indexTip === null
+    indexTip === null ||
+    middlePip === null
   ) {
     return null;
   }
@@ -145,7 +150,8 @@ function extractPoseCandidate(
     indexBase,
     indexKnuckle,
     indexJoint,
-    indexTip
+    indexTip,
+    middlePip
   };
 }
 

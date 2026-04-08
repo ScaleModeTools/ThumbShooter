@@ -49,6 +49,12 @@ export interface GameplayTelemetrySnapshot {
   readonly frameDeltaMs: number;
   readonly frameRate: number;
   readonly observedAimPoint: NormalizedViewportPointInput | null;
+  readonly renderer: {
+    readonly devicePixelRatio: number;
+    readonly drawCallCount: number;
+    readonly label: string;
+    readonly triangleCount: number;
+  };
   readonly renderedFrameCount: number;
   readonly reticleVisualState: GameplayReticleVisualState;
   readonly sessionPhase: LocalCombatSessionPhase;

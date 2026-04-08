@@ -95,6 +95,7 @@ export class LocalArenaSimulation {
   #feedbackState: LocalArenaTargetFeedbackState = "tracking-lost";
   #hudSnapshot: LocalArenaHudSnapshot;
   #lastStepAtMs: number | null = null;
+  #triggerReadyLatch = false;
   #worldTimeMs = 0;
 
   constructor(
@@ -154,7 +155,7 @@ export class LocalArenaSimulation {
     const triggerPressed =
       trackingSnapshot.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
-        : false;
+        : this.#clearTriggerReadyLatch();
     const sessionPhase = this.#combatSession.beginFrame(safeNowMs).phase;
     const sessionActive = sessionPhase === "active";
     const weaponFrame = this.#weaponRuntime.advance({
@@ -219,6 +220,7 @@ export class LocalArenaSimulation {
     this.#feedbackHoldUntilMs = 0;
     this.#feedbackState = "tracking-lost";
     this.#lastStepAtMs = null;
+    this.#triggerReadyLatch = false;
     this.#weaponRuntime.reset(
       trackingSnapshot?.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
@@ -261,12 +263,31 @@ export class LocalArenaSimulation {
   #readTriggerPressed(trackingSnapshot: Extract<LatestHandTrackingSnapshot, {
     readonly trackingState: "tracked";
   }>): boolean {
-    return evaluateHandTriggerGesture(
+    const triggerGesture = evaluateHandTriggerGesture(
       trackingSnapshot.pose,
       this.#weaponRuntime.triggerHeld,
       this.#weaponRuntime.definition.triggerGesture,
       this.#triggerCalibration
-    ).triggerPressed;
+    );
+
+    if (triggerGesture.triggerReady) {
+      this.#triggerReadyLatch = true;
+    }
+
+    const triggerPressed =
+      this.#triggerReadyLatch && triggerGesture.triggerPressed;
+
+    if (triggerGesture.triggerPressed) {
+      this.#triggerReadyLatch = false;
+    }
+
+    return triggerPressed;
+  }
+
+  #clearTriggerReadyLatch(): false {
+    this.#triggerReadyLatch = false;
+
+    return false;
   }
 
   #resolveShot(aimX: number, aimY: number, nowMs: number): void {

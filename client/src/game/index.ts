@@ -15,17 +15,6 @@ export { NinePointCalibrationSession } from "./classes/nine-point-calibration-se
 export { WebGpuGameplayRuntime } from "./classes/webgpu-gameplay-runtime";
 export { WebGpuGameplayCapabilityProbe } from "./classes/webgpu-gameplay-capability-probe";
 export { WeaponRuntime } from "./classes/weapon-runtime";
-export {
-  calibrationTransformModels,
-  firstPlayableWeaponIds,
-  handTrackingExecutionModels,
-  handTrackingTransportModes,
-  shaderAuthoringModels,
-  threeGameplayImportSurfaces,
-  triggerGestureModes,
-  weaponReloadRules,
-  webGpuFallbackPolicies
-} from "./types/game-foundation";
 export { calibrationCaptureStates } from "./types/calibration-session";
 export { gameplayRuntimeLifecycleStates } from "./types/gameplay-runtime";
 export {
@@ -61,16 +50,9 @@ export {
 export type {
   CalibrationAnchorDefinition,
   CalibrationAnchorId,
-  CalibrationTransformModel,
   FirstPlayableWeaponId,
-  GameFoundationConfig,
-  HandTrackingExecutionModel,
-  HandTrackingTransportMode,
-  ShaderAuthoringModel,
-  ThreeGameplayImportSurface,
   TriggerGestureMode,
-  WeaponReloadRule,
-  WebGpuFallbackPolicy
+  WeaponReloadRule
 } from "./types/game-foundation";
 export type {
   GameplaySignal,

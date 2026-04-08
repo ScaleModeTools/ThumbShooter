@@ -1,7 +1,13 @@
-import type { PlayerProfile } from "@thumbshooter/shared";
+import type {
+  Degrees,
+  Milliseconds,
+  PlayerProfile,
+  Radians
+} from "@thumbshooter/shared";
 
 import type { ThumbShooterShellControllerAction } from "../../client/src/app/types/thumbshooter-shell-controller";
 import {
+  gameFoundationConfig,
   gameplayDebugPanelModes,
   gameplayRuntimeLifecycleStates,
   gameplayReticleVisualStates,
@@ -10,13 +16,17 @@ import {
   type FirstPlayableWeaponId,
   type GameplayDebugPanelMode,
   type GameplayHudSnapshot,
+  type GameplayRuntimeConfig,
   type GameplayReticleVisualState,
   type GameplayTelemetrySnapshot,
   type HandTriggerGestureConfig,
+  type HandTriggerGestureSnapshot,
   type GameplayRuntimeLifecycleState,
   type GameplaySignal,
   type GameplaySignalType,
+  type LocalArenaEnemyRenderState,
   type LocalArenaEnemyBehaviorState,
+  type LocalCombatSessionSnapshot,
   type LocalArenaTargetFeedbackState,
   type TriggerGestureMode,
   type WeaponDefinition,
@@ -24,10 +34,9 @@ import {
   type WeaponReloadRule,
   type WeaponReloadState,
   weaponReadinessStates,
-  weaponReloadRules,
   weaponReloadStates
 } from "../../client/src/game/index";
-import type { AssertTrue, IsEqual } from "./type-assertions";
+import type { AssertTrue, IsAssignable, IsEqual } from "./type-assertions";
 
 type ThumbShooterShellControllerActionType =
   ThumbShooterShellControllerAction["type"];
@@ -41,7 +50,6 @@ type ExpectedShellActionType =
   | "capabilitySnapshotReceived"
   | "gameplayExited"
   | "gameplayDebugPanelModeChanged"
-  | "gameplayMenuAutoOpened"
   | "gameplayMenuSetOpen"
   | "loginRejected"
   | "musicVolumeChanged"
@@ -143,6 +151,12 @@ type GameplayHudFeedbackUsesTargetFeedbackState = AssertTrue<
 type GameplayHudWeaponUsesFirstPlayableWeaponId = AssertTrue<
   IsEqual<GameplayHudSnapshot["weapon"]["weaponId"], FirstPlayableWeaponId>
 >;
+type FoundationFirstPlayableWeaponUsesWeaponId = AssertTrue<
+  IsEqual<
+    (typeof gameFoundationConfig)["weapon"]["firstPlayableWeapon"],
+    FirstPlayableWeaponId
+  >
+>;
 type GameplayDebugPanelModeMatches = AssertTrue<
   IsEqual<GameplayDebugPanelMode, ExpectedGameplayDebugPanelMode>
 >;
@@ -194,11 +208,71 @@ type GameplayHudReloadStateMatches = AssertTrue<
 type WeaponReloadRuleMatches = AssertTrue<
   IsEqual<WeaponReloadRule, ExpectedWeaponReloadRule>
 >;
-type WeaponReloadRuleCatalogMatches = AssertTrue<
-  IsEqual<(typeof weaponReloadRules)[number], WeaponReloadRule>
+type FoundationReloadRulesUseWeaponReloadRule = AssertTrue<
+  IsAssignable<
+    (typeof gameFoundationConfig)["weapon"]["supportedReloadRules"],
+    readonly WeaponReloadRule[]
+  >
 >;
 type GameplayHudReloadRuleMatches = AssertTrue<
   IsEqual<GameplayHudSnapshot["weapon"]["reload"]["rule"], WeaponReloadRule>
+>;
+type FoundationTriggerModesUseTriggerGestureMode = AssertTrue<
+  IsAssignable<
+    (typeof gameFoundationConfig)["weapon"]["supportedTriggerModes"],
+    readonly TriggerGestureMode[]
+  >
+>;
+type HandTrackingExecutionModelIsFixedImplementationValue = AssertTrue<
+  IsEqual<
+    (typeof gameFoundationConfig)["runtime"]["handTrackingExecutionModel"],
+    "worker-first"
+  >
+>;
+type RendererTargetIsFixedImplementationValue = AssertTrue<
+  IsEqual<(typeof gameFoundationConfig)["renderer"]["target"], "webgpu">
+>;
+type InputTrackerIsFixedImplementationValue = AssertTrue<
+  IsEqual<
+    (typeof gameFoundationConfig)["input"]["tracker"],
+    "mediapipe-hand-landmarker"
+  >
+>;
+type PrototypeScatterStateIsFixedImplementationValue = AssertTrue<
+  IsEqual<(typeof gameFoundationConfig)["prototype"]["supportsScatterState"], true>
+>;
+type WeaponCadenceUsesMilliseconds = AssertTrue<
+  IsEqual<WeaponDefinition["cadence"]["shotIntervalMs"], Milliseconds>
+>;
+type WeaponReloadDurationUsesMilliseconds = AssertTrue<
+  IsEqual<WeaponDefinition["reload"]["durationMs"], Milliseconds>
+>;
+type GameplayHudWeaponCooldownUsesMilliseconds = AssertTrue<
+  IsEqual<GameplayHudSnapshot["weapon"]["cooldownRemainingMs"], Milliseconds>
+>;
+type GameplayHudReloadRemainingUsesMilliseconds = AssertTrue<
+  IsEqual<
+    GameplayHudSnapshot["weapon"]["reload"]["reloadRemainingMs"],
+    Milliseconds
+  >
+>;
+type CombatSessionDurationUsesMilliseconds = AssertTrue<
+  IsEqual<LocalCombatSessionSnapshot["roundDurationMs"], Milliseconds>
+>;
+type CombatSessionRemainingUsesMilliseconds = AssertTrue<
+  IsEqual<LocalCombatSessionSnapshot["roundTimeRemainingMs"], Milliseconds>
+>;
+type TriggerConfigPressAxisUsesDegrees = AssertTrue<
+  IsEqual<HandTriggerGestureConfig["pressAxisAngleDegrees"], Degrees>
+>;
+type TriggerSnapshotAxisUsesDegrees = AssertTrue<
+  IsEqual<HandTriggerGestureSnapshot["axisAngleDegrees"], Degrees>
+>;
+type EnemyHeadingUsesRadians = AssertTrue<
+  IsEqual<LocalArenaEnemyRenderState["headingRadians"], Radians>
+>;
+type GameplayWingSweepUsesRadians = AssertTrue<
+  IsEqual<GameplayRuntimeConfig["enemies"]["wingSweepRadians"], Radians>
 >;
 type WeaponDefinitionClipCapacityIsNumber = AssertTrue<
   IsEqual<WeaponDefinition["reload"]["clipCapacity"], number>
@@ -266,6 +340,7 @@ export type ClientShellGameplayTypeTests =
   | LocalArenaTargetFeedbackCatalogMatches
   | GameplayHudFeedbackUsesTargetFeedbackState
   | GameplayHudWeaponUsesFirstPlayableWeaponId
+  | FoundationFirstPlayableWeaponUsesWeaponId
   | GameplayDebugPanelModeMatches
   | GameplayDebugPanelModeCatalogMatches
   | GameplayDebugActionModeMatches
@@ -279,8 +354,23 @@ export type ClientShellGameplayTypeTests =
   | WeaponReloadStateCatalogMatches
   | GameplayHudReloadStateMatches
   | WeaponReloadRuleMatches
-  | WeaponReloadRuleCatalogMatches
+  | FoundationReloadRulesUseWeaponReloadRule
   | GameplayHudReloadRuleMatches
+  | FoundationTriggerModesUseTriggerGestureMode
+  | HandTrackingExecutionModelIsFixedImplementationValue
+  | RendererTargetIsFixedImplementationValue
+  | InputTrackerIsFixedImplementationValue
+  | PrototypeScatterStateIsFixedImplementationValue
+  | WeaponCadenceUsesMilliseconds
+  | WeaponReloadDurationUsesMilliseconds
+  | GameplayHudWeaponCooldownUsesMilliseconds
+  | GameplayHudReloadRemainingUsesMilliseconds
+  | CombatSessionDurationUsesMilliseconds
+  | CombatSessionRemainingUsesMilliseconds
+  | TriggerConfigPressAxisUsesDegrees
+  | TriggerSnapshotAxisUsesDegrees
+  | EnemyHeadingUsesRadians
+  | GameplayWingSweepUsesRadians
   | WeaponDefinitionClipCapacityIsNumber
   | WeaponDefinitionTriggerModeMatchesFoundation
   | WeaponDefinitionTriggerGestureUsesHandTriggerConfig

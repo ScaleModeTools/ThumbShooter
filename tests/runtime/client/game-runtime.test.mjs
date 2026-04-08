@@ -32,18 +32,15 @@ test("WebGpuGameplayCapabilityProbe reports ready adapters as supported", async 
     "/src/game/classes/webgpu-gameplay-capability-probe.ts"
   );
   const probe = new WebGpuGameplayCapabilityProbe();
-  let deviceDestroyed = false;
+  let deviceRequestCount = 0;
 
   const snapshot = await probe.probe({
     gpu: {
       async requestAdapter() {
         return {
           async requestDevice() {
-            return {
-              destroy() {
-                deviceDestroyed = true;
-              }
-            };
+            deviceRequestCount += 1;
+            return {};
           }
         };
       }
@@ -54,7 +51,7 @@ test("WebGpuGameplayCapabilityProbe reports ready adapters as supported", async 
     status: "supported",
     reason: "adapter-ready"
   });
-  assert.equal(deviceDestroyed, true);
+  assert.equal(deviceRequestCount, 0);
 });
 
 test("WebGpuGameplayCapabilityProbe reports probe failures cleanly", async () => {
@@ -77,7 +74,7 @@ test("WebGpuGameplayCapabilityProbe reports probe failures cleanly", async () =>
   });
 });
 
-test("WebGpuGameplayCapabilityProbe reports device request failures cleanly", async () => {
+test("WebGpuGameplayCapabilityProbe reports missing adapters cleanly", async () => {
   const { WebGpuGameplayCapabilityProbe } = await clientLoader.load(
     "/src/game/classes/webgpu-gameplay-capability-probe.ts"
   );
@@ -86,17 +83,13 @@ test("WebGpuGameplayCapabilityProbe reports device request failures cleanly", as
   const snapshot = await probe.probe({
     gpu: {
       async requestAdapter() {
-        return {
-          async requestDevice() {
-            throw new Error("device boom");
-          }
-        };
+        return null;
       }
     }
   });
 
   assert.deepEqual(snapshot, {
     status: "unsupported",
-    reason: "probe-failed"
+    reason: "adapter-unavailable"
   });
 });

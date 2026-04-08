@@ -21,10 +21,6 @@ export class WebGpuGameplayCapabilityProbe {
         };
       }
 
-      const device = await adapter.requestDevice();
-
-      device.destroy?.();
-
       return {
         status: "supported",
         reason: "adapter-ready"

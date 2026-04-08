@@ -1,3 +1,8 @@
+import {
+  createDegrees,
+  createMilliseconds
+} from "@thumbshooter/shared";
+
 import type { FirstPlayableWeaponId } from "../types/game-foundation";
 import type { WeaponDefinition } from "../types/weapon-contract";
 
@@ -7,10 +12,10 @@ export const weaponManifest = {
     displayName: "Semiautomatic pistol",
     triggerMode: "single",
     triggerGesture: {
-      pressAxisAngleDegrees: 26,
+      pressAxisAngleDegrees: createDegrees(68),
       pressEngagementRatio: 0.72,
-      releaseAxisAngleDegrees: 32,
-      releaseEngagementRatio: 0.92,
+      releaseAxisAngleDegrees: createDegrees(72),
+      releaseEngagementRatio: 0.95,
       calibration: {
         pressAxisWindowFraction: 0.4,
         pressEngagementWindowFraction: 0.4,
@@ -19,11 +24,11 @@ export const weaponManifest = {
       }
     },
     cadence: {
-      shotIntervalMs: 260
+      shotIntervalMs: createMilliseconds(260)
     },
     reload: {
       clipCapacity: 6,
-      durationMs: 420,
+      durationMs: createMilliseconds(420),
       rule: "reticle-offscreen"
     },
     spread: {

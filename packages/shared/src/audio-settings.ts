@@ -4,13 +4,9 @@ export const audioChannelIds = ["music", "sfx"] as const;
 
 export type AudioChannelId = (typeof audioChannelIds)[number];
 
-export const backgroundMusicEngines = ["strudel-web"] as const;
+export type BackgroundMusicEngine = "strudel-web";
 
-export type BackgroundMusicEngine = (typeof backgroundMusicEngines)[number];
-
-export const soundEffectEngines = ["web-audio-api"] as const;
-
-export type SoundEffectEngine = (typeof soundEffectEngines)[number];
+export type SoundEffectEngine = "web-audio-api";
 
 export type AudioLevel = TypeBrand<number, "AudioLevel">;
 

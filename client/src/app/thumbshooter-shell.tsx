@@ -10,6 +10,7 @@ export function ThumbShooterShell() {
   const activeStep = controller.navigationSnapshot.activeStep;
   const isImmersiveStage =
     activeStep === "calibration" || activeStep === "gameplay";
+  const showDeveloperUi = import.meta.env.DEV;
   const stageRouter = (
     <ShellStageRouter
       activeStep={activeStep}
@@ -88,6 +89,7 @@ export function ThumbShooterShell() {
           open={
             activeStep === "gameplay" && controller.isMenuOpen
           }
+          showDebugControls={showDeveloperUi}
           sfxVolume={controller.shellView.sfxVolumeSliderValue}
         />
       ) : null}

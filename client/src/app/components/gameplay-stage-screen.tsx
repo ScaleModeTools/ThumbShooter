@@ -14,7 +14,11 @@ import type {
 import { HandTrackingRuntime } from "../../game/classes/hand-tracking-runtime";
 import { LocalArenaSimulation } from "../../game/classes/local-arena-simulation";
 import { WebGpuGameplayRuntime } from "../../game/classes/webgpu-gameplay-runtime";
-import { GameplayDebugOverlay, GameplayHudOverlay } from "../../ui";
+import {
+  GameplayDebugOverlay,
+  GameplayDeveloperPanel,
+  GameplayHudOverlay
+} from "../../ui";
 
 import { ImmersiveStageFrame } from "./immersive-stage-frame";
 
@@ -47,6 +51,7 @@ export function GameplayStageScreen({
   username,
   weaponLabel
 }: GameplayStageScreenProps) {
+  const showDeveloperUi = import.meta.env.DEV;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bestScoreRef = useRef(bestScore);
   const runtimeStartVersionRef = useRef(0);
@@ -71,6 +76,36 @@ export function GameplayStageScreen({
     () => handTrackingRuntime.telemetrySnapshot
   );
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void handTrackingRuntime.ensureStarted().then(
+      () => {
+        if (cancelled) {
+          return;
+        }
+
+        setTrackingTelemetry(handTrackingRuntime.telemetrySnapshot);
+      },
+      (error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setTrackingTelemetry(handTrackingRuntime.telemetrySnapshot);
+        setRuntimeError((currentValue) =>
+          currentValue ??
+          handTrackingRuntime.snapshot.failureReason ??
+          (error instanceof Error ? error.message : "Hand tracking runtime failed.")
+        );
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handTrackingRuntime]);
 
   const handleStartRuntime = useEffectEvent(async () => {
     if (canvasRef.current === null) {
@@ -140,7 +175,9 @@ export function GameplayStageScreen({
       window.clearInterval(intervalHandle);
       gameplayRuntime.dispose();
     };
-  }, [gameplayRuntime, handleStartRuntime]);
+    // Effect events must stay out of dependency arrays or the runtime gets
+    // torn down on the first post-boot rerender before RAF can advance.
+  }, [gameplayRuntime, handTrackingRuntime]);
 
   useEffect(() => {
     const nextBestScore = hudSnapshot.session.score;
@@ -158,11 +195,16 @@ export function GameplayStageScreen({
       <div className="relative flex-1 overflow-hidden">
         <canvas className="absolute inset-0 h-full w-full" ref={canvasRef} />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgb(56_189_248_/_0.08),_transparent_28%)]" />
-        <GameplayDebugOverlay
-          gameplayTelemetry={gameplayTelemetry}
-          mode={debugPanelMode}
-          trackingTelemetry={trackingTelemetry}
-        />
+        {showDeveloperUi ? (
+          <>
+            <GameplayDeveloperPanel gameplayTelemetry={gameplayTelemetry} />
+            <GameplayDebugOverlay
+              gameplayTelemetry={gameplayTelemetry}
+              mode={debugPanelMode}
+              trackingTelemetry={trackingTelemetry}
+            />
+          </>
+        ) : null}
         <GameplayHudOverlay
           audioStatusLabel={audioStatusLabel}
           bestScore={bestScore}

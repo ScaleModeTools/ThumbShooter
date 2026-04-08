@@ -89,12 +89,8 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
     type: "gameplayDebugPanelModeChanged"
   });
   state = reduceThumbShooterShellControllerState(state, {
-    type: "gameplayMenuAutoOpened",
-    audioSnapshot: {
-      ...createAudioSnapshot(),
-      backgroundTrackId: "birds-arena-loop",
-      lastCueId: "ui-menu-open"
-    }
+    type: "gameplayMenuSetOpen",
+    open: true
   });
   state = reduceThumbShooterShellControllerState(state, {
     type: "bestScoreRaised",
@@ -113,7 +109,6 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
   assert.equal(state.permissionState, "granted");
   assert.equal(state.debugPanelMode, "aim-inspector");
   assert.equal(state.isMenuOpen, true);
-  assert.equal(state.hasAutoOpenedMenu, true);
   assert.equal(state.profile?.snapshot.bestScore, 300);
   assert.equal(state.profile?.snapshot.audioSettings.mix.musicVolume, 0.2);
   assert.equal(state.profile?.snapshot.audioSettings.mix.sfxVolume, 0.45);

@@ -57,7 +57,6 @@ export function createInitialThumbShooterShellControllerState({
     audioSnapshot,
     capabilitySnapshot: initialCapabilitySnapshot,
     debugPanelMode: "hidden",
-    hasAutoOpenedMenu: false,
     hasConfirmedProfile: false,
     hydrationSource: hydratedProfile.source,
     isMenuOpen: false,
@@ -126,13 +125,6 @@ export function reduceThumbShooterShellControllerState(
             ...state,
             debugPanelMode: action.mode
           };
-    case "gameplayMenuAutoOpened":
-      return {
-        ...state,
-        audioSnapshot: action.audioSnapshot,
-        hasAutoOpenedMenu: true,
-        isMenuOpen: true
-      };
     case "gameplayMenuSetOpen":
       return action.open === state.isMenuOpen
         ? state
@@ -163,7 +155,6 @@ export function reduceThumbShooterShellControllerState(
       return {
         ...state,
         audioSnapshot: action.audioSnapshot,
-        hasAutoOpenedMenu: false,
         hasConfirmedProfile: false,
         hydrationSource: "empty",
         isMenuOpen: false,

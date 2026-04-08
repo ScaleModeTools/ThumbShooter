@@ -1,7 +1,15 @@
+import type {
+  Milliseconds,
+  NormalizedViewportPoint,
+  Radians
+} from "@thumbshooter/shared";
+
 import type { HandTrackingPoseState } from "./hand-tracking";
-import type { LocalCombatSessionConfig, LocalCombatSessionSnapshot } from "./local-combat-session";
+import type {
+  LocalCombatSessionConfig,
+  LocalCombatSessionSnapshot
+} from "./local-combat-session";
 import type { WeaponDefinition, WeaponHudSnapshot } from "./weapon-contract";
-import type { NormalizedViewportPoint } from "@thumbshooter/shared";
 
 export const localArenaEnemyBehaviorStates = [
   "glide",
@@ -40,7 +48,7 @@ export interface LocalArenaEnemySeed {
 
 export interface LocalArenaEnemyRenderState {
   readonly behavior: LocalArenaEnemyBehaviorState;
-  readonly headingRadians: number;
+  readonly headingRadians: Radians;
   readonly id: string;
   readonly label: string;
   readonly positionX: number;
@@ -83,14 +91,14 @@ export interface LocalArenaSimulationConfig {
   };
   readonly enemySeeds: readonly LocalArenaEnemySeed[];
   readonly feedback: {
-    readonly holdDurationMs: number;
+    readonly holdDurationMs: Milliseconds;
   };
   readonly movement: {
     readonly downedDriftVelocityY: number;
-    readonly maxStepMs: number;
-    readonly scatterDurationMs: number;
+    readonly maxStepMs: Milliseconds;
+    readonly scatterDurationMs: Milliseconds;
     readonly scatterSpeed: number;
-    readonly downedDurationMs: number;
+    readonly downedDurationMs: Milliseconds;
   };
   readonly session: LocalCombatSessionConfig;
   readonly targeting: {

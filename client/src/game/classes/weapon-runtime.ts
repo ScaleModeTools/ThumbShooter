@@ -1,3 +1,5 @@
+import { createMilliseconds } from "@thumbshooter/shared";
+
 import type {
   WeaponDefinition,
   WeaponHudSnapshot,
@@ -40,7 +42,7 @@ function freezeReloadSnapshot(
     clipCapacity,
     clipRoundsRemaining,
     isReloadReady,
-    reloadRemainingMs,
+    reloadRemainingMs: createMilliseconds(reloadRemainingMs),
     requiresReload,
     rule,
     state
@@ -57,7 +59,7 @@ function freezeWeaponSnapshot(
   reload: WeaponReloadSnapshot
 ): WeaponHudSnapshot {
   return Object.freeze({
-    cooldownRemainingMs,
+    cooldownRemainingMs: createMilliseconds(cooldownRemainingMs),
     hitsLanded,
     readiness,
     reload,

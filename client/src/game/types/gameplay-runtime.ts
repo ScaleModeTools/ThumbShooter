@@ -1,5 +1,6 @@
 import type {
-  NormalizedViewportPoint
+  NormalizedViewportPoint,
+  Radians
 } from "@thumbshooter/shared";
 
 import type { GameplayReticleStyledState } from "./gameplay-presentation";
@@ -50,7 +51,7 @@ export interface GameplayRuntimeConfig {
       readonly height: number;
       readonly width: number;
     };
-    readonly wingSweepRadians: number;
+    readonly wingSweepRadians: Radians;
   };
   readonly reticle: {
     readonly haloInnerRadius: number;

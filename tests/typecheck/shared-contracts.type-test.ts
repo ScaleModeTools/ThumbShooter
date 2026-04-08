@@ -5,18 +5,28 @@ import type {
   AffineAimTransformSnapshot,
   AudioChannelId,
   AudioSettingsSnapshot,
+  Degrees,
   HandTriggerCalibrationSnapshot,
+  HandTriggerMetricSnapshot,
   BackgroundMusicEngine,
   CalibrationAnchorId,
+  Milliseconds,
   NormalizedViewportScalar,
   NormalizedViewportPointInput,
   NormalizedViewportPoint,
   PlayerProfileSnapshot,
+  Radians,
   ReticleId,
   SoundEffectEngine,
   Username
 } from "@thumbshooter/shared";
-import { affineAimTransformFitQualities, createUsername } from "@thumbshooter/shared";
+import {
+  affineAimTransformFitQualities,
+  createDegrees,
+  createMilliseconds,
+  createRadians,
+  createUsername
+} from "@thumbshooter/shared";
 import type { AssertTrue, IsEqual } from "./type-assertions";
 
 type ExpectedCalibrationAnchorId =
@@ -78,6 +88,24 @@ type NormalizedPointXAxisUsesBrandedScalar = AssertTrue<
 type NormalizedPointYAxisUsesBrandedScalar = AssertTrue<
   IsEqual<NormalizedViewportPoint["y"], NormalizedViewportScalar>
 >;
+type HandTriggerMetricAxisUsesDegrees = AssertTrue<
+  IsEqual<HandTriggerMetricSnapshot["axisAngleDegrees"], Degrees>
+>;
+type HandTriggerCalibrationAxisUsesDegrees = AssertTrue<
+  IsEqual<
+    HandTriggerCalibrationSnapshot["pressedAxisAngleDegreesMax"],
+    Degrees
+  >
+>;
+type CreateMillisecondsReturnMatches = AssertTrue<
+  IsEqual<ReturnType<typeof createMilliseconds>, Milliseconds>
+>;
+type CreateDegreesReturnMatches = AssertTrue<
+  IsEqual<ReturnType<typeof createDegrees>, Degrees>
+>;
+type CreateRadiansReturnMatches = AssertTrue<
+  IsEqual<ReturnType<typeof createRadians>, Radians>
+>;
 type CreateUsernameReturnMatches = AssertTrue<
   IsEqual<ReturnType<typeof createUsername>, Username | null>
 >;
@@ -111,6 +139,11 @@ export type SharedContractTypeTests =
   | PlayerProfileTriggerCalibrationUsesSharedSnapshot
   | NormalizedPointXAxisUsesBrandedScalar
   | NormalizedPointYAxisUsesBrandedScalar
+  | HandTriggerMetricAxisUsesDegrees
+  | HandTriggerCalibrationAxisUsesDegrees
+  | CreateMillisecondsReturnMatches
+  | CreateDegreesReturnMatches
+  | CreateRadiansReturnMatches
   | CreateUsernameReturnMatches
   | SharedProjectUnclampedReturnMatches
   | AffineAimTransformFitDiagnosticsSampleCountIsNumber

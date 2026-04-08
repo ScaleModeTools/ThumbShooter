@@ -1,3 +1,5 @@
+import { createMilliseconds } from "@thumbshooter/shared";
+
 import { localCombatSessionConfig } from "./local-combat-session";
 import { firstPlayableWeaponDefinition } from "./weapon-manifest";
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
@@ -48,13 +50,13 @@ export const localArenaSimulationConfig = {
     }
   ],
   feedback: {
-    holdDurationMs: 380
+    holdDurationMs: createMilliseconds(380)
   },
   movement: {
-    maxStepMs: 48,
-    scatterDurationMs: 820,
+    maxStepMs: createMilliseconds(48),
+    scatterDurationMs: createMilliseconds(820),
     scatterSpeed: 0.24,
-    downedDurationMs: 960,
+    downedDurationMs: createMilliseconds(960),
     downedDriftVelocityY: 0.18
   },
   session: localCombatSessionConfig,

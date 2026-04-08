@@ -190,8 +190,8 @@ export function readObservedAimPoint(
     )
   );
 
-  return Object.freeze({
+  return {
     x: projectedAimPoint.x,
     y: projectedAimPoint.y
-  });
+  };
 }

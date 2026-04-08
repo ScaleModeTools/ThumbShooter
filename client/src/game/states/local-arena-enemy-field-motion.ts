@@ -1,3 +1,5 @@
+import { createRadians } from "@thumbshooter/shared";
+
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 import type { LocalArenaEnemyRuntimeState } from "../types/local-arena-enemy-field";
 
@@ -20,9 +22,8 @@ function restoreEnemyGlide(enemyState: LocalArenaEnemyRuntimeState): void {
   enemyState.velocityX = enemyState.homeVelocityX;
   enemyState.velocityY = enemyState.homeVelocityY;
   enemyState.renderState.behavior = "glide";
-  enemyState.renderState.headingRadians = Math.atan2(
-    enemyState.homeVelocityY,
-    enemyState.homeVelocityX
+  enemyState.renderState.headingRadians = createRadians(
+    Math.atan2(enemyState.homeVelocityY, enemyState.homeVelocityX)
   );
   enemyState.renderState.scale = enemyState.glideScale;
 }
@@ -68,7 +69,9 @@ export function stepEnemyField(
           config.arenaBounds.minY,
           config.arenaBounds.maxY + 0.14
         );
-        enemyState.renderState.headingRadians += deltaSeconds * 2.8;
+        enemyState.renderState.headingRadians = createRadians(
+          enemyState.renderState.headingRadians + deltaSeconds * 2.8
+        );
 
         if (enemyState.behaviorRemainingMs === 0) {
           settleEnemyDowned(enemyState);
@@ -105,9 +108,8 @@ export function stepEnemyField(
       );
     }
 
-    enemyState.renderState.headingRadians = Math.atan2(
-      enemyState.velocityY,
-      enemyState.velocityX
+    enemyState.renderState.headingRadians = createRadians(
+      Math.atan2(enemyState.velocityY, enemyState.velocityX)
     );
 
     if (enemyState.renderState.behavior === "scatter") {

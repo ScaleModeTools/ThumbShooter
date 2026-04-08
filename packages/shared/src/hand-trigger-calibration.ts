@@ -1,5 +1,8 @@
+import type { Degrees } from "./unit-measurements.js";
+import { createDegrees } from "./unit-measurements.js";
+
 export interface HandTriggerMetricSnapshot {
-  readonly axisAngleDegrees: number;
+  readonly axisAngleDegrees: Degrees;
   readonly engagementRatio: number;
 }
 
@@ -10,9 +13,9 @@ export interface HandTriggerMetricInput {
 
 export interface HandTriggerCalibrationSnapshot {
   readonly sampleCount: number;
-  readonly pressedAxisAngleDegreesMax: number;
+  readonly pressedAxisAngleDegreesMax: Degrees;
   readonly pressedEngagementRatioMax: number;
-  readonly readyAxisAngleDegreesMin: number;
+  readonly readyAxisAngleDegreesMin: Degrees;
   readonly readyEngagementRatioMin: number;
 }
 
@@ -40,7 +43,9 @@ export function createHandTriggerMetricSnapshot(
   input: HandTriggerMetricInput
 ): HandTriggerMetricSnapshot {
   return Object.freeze({
-    axisAngleDegrees: normalizeFiniteNonNegativeNumber(input.axisAngleDegrees),
+    axisAngleDegrees: createDegrees(
+      normalizeFiniteNonNegativeNumber(input.axisAngleDegrees)
+    ),
     engagementRatio: normalizeFiniteNonNegativeNumber(input.engagementRatio)
   });
 }
@@ -65,9 +70,9 @@ export function createHandTriggerCalibrationSnapshot(
 
   return Object.freeze({
     sampleCount: normalizeSampleCount(input.sampleCount),
-    pressedAxisAngleDegreesMax,
+    pressedAxisAngleDegreesMax: createDegrees(pressedAxisAngleDegreesMax),
     pressedEngagementRatioMax,
-    readyAxisAngleDegreesMin,
+    readyAxisAngleDegreesMin: createDegrees(readyAxisAngleDegreesMin),
     readyEngagementRatioMin
   });
 }

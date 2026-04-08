@@ -66,10 +66,10 @@ function createArenaConfig() {
       displayName: "Semiautomatic pistol",
       triggerMode: "single",
       triggerGesture: {
-        pressAxisAngleDegrees: 26,
+        pressAxisAngleDegrees: 68,
         pressEngagementRatio: 0.72,
-        releaseAxisAngleDegrees: 32,
-        releaseEngagementRatio: 0.92,
+        releaseAxisAngleDegrees: 72,
+        releaseEngagementRatio: 0.95,
         calibration: {
           pressAxisWindowFraction: 0.4,
           pressEngagementWindowFraction: 0.4,
