@@ -1,7 +1,8 @@
 # ThumbShooter
 
 ThumbShooter is a browser FPS prototype where the player aims with a webcam-
-tracked hand pose and fires by dropping the thumb relative to the index finger.
+tracked hand pose and fires by dropping the thumb relative to the index finger
+inside a WebGPU-rendered ocean hunting arena.
 
 ## What Ships Now
 
@@ -9,8 +10,12 @@ tracked hand pose and fires by dropping the thumb relative to the index finger.
 - shared browser audio unlock plus live Strudel shell/gameplay loops
 - explicit webcam permission flow plus worker-first MediaPipe Hand Landmarker
 - nine-point affine aim calibration
-- WebGPU arena gameplay with readable bird targets and semiautomatic thumb-drop
-  firing
+- WebGPU ocean-arena gameplay with readable bird targets, a 3D scene
+  foundation, and semiautomatic thumb-drop firing
+- shared co-op room/session contracts, shared bird snapshots, and a
+  server-owned co-op room tick runtime
+- browser co-op room sync with join, ready-up, fire-shot, leave-room, and team
+  HUD state
 - clip-aware semiautomatic weapon behavior with off-screen reload
 - local hit, kill, score, streak, and round-phase tracking
 - completed / failed local rounds with restart-ready flow
@@ -21,8 +26,7 @@ tracked hand pose and fires by dropping the thumb relative to the index finger.
 
 Still intentionally deferred:
 
-- server-authoritative gameplay
-- multiplayer/network sync
+- remote teammate visuals and shared gun presentation
 - automatic weapons
 
 ## Repo Map
@@ -55,7 +59,9 @@ npm install
 ./tools/test
 ./tools/bench
 ./tools/verify
+npm run dev
 npm run dev:client
+npm run dev:server
 npm run start:server
 ```
 
@@ -65,6 +71,17 @@ To review the current client locally:
 npm install
 npm run dev:client
 ```
+
+For local co-op development:
+
+```bash
+npm install
+npm run dev
+```
+
+Use `http://localhost:5173/` when you are testing on the same machine.
+The Vite `Network` URL is useful for other devices, but plain HTTP LAN origins
+do not satisfy the WebGPU secure-context requirement that `localhost` does.
 
 ## Fast Orientation
 

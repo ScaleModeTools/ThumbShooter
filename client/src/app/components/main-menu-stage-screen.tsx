@@ -1,7 +1,9 @@
 import {
+  gameplaySessionModes,
   gameplayInputModes,
   resolveGameplayInputMode,
-  type GameplayInputModeId
+  type GameplayInputModeId,
+  type GameplaySessionMode
 } from "../../game";
 import type { GameplayEntryStepId } from "../../navigation";
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
@@ -31,7 +33,9 @@ interface MainMenuStageScreenProps {
   readonly nextGameplayStep: GameplayEntryStepId | null;
   readonly onInputModeChange: (inputMode: GameplayInputModeId) => void;
   readonly onRecalibrationRequest: () => void;
+  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
   readonly onStartGame: () => void;
+  readonly sessionMode: GameplaySessionMode;
 }
 
 function resolveStartButtonLabel(
@@ -66,7 +70,9 @@ export function MainMenuStageScreen({
   nextGameplayStep,
   onInputModeChange,
   onRecalibrationRequest,
-  onStartGame
+  onSessionModeChange,
+  onStartGame,
+  sessionMode
 }: MainMenuStageScreenProps) {
   const selectedInputMode = resolveGameplayInputMode(inputMode);
 
@@ -131,13 +137,49 @@ export function MainMenuStageScreen({
 
         <Card className="rounded-[1.5rem] border-border/70 bg-muted/35">
           <CardHeader className="gap-3">
-            <CardTitle>Ready check</CardTitle>
+            <CardTitle>Session mode</CardTitle>
             <CardDescription>
-              Gameplay stays explicit. Unsupported hardware still fails into a
-              clear route instead of auto-downgrading.
+              Pick the authority model before booting gameplay. Co-op joins the
+              shared server room and uses server-owned bird state.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <ToggleGroup
+              className="w-full"
+              onValueChange={(nextValue) => {
+                if (nextValue.length === 0) {
+                  return;
+                }
+
+                onSessionModeChange(nextValue as GameplaySessionMode);
+              }}
+              type="single"
+              value={sessionMode}
+              variant="outline"
+            >
+              {gameplaySessionModes.map((mode) => (
+                <ToggleGroupItem className="flex-1" key={mode} value={mode}>
+                  {mode === "single-player" ? "Single player" : "Co-op"}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+              {sessionMode === "single-player"
+                ? "Client-owned arena progression with local best-score tracking."
+                : "Server-owned room snapshots, shared birds, and team shooting progression."}
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/70 px-4 py-4">
+              <p className="text-sm font-medium text-foreground">Ready check</p>
+              <p className="text-sm text-muted-foreground">
+                Gameplay stays explicit. Unsupported hardware still fails into a
+                clear route instead of auto-downgrading.
+              </p>
+            </div>
+
             <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
               {capabilityReasonLabel}
             </div>

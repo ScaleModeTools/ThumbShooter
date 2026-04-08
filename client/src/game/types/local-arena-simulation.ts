@@ -6,8 +6,10 @@ import type {
 
 import type { HandTrackingPoseState } from "./hand-tracking";
 import type {
+  SinglePlayerGameplaySessionSnapshot
+} from "./gameplay-session";
+import type {
   LocalCombatSessionConfig,
-  LocalCombatSessionSnapshot
 } from "./local-combat-session";
 import type { WeaponDefinition, WeaponHudSnapshot } from "./weapon-contract";
 
@@ -76,7 +78,7 @@ export interface LocalArenaTargetFeedbackSnapshot {
 export interface LocalArenaHudSnapshot {
   readonly aimPoint: NormalizedViewportPoint | null;
   readonly arena: LocalArenaArenaSnapshot;
-  readonly session: LocalCombatSessionSnapshot;
+  readonly session: SinglePlayerGameplaySessionSnapshot;
   readonly targetFeedback: LocalArenaTargetFeedbackSnapshot;
   readonly trackingState: HandTrackingPoseState;
   readonly weapon: LocalArenaWeaponSnapshot;

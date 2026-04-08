@@ -1,15 +1,33 @@
-import { createRadians } from "@thumbshooter/shared";
+import {
+  createDegrees,
+  createRadians
+} from "@thumbshooter/shared";
 
 import type { GameplayRuntimeConfig } from "../types/gameplay-runtime";
 
 export const gameplayRuntimeConfig = {
-  background: {
-    lowerColor: [0.02, 0.07, 0.16],
-    upperColor: [0.03, 0.19, 0.29]
+  camera: {
+    far: 320,
+    fieldOfViewDegrees: createDegrees(34),
+    near: 0.1,
+    position: {
+      x: 0,
+      y: 4.6,
+      z: 15.5
+    },
+    target: {
+      x: 0,
+      y: 4.1,
+      z: 0
+    }
   },
   enemies: {
     bodyColor: [0.95, 0.98, 0.99],
     downedColor: [0.96, 0.39, 0.31],
+    flightDepth: {
+      far: 25,
+      near: 18
+    },
     scatterColor: [0.98, 0.78, 0.36],
     wingColor: [0.82, 0.9, 0.97],
     bodySize: {
@@ -22,7 +40,42 @@ export const gameplayRuntimeConfig = {
     },
     wingSweepRadians: createRadians(0.58)
   },
+  environment: {
+    domeRadius: 240,
+    fogColor: [0.67, 0.79, 0.9],
+    fogDensity: 0.009,
+    horizonColor: [0.78, 0.89, 0.98],
+    sunColor: [1, 0.9, 0.72],
+    sunDirection: {
+      x: -0.38,
+      y: 0.79,
+      z: -0.48
+    },
+    zenithColor: [0.11, 0.23, 0.42]
+  },
+  ocean: {
+    emissiveColor: [0.08, 0.28, 0.37],
+    farColor: [0.05, 0.22, 0.34],
+    height: -3.2,
+    nearColor: [0.12, 0.45, 0.58],
+    planeDepth: 320,
+    planeWidth: 320,
+    roughness: 0.16,
+    segmentCount: 120,
+    waveAmplitude: 0.32,
+    waveFrequencies: {
+      primary: 0.11,
+      ripple: 0.38,
+      secondary: 0.18
+    },
+    waveSpeeds: {
+      primary: 0.62,
+      ripple: 1.28,
+      secondary: 0.87
+    }
+  },
   reticle: {
+    depth: 9.5,
     haloInnerRadius: 0.071,
     haloOuterRadius: 0.125,
     innerRadius: 0.045,

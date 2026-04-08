@@ -1,0 +1,241 @@
+import assert from "node:assert/strict";
+import test, { after, before } from "node:test";
+
+import {
+  createCoopPlayerId,
+  createCoopRoomId,
+  createCoopRoomSnapshotEvent,
+  createCoopSessionId,
+  createMilliseconds,
+  createNormalizedViewportPoint,
+  createUsername
+} from "@thumbshooter/shared";
+
+import { createClientModuleLoader } from "./load-client-module.mjs";
+
+let clientLoader;
+
+before(async () => {
+  clientLoader = await createClientModuleLoader();
+});
+
+after(async () => {
+  await clientLoader?.close();
+});
+
+function createJsonResponse(ok, payload) {
+  return {
+    ok,
+    async json() {
+      return payload;
+    }
+  };
+}
+
+function flushAsyncWork() {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+function createRoomSnapshotEvent({
+  playerId,
+  roomId,
+  sessionId,
+  tick,
+  phase = "active",
+  playerHits = 0,
+  playerShots = 0,
+  lastAcknowledgedShotSequence = 0,
+  lastOutcome = null,
+  birdBehavior = "glide"
+}) {
+  return createCoopRoomSnapshotEvent({
+    birds: [
+      {
+        behavior: birdBehavior,
+        birdId: "shared-bird-1",
+        headingRadians: 0,
+        label: "Shared Bird 1",
+        position: {
+          x: 0.42,
+          y: 0.36
+        },
+        radius: 0.08,
+        scale: 1,
+        visible: true,
+        wingPhase: tick * 0.4
+      }
+    ],
+    capacity: 4,
+    players: [
+      {
+        activity: {
+          hitsLanded: playerHits,
+          lastAcknowledgedShotSequence,
+          lastHitBirdId: playerHits > 0 ? "shared-bird-1" : null,
+          lastOutcome,
+          lastShotTick: lastAcknowledgedShotSequence > 0 ? tick : null,
+          scatterEventsCaused: lastOutcome === "scatter" ? 1 : 0,
+          shotsFired: playerShots
+        },
+        connected: true,
+        playerId,
+        ready: true,
+        username: "coop-user"
+      }
+    ],
+    roomId,
+    session: {
+      birdsCleared: birdBehavior === "downed" ? 1 : 0,
+      birdsRemaining: birdBehavior === "downed" ? 0 : 1,
+      phase,
+      requiredReadyPlayerCount: 2,
+      sessionId,
+      teamHitsLanded: playerHits,
+      teamShotsFired: playerShots
+    },
+    tick: {
+      currentTick: tick,
+      tickIntervalMs: 50
+    }
+  });
+}
+
+test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands", async () => {
+  const { CoopRoomClient } = await clientLoader.load("/src/network/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const sessionId = createCoopSessionId("co-op-harbor-session-1");
+  const playerId = createCoopPlayerId("coop-player-1");
+  const username = createUsername("coop-user");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(sessionId, null);
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  const requests = [];
+  const scheduledPolls = [];
+  const clearedTimers = [];
+  const responseQueue = [
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0,
+      phase: "waiting-for-players"
+    }),
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0,
+      phase: "waiting-for-players"
+    }),
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 1
+    }),
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 2,
+      playerHits: 1,
+      playerShots: 1,
+      lastAcknowledgedShotSequence: 1,
+      lastOutcome: "hit",
+      birdBehavior: "downed"
+    }),
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 2,
+      playerHits: 1,
+      playerShots: 1,
+      lastAcknowledgedShotSequence: 1,
+      lastOutcome: "hit",
+      birdBehavior: "downed"
+    })
+  ];
+  const roomClient = new CoopRoomClient(
+    {
+      defaultPollIntervalMs: createMilliseconds(75),
+      roomId,
+      serverOrigin: "http://127.0.0.1:3210"
+    },
+    {
+      clearTimeout(handle) {
+        clearedTimers.push(handle);
+      },
+      async fetch(input, init) {
+        const queuedResponse = responseQueue.shift();
+
+        assert.notEqual(queuedResponse, undefined);
+        requests.push({
+          body: init?.body ?? null,
+          method: init?.method ?? "GET",
+          url: String(input)
+        });
+
+        return createJsonResponse(true, queuedResponse);
+      },
+      setTimeout(callback, delay) {
+        scheduledPolls.push({
+          callback,
+          delay
+        });
+        return scheduledPolls.length;
+      }
+    }
+  );
+
+  const joinedSnapshot = await roomClient.ensureJoined({
+    playerId,
+    ready: false,
+    username
+  });
+
+  assert.equal(joinedSnapshot.session.phase, "waiting-for-players");
+  assert.equal(roomClient.statusSnapshot.joined, true);
+  assert.equal(roomClient.statusSnapshot.state, "connected");
+  assert.equal(requests[0]?.method, "POST");
+  assert.match(String(requests[0]?.body), /"type":"join-room"/);
+  assert.match(String(requests[0]?.body), /"ready":false/);
+  assert.equal(scheduledPolls[0]?.delay, 0);
+
+  const readySnapshot = await roomClient.setPlayerReady(true);
+
+  assert.equal(readySnapshot.session.phase, "waiting-for-players");
+  assert.equal(requests[1]?.method, "POST");
+  assert.match(String(requests[1]?.body), /"type":"set-player-ready"/);
+
+  scheduledPolls.shift()?.callback();
+  await flushAsyncWork();
+
+  assert.equal(roomClient.roomSnapshot?.tick.currentTick, 1);
+  assert.equal(requests[2]?.method, "GET");
+  assert.equal(scheduledPolls[0]?.delay, 50);
+
+  roomClient.fireShot(createNormalizedViewportPoint({ x: 0.42, y: 0.36 }));
+  await flushAsyncWork();
+
+  assert.equal(requests[3]?.method, "POST");
+  assert.match(String(requests[3]?.body), /"type":"fire-shot"/);
+  assert.equal(
+    roomClient.roomSnapshot?.players[0]?.activity.lastAcknowledgedShotSequence,
+    1
+  );
+  assert.equal(roomClient.roomSnapshot?.players[0]?.activity.lastOutcome, "hit");
+
+  roomClient.dispose();
+  await flushAsyncWork();
+
+  assert.equal(roomClient.statusSnapshot.state, "disposed");
+  assert.ok(clearedTimers.length >= 1);
+  assert.equal(requests[4]?.method, "POST");
+  assert.match(String(requests[4]?.body), /"type":"leave-room"/);
+});

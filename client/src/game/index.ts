@@ -1,8 +1,10 @@
 export { gameFoundationConfig } from "./config/game-foundation";
 export { calibrationCaptureConfig } from "./config/calibration-capture";
+export { coopArenaSimulationConfig } from "./config/coop-arena-simulation";
 export { localCombatSessionConfig } from "./config/local-combat-session";
 export { localArenaSimulationConfig } from "./config/local-arena-simulation";
 export { gameplayRuntimeConfig } from "./config/gameplay-runtime";
+export { gameplaySessionModes } from "@thumbshooter/shared";
 export {
   defaultGameplayInputMode,
   gameplayInputModes,
@@ -15,6 +17,7 @@ export {
 } from "./config/weapon-manifest";
 export { HandTrackingRuntime } from "./classes/hand-tracking-runtime";
 export { LocalCombatSession } from "./classes/local-combat-session";
+export { CoopArenaSimulation } from "./classes/coop-arena-simulation";
 export { LocalArenaSimulation } from "./classes/local-arena-simulation";
 export {
   MouseGameplayInput,
@@ -65,10 +68,26 @@ export type {
   WeaponReloadRule
 } from "./types/game-foundation";
 export type {
+  CoopArenaLocalIdentity,
+  CoopArenaRoomSource,
+  CoopArenaSimulationConfig
+} from "./types/coop-arena-simulation";
+export type {
+  CoopGameplaySessionPlayerSnapshot,
+  CoopGameplaySessionSnapshot,
+  GameplaySessionPhase,
+  GameplaySessionSnapshot,
+  SinglePlayerGameplaySessionSnapshot
+} from "./types/gameplay-session";
+export type {
+  GameplayArenaRuntime
+} from "./types/gameplay-arena-runtime";
+export type {
   GameplayInputModeDefinition,
   GameplayInputModeHudCopy,
   GameplayInputModeId
 } from "./types/gameplay-input-mode";
+export type { GameplaySessionMode } from "@thumbshooter/shared";
 export type { GameplayInputSource } from "./types/gameplay-input-source";
 export type {
   GameplaySignal,
@@ -110,6 +129,7 @@ export type {
   NinePointCalibrationSnapshot
 } from "./types/calibration-session";
 export type {
+  GameplayArenaHudSnapshot,
   GameplayHudSnapshot,
   GameplayRuntimeConfig,
   GameplayRuntimeLifecycleState

@@ -1,11 +1,12 @@
 import type {
+  Degrees,
   NormalizedViewportPoint,
   Radians
 } from "@thumbshooter/shared";
 
 import type { GameplayReticleStyledState } from "./gameplay-presentation";
 import type { HandTrackingPoseState } from "./hand-tracking";
-import type { LocalCombatSessionSnapshot } from "./local-combat-session";
+import type { GameplaySessionSnapshot } from "./gameplay-session";
 import type {
   LocalArenaArenaSnapshot,
   LocalArenaTargetFeedbackSnapshot,
@@ -22,21 +23,35 @@ export const gameplayRuntimeLifecycleStates = [
 export type GameplayRuntimeLifecycleState =
   (typeof gameplayRuntimeLifecycleStates)[number];
 
-export interface GameplayHudSnapshot {
+export interface GameplayArenaHudSnapshot {
   readonly aimPoint: NormalizedViewportPoint | null;
   readonly arena: LocalArenaArenaSnapshot;
-  readonly failureReason: string | null;
-  readonly lifecycle: GameplayRuntimeLifecycleState;
-  readonly session: LocalCombatSessionSnapshot;
+  readonly session: GameplaySessionSnapshot;
   readonly targetFeedback: LocalArenaTargetFeedbackSnapshot;
   readonly trackingState: HandTrackingPoseState;
   readonly weapon: LocalArenaWeaponSnapshot;
 }
 
+export interface GameplayHudSnapshot extends GameplayArenaHudSnapshot {
+  readonly failureReason: string | null;
+  readonly lifecycle: GameplayRuntimeLifecycleState;
+}
+
 export interface GameplayRuntimeConfig {
-  readonly background: {
-    readonly lowerColor: readonly [number, number, number];
-    readonly upperColor: readonly [number, number, number];
+  readonly camera: {
+    readonly far: number;
+    readonly fieldOfViewDegrees: Degrees;
+    readonly near: number;
+    readonly position: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly target: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
   };
   readonly enemies: {
     readonly bodyColor: readonly [number, number, number];
@@ -45,6 +60,10 @@ export interface GameplayRuntimeConfig {
       readonly width: number;
     };
     readonly downedColor: readonly [number, number, number];
+    readonly flightDepth: {
+      readonly far: number;
+      readonly near: number;
+    };
     readonly scatterColor: readonly [number, number, number];
     readonly wingColor: readonly [number, number, number];
     readonly wingSize: {
@@ -53,7 +72,42 @@ export interface GameplayRuntimeConfig {
     };
     readonly wingSweepRadians: Radians;
   };
+  readonly environment: {
+    readonly domeRadius: number;
+    readonly fogColor: readonly [number, number, number];
+    readonly fogDensity: number;
+    readonly horizonColor: readonly [number, number, number];
+    readonly sunColor: readonly [number, number, number];
+    readonly sunDirection: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly zenithColor: readonly [number, number, number];
+  };
+  readonly ocean: {
+    readonly emissiveColor: readonly [number, number, number];
+    readonly farColor: readonly [number, number, number];
+    readonly height: number;
+    readonly nearColor: readonly [number, number, number];
+    readonly planeDepth: number;
+    readonly planeWidth: number;
+    readonly roughness: number;
+    readonly segmentCount: number;
+    readonly waveAmplitude: number;
+    readonly waveFrequencies: {
+      readonly primary: number;
+      readonly ripple: number;
+      readonly secondary: number;
+    };
+    readonly waveSpeeds: {
+      readonly primary: number;
+      readonly ripple: number;
+      readonly secondary: number;
+    };
+  };
   readonly reticle: {
+    readonly depth: number;
     readonly haloInnerRadius: number;
     readonly haloOuterRadius: number;
     readonly innerRadius: number;

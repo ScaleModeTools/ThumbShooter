@@ -9,19 +9,29 @@ import {
 
 import type {
   AffineAimTransformSnapshot,
+  CoopPlayerId,
   HandTriggerCalibrationSnapshot
 } from "@thumbshooter/shared";
+import { createCoopPlayerId, type Username } from "@thumbshooter/shared";
 
 import type {
   GameplayDebugPanelMode,
   GameplayInputModeId,
   GameplayInputSource,
+  GameplaySessionMode,
   GameplaySignal,
   GameplayTelemetrySnapshot,
   HandTrackingTelemetrySnapshot
 } from "../../game";
+import { CoopArenaSimulation } from "../../game/classes/coop-arena-simulation";
 import { LocalArenaSimulation } from "../../game/classes/local-arena-simulation";
 import { WebGpuGameplayRuntime } from "../../game/classes/webgpu-gameplay-runtime";
+import type { GameplayArenaRuntime } from "../../game/types/gameplay-arena-runtime";
+import {
+  CoopRoomClient,
+  coopRoomClientConfig,
+  type CoopRoomClientStatusSnapshot
+} from "../../network";
 import {
   GameplayDebugOverlay,
   GameplayDeveloperPanel,
@@ -40,11 +50,41 @@ interface GameplayStageScreenProps {
   readonly onGameplaySignal: (signal: GameplaySignal) => void;
   readonly onOpenMenu: () => void;
   readonly selectedReticleLabel: string;
+  readonly sessionMode: GameplaySessionMode;
   readonly trackingSource: GameplayInputSource;
   readonly triggerCalibration: HandTriggerCalibrationSnapshot | null;
-  readonly username: string;
+  readonly username: Username;
   readonly weaponLabel: string;
 }
+
+function createEphemeralCoopPlayerId(username: string): CoopPlayerId {
+  const normalizedUsername = username
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const randomSuffix =
+    globalThis.crypto?.randomUUID?.().slice(0, 8) ??
+    Math.random().toString(36).slice(2, 10);
+  const playerId = createCoopPlayerId(
+    `${normalizedUsername.length === 0 ? "player" : normalizedUsername}-${randomSuffix}`
+  );
+
+  if (playerId === null) {
+    throw new Error("Unable to create a co-op player id for gameplay.");
+  }
+
+  return playerId;
+}
+
+const idleCoopRoomStatusSnapshot = Object.freeze({
+  joined: false,
+  lastError: null,
+  lastSnapshotTick: null,
+  playerId: null,
+  roomId: coopRoomClientConfig.roomId,
+  state: "idle"
+}) satisfies CoopRoomClientStatusSnapshot;
 
 export function GameplayStageScreen({
   aimCalibration,
@@ -56,6 +96,7 @@ export function GameplayStageScreen({
   onGameplaySignal,
   onOpenMenu,
   selectedReticleLabel,
+  sessionMode,
   trackingSource,
   triggerCalibration,
   username,
@@ -63,23 +104,47 @@ export function GameplayStageScreen({
 }: GameplayStageScreenProps) {
   const showDeveloperUi = import.meta.env.DEV;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const coopRoomDisposeHandleRef =
+    useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const bestScoreRef = useRef(bestScore);
   const runtimeStartVersionRef = useRef(0);
   const handleGameplaySignal = useEffectEvent((signal: GameplaySignal) => {
     onGameplaySignal(signal);
   });
-  const [arenaSimulation] = useState(
-    () =>
-      new LocalArenaSimulation(aimCalibration, undefined, {
-        emitGameplaySignal: handleGameplaySignal,
-        triggerCalibration
-      })
+  const [coopPlayerId] = useState(() =>
+    sessionMode === "co-op" ? createEphemeralCoopPlayerId(username) : null
+  );
+  const [coopRoomClient] = useState(() =>
+    sessionMode === "co-op" ? new CoopRoomClient() : null
+  );
+  const [arenaSimulation] = useState<GameplayArenaRuntime>(() =>
+    sessionMode === "co-op" && coopRoomClient !== null && coopPlayerId !== null
+      ? new CoopArenaSimulation(aimCalibration, coopRoomClient, undefined, {
+          emitGameplaySignal: handleGameplaySignal,
+          playerId: coopPlayerId,
+          triggerCalibration
+        })
+      : new LocalArenaSimulation(aimCalibration, undefined, {
+          emitGameplaySignal: handleGameplaySignal,
+          triggerCalibration
+        })
   );
   const [gameplayRuntime] = useState(
     () => new WebGpuGameplayRuntime(trackingSource, arenaSimulation)
   );
+  const subscribeCoopRoomUpdates = useCallback(
+    (notifyReact: () => void) =>
+      coopRoomClient?.subscribeUpdates(notifyReact) ?? (() => {}),
+    [coopRoomClient]
+  );
+  const coopRoomStatus = useSyncExternalStore(
+    subscribeCoopRoomUpdates,
+    () => coopRoomClient?.statusSnapshot ?? idleCoopRoomStatusSnapshot,
+    () => coopRoomClient?.statusSnapshot ?? idleCoopRoomStatusSnapshot
+  );
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [coopReadyActionPending, setCoopReadyActionPending] = useState(false);
   const subscribeGameplayUiUpdates = useCallback(
     (notifyReact: () => void) => gameplayRuntime.subscribeUiUpdates(notifyReact),
     [gameplayRuntime]
@@ -92,6 +157,11 @@ export function GameplayStageScreen({
   const gameplayTelemetry: GameplayTelemetrySnapshot = gameplayRuntime.telemetrySnapshot;
   const trackingTelemetry: HandTrackingTelemetrySnapshot =
     trackingSource.telemetrySnapshot;
+  const coopLocalPlayer =
+    hudSnapshot.session.mode === "co-op"
+      ? hudSnapshot.session.players.find((playerSnapshot) => playerSnapshot.isLocalPlayer) ??
+        null
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +182,39 @@ export function GameplayStageScreen({
       cancelled = true;
     };
   }, [trackingSource]);
+
+  useEffect(() => {
+    if (coopRoomClient === null || coopPlayerId === null) {
+      return;
+    }
+
+    if (coopRoomDisposeHandleRef.current !== null) {
+      globalThis.clearTimeout(coopRoomDisposeHandleRef.current);
+      coopRoomDisposeHandleRef.current = null;
+    }
+
+    let cancelled = false;
+
+    void coopRoomClient
+      .ensureJoined({
+        playerId: coopPlayerId,
+        ready: false,
+        username
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      coopRoomDisposeHandleRef.current = globalThis.setTimeout(() => {
+        coopRoomDisposeHandleRef.current = null;
+        coopRoomClient.dispose();
+      }, 0);
+    };
+  }, [coopPlayerId, coopRoomClient, username]);
 
   useEffect(() => {
     if (trackingSource.attachViewport === undefined || viewportRef.current === null) {
@@ -161,6 +264,28 @@ export function GameplayStageScreen({
     gameplayRuntime.restartSession();
   });
 
+  const handleToggleCoopReady = useEffectEvent(() => {
+    if (
+      coopRoomClient === null ||
+      coopLocalPlayer === null ||
+      coopReadyActionPending ||
+      hudSnapshot.session.mode !== "co-op" ||
+      hudSnapshot.session.phase !== "waiting-for-players"
+    ) {
+      return;
+    }
+
+    setCoopReadyActionPending(true);
+    void coopRoomClient
+      .setPlayerReady(!coopLocalPlayer.ready)
+      .catch(() => {
+        // The room client snapshots surface transport errors to the HUD.
+      })
+      .finally(() => {
+        setCoopReadyActionPending(false);
+      });
+  });
+
   useEffect(() => {
     bestScoreRef.current = bestScore;
   }, [bestScore]);
@@ -177,6 +302,10 @@ export function GameplayStageScreen({
   }, [gameplayRuntime, trackingSource]);
 
   useEffect(() => {
+    if (hudSnapshot.session.mode !== "single-player") {
+      return;
+    }
+
     const nextBestScore = hudSnapshot.session.score;
 
     if (nextBestScore <= bestScoreRef.current) {
@@ -185,7 +314,7 @@ export function GameplayStageScreen({
 
     bestScoreRef.current = nextBestScore;
     onBestScoreChange(nextBestScore);
-  }, [hudSnapshot.session.score, onBestScoreChange]);
+  }, [hudSnapshot.session, onBestScoreChange]);
 
   return (
     <ImmersiveStageFrame>
@@ -205,12 +334,27 @@ export function GameplayStageScreen({
         <GameplayHudOverlay
           audioStatusLabel={audioStatusLabel}
           bestScore={bestScore}
+          coopReadyActionAvailable={
+            hudSnapshot.session.mode === "co-op" &&
+            hudSnapshot.session.phase === "waiting-for-players"
+          }
+          coopReadyActionBusy={coopReadyActionPending}
+          coopReadyActionDisabled={
+            coopLocalPlayer === null ||
+            coopReadyActionPending ||
+            coopRoomStatus.state === "joining" ||
+            coopRoomStatus.state === "disposed"
+          }
+          coopReadyActionLabel={
+            coopLocalPlayer?.ready === true ? "Unready" : "Ready up"
+          }
           hudSnapshot={hudSnapshot}
           inputMode={inputMode}
           onOpenMenu={onOpenMenu}
           onRestartSession={handleRestartSession}
           onRetryRuntime={handleRetryRuntime}
-          runtimeError={runtimeError}
+          onToggleCoopReady={handleToggleCoopReady}
+          runtimeError={runtimeError ?? coopRoomStatus.lastError}
           selectedReticleLabel={selectedReticleLabel}
           username={username}
           weaponLabel={weaponLabel}

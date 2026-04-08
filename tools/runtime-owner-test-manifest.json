@@ -31,6 +31,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/game/classes/coop-arena-simulation.ts",
+      "testPaths": [
+        "tests/runtime/client/coop-arena-simulation.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/game/classes/nine-point-calibration-session.ts",
       "testPaths": [
         "tests/runtime/client/calibration-session.runtime.test.mjs"
@@ -70,6 +76,18 @@
       "ownerPath": "client/src/network/classes/local-profile-storage.ts",
       "testPaths": [
         "tests/runtime/client/local-profile-storage.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/classes/coop-room-client.ts",
+      "testPaths": [
+        "tests/runtime/client/coop-room-client.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/classes/coop-room-runtime.ts",
+      "testPaths": [
+        "tests/runtime/server/coop-room-runtime.test.mjs"
       ]
     },
     {

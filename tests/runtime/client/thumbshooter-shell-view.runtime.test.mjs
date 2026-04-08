@@ -60,6 +60,34 @@ test("buildThumbShooterShellView derives stable shell labels from typed state", 
   ]);
 });
 
+test("buildThumbShooterShellView explains the localhost versus LAN IP WebGPU constraint", async () => {
+  const { buildThumbShooterShellView } = await clientLoader.load(
+    "/src/app/states/thumbshooter-shell-view.ts"
+  );
+
+  const shellView = buildThumbShooterShellView({
+    audioSnapshot: {
+      backgroundTrackId: "shell-attract-loop",
+      unlockState: "locked",
+      backgroundMusicState: "idle",
+      mix: {
+        musicVolume: 0.5,
+        sfxVolume: 0.5
+      },
+      lastCueId: null,
+      failureReason: null
+    },
+    capabilitySnapshot: {
+      status: "unsupported",
+      reason: "navigator-gpu-missing"
+    },
+    profile: null
+  });
+
+  assert.match(shellView.capabilityReasonLabel, /localhost/);
+  assert.match(shellView.capabilityReasonLabel, /LAN IP URL/);
+});
+
 test("resolveCalibrationShellState reports reviewed only after a fitted calibration exists", async () => {
   const { resolveCalibrationShellState } = await clientLoader.load(
     "/src/app/states/thumbshooter-shell-view.ts"

@@ -1,5 +1,6 @@
 import {
   resolveGameplayInputMode,
+  type CoopGameplaySessionPlayerSnapshot,
   type GameplayHudSnapshot,
   type GameplayInputModeId
 } from "../../game";
@@ -9,11 +10,16 @@ import { Button } from "@/components/ui/button";
 interface GameplayHudOverlayProps {
   readonly audioStatusLabel: string;
   readonly bestScore: number;
+  readonly coopReadyActionAvailable: boolean;
+  readonly coopReadyActionBusy: boolean;
+  readonly coopReadyActionDisabled: boolean;
+  readonly coopReadyActionLabel: string;
   readonly hudSnapshot: GameplayHudSnapshot;
   readonly inputMode: GameplayInputModeId;
   readonly onOpenMenu: () => void;
   readonly onRestartSession: () => void;
   readonly onRetryRuntime: () => void;
+  readonly onToggleCoopReady: () => void;
   readonly runtimeError: string | null;
   readonly selectedReticleLabel: string;
   readonly username: string;
@@ -114,6 +120,10 @@ function formatRoundTime(roundTimeRemainingMs: number): string {
 }
 
 function formatSessionPhase(phase: GameplayHudSnapshot["session"]["phase"]): string {
+  if (phase === "waiting-for-players") {
+    return "Waiting";
+  }
+
   if (phase === "active") {
     return "Active";
   }
@@ -126,6 +136,22 @@ function formatSessionPhase(phase: GameplayHudSnapshot["session"]["phase"]): str
 }
 
 function formatSessionStatus(hudSnapshot: GameplayHudSnapshot): string {
+  if (hudSnapshot.session.mode === "co-op") {
+    if (hudSnapshot.session.phase === "waiting-for-players") {
+      if (hudSnapshot.session.playerCount === 0) {
+        return "Joining room...";
+      }
+
+      return `${hudSnapshot.session.connectedPlayerCount}/${hudSnapshot.session.capacity} connected • ${hudSnapshot.session.readyPlayerCount}/${hudSnapshot.session.requiredReadyPlayerCount} ready`;
+    }
+
+    if (hudSnapshot.session.phase === "active") {
+      return `${hudSnapshot.session.birdsRemaining} birds remaining`;
+    }
+
+    return "Shared room cleared";
+  }
+
   if (hudSnapshot.session.phase === "active") {
     return `${formatRoundTime(hudSnapshot.session.roundTimeRemainingMs)} remaining`;
   }
@@ -137,40 +163,103 @@ function formatRoundSummary(
   hudSnapshot: GameplayHudSnapshot,
   bestScore: number,
   displayedBestScore: number
-): { readonly headline: string; readonly detail: string } {
+): { readonly detail: string; readonly headline: string; readonly showRestart: boolean } {
+  if (hudSnapshot.session.mode === "co-op") {
+    return {
+      detail:
+        hudSnapshot.session.phase === "completed"
+          ? `Team landed ${hudSnapshot.session.teamHitsLanded} hits across ${hudSnapshot.session.teamShotsFired} shots.`
+          : `${hudSnapshot.session.birdsRemaining} birds are still airborne.`,
+      headline:
+        hudSnapshot.session.phase === "completed"
+          ? "Harbor cleared"
+          : "Room still in progress",
+      showRestart: false
+    };
+  }
+
   if (hudSnapshot.session.phase === "completed") {
     return {
       headline: "Arena cleared",
       detail:
         hudSnapshot.session.score > bestScore
           ? `All enemies downed. New best score: ${displayedBestScore}.`
-          : `All enemies downed with ${hudSnapshot.session.score} points.`
+          : `All enemies downed with ${hudSnapshot.session.score} points.`,
+      showRestart: true
     };
   }
 
   return {
     headline: "Round failed",
-    detail: `Timer expired with ${hudSnapshot.arena.liveEnemyCount} enemies still airborne.`
+    detail: `Timer expired with ${hudSnapshot.arena.liveEnemyCount} enemies still airborne.`,
+    showRestart: true
   };
+}
+
+function formatCoopLobbyBadge(hudSnapshot: GameplayHudSnapshot): string {
+  if (hudSnapshot.session.mode !== "co-op") {
+    return "Single-player";
+  }
+
+  if (hudSnapshot.session.playerCount === 0) {
+    return "Joining room";
+  }
+
+  return `${hudSnapshot.session.connectedPlayerCount}/${hudSnapshot.session.capacity} connected • ${hudSnapshot.session.readyPlayerCount}/${hudSnapshot.session.requiredReadyPlayerCount} ready`;
+}
+
+function formatCoopPlayerOutcome(
+  playerSnapshot: CoopGameplaySessionPlayerSnapshot
+): string {
+  if (playerSnapshot.lastOutcome === null) {
+    return playerSnapshot.ready ? "Ready" : "Not ready";
+  }
+
+  if (playerSnapshot.lastOutcome === "hit") {
+    return "Last shot hit";
+  }
+
+  if (playerSnapshot.lastOutcome === "scatter") {
+    return "Last shot scattered birds";
+  }
+
+  return "Last shot missed";
 }
 
 export function GameplayHudOverlay({
   audioStatusLabel,
   bestScore,
+  coopReadyActionAvailable,
+  coopReadyActionBusy,
+  coopReadyActionDisabled,
+  coopReadyActionLabel,
   hudSnapshot,
   inputMode,
   onOpenMenu,
   onRestartSession,
   onRetryRuntime,
+  onToggleCoopReady,
   runtimeError,
   selectedReticleLabel,
   username,
   weaponLabel
 }: GameplayHudOverlayProps) {
-  const displayedBestScore = Math.max(bestScore, hudSnapshot.session.score);
+  const displayedBestScore =
+    hudSnapshot.session.mode === "single-player"
+      ? Math.max(bestScore, hudSnapshot.session.score)
+      : bestScore;
   const roundSummary =
-    hudSnapshot.session.restartReady
-      ? formatRoundSummary(hudSnapshot, bestScore, displayedBestScore)
+    hudSnapshot.session.mode === "single-player"
+      ? hudSnapshot.session.restartReady
+        ? formatRoundSummary(hudSnapshot, bestScore, displayedBestScore)
+        : null
+      : hudSnapshot.session.phase === "completed"
+        ? formatRoundSummary(hudSnapshot, bestScore, displayedBestScore)
+        : null;
+  const coopLocalPlayer =
+    hudSnapshot.session.mode === "co-op"
+      ? hudSnapshot.session.players.find((playerSnapshot) => playerSnapshot.isLocalPlayer) ??
+        null
       : null;
 
   return (
@@ -203,17 +292,21 @@ export function GameplayHudOverlay({
             {roundSummary.headline}
           </p>
           <p className="mt-3 text-2xl font-semibold text-white">
-            {hudSnapshot.session.score} points
+            {hudSnapshot.session.mode === "single-player"
+              ? `${hudSnapshot.session.score} points`
+              : `${hudSnapshot.session.teamHitsLanded} team hits`}
           </p>
           <p className="mt-3 text-sm text-white/72">{roundSummary.detail}</p>
-          <Button
-            className="mt-5"
-            onClick={onRestartSession}
-            type="button"
-            variant="secondary"
-          >
-            Restart round
-          </Button>
+          {roundSummary.showRestart ? (
+            <Button
+              className="mt-5"
+              onClick={onRestartSession}
+              type="button"
+              variant="secondary"
+            >
+              Restart round
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -221,7 +314,11 @@ export function GameplayHudOverlay({
         <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
           <p className="text-sm font-medium text-white">Player</p>
           <p className="mt-2 text-2xl font-semibold text-white">{username}</p>
-          <p className="mt-2 text-sm text-white/72">{selectedReticleLabel}</p>
+          <p className="mt-2 text-sm text-white/72">
+            {hudSnapshot.session.mode === "co-op"
+              ? `${selectedReticleLabel} • Co-op`
+              : selectedReticleLabel}
+          </p>
         </div>
         <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
           <p className="text-sm font-medium text-white">Session</p>
@@ -231,19 +328,31 @@ export function GameplayHudOverlay({
           <p className="mt-2 text-sm text-white/72">{formatSessionStatus(hudSnapshot)}</p>
         </div>
         <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">Score</p>
-          <p className="mt-2 text-2xl font-semibold text-white">
-            {hudSnapshot.session.score}
+          <p className="text-sm font-medium text-white">
+            {hudSnapshot.session.mode === "co-op" ? "Team" : "Score"}
           </p>
-          <p className="mt-2 text-sm text-white/72">{`Best ${displayedBestScore}`}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {hudSnapshot.session.mode === "co-op"
+              ? hudSnapshot.session.teamHitsLanded
+              : hudSnapshot.session.score}
+          </p>
+          <p className="mt-2 text-sm text-white/72">
+            {hudSnapshot.session.mode === "co-op"
+              ? `${hudSnapshot.session.teamShotsFired} team shots`
+              : `Best ${displayedBestScore}`}
+          </p>
         </div>
         <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
           <p className="text-sm font-medium text-white">Combat</p>
           <p className="mt-2 text-2xl font-semibold text-white">
-            {`x${hudSnapshot.session.streak}`}
+            {hudSnapshot.session.mode === "co-op"
+              ? `${coopLocalPlayer?.hitsLanded ?? 0}`
+              : `x${hudSnapshot.session.streak}`}
           </p>
           <p className="mt-2 text-sm text-white/72">
-            {`${hudSnapshot.session.killsThisSession} kills this round`}
+            {hudSnapshot.session.mode === "co-op"
+              ? `${coopLocalPlayer?.shotsFired ?? 0} local shots`
+              : `${hudSnapshot.session.killsThisSession} kills this round`}
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
@@ -268,6 +377,65 @@ export function GameplayHudOverlay({
           </p>
         </div>
       </div>
+
+      {hudSnapshot.session.mode === "co-op" ? (
+        <div className="rounded-[1.75rem] border border-white/12 bg-white/6 p-5 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-white">Team activity</p>
+              <p className="mt-1 text-sm text-white/72">
+                Shared room snapshots drive teammate status, shot outcomes, and bird pressure.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline">{formatCoopLobbyBadge(hudSnapshot)}</Badge>
+              {coopReadyActionAvailable ? (
+                <Button
+                  disabled={coopReadyActionDisabled || coopReadyActionBusy}
+                  onClick={onToggleCoopReady}
+                  type="button"
+                  variant="secondary"
+                >
+                  {coopReadyActionBusy ? "Updating..." : coopReadyActionLabel}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          {hudSnapshot.session.players.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-white/12 bg-slate-950/38 p-4 text-sm text-white/72">
+              Waiting for the room snapshot to confirm your player slot.
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {hudSnapshot.session.players.map((playerSnapshot) => (
+                <div
+                  className="rounded-xl border border-white/12 bg-slate-950/38 p-4"
+                  key={playerSnapshot.playerId}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-white">
+                      {playerSnapshot.username}
+                    </p>
+                    <Badge variant={playerSnapshot.isLocalPlayer ? "secondary" : "outline"}>
+                      {playerSnapshot.isLocalPlayer ? "You" : "Teammate"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-white/72">
+                    {formatCoopPlayerOutcome(playerSnapshot)}
+                  </p>
+                  <p className="mt-3 text-xs uppercase tracking-[0.22em] text-white/52">
+                    {`${playerSnapshot.hitsLanded} hits / ${playerSnapshot.shotsFired} shots`}
+                  </p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
+                    {`${playerSnapshot.scatterEventsCaused} scatter events`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

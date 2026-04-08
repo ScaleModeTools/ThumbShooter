@@ -56,6 +56,7 @@ test("createInitialThumbShooterShellControllerState seeds typed shell policy fro
   assert.equal(state.debugPanelMode, "hidden");
   assert.equal(state.gameplayShell, "main-menu");
   assert.equal(state.permissionState, "prompt");
+  assert.equal(state.sessionMode, "single-player");
 });
 
 test("reduceThumbShooterShellControllerState keeps shell mutations behind typed actions", async () => {
@@ -100,6 +101,10 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
     type: "gameplayStartRequested"
   });
   state = reduceThumbShooterShellControllerState(state, {
+    type: "sessionModeChanged",
+    sessionMode: "co-op"
+  });
+  state = reduceThumbShooterShellControllerState(state, {
     type: "bestScoreRaised",
     bestScore: 300
   });
@@ -114,12 +119,24 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
 
   assert.equal(state.hasConfirmedProfile, true);
   assert.equal(state.permissionState, "granted");
-  assert.equal(state.debugPanelMode, "aim-inspector");
-  assert.equal(state.gameplayShell, "gameplay");
-  assert.equal(state.isMenuOpen, true);
+  assert.equal(state.debugPanelMode, "hidden");
+  assert.equal(state.gameplayShell, "main-menu");
+  assert.equal(state.isMenuOpen, false);
   assert.equal(state.profile?.snapshot.bestScore, 300);
   assert.equal(state.profile?.snapshot.audioSettings.mix.musicVolume, 0.2);
   assert.equal(state.profile?.snapshot.audioSettings.mix.sfxVolume, 0.45);
+  assert.equal(state.sessionMode, "co-op");
+
+  state = reduceThumbShooterShellControllerState(state, {
+    type: "gameplayStartRequested"
+  });
+  state = reduceThumbShooterShellControllerState(state, {
+    type: "gameplayMenuSetOpen",
+    open: true
+  });
+
+  assert.equal(state.gameplayShell, "gameplay");
+  assert.equal(state.isMenuOpen, true);
 
   state = reduceThumbShooterShellControllerState(state, {
     type: "inputModeChanged",
@@ -152,4 +169,5 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
   assert.equal(state.inputMode, "camera-thumb-shooter");
   assert.equal(state.usernameDraft, "");
   assert.equal(state.isMenuOpen, false);
+  assert.equal(state.sessionMode, "single-player");
 });

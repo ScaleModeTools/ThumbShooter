@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import type { PlayerProfile } from "@thumbshooter/shared";
+import type { GameplaySessionMode, PlayerProfile } from "@thumbshooter/shared";
 
 import type { AudioSessionSnapshot } from "../../audio";
 import type {
@@ -32,6 +32,7 @@ export interface ThumbShooterShellController {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
+  readonly sessionMode: GameplaySessionMode;
   readonly shellView: ThumbShooterShellViewModel;
   readonly usernameDraft: string;
   readonly setUsernameDraft: (value: string) => void;
@@ -55,6 +56,7 @@ export interface ThumbShooterShellController {
   readonly onRecalibrationRequest: () => void;
   readonly onRequestPermission: () => void;
   readonly onRetryCapabilityProbe: () => void;
+  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
   readonly onSfxVolumeChange: (nextValue: number) => void;
 }
 
@@ -71,6 +73,7 @@ export interface ThumbShooterShellControllerState {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
+  readonly sessionMode: GameplaySessionMode;
   readonly usernameDraft: string;
 }
 
@@ -104,6 +107,10 @@ export type ThumbShooterShellControllerAction =
     }
   | {
       readonly type: "gameplayStartRequested";
+    }
+  | {
+      readonly type: "sessionModeChanged";
+      readonly sessionMode: GameplaySessionMode;
     }
   | {
       readonly type: "gameplayExited";

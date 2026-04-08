@@ -1,4 +1,5 @@
 import { defaultGameplayInputMode } from "../../game";
+import type { GameplaySessionMode } from "@thumbshooter/shared";
 import { AudioSettings } from "@thumbshooter/shared";
 
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
@@ -13,6 +14,7 @@ export const initialCapabilitySnapshot = Object.freeze({
   status: "checking",
   reason: "pending"
 }) satisfies WebGpuGameplayCapabilitySnapshot;
+const defaultSessionMode: GameplaySessionMode = "single-player";
 
 function withMusicVolume(
   state: ThumbShooterShellControllerState,
@@ -67,6 +69,7 @@ export function createInitialThumbShooterShellControllerState({
     permissionError: null,
     permissionState: "prompt",
     profile: hydratedProfile.profile,
+    sessionMode: defaultSessionMode,
     usernameDraft: hydratedProfile.profile?.snapshot.username ?? ""
   };
 }
@@ -122,6 +125,18 @@ export function reduceThumbShooterShellControllerState(
         : {
             ...state,
             gameplayShell: "gameplay"
+          };
+    case "sessionModeChanged":
+      return action.sessionMode === state.sessionMode &&
+        state.gameplayShell === "main-menu" &&
+        !state.isMenuOpen
+        ? state
+        : {
+            ...state,
+            debugPanelMode: "hidden",
+            gameplayShell: "main-menu",
+            isMenuOpen: false,
+            sessionMode: action.sessionMode
           };
     case "gameplayExited":
       return state.isMenuOpen
@@ -196,6 +211,7 @@ export function reduceThumbShooterShellControllerState(
         permissionError: null,
         permissionState: "prompt",
         profile: null,
+        sessionMode: defaultSessionMode,
         usernameDraft: "",
         debugPanelMode: "hidden"
       };

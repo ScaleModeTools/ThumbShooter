@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import type { FormEvent } from "react";
 
-import type { PlayerProfile } from "@thumbshooter/shared";
+import type { GameplaySessionMode, PlayerProfile } from "@thumbshooter/shared";
 
 import {
   mouseGameplayAimCalibrationSnapshot,
@@ -49,6 +49,7 @@ interface ShellStageRouterProps {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
+  readonly sessionMode: GameplaySessionMode;
   readonly selectedReticleLabel: string;
   readonly usernameDraft: string;
   readonly onCalibrationProgress: (
@@ -66,6 +67,7 @@ interface ShellStageRouterProps {
   readonly onRequestPermission: () => void;
   readonly onRecalibrationRequest: () => void;
   readonly onRetryCapabilityProbe: () => void;
+  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
   readonly setUsernameDraft: (value: string) => void;
 }
 
@@ -104,6 +106,7 @@ export function ShellStageRouter({
   permissionError,
   permissionState,
   profile,
+  sessionMode,
   selectedReticleLabel,
   usernameDraft,
   onCalibrationProgress,
@@ -118,6 +121,7 @@ export function ShellStageRouter({
   onRequestPermission,
   onRecalibrationRequest,
   onRetryCapabilityProbe,
+  onSessionModeChange,
   setUsernameDraft
 }: ShellStageRouterProps) {
   const gameplayAimCalibration =
@@ -166,7 +170,9 @@ export function ShellStageRouter({
           nextGameplayStep={nextGameplayStep}
           onInputModeChange={onInputModeChange}
           onRecalibrationRequest={onRecalibrationRequest}
+          onSessionModeChange={onSessionModeChange}
           onStartGame={onGameplayStartRequest}
+          sessionMode={sessionMode}
         />
       ) : null}
 
@@ -192,6 +198,7 @@ export function ShellStageRouter({
             onGameplaySignal={onGameplaySignal}
             onOpenMenu={onOpenGameplayMenu}
             selectedReticleLabel={selectedReticleLabel}
+            sessionMode={sessionMode}
             trackingSource={gameplayInputSource}
             triggerCalibration={profile.snapshot.triggerCalibration}
             username={profile.snapshot.username}

@@ -11,6 +11,13 @@ import type {
   HandTriggerMetricSnapshot,
   BackgroundMusicEngine,
   CalibrationAnchorId,
+  CoopBirdBehaviorState,
+  CoopRoomClientCommand,
+  CoopRoomPhase,
+  CoopRoomSnapshot,
+  CoopPlayerShotOutcomeState,
+  GameplaySessionMode,
+  GameplayTickOwner,
   Milliseconds,
   NormalizedViewportScalar,
   NormalizedViewportPointInput,
@@ -23,6 +30,10 @@ import type {
 } from "@thumbshooter/shared";
 import {
   affineAimTransformFitQualities,
+  coopBirdBehaviorStates,
+  coopPlayerShotOutcomeStates,
+  coopRoomClientCommandTypes,
+  coopRoomPhases,
   createDegrees,
   createMilliseconds,
   createRadians,
@@ -45,8 +56,18 @@ type ExpectedReticleId = "default-ring" | "precision-ring";
 type ExpectedAudioChannelId = "music" | "sfx";
 type ExpectedBackgroundMusicEngine = "strudel-web";
 type ExpectedGameplayInputModeId = "camera-thumb-shooter" | "mouse";
+type ExpectedGameplaySessionMode = "single-player" | "co-op";
+type ExpectedGameplayTickOwner = "client" | "server";
 type ExpectedSoundEffectEngine = "web-audio-api";
 type ExpectedAffineAimTransformFitQuality = "stable" | "usable" | "degraded";
+type ExpectedCoopRoomPhase = "waiting-for-players" | "active" | "completed";
+type ExpectedCoopBirdBehaviorState = "glide" | "scatter" | "downed";
+type ExpectedCoopPlayerShotOutcomeState = "miss" | "scatter" | "hit";
+type ExpectedCoopRoomClientCommandType =
+  | "join-room"
+  | "set-player-ready"
+  | "leave-room"
+  | "fire-shot";
 
 type CalibrationAnchorIdMatches = AssertTrue<
   IsEqual<CalibrationAnchorId, ExpectedCalibrationAnchorId>
@@ -62,6 +83,12 @@ type BackgroundMusicEngineMatches = AssertTrue<
 type GameplayInputModeMatches = AssertTrue<
   IsEqual<GameplayInputModeId, ExpectedGameplayInputModeId>
 >;
+type GameplaySessionModeMatches = AssertTrue<
+  IsEqual<GameplaySessionMode, ExpectedGameplaySessionMode>
+>;
+type GameplayTickOwnerMatches = AssertTrue<
+  IsEqual<GameplayTickOwner, ExpectedGameplayTickOwner>
+>;
 type SoundEffectEngineMatches = AssertTrue<
   IsEqual<SoundEffectEngine, ExpectedSoundEffectEngine>
 >;
@@ -72,6 +99,36 @@ type AffineAimTransformFitQualityCatalogMatches = AssertTrue<
   IsEqual<
     (typeof affineAimTransformFitQualities)[number],
     AffineAimTransformFitQuality
+  >
+>;
+type CoopRoomPhaseMatches = AssertTrue<
+  IsEqual<CoopRoomPhase, ExpectedCoopRoomPhase>
+>;
+type CoopRoomPhaseCatalogMatches = AssertTrue<
+  IsEqual<(typeof coopRoomPhases)[number], CoopRoomPhase>
+>;
+type CoopBirdBehaviorMatches = AssertTrue<
+  IsEqual<CoopBirdBehaviorState, ExpectedCoopBirdBehaviorState>
+>;
+type CoopBirdBehaviorCatalogMatches = AssertTrue<
+  IsEqual<(typeof coopBirdBehaviorStates)[number], CoopBirdBehaviorState>
+>;
+type CoopPlayerShotOutcomeMatches = AssertTrue<
+  IsEqual<CoopPlayerShotOutcomeState, ExpectedCoopPlayerShotOutcomeState>
+>;
+type CoopPlayerShotOutcomeCatalogMatches = AssertTrue<
+  IsEqual<
+    (typeof coopPlayerShotOutcomeStates)[number],
+    CoopPlayerShotOutcomeState
+  >
+>;
+type CoopRoomClientCommandTypeMatches = AssertTrue<
+  IsEqual<CoopRoomClientCommand["type"], ExpectedCoopRoomClientCommandType>
+>;
+type CoopRoomClientCommandCatalogMatches = AssertTrue<
+  IsEqual<
+    (typeof coopRoomClientCommandTypes)[number],
+    CoopRoomClientCommand["type"]
   >
 >;
 
@@ -129,15 +186,43 @@ type AffineAimTransformFitDiagnosticsQualityUsesFitQuality = AssertTrue<
     AffineAimTransformFitQuality
   >
 >;
+type CoopRoomTickOwnerUsesServer = AssertTrue<
+  IsEqual<CoopRoomSnapshot["tick"]["owner"], "server">
+>;
+type CoopRoomTickIntervalUsesMilliseconds = AssertTrue<
+  IsEqual<CoopRoomSnapshot["tick"]["tickIntervalMs"], Milliseconds>
+>;
+type CoopRoomBirdHeadingUsesRadians = AssertTrue<
+  IsEqual<CoopRoomSnapshot["birds"][number]["headingRadians"], Radians>
+>;
+type CoopRoomBirdPositionUsesNormalizedPoint = AssertTrue<
+  IsEqual<CoopRoomSnapshot["birds"][number]["position"], NormalizedViewportPoint>
+>;
+type CoopRoomPlayerUsernameUsesSharedUsername = AssertTrue<
+  IsEqual<CoopRoomSnapshot["players"][number]["username"], Username>
+>;
+type CoopRoomRequiredReadyCountUsesNumber = AssertTrue<
+  IsEqual<CoopRoomSnapshot["session"]["requiredReadyPlayerCount"], number>
+>;
 
 export type SharedContractTypeTests =
   | CalibrationAnchorIdMatches
   | AudioChannelIdMatches
   | BackgroundMusicEngineMatches
   | GameplayInputModeMatches
+  | GameplaySessionModeMatches
+  | GameplayTickOwnerMatches
   | SoundEffectEngineMatches
   | AffineAimTransformFitQualityMatches
   | AffineAimTransformFitQualityCatalogMatches
+  | CoopRoomPhaseMatches
+  | CoopRoomPhaseCatalogMatches
+  | CoopBirdBehaviorMatches
+  | CoopBirdBehaviorCatalogMatches
+  | CoopPlayerShotOutcomeMatches
+  | CoopPlayerShotOutcomeCatalogMatches
+  | CoopRoomClientCommandTypeMatches
+  | CoopRoomClientCommandCatalogMatches
   | ReticleIdMatches
   | PlayerProfileReticleUsesReticleId
   | PlayerProfileAudioUsesAudioSettings
@@ -153,4 +238,10 @@ export type SharedContractTypeTests =
   | CreateUsernameReturnMatches
   | SharedProjectUnclampedReturnMatches
   | AffineAimTransformFitDiagnosticsSampleCountIsNumber
-  | AffineAimTransformFitDiagnosticsQualityUsesFitQuality;
+  | AffineAimTransformFitDiagnosticsQualityUsesFitQuality
+  | CoopRoomTickOwnerUsesServer
+  | CoopRoomTickIntervalUsesMilliseconds
+  | CoopRoomBirdHeadingUsesRadians
+  | CoopRoomBirdPositionUsesNormalizedPoint
+  | CoopRoomPlayerUsernameUsesSharedUsername
+  | CoopRoomRequiredReadyCountUsesNumber;

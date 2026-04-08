@@ -3,8 +3,10 @@ import type {
   NormalizedViewportPointInput
 } from "@thumbshooter/shared";
 import {
-  type OrthographicCamera,
+  ACESFilmicToneMapping,
+  type Camera,
   type Scene,
+  SRGBColorSpace,
   WebGPURenderer
 } from "three/webgpu";
 
@@ -19,13 +21,14 @@ import type {
   GameplayReticleVisualState,
   GameplayTelemetrySnapshot
 } from "../types/gameplay-presentation";
+import type { GameplayArenaRuntime } from "../types/gameplay-arena-runtime";
 import type {
+  GameplayArenaHudSnapshot,
   GameplayHudSnapshot,
   GameplayRuntimeConfig
 } from "../types/gameplay-runtime";
 import { readObservedAimPoint } from "../types/hand-aim-observation";
 import type { LatestHandTrackingSnapshot } from "../types/hand-tracking";
-import { LocalArenaSimulation } from "./local-arena-simulation";
 
 interface GameplayTrackingSource {
   readonly latestPose: LatestHandTrackingSnapshot;
@@ -40,7 +43,7 @@ interface GameplayRendererHost {
     };
   };
   init(): Promise<void | GameplayRendererHost>;
-  render(scene: Scene, camera: OrthographicCamera): void;
+  render(scene: Scene, camera: Camera): void;
   setPixelRatio(pixelRatio: number): void;
   setSize(width: number, height: number, updateStyle?: boolean): void;
   dispose(): void;
@@ -60,6 +63,12 @@ interface GameplayRendererFallbackHandle {
   _getFallback?: ((error: unknown) => GameplayRendererHost) | null;
 }
 
+interface GameplayRendererTuningHandle {
+  outputColorSpace?: string;
+  toneMapping?: number;
+  toneMappingExposure?: number;
+}
+
 function disableImplicitWebGlFallback(renderer: GameplayRendererHost): void {
   const fallbackHandle = renderer as GameplayRendererHost &
     GameplayRendererFallbackHandle;
@@ -75,8 +84,13 @@ function createDefaultRenderer(canvas: HTMLCanvasElement): GameplayRendererHost 
     antialias: true,
     canvas
   });
+  const tuningHandle = renderer as GameplayRendererHost &
+    GameplayRendererTuningHandle;
 
   disableImplicitWebGlFallback(renderer);
+  tuningHandle.toneMapping = ACESFilmicToneMapping;
+  tuningHandle.toneMappingExposure = 1.05;
+  tuningHandle.outputColorSpace = SRGBColorSpace;
 
   return renderer;
 }
@@ -84,7 +98,7 @@ function createDefaultRenderer(canvas: HTMLCanvasElement): GameplayRendererHost 
 function freezeHudSnapshot(
   lifecycle: GameplayHudSnapshot["lifecycle"],
   failureReason: string | null,
-  arenaHudSnapshot: LocalArenaSimulation["hudSnapshot"]
+  arenaHudSnapshot: GameplayArenaHudSnapshot
 ): GameplayHudSnapshot {
   return Object.freeze({
     aimPoint: arenaHudSnapshot.aimPoint,
@@ -203,7 +217,7 @@ async function withGameplayBootLock<T>(task: () => Promise<T>): Promise<T> {
 const gameplayUiUpdateIntervalMs = 150;
 
 export class WebGpuGameplayRuntime {
-  readonly #arenaSimulation: LocalArenaSimulation;
+  readonly #arenaSimulation: GameplayArenaRuntime;
   readonly #config: GameplayRuntimeConfig;
   readonly #createRenderer: (canvas: HTMLCanvasElement) => GameplayRendererHost;
   readonly #devicePixelRatio: number;
@@ -233,7 +247,7 @@ export class WebGpuGameplayRuntime {
 
   constructor(
     trackingSource: GameplayTrackingSource,
-    arenaSimulation: LocalArenaSimulation,
+    arenaSimulation: GameplayArenaRuntime,
     config: GameplayRuntimeConfig = gameplayRuntimeConfig,
     dependencies: GameplayRuntimeDependencies = {}
   ) {
@@ -576,7 +590,7 @@ export class WebGpuGameplayRuntime {
   #setHudSnapshot(
     lifecycle: GameplayHudSnapshot["lifecycle"],
     failureReason: string | null,
-    arenaHudSnapshot: LocalArenaSimulation["hudSnapshot"],
+    arenaHudSnapshot: GameplayArenaHudSnapshot,
     nowMs: number,
     forceUiUpdate: boolean
   ): GameplayHudSnapshot {

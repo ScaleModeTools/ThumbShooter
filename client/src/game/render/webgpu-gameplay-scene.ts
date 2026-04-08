@@ -1,14 +1,42 @@
 import type { NormalizedViewportPoint } from "@thumbshooter/shared";
 import {
+  BackSide,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  DoubleSide,
+  FogExp2,
   Group,
+  HemisphereLight,
+  MathUtils,
   Mesh,
   MeshBasicNodeMaterial,
-  OrthographicCamera,
+  MeshStandardNodeMaterial,
+  PerspectiveCamera,
   PlaneGeometry,
   RingGeometry,
-  Scene
+  Scene,
+  SphereGeometry,
+  Vector3
 } from "three/webgpu";
-import { color, mix, uv } from "three/tsl";
+import {
+  abs,
+  cameraPosition,
+  color,
+  dot,
+  float,
+  mix,
+  normalWorld,
+  oneMinus,
+  positionLocal,
+  positionWorld,
+  pow,
+  sin,
+  smoothstep,
+  time,
+  uv,
+  vec3
+} from "three/tsl";
 
 import type {
   GameplayReticleVisualState
@@ -29,44 +57,114 @@ export interface GameplaySceneRendererHost {
   setSize(width: number, height: number, updateStyle?: boolean): void;
 }
 
+type GameplayNodeMaterial = MeshBasicNodeMaterial | MeshStandardNodeMaterial;
+type RgbColor = readonly [number, number, number];
+
 interface EnemyMeshRuntime {
   behavior: LocalArenaEnemyBehaviorState | null;
-  readonly bodyMaterial: MeshBasicNodeMaterial;
-  readonly group: Group;
+  readonly anchorGroup: Group;
+  readonly billboardGroup: Group;
+  readonly bodyMaterial: MeshStandardNodeMaterial;
+  readonly flightGroup: Group;
   readonly leftWingPivot: Group;
   readonly rightWingPivot: Group;
-  readonly wingMaterial: MeshBasicNodeMaterial;
+  readonly wingMaterial: MeshStandardNodeMaterial;
+}
+
+interface ProjectionRuntime {
+  readonly forward: Vector3;
+  readonly right: Vector3;
+  readonly up: Vector3;
 }
 
 interface ReticleRuntime {
   visualState: GameplayReticleVisualState | null;
-  readonly group: Group;
+  readonly anchorGroup: Group;
+  readonly billboardGroup: Group;
   readonly haloMaterial: MeshBasicNodeMaterial;
   readonly horizontalMaterial: MeshBasicNodeMaterial;
   readonly ringMaterial: MeshBasicNodeMaterial;
+  readonly styleGroup: Group;
   readonly verticalMaterial: MeshBasicNodeMaterial;
 }
 
 function setMaterialColor(
-  material: MeshBasicNodeMaterial,
-  nextColor: readonly [number, number, number]
+  material: GameplayNodeMaterial,
+  nextColor: RgbColor
 ): void {
   material.colorNode = color(nextColor[0], nextColor[1], nextColor[2]);
 }
 
-function toWorldX(camera: OrthographicCamera, normalizedX: number): number {
-  return (normalizedX * 2 - 1) * camera.right;
+function setMaterialEmissive(
+  material: MeshStandardNodeMaterial,
+  nextColor: RgbColor,
+  intensity: number
+): void {
+  material.emissiveNode = color(
+    nextColor[0],
+    nextColor[1],
+    nextColor[2]
+  ).mul(intensity);
 }
 
-function toWorldY(normalizedY: number): number {
-  return 1 - normalizedY * 2;
+function toThreeColor(rgb: RgbColor): Color {
+  return new Color(rgb[0], rgb[1], rgb[2]);
+}
+
+function createProjectionRuntime(): ProjectionRuntime {
+  return {
+    forward: new Vector3(),
+    right: new Vector3(),
+    up: new Vector3()
+  };
+}
+
+function updateProjectionRuntime(
+  camera: PerspectiveCamera,
+  projectionRuntime: ProjectionRuntime
+): void {
+  camera.getWorldDirection(projectionRuntime.forward);
+  projectionRuntime.right
+    .crossVectors(projectionRuntime.forward, camera.up)
+    .normalize();
+  projectionRuntime.up
+    .crossVectors(projectionRuntime.right, projectionRuntime.forward)
+    .normalize();
+}
+
+function computeProjectionHalfHeight(
+  camera: PerspectiveCamera,
+  depthFromCamera: number
+): number {
+  return (
+    Math.tan(MathUtils.degToRad(camera.fov * 0.5)) *
+    Math.max(depthFromCamera, 0.001)
+  );
+}
+
+function projectNormalizedPointToPlane(
+  camera: PerspectiveCamera,
+  projectionRuntime: ProjectionRuntime,
+  normalizedX: number,
+  normalizedY: number,
+  depthFromCamera: number,
+  target: Vector3
+): void {
+  const halfHeight = computeProjectionHalfHeight(camera, depthFromCamera);
+  const halfWidth = halfHeight * camera.aspect;
+
+  target
+    .copy(camera.position)
+    .addScaledVector(projectionRuntime.forward, depthFromCamera)
+    .addScaledVector(projectionRuntime.right, (normalizedX * 2 - 1) * halfWidth)
+    .addScaledVector(projectionRuntime.up, (1 - normalizedY * 2) * halfHeight);
 }
 
 export function createGameplayScene(
   config: GameplayRuntimeConfig,
   enemyStates: readonly LocalArenaEnemyRenderState[]
 ): {
-  readonly camera: OrthographicCamera;
+  readonly camera: PerspectiveCamera;
   readonly scene: Scene;
   resetPresentation(): void;
   syncArenaPresentation(
@@ -81,147 +179,339 @@ export function createGameplayScene(
   ): void;
   updateReticleDrift(rotationZ: number): void;
 } {
-  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+  const camera = new PerspectiveCamera(
+    config.camera.fieldOfViewDegrees,
+    1,
+    config.camera.near,
+    config.camera.far
+  );
   const scene = new Scene();
-  const backgroundMesh = createBackgroundMesh(config);
+  const projectionRuntime = createProjectionRuntime();
+  const skyMesh = createSkyMesh(config);
+  const oceanMesh = createOceanMesh(config);
   const reticleRuntime = createReticleRuntime(config);
-  const enemyMeshes = createEnemyMeshes(config, enemyStates, camera);
+  const enemyMeshes = createEnemyMeshes(config, enemyStates);
 
-  camera.position.z = 5;
-  scene.add(backgroundMesh);
-  scene.add(reticleRuntime.group);
+  camera.position.set(
+    config.camera.position.x,
+    config.camera.position.y,
+    config.camera.position.z
+  );
+  camera.lookAt(
+    config.camera.target.x,
+    config.camera.target.y,
+    config.camera.target.z
+  );
+  camera.updateMatrixWorld(true);
+
+  scene.background = toThreeColor(config.environment.horizonColor);
+  scene.fog = new FogExp2(
+    toThreeColor(config.environment.fogColor),
+    config.environment.fogDensity
+  );
+  scene.add(
+    createHemisphereLight(config),
+    createSunLight(config),
+    skyMesh,
+    oceanMesh,
+    reticleRuntime.anchorGroup
+  );
 
   for (const enemyMesh of enemyMeshes) {
-    scene.add(enemyMesh.group);
+    scene.add(enemyMesh.anchorGroup);
   }
 
   return {
     camera,
     scene,
     resetPresentation() {
-      reticleRuntime.group.visible = false;
+      reticleRuntime.anchorGroup.visible = false;
       reticleRuntime.visualState = null;
 
       for (const enemyMesh of enemyMeshes) {
-        enemyMesh.group.visible = true;
+        enemyMesh.anchorGroup.visible = true;
       }
     },
     syncArenaPresentation(arenaEnemyStates, aimPoint, reticleVisualState) {
+      ensureEnemyMeshCount(enemyMeshes, arenaEnemyStates, scene, config);
+      updateProjectionRuntime(camera, projectionRuntime);
       syncReticleGroup(
         reticleRuntime,
         camera,
+        projectionRuntime,
         aimPoint,
         reticleVisualState,
         config
       );
-      syncEnemyMeshes(enemyMeshes, arenaEnemyStates, camera, config);
+      syncEnemyMeshes(
+        enemyMeshes,
+        arenaEnemyStates,
+        camera,
+        projectionRuntime,
+        config
+      );
     },
     syncViewport(renderer, canvasHost, devicePixelRatio) {
       const width = Math.max(1, canvasHost.clientWidth);
       const height = Math.max(1, canvasHost.clientHeight);
-      const aspect = width / height;
 
       renderer.setPixelRatio(devicePixelRatio);
       renderer.setSize(width, height, false);
-      camera.left = -aspect;
-      camera.right = aspect;
-      camera.top = 1;
-      camera.bottom = -1;
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      backgroundMesh.scale.set(aspect, 1, 1);
+      camera.updateMatrixWorld(true);
     },
     updateReticleDrift(rotationZ) {
-      reticleRuntime.group.rotation.z = rotationZ;
+      reticleRuntime.styleGroup.rotation.z = rotationZ;
     }
   };
 }
 
-function createBackgroundMesh(config: GameplayRuntimeConfig): Mesh {
-  const backgroundMaterial = new MeshBasicNodeMaterial();
-
-  backgroundMaterial.colorNode = mix(
-    color(...config.background.lowerColor),
-    color(...config.background.upperColor),
-    uv().y
+function createHemisphereLight(config: GameplayRuntimeConfig): HemisphereLight {
+  const light = new HemisphereLight(
+    toThreeColor(config.environment.zenithColor),
+    toThreeColor(config.ocean.farColor),
+    1.8
   );
 
-  return new Mesh(new PlaneGeometry(2, 2), backgroundMaterial);
+  light.position.set(0, 1, 0);
+
+  return light;
+}
+
+function createSunLight(config: GameplayRuntimeConfig): DirectionalLight {
+  const light = new DirectionalLight(
+    toThreeColor(config.environment.sunColor),
+    2.2
+  );
+  const { sunDirection } = config.environment;
+  const sunOffset = new Vector3(
+    -sunDirection.x * 80,
+    -sunDirection.y * 80,
+    -sunDirection.z * 80
+  );
+
+  light.position.copy(sunOffset);
+  light.target.position.set(
+    config.camera.target.x,
+    config.camera.target.y,
+    config.camera.target.z
+  );
+  light.target.updateMatrixWorld();
+
+  return light;
+}
+
+function createSkyMesh(config: GameplayRuntimeConfig): Mesh {
+  const skyMaterial = new MeshBasicNodeMaterial({
+    side: BackSide
+  });
+  const sunDirection = vec3(
+    config.environment.sunDirection.x,
+    config.environment.sunDirection.y,
+    config.environment.sunDirection.z
+  ).normalize();
+  const horizonBlend = smoothstep(-0.15, 0.85, normalWorld.y);
+  const sunAmount = dot(normalWorld, sunDirection).max(0);
+  const sunHalo = pow(sunAmount, 18).mul(0.36);
+  const sunDisc = pow(sunAmount, 120).mul(0.92);
+
+  skyMaterial.colorNode = mix(
+    color(...config.environment.horizonColor),
+    color(...config.environment.zenithColor),
+    horizonBlend
+  ).add(color(...config.environment.sunColor).mul(sunHalo.add(sunDisc)));
+  skyMaterial.depthWrite = false;
+
+  return new Mesh(
+    new SphereGeometry(config.environment.domeRadius, 48, 24),
+    skyMaterial
+  );
+}
+
+function createOceanMesh(config: GameplayRuntimeConfig): Mesh {
+  const oceanMaterial = new MeshStandardNodeMaterial({
+    side: DoubleSide
+  });
+  const wavePrimary = sin(
+    positionLocal.x
+      .mul(config.ocean.waveFrequencies.primary)
+      .add(time.mul(config.ocean.waveSpeeds.primary))
+  );
+  const waveSecondary = sin(
+    positionLocal.y
+      .mul(config.ocean.waveFrequencies.secondary)
+      .add(time.mul(config.ocean.waveSpeeds.secondary))
+  );
+  const waveRipple = sin(
+    positionLocal.x
+      .add(positionLocal.y)
+      .mul(config.ocean.waveFrequencies.ripple)
+      .add(time.mul(config.ocean.waveSpeeds.ripple))
+  );
+  const waveHeight = wavePrimary
+    .mul(0.56)
+    .add(waveSecondary.mul(0.34))
+    .add(waveRipple.mul(0.18))
+    .mul(config.ocean.waveAmplitude);
+  const depthBlend = smoothstep(0.08, 1, uv().y);
+  const viewDirection = cameraPosition.sub(positionWorld).normalize();
+  const fresnel = pow(oneMinus(abs(dot(normalWorld, viewDirection))), 3);
+
+  oceanMaterial.positionNode = positionLocal.add(vec3(0, 0, waveHeight));
+  oceanMaterial.colorNode = mix(
+    color(...config.ocean.nearColor),
+    color(...config.ocean.farColor),
+    depthBlend
+  ).add(color(...config.environment.sunColor).mul(fresnel.mul(0.12)));
+  oceanMaterial.emissiveNode = color(...config.ocean.emissiveColor).mul(
+    fresnel.mul(0.48).add(abs(waveRipple).mul(0.03))
+  );
+  oceanMaterial.roughnessNode = float(config.ocean.roughness);
+  oceanMaterial.metalnessNode = float(0.02);
+
+  const oceanMesh = new Mesh(
+    new PlaneGeometry(
+      config.ocean.planeWidth,
+      config.ocean.planeDepth,
+      config.ocean.segmentCount,
+      config.ocean.segmentCount
+    ),
+    oceanMaterial
+  );
+
+  oceanMesh.rotation.x = -Math.PI / 2;
+  oceanMesh.position.y = config.ocean.height;
+
+  return oceanMesh;
 }
 
 function createEnemyMeshes(
   config: GameplayRuntimeConfig,
-  enemyStates: readonly LocalArenaEnemyRenderState[],
-  camera: OrthographicCamera
+  enemyStates: readonly LocalArenaEnemyRenderState[]
 ): EnemyMeshRuntime[] {
-  return enemyStates.map((enemyState) => {
-    const group = new Group();
-    const bodyMaterial = new MeshBasicNodeMaterial({
-      transparent: true
-    });
-    const wingMaterial = new MeshBasicNodeMaterial({
-      transparent: true
-    });
-    const bodyMesh = new Mesh(
-      new PlaneGeometry(
-        config.enemies.bodySize.width,
-        config.enemies.bodySize.height
-      ),
-      bodyMaterial
-    );
-    const leftWingPivot = new Group();
-    const rightWingPivot = new Group();
-    const leftWing = new Mesh(
-      new PlaneGeometry(
-        config.enemies.wingSize.width,
-        config.enemies.wingSize.height
-      ),
-      wingMaterial
-    );
-    const rightWing = new Mesh(
-      new PlaneGeometry(
-        config.enemies.wingSize.width,
-        config.enemies.wingSize.height
-      ),
-      wingMaterial
-    );
+  return enemyStates.map((enemyState) => createEnemyMesh(config, enemyState));
+}
 
-    setMaterialColor(bodyMaterial, config.enemies.bodyColor);
-    setMaterialColor(wingMaterial, config.enemies.wingColor);
-    bodyMaterial.opacity = 0.95;
-    wingMaterial.opacity = 0.92;
+function createEnemyMesh(
+  config: GameplayRuntimeConfig,
+  enemyState: LocalArenaEnemyRenderState
+): EnemyMeshRuntime {
+  const bodyGeometry = new SphereGeometry(0.5, 20, 16);
+  const headGeometry = new SphereGeometry(0.5, 16, 12);
+  const wingGeometry = new BoxGeometry(1, 1, 1);
+  const tailGeometry = new BoxGeometry(1, 1, 1);
+  const bodyDepth = config.enemies.bodySize.height * 0.92;
+  const headRadius = config.enemies.bodySize.height * 0.48;
+  const beakLength = config.enemies.bodySize.width * 0.3;
+  const beakDepth = config.enemies.bodySize.height * 0.18;
+  const wingDepth = config.enemies.wingSize.height * 2.8;
 
-    leftWing.position.x = -config.enemies.wingSize.width * 0.38;
-    rightWing.position.x = config.enemies.wingSize.width * 0.38;
-    leftWingPivot.position.x = -config.enemies.bodySize.width * 0.18;
-    rightWingPivot.position.x = config.enemies.bodySize.width * 0.18;
-
-    leftWingPivot.add(leftWing);
-    rightWingPivot.add(rightWing);
-    group.add(bodyMesh, leftWingPivot, rightWingPivot);
-    group.position.set(
-      toWorldX(camera, enemyState.positionX),
-      toWorldY(enemyState.positionY),
-      0.04
-    );
-    group.scale.setScalar(enemyState.scale);
-    group.visible = enemyState.visible;
-    const enemyMesh: EnemyMeshRuntime = {
-      behavior: null,
-      bodyMaterial,
-      group,
-      leftWingPivot,
-      rightWingPivot,
-      wingMaterial
-    };
-
-    applyEnemyBehaviorStyle(enemyMesh, enemyState.behavior, config);
-
-    return enemyMesh;
+  const anchorGroup = new Group();
+  const billboardGroup = new Group();
+  const flightGroup = new Group();
+  const bodyMaterial = new MeshStandardNodeMaterial({
+    transparent: true
   });
+  const wingMaterial = new MeshStandardNodeMaterial({
+    transparent: true
+  });
+  const accentMaterial = new MeshStandardNodeMaterial();
+  const bodyMesh = new Mesh(bodyGeometry, bodyMaterial);
+  const headMesh = new Mesh(headGeometry, bodyMaterial);
+  const beakMesh = new Mesh(
+    new BoxGeometry(beakLength, beakDepth, beakDepth),
+    accentMaterial
+  );
+  const leftWingPivot = new Group();
+  const rightWingPivot = new Group();
+  const leftWing = new Mesh(wingGeometry, wingMaterial);
+  const rightWing = new Mesh(wingGeometry, wingMaterial);
+  const tailMesh = new Mesh(tailGeometry, wingMaterial);
+
+  bodyMesh.scale.set(
+    config.enemies.bodySize.width,
+    config.enemies.bodySize.height,
+    bodyDepth
+  );
+  headMesh.scale.setScalar(headRadius);
+  headMesh.position.set(config.enemies.bodySize.width * 0.42, headRadius * 0.2, 0);
+  beakMesh.position.set(config.enemies.bodySize.width * 0.72, 0, 0);
+  leftWing.scale.set(
+    config.enemies.wingSize.width,
+    config.enemies.wingSize.height,
+    wingDepth
+  );
+  rightWing.scale.set(
+    config.enemies.wingSize.width,
+    config.enemies.wingSize.height,
+    wingDepth
+  );
+  tailMesh.scale.set(
+    config.enemies.bodySize.width * 0.3,
+    config.enemies.bodySize.height * 0.52,
+    config.enemies.bodySize.height * 0.32
+  );
+  leftWing.position.x = -config.enemies.wingSize.width * 0.42;
+  rightWing.position.x = config.enemies.wingSize.width * 0.42;
+  leftWingPivot.position.x = -config.enemies.bodySize.width * 0.1;
+  rightWingPivot.position.x = config.enemies.bodySize.width * 0.1;
+  tailMesh.position.x = -config.enemies.bodySize.width * 0.58;
+  tailMesh.rotation.z = Math.PI * 0.16;
+
+  setMaterialColor(accentMaterial, [0.98, 0.76, 0.29]);
+  setMaterialEmissive(accentMaterial, [0.98, 0.74, 0.25], 0.05);
+  accentMaterial.roughnessNode = float(0.32);
+  accentMaterial.metalnessNode = float(0);
+  leftWingPivot.add(leftWing);
+  rightWingPivot.add(rightWing);
+  flightGroup.add(
+    bodyMesh,
+    headMesh,
+    beakMesh,
+    leftWingPivot,
+    rightWingPivot,
+    tailMesh
+  );
+  billboardGroup.add(flightGroup);
+  anchorGroup.add(billboardGroup);
+  anchorGroup.position.set(0, 0, 0);
+  anchorGroup.visible = enemyState.visible;
+
+  const enemyMesh: EnemyMeshRuntime = {
+    behavior: null,
+    anchorGroup,
+    billboardGroup,
+    bodyMaterial,
+    flightGroup,
+    leftWingPivot,
+    rightWingPivot,
+    wingMaterial
+  };
+
+  applyEnemyBehaviorStyle(enemyMesh, enemyState.behavior, config);
+
+  return enemyMesh;
+}
+
+function ensureEnemyMeshCount(
+  enemyMeshes: EnemyMeshRuntime[],
+  enemyStates: readonly LocalArenaEnemyRenderState[],
+  scene: Scene,
+  config: GameplayRuntimeConfig
+): void {
+  for (let index = enemyMeshes.length; index < enemyStates.length; index += 1) {
+    const enemyMesh = createEnemyMesh(config, enemyStates[index]!);
+
+    enemyMeshes.push(enemyMesh);
+    scene.add(enemyMesh.anchorGroup);
+  }
 }
 
 function createReticleRuntime(config: GameplayRuntimeConfig): ReticleRuntime {
-  const group = new Group();
+  const anchorGroup = new Group();
+  const billboardGroup = new Group();
+  const styleGroup = new Group();
   const ringMaterial = new MeshBasicNodeMaterial({
     transparent: true
   });
@@ -234,7 +524,6 @@ function createReticleRuntime(config: GameplayRuntimeConfig): ReticleRuntime {
   const verticalMaterial = new MeshBasicNodeMaterial({
     transparent: true
   });
-
   const ringMesh = new Mesh(
     new RingGeometry(
       config.reticle.innerRadius,
@@ -266,15 +555,27 @@ function createReticleRuntime(config: GameplayRuntimeConfig): ReticleRuntime {
     verticalMaterial
   );
 
-  group.visible = false;
-  group.add(haloMesh, ringMesh, horizontalBar, verticalBar);
+  ringMaterial.depthWrite = false;
+  ringMaterial.depthTest = false;
+  haloMaterial.depthWrite = false;
+  haloMaterial.depthTest = false;
+  horizontalMaterial.depthWrite = false;
+  horizontalMaterial.depthTest = false;
+  verticalMaterial.depthWrite = false;
+  verticalMaterial.depthTest = false;
+  anchorGroup.visible = false;
+  styleGroup.add(haloMesh, ringMesh, horizontalBar, verticalBar);
+  billboardGroup.add(styleGroup);
+  anchorGroup.add(billboardGroup);
 
   const reticleRuntime: ReticleRuntime = {
     visualState: null,
-    group,
+    anchorGroup,
+    billboardGroup,
     haloMaterial,
     horizontalMaterial,
     ringMaterial,
+    styleGroup,
     verticalMaterial
   };
 
@@ -293,22 +594,28 @@ function applyEnemyBehaviorStyle(
   if (behavior === "downed") {
     setMaterialColor(enemyMesh.bodyMaterial, config.enemies.downedColor);
     setMaterialColor(enemyMesh.wingMaterial, config.enemies.downedColor);
-    enemyMesh.bodyMaterial.opacity = 0.82;
-    enemyMesh.wingMaterial.opacity = 0.78;
+    setMaterialEmissive(enemyMesh.bodyMaterial, config.enemies.downedColor, 0.08);
+    setMaterialEmissive(enemyMesh.wingMaterial, config.enemies.downedColor, 0.05);
+    enemyMesh.bodyMaterial.opacity = 0.88;
+    enemyMesh.wingMaterial.opacity = 0.8;
     return;
   }
 
   if (behavior === "scatter") {
     setMaterialColor(enemyMesh.bodyMaterial, config.enemies.scatterColor);
     setMaterialColor(enemyMesh.wingMaterial, config.enemies.scatterColor);
-    enemyMesh.bodyMaterial.opacity = 0.96;
+    setMaterialEmissive(enemyMesh.bodyMaterial, config.enemies.scatterColor, 0.07);
+    setMaterialEmissive(enemyMesh.wingMaterial, config.enemies.scatterColor, 0.04);
+    enemyMesh.bodyMaterial.opacity = 0.98;
     enemyMesh.wingMaterial.opacity = 0.94;
     return;
   }
 
   setMaterialColor(enemyMesh.bodyMaterial, config.enemies.bodyColor);
   setMaterialColor(enemyMesh.wingMaterial, config.enemies.wingColor);
-  enemyMesh.bodyMaterial.opacity = 0.95;
+  setMaterialEmissive(enemyMesh.bodyMaterial, config.enemies.bodyColor, 0.03);
+  setMaterialEmissive(enemyMesh.wingMaterial, config.enemies.wingColor, 0.02);
+  enemyMesh.bodyMaterial.opacity = 0.96;
   enemyMesh.wingMaterial.opacity = 0.92;
 }
 
@@ -324,7 +631,6 @@ function applyReticleVisualState(
   setMaterialColor(reticleRuntime.horizontalMaterial, style.strokeColor);
   setMaterialColor(reticleRuntime.verticalMaterial, style.strokeColor);
   setMaterialColor(reticleRuntime.haloMaterial, style.strokeColor);
-  reticleRuntime.group.scale.setScalar(style.scale);
   reticleRuntime.ringMaterial.opacity = style.strokeOpacity;
   reticleRuntime.horizontalMaterial.opacity = style.strokeOpacity * 0.84;
   reticleRuntime.verticalMaterial.opacity = style.strokeOpacity * 0.84;
@@ -334,7 +640,8 @@ function applyReticleVisualState(
 function syncEnemyMeshes(
   enemyMeshes: readonly EnemyMeshRuntime[],
   enemyStates: readonly LocalArenaEnemyRenderState[],
-  camera: OrthographicCamera,
+  camera: PerspectiveCamera,
+  projectionRuntime: ProjectionRuntime,
   config: GameplayRuntimeConfig
 ): void {
   for (let index = 0; index < enemyMeshes.length; index += 1) {
@@ -342,7 +649,7 @@ function syncEnemyMeshes(
     const enemyState = enemyStates[index];
 
     if (enemyState === undefined) {
-      enemyMesh.group.visible = false;
+      enemyMesh.anchorGroup.visible = false;
       continue;
     }
 
@@ -350,42 +657,79 @@ function syncEnemyMeshes(
       applyEnemyBehaviorStyle(enemyMesh, enemyState.behavior, config);
     }
 
-    enemyMesh.group.visible = enemyState.visible;
-    enemyMesh.group.position.set(
-      toWorldX(camera, enemyState.positionX),
-      toWorldY(enemyState.positionY),
-      0.04
+    enemyMesh.anchorGroup.visible = enemyState.visible;
+    enemyMesh.billboardGroup.quaternion.copy(camera.quaternion);
+
+    const depthBlend = MathUtils.clamp(enemyState.positionY, 0, 1);
+    const depthFromCamera = MathUtils.lerp(
+      config.enemies.flightDepth.far,
+      config.enemies.flightDepth.near,
+      depthBlend
     );
-    enemyMesh.group.rotation.z = enemyState.headingRadians;
-    enemyMesh.group.scale.setScalar(enemyState.scale);
-    enemyMesh.leftWingPivot.rotation.z =
-      Math.sin(enemyState.wingPhase) * config.enemies.wingSweepRadians;
-    enemyMesh.rightWingPivot.rotation.z =
-      -Math.sin(enemyState.wingPhase) * config.enemies.wingSweepRadians;
+    const projectionScale = computeProjectionHalfHeight(camera, depthFromCamera);
+    const motionLift =
+      Math.sin(enemyState.wingPhase * 0.5) * config.enemies.bodySize.height * 0.28;
+    const wingSwing =
+      Math.sin(enemyState.wingPhase) *
+      config.enemies.wingSweepRadians *
+      (enemyState.behavior === "downed" ? 0.18 : 1);
+    const pitchRadians =
+      enemyState.behavior === "downed"
+        ? 0.52
+        : enemyState.behavior === "scatter"
+          ? -0.14
+          : -0.08;
+
+    projectNormalizedPointToPlane(
+      camera,
+      projectionRuntime,
+      enemyState.positionX,
+      enemyState.positionY,
+      depthFromCamera,
+      enemyMesh.anchorGroup.position
+    );
+    enemyMesh.flightGroup.position.y = motionLift;
+    enemyMesh.flightGroup.rotation.set(
+      pitchRadians,
+      0,
+      enemyState.headingRadians
+    );
+    enemyMesh.flightGroup.scale.setScalar(projectionScale * enemyState.scale);
+    enemyMesh.leftWingPivot.rotation.y = wingSwing;
+    enemyMesh.rightWingPivot.rotation.y = -wingSwing;
   }
 }
 
 function syncReticleGroup(
   reticleRuntime: ReticleRuntime,
-  camera: OrthographicCamera,
+  camera: PerspectiveCamera,
+  projectionRuntime: ProjectionRuntime,
   aimPoint: NormalizedViewportPoint | null,
   visualState: GameplayReticleVisualState,
   config: GameplayRuntimeConfig
 ): void {
   if (aimPoint === null || visualState === "hidden") {
-    reticleRuntime.group.visible = false;
+    reticleRuntime.anchorGroup.visible = false;
     return;
   }
 
-  reticleRuntime.group.visible = true;
+  reticleRuntime.anchorGroup.visible = true;
+  reticleRuntime.billboardGroup.quaternion.copy(camera.quaternion);
 
   if (reticleRuntime.visualState !== visualState) {
     applyReticleVisualState(reticleRuntime, visualState, config);
   }
 
-  reticleRuntime.group.position.set(
-    toWorldX(camera, aimPoint.x),
-    toWorldY(aimPoint.y),
-    0.1
+  const projectionScale = computeProjectionHalfHeight(camera, config.reticle.depth);
+  const styleScale = config.reticle.stateStyles[visualState].scale;
+
+  projectNormalizedPointToPlane(
+    camera,
+    projectionRuntime,
+    aimPoint.x,
+    aimPoint.y,
+    config.reticle.depth,
+    reticleRuntime.anchorGroup.position
   );
+  reticleRuntime.styleGroup.scale.setScalar(projectionScale * styleScale);
 }

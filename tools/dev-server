@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+cd "$repo_root"
+
+# Avoid the workspace build scripts here because they aggressively clean `dist/`
+# trees. Cleaning during dev startup can race an already-running watcher and
+# temporarily remove package outputs that the server process imports.
+./node_modules/.bin/tsc -p "$repo_root/packages/shared/tsconfig.json"
+./node_modules/.bin/tsc -p "$repo_root/server/tsconfig.json"
+
+pids=()
+
+cleanup() {
+  trap - EXIT INT TERM
+
+  for pid in "${pids[@]:-}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+
+  wait 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+npm run watch:build --workspace @thumbshooter/shared &
+pids+=($!)
+
+npm run watch:build --workspace @thumbshooter/server &
+pids+=($!)
+
+node \
+  --watch \
+  --watch-preserve-output \
+  --watch-path "$repo_root/packages/shared/dist" \
+  --watch-path "$repo_root/server/dist" \
+  "$repo_root/server/dist/index.js" &
+pids+=($!)
+
+wait -n "${pids[@]}"

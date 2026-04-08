@@ -24,6 +24,9 @@ import {
 } from "../states/local-arena-enemy-field";
 import type { GameplaySignal } from "../types/gameplay-signal";
 import type { LatestHandTrackingSnapshot } from "../types/hand-tracking";
+import {
+  createSinglePlayerGameplaySessionSnapshot
+} from "../types/gameplay-session";
 import type {
   LocalArenaEnemyRenderState,
   LocalArenaHudSnapshot,
@@ -250,7 +253,7 @@ export class LocalArenaSimulation {
       trackingState,
       aimPoint,
       summarizeEnemyField(this.#enemyRuntimeStates),
-      this.#combatSession.snapshot,
+      createSinglePlayerGameplaySessionSnapshot(this.#combatSession.snapshot),
       weapon,
       freezeTargetFeedbackSnapshot(
         this.#feedbackState,

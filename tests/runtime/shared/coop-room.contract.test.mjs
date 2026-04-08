@@ -1,0 +1,141 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  createCoopBirdId,
+  createCoopFireShotCommand,
+  createCoopLeaveRoomCommand,
+  createCoopPlayerId,
+  createCoopRoomId,
+  createCoopRoomSnapshot,
+  createCoopSessionId,
+  createUsername
+} from "@thumbshooter/shared";
+
+function requireValue(value, label) {
+  assert.notEqual(value, null, `${label} should resolve`);
+  return value;
+}
+
+test("co-op ids trim surrounding whitespace and reject blanks", () => {
+  assert.equal(createCoopRoomId("   "), null);
+  assert.equal(createCoopPlayerId(""), null);
+  assert.equal(createCoopBirdId("\n\t"), null);
+  assert.equal(createCoopSessionId("   "), null);
+  assert.equal(createCoopRoomId("  harbor-room  "), "harbor-room");
+  assert.equal(createCoopPlayerId("  player-7 "), "player-7");
+});
+
+test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot values", () => {
+  const roomId = requireValue(createCoopRoomId("harbor-room"), "roomId");
+  const sessionId = requireValue(
+    createCoopSessionId("harbor-room-session"),
+    "sessionId"
+  );
+  const birdId = requireValue(createCoopBirdId("bird-1"), "birdId");
+  const playerId = requireValue(createCoopPlayerId("player-1"), "playerId");
+  const username = requireValue(createUsername("coop-player"), "username");
+  const input = {
+    birds: [
+      {
+        behavior: "scatter",
+        birdId,
+        headingRadians: Number.POSITIVE_INFINITY,
+        label: "Bird 1",
+        lastInteractionByPlayerId: playerId,
+        lastInteractionTick: 12.7,
+        position: {
+          x: 1.4,
+          y: -2
+        },
+        radius: -5,
+        scale: 1.15,
+        visible: true,
+        wingPhase: Number.NaN
+      }
+    ],
+    capacity: 0,
+    players: [
+      {
+        activity: {
+          hitsLanded: 1.8,
+          lastAcknowledgedShotSequence: 4.9,
+          lastHitBirdId: birdId,
+          lastOutcome: "hit",
+          lastShotTick: 8.2,
+          scatterEventsCaused: 2.4,
+          shotsFired: 5.6
+        },
+        connected: true,
+        playerId,
+        ready: true,
+        username
+      }
+    ],
+    roomId,
+    session: {
+      birdsCleared: 1.2,
+      birdsRemaining: 3.9,
+      phase: "active",
+      requiredReadyPlayerCount: 0,
+      sessionId,
+      teamHitsLanded: 1.1,
+      teamShotsFired: 5.8
+    },
+    tick: {
+      currentTick: 19.9,
+      tickIntervalMs: 50.4
+    }
+  };
+
+  const snapshot = createCoopRoomSnapshot(input);
+
+  input.birds[0].position.x = 0.2;
+  input.players[0].activity.shotsFired = 99;
+
+  assert.equal(snapshot.capacity, 1);
+  assert.equal(snapshot.tick.owner, "server");
+  assert.equal(snapshot.tick.currentTick, 19);
+  assert.equal(snapshot.tick.tickIntervalMs, 50.4);
+  assert.deepEqual(snapshot.birds[0]?.position, {
+    x: 1,
+    y: 0
+  });
+  assert.equal(snapshot.birds[0]?.radius, 0);
+  assert.equal(snapshot.birds[0]?.wingPhase, 0);
+  assert.equal(snapshot.players[0]?.activity.lastAcknowledgedShotSequence, 4);
+  assert.equal(snapshot.players[0]?.activity.shotsFired, 5);
+  assert.equal(snapshot.session.requiredReadyPlayerCount, 1);
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(Object.isFrozen(snapshot.birds), true);
+  assert.equal(Object.isFrozen(snapshot.players), true);
+});
+
+test("createCoopFireShotCommand clamps viewport aim and floors client shot sequences", () => {
+  const command = createCoopFireShotCommand({
+    aimPoint: {
+      x: 2.4,
+      y: -0.4
+    },
+    clientShotSequence: 7.8,
+    playerId: requireValue(createCoopPlayerId("player-2"), "playerId"),
+    roomId: requireValue(createCoopRoomId("harbor-room"), "roomId")
+  });
+
+  assert.equal(command.type, "fire-shot");
+  assert.equal(command.clientShotSequence, 7);
+  assert.deepEqual(command.aimPoint, {
+    x: 1,
+    y: 0
+  });
+});
+
+test("createCoopLeaveRoomCommand preserves player identity for explicit disconnects", () => {
+  const command = createCoopLeaveRoomCommand({
+    playerId: requireValue(createCoopPlayerId("player-8"), "playerId"),
+    roomId: requireValue(createCoopRoomId("harbor-room"), "roomId")
+  });
+
+  assert.equal(command.type, "leave-room");
+  assert.equal(command.playerId, "player-8");
+});

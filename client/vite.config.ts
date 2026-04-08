@@ -53,11 +53,18 @@ export default defineConfig({
       "@thumbshooter/shared": fileURLToPath(
         new URL("../packages/shared/src/index.ts", import.meta.url)
       )
-    }
+    },
+    dedupe: ["react", "react-dom"]
   },
   server: {
     host: true,
-    port: 5173
+    port: 5173,
+    proxy: {
+      "/coop": {
+        changeOrigin: true,
+        target: "http://127.0.0.1:3210"
+      }
+    }
   },
   preview: {
     host: true,

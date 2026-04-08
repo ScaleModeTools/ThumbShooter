@@ -43,7 +43,7 @@ function describeCapabilityReason(
     case "adapter-ready":
       return "Gameplay WebGPU adapter ready.";
     case "navigator-gpu-missing":
-      return "The browser does not expose navigator.gpu.";
+      return "The browser does not expose navigator.gpu. For local HTTP development, use localhost on the same machine or run HTTPS instead of a LAN IP URL.";
     case "adapter-unavailable":
       return "A WebGPU adapter was not returned for gameplay.";
     case "probe-failed":

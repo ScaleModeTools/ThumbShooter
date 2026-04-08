@@ -29,6 +29,7 @@ export function ThumbShooterShell() {
       permissionError={controller.permissionError}
       permissionState={controller.permissionState}
       profile={controller.profile}
+      sessionMode={controller.sessionMode}
       selectedReticleLabel={controller.shellView.selectedReticleLabel}
       usernameDraft={controller.usernameDraft}
       nextGameplayStep={controller.navigationSnapshot.nextGameplayStep}
@@ -43,6 +44,7 @@ export function ThumbShooterShell() {
       onRequestPermission={controller.onRequestPermission}
       onRecalibrationRequest={controller.onRecalibrationRequest}
       onRetryCapabilityProbe={controller.onRetryCapabilityProbe}
+      onSessionModeChange={controller.onSessionModeChange}
       setUsernameDraft={controller.setUsernameDraft}
     />
   );
@@ -86,7 +88,11 @@ export function ThumbShooterShell() {
           audioStatusLabel={controller.shellView.audioStatusLabel}
           calibrationQualityLabel={controller.shellView.calibrationQualityLabel}
           debugPanelMode={controller.debugPanelMode}
-          gameplayStatusLabel="Local combat progression live"
+          gameplayStatusLabel={
+            controller.sessionMode === "co-op"
+              ? "Co-op room sync live"
+              : "Local combat progression live"
+          }
           inputMode={controller.inputMode}
           musicVolume={controller.shellView.musicVolumeSliderValue}
           onDebugPanelModeChange={controller.onGameplayDebugPanelModeChange}
@@ -95,10 +101,12 @@ export function ThumbShooterShell() {
           onMusicVolumeChange={controller.onMusicVolumeChange}
           onOpenChange={controller.onGameplayMenuOpen}
           onRecalibrationRequest={controller.onRecalibrationRequest}
+          onSessionModeChange={controller.onSessionModeChange}
           onSfxVolumeChange={controller.onSfxVolumeChange}
           open={
             activeStep === "gameplay" && controller.isMenuOpen
           }
+          sessionMode={controller.sessionMode}
           showDebugControls={showDeveloperUi}
           sfxVolume={controller.shellView.sfxVolumeSliderValue}
         />

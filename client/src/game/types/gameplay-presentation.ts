@@ -3,8 +3,8 @@ import type {
   NormalizedViewportPointInput
 } from "@thumbshooter/shared";
 
+import type { GameplaySessionPhase } from "./gameplay-session";
 import type { HandTrackingPoseState } from "./hand-tracking";
-import type { LocalCombatSessionPhase } from "./local-combat-session";
 import type { LocalArenaTargetFeedbackState } from "./local-arena-simulation";
 import type { WeaponReadinessState } from "./weapon-contract";
 
@@ -57,7 +57,7 @@ export interface GameplayTelemetrySnapshot {
   };
   readonly renderedFrameCount: number;
   readonly reticleVisualState: GameplayReticleVisualState;
-  readonly sessionPhase: LocalCombatSessionPhase;
+  readonly sessionPhase: GameplaySessionPhase;
   readonly targetFeedbackState: LocalArenaTargetFeedbackState;
   readonly thumbDropDistance: number | null;
   readonly trackingPoseAgeMs: number | null;

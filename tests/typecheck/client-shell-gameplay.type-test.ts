@@ -1,5 +1,6 @@
 import type {
   Degrees,
+  GameplaySessionMode,
   Milliseconds,
   PlayerProfile,
   Radians
@@ -7,6 +8,7 @@ import type {
 
 import type { ThumbShooterShellControllerAction } from "../../client/src/app/types/thumbshooter-shell-controller";
 import {
+  gameplaySessionModes,
   gameplayInputModeIds,
   gameFoundationConfig,
   gameplayDebugPanelModes,
@@ -50,10 +52,10 @@ type ExpectedShellActionType =
   | "calibrationResetRequested"
   | "capabilityProbeStarted"
   | "capabilitySnapshotReceived"
-  | "gameplayStartRequested"
-  | "gameplayExited"
   | "gameplayDebugPanelModeChanged"
+  | "gameplayExited"
   | "gameplayMenuSetOpen"
+  | "gameplayStartRequested"
   | "inputModeChanged"
   | "loginRejected"
   | "mainMenuRequested"
@@ -63,6 +65,7 @@ type ExpectedShellActionType =
   | "profileCleared"
   | "profileConfirmed"
   | "profileEditRequested"
+  | "sessionModeChanged"
   | "sfxVolumeChanged"
   | "usernameDraftChanged";
 type ExpectedGameplayRuntimeLifecycleState =
@@ -105,6 +108,12 @@ type ExpectedGameplayReticleVisualState =
   | "reloading"
   | "round-paused";
 type ExpectedGameplayInputModeId = "camera-thumb-shooter" | "mouse";
+type ExpectedGameplaySessionMode = "single-player" | "co-op";
+type ExpectedGameplaySessionPhase =
+  | "active"
+  | "completed"
+  | "failed"
+  | "waiting-for-players";
 
 type ShellActionTypesMatch = AssertTrue<
   IsEqual<ThumbShooterShellControllerActionType, ExpectedShellActionType>
@@ -193,11 +202,32 @@ type GameplayInputModeMatches = AssertTrue<
 type GameplayInputModeCatalogMatches = AssertTrue<
   IsEqual<(typeof gameplayInputModeIds)[number], GameplayInputModeId>
 >;
+type GameplaySessionModeMatches = AssertTrue<
+  IsEqual<GameplaySessionMode, ExpectedGameplaySessionMode>
+>;
+type GameplaySessionModeCatalogMatches = AssertTrue<
+  IsEqual<(typeof gameplaySessionModes)[number], GameplaySessionMode>
+>;
+type GameplayHudSessionModeMatches = AssertTrue<
+  IsEqual<GameplayHudSnapshot["session"]["mode"], GameplaySessionMode>
+>;
+type SessionModeActionPayloadMatches = AssertTrue<
+  IsEqual<
+    Extract<
+      ThumbShooterShellControllerAction,
+      { readonly type: "sessionModeChanged" }
+    >["sessionMode"],
+    GameplaySessionMode
+  >
+>;
 type GameplayTelemetryReticleStateMatches = AssertTrue<
   IsEqual<
     GameplayTelemetrySnapshot["reticleVisualState"],
     GameplayReticleVisualState
   >
+>;
+type GameplayTelemetrySessionPhaseMatches = AssertTrue<
+  IsEqual<GameplayTelemetrySnapshot["sessionPhase"], ExpectedGameplaySessionPhase>
 >;
 type WeaponReadinessMatches = AssertTrue<
   IsEqual<WeaponReadinessState, ExpectedWeaponReadinessState>
@@ -360,7 +390,12 @@ export type ClientShellGameplayTypeTests =
   | GameplayReticleVisualStateCatalogMatches
   | GameplayInputModeMatches
   | GameplayInputModeCatalogMatches
+  | GameplaySessionModeMatches
+  | GameplaySessionModeCatalogMatches
+  | GameplayHudSessionModeMatches
+  | SessionModeActionPayloadMatches
   | GameplayTelemetryReticleStateMatches
+  | GameplayTelemetrySessionPhaseMatches
   | WeaponReadinessMatches
   | WeaponReadinessCatalogMatches
   | GameplayHudWeaponReadinessMatches

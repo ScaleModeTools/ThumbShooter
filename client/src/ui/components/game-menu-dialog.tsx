@@ -1,9 +1,11 @@
 import { gameMenuPlan } from "../config/game-menu-plan";
 import {
+  gameplaySessionModes,
   gameplayInputModes,
   resolveGameplayInputMode,
   type GameplayDebugPanelMode,
-  type GameplayInputModeId
+  type GameplayInputModeId,
+  type GameplaySessionMode
 } from "../../game";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +41,9 @@ interface GameMenuDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
   readonly onRecalibrationRequest: () => void;
+  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
   readonly onSfxVolumeChange: (nextValue: number) => void;
+  readonly sessionMode: GameplaySessionMode;
   readonly showDebugControls: boolean;
 }
 
@@ -58,7 +62,9 @@ export function GameMenuDialog({
   onOpenChange,
   open,
   onRecalibrationRequest,
+  onSessionModeChange,
   onSfxVolumeChange,
+  sessionMode,
   showDebugControls
 }: GameMenuDialogProps) {
   const selectedInputMode = resolveGameplayInputMode(inputMode);
@@ -108,6 +114,40 @@ export function GameMenuDialog({
                 </div>
               ))}
             </div>
+          </section>
+
+          <Separator />
+
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Session mode</p>
+                <p className="text-sm text-muted-foreground">
+                  Changing the authority model returns the session to the main menu.
+                </p>
+              </div>
+              <Badge variant="outline">Authority</Badge>
+            </div>
+
+            <ToggleGroup
+              className="w-full"
+              onValueChange={(nextValue) => {
+                if (nextValue.length === 0) {
+                  return;
+                }
+
+                onSessionModeChange(nextValue as GameplaySessionMode);
+              }}
+              type="single"
+              value={sessionMode}
+              variant="outline"
+            >
+              {gameplaySessionModes.map((mode) => (
+                <ToggleGroupItem className="flex-1" key={mode} value={mode}>
+                  {mode === "single-player" ? "Single player" : "Co-op"}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
           </section>
 
           <Separator />

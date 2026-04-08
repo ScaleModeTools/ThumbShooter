@@ -136,6 +136,7 @@ export function useThumbShooterShellController(): ThumbShooterShellController {
     permissionError: state.permissionError,
     permissionState: state.permissionState,
     profile: state.profile,
+    sessionMode: state.sessionMode,
     shellView,
     usernameDraft: state.usernameDraft,
     setUsernameDraft: entryPolicy.setUsernameDraft,
@@ -161,6 +162,12 @@ export function useThumbShooterShellController(): ThumbShooterShellController {
     onRecalibrationRequest: profilePolicy.onRecalibrationRequest,
     onRequestPermission: entryPolicy.onRequestPermission,
     onRetryCapabilityProbe: entryPolicy.onRetryCapabilityProbe,
+    onSessionModeChange: (sessionMode) => {
+      dispatch({
+        sessionMode,
+        type: "sessionModeChanged"
+      });
+    },
     onSfxVolumeChange: profilePolicy.onSfxVolumeChange
   };
 }
