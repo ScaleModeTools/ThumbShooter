@@ -60,7 +60,9 @@ test("MouseGameplayInput emits tracked snapshots that preserve direct cursor aim
         left: 0,
         top: 0,
         width: 200,
-        height: 100
+        height: 100,
+        right: 200,
+        bottom: 100
       };
     }
   });
@@ -109,11 +111,182 @@ test("MouseGameplayInput emits tracked snapshots that preserve direct cursor aim
   nowMs += 16;
   fakeWindow.dispatch("mousemove", {
     buttons: 0,
+    clientX: 199,
+    clientY: 50
+  });
+
+  assert.equal(input.latestPose.trackingState, "tracked");
+  const edgeObservedAim = readObservedAimPoint(
+    input.latestPose.pose,
+    handAimObservationConfig
+  );
+
+  assert.ok(edgeObservedAim.x > 1);
+
+  nowMs += 16;
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
+    clientX: 180,
+    clientY: 50
+  });
+
+  assert.equal(input.latestPose.trackingState, "tracked");
+  const latchedObservedAim = readObservedAimPoint(
+    input.latestPose.pose,
+    handAimObservationConfig
+  );
+
+  assert.ok(latchedObservedAim.x > 1);
+
+  nowMs += 16;
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
+    clientX: 140,
+    clientY: 50
+  });
+
+  assert.equal(input.latestPose.trackingState, "tracked");
+  const restoredObservedAim = readObservedAimPoint(
+    input.latestPose.pose,
+    handAimObservationConfig
+  );
+
+  assert.ok(restoredObservedAim.x < 1);
+
+  nowMs += 16;
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
     clientX: 260,
     clientY: 50
   });
 
+  assert.equal(input.latestPose.trackingState, "tracked");
+  const outsideObservedAim = readObservedAimPoint(
+    input.latestPose.pose,
+    handAimObservationConfig
+  );
+
+  assert.ok(outsideObservedAim.x > 1);
+
+  nowMs += 16;
+  fakeWindow.dispatch("blur");
+
   assert.equal(input.latestPose.trackingState, "no-hand");
+
+  cleanup();
+  input.dispose();
+});
+
+test("MouseGameplayInput lets the fullscreen viewport edge drive off-screen reloads", async () => {
+  const { MouseGameplayInput, LocalArenaSimulation, localArenaSimulationConfig } =
+    await clientLoader.load("/src/game/index.ts");
+  const fakeWindow = new FakeWindow();
+  let nowMs = 100;
+  const input = new MouseGameplayInput({
+    readNowMs: () => nowMs,
+    windowObject: fakeWindow
+  });
+  const simulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    {
+      ...localArenaSimulationConfig,
+      weapon: {
+        ...localArenaSimulationConfig.weapon,
+        reload: {
+          ...localArenaSimulationConfig.weapon.reload,
+          clipCapacity: 1,
+          durationMs: 180
+        }
+      }
+    }
+  );
+
+  await input.ensureStarted();
+  const cleanup = input.attachViewport({
+    getBoundingClientRect() {
+      return {
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 100,
+        right: 200,
+        bottom: 100
+      };
+    }
+  });
+
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
+    clientX: 100,
+    clientY: 50
+  });
+  simulation.advance(input.latestPose, nowMs, {
+    width: 200,
+    height: 100
+  });
+
+  nowMs += 16;
+  fakeWindow.dispatch("mousedown", {
+    button: 0,
+    clientX: 100,
+    clientY: 50
+  });
+  const emptyClipSnapshot = simulation.advance(input.latestPose, nowMs, {
+    width: 200,
+    height: 100
+  });
+
+  assert.equal(emptyClipSnapshot.weapon.reload.clipRoundsRemaining, 0);
+  assert.equal(emptyClipSnapshot.weapon.readiness, "reload-required");
+
+  nowMs += 16;
+  fakeWindow.dispatch("mouseup", {
+    button: 0,
+    clientX: 100,
+    clientY: 50
+  });
+
+  nowMs = 200;
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
+    clientX: 199,
+    clientY: 50
+  });
+  const reloadingSnapshot = simulation.advance(input.latestPose, nowMs, {
+    width: 200,
+    height: 100
+  });
+
+  assert.equal(reloadingSnapshot.aimPoint, null);
+  assert.equal(reloadingSnapshot.weapon.reload.state, "reloading");
+  assert.equal(reloadingSnapshot.weapon.reload.isReloadReady, true);
+
+  nowMs = 240;
+  fakeWindow.dispatch("mousemove", {
+    buttons: 0,
+    clientX: 180,
+    clientY: 50
+  });
+  const latchedReloadSnapshot = simulation.advance(input.latestPose, nowMs, {
+    width: 200,
+    height: 100
+  });
+
+  assert.equal(latchedReloadSnapshot.aimPoint, null);
+  assert.equal(latchedReloadSnapshot.weapon.reload.state, "reloading");
+
+  nowMs = 400;
+  const reloadedSnapshot = simulation.advance(input.latestPose, nowMs, {
+    width: 200,
+    height: 100
+  });
+
+  assert.equal(reloadedSnapshot.weapon.reload.clipRoundsRemaining, 1);
+  assert.equal(reloadedSnapshot.weapon.reload.requiresReload, false);
+  assert.equal(reloadedSnapshot.weapon.reload.state, "full");
 
   cleanup();
   input.dispose();

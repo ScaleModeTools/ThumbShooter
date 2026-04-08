@@ -72,6 +72,7 @@ function formatWeaponReadiness(
   inputMode: GameplayInputModeId
 ): string {
   const selectedInputMode = resolveGameplayInputMode(inputMode);
+  const mouseInputSelected = inputMode === "mouse";
 
   switch (hudSnapshot.weapon.readiness) {
     case "round-paused":
@@ -83,6 +84,10 @@ function formatWeaponReadiness(
     case "cooldown":
       return `Recovering ${Math.ceil(hudSnapshot.weapon.cooldownRemainingMs)} ms`;
     case "reload-required":
+      if (mouseInputSelected) {
+        return "Swipe to the screen edge to reload";
+      }
+
       return hudSnapshot.weapon.reload.isReloadReady
         ? "Move farther off-screen to reload"
         : "Move reticle off-screen to reload";
