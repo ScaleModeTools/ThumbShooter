@@ -1,3 +1,5 @@
+import { createCoopRoomId } from "@thumbshooter/shared";
+
 import {
   gameplaySessionModes,
   gameplayInputModes,
@@ -16,6 +18,8 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   ToggleGroup,
@@ -29,8 +33,10 @@ interface MainMenuStageScreenProps {
   readonly calibrationQualityLabel: string;
   readonly capabilityReasonLabel: string;
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
+  readonly coopRoomIdDraft: string;
   readonly inputMode: GameplayInputModeId;
   readonly nextGameplayStep: GameplayEntryStepId | null;
+  readonly onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => void;
   readonly onInputModeChange: (inputMode: GameplayInputModeId) => void;
   readonly onRecalibrationRequest: () => void;
   readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
@@ -40,8 +46,13 @@ interface MainMenuStageScreenProps {
 
 function resolveStartButtonLabel(
   capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"],
-  nextGameplayStep: GameplayEntryStepId | null
+  nextGameplayStep: GameplayEntryStepId | null,
+  roomSelectionValid: boolean
 ): string {
+  if (!roomSelectionValid) {
+    return "Enter a room code";
+  }
+
   if (nextGameplayStep === "gameplay") {
     return "Start game";
   }
@@ -66,8 +77,10 @@ export function MainMenuStageScreen({
   calibrationQualityLabel,
   capabilityReasonLabel,
   capabilityStatus,
+  coopRoomIdDraft,
   inputMode,
   nextGameplayStep,
+  onCoopRoomIdDraftChange,
   onInputModeChange,
   onRecalibrationRequest,
   onSessionModeChange,
@@ -75,6 +88,10 @@ export function MainMenuStageScreen({
   sessionMode
 }: MainMenuStageScreenProps) {
   const selectedInputMode = resolveGameplayInputMode(inputMode);
+  const coopRoomIdValid =
+    sessionMode !== "co-op" || createCoopRoomId(coopRoomIdDraft) !== null;
+  const startButtonDisabled =
+    nextGameplayStep === null || !coopRoomIdValid;
 
   return (
     <StageScreenLayout
@@ -170,6 +187,36 @@ export function MainMenuStageScreen({
                 : "Server-owned room snapshots, shared birds, and team shooting progression."}
             </div>
 
+            {sessionMode === "co-op" ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/70 px-4 py-4">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="main-menu-coop-room-id">Room code</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Players sharing the same room code join the same co-op room.
+                    Switch codes when one room fills.
+                  </p>
+                </div>
+                <Input
+                  aria-invalid={!coopRoomIdValid}
+                  id="main-menu-coop-room-id"
+                  onChange={(event) => {
+                    onCoopRoomIdDraftChange(event.target.value);
+                  }}
+                  placeholder="co-op-harbor"
+                  value={coopRoomIdDraft}
+                />
+                <p
+                  className={`text-sm ${
+                    coopRoomIdValid ? "text-muted-foreground" : "text-destructive"
+                  }`}
+                >
+                  {coopRoomIdValid
+                    ? "Room codes only need to be non-empty. Reuse one to play together or enter a new one to start a fresh room."
+                    : "Enter a non-empty room code before starting co-op."}
+                </p>
+              </div>
+            ) : null}
+
             <Separator />
 
             <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/70 px-4 py-4">
@@ -197,11 +244,15 @@ export function MainMenuStageScreen({
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button
-                disabled={nextGameplayStep === null}
+                disabled={startButtonDisabled}
                 onClick={onStartGame}
                 type="button"
               >
-                {resolveStartButtonLabel(capabilityStatus, nextGameplayStep)}
+                {resolveStartButtonLabel(
+                  capabilityStatus,
+                  nextGameplayStep,
+                  coopRoomIdValid
+                )}
               </Button>
 
               {selectedInputMode.requiresCalibration ? (

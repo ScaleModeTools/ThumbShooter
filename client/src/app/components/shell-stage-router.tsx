@@ -1,7 +1,11 @@
 import { Suspense, lazy } from "react";
 import type { FormEvent } from "react";
 
-import type { GameplaySessionMode, PlayerProfile } from "@thumbshooter/shared";
+import {
+  createCoopRoomId,
+  type GameplaySessionMode,
+  type PlayerProfile
+} from "@thumbshooter/shared";
 
 import {
   mouseGameplayAimCalibrationSnapshot,
@@ -18,6 +22,7 @@ import type {
   NavigationStepId,
   WebcamPermissionState
 } from "../../navigation";
+import { defaultCoopRoomId } from "../../network";
 
 import { CalibrationStageScreen } from "./calibration-stage-screen";
 import { ImmersiveStageFrame } from "./immersive-stage-frame";
@@ -39,6 +44,7 @@ interface ShellStageRouterProps {
   readonly capabilityReasonLabel: string;
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
   readonly calibrationQualityLabel: string;
+  readonly coopRoomIdDraft: string;
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly gameplayInputSource: GameplayInputSource;
   readonly handTrackingRuntime: HandTrackingRuntime;
@@ -58,6 +64,7 @@ interface ShellStageRouterProps {
   ) => void;
   readonly onBestScoreChange: (bestScore: number) => void;
   readonly onClearProfile: () => void;
+  readonly onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => void;
   readonly onEditProfile: () => void;
   readonly onGameplaySignal: (signal: GameplaySignal) => void;
   readonly onGameplayStartRequest: () => void;
@@ -96,6 +103,7 @@ export function ShellStageRouter({
   capabilityReasonLabel,
   capabilityStatus,
   calibrationQualityLabel,
+  coopRoomIdDraft,
   debugPanelMode,
   gameplayInputSource,
   handTrackingRuntime,
@@ -112,6 +120,7 @@ export function ShellStageRouter({
   onCalibrationProgress,
   onBestScoreChange,
   onClearProfile,
+  onCoopRoomIdDraftChange,
   onEditProfile,
   onGameplaySignal,
   onGameplayStartRequest,
@@ -128,6 +137,8 @@ export function ShellStageRouter({
     inputMode === "mouse"
       ? mouseGameplayAimCalibrationSnapshot
       : profile?.snapshot.aimCalibration ?? null;
+  const selectedCoopRoomId = createCoopRoomId(coopRoomIdDraft);
+  const gameplayCoopRoomId = selectedCoopRoomId ?? defaultCoopRoomId;
 
   return (
     <section>
@@ -166,8 +177,10 @@ export function ShellStageRouter({
           calibrationQualityLabel={calibrationQualityLabel}
           capabilityReasonLabel={capabilityReasonLabel}
           capabilityStatus={capabilityStatus}
+          coopRoomIdDraft={coopRoomIdDraft}
           inputMode={inputMode}
           nextGameplayStep={nextGameplayStep}
+          onCoopRoomIdDraftChange={onCoopRoomIdDraftChange}
           onInputModeChange={onInputModeChange}
           onRecalibrationRequest={onRecalibrationRequest}
           onSessionModeChange={onSessionModeChange}
@@ -192,6 +205,7 @@ export function ShellStageRouter({
             aimCalibration={gameplayAimCalibration}
             audioStatusLabel={audioStatusLabel}
             bestScore={bestScore}
+            coopRoomId={gameplayCoopRoomId}
             debugPanelMode={debugPanelMode}
             inputMode={inputMode}
             onBestScoreChange={onBestScoreChange}

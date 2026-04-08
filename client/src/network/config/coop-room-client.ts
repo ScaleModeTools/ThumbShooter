@@ -15,6 +15,8 @@ function requireCoopRoomId(rawValue: string) {
   return roomId;
 }
 
+export const defaultCoopRoomId = requireCoopRoomId("co-op-harbor");
+
 function resolveDefaultServerOrigin(): string {
   const configuredOrigin = import.meta.env?.VITE_SERVER_ORIGIN?.trim();
 
@@ -33,6 +35,6 @@ function resolveDefaultServerOrigin(): string {
 
 export const coopRoomClientConfig = {
   defaultPollIntervalMs: createMilliseconds(75),
-  roomId: requireCoopRoomId("co-op-harbor"),
+  roomId: defaultCoopRoomId,
   serverOrigin: resolveDefaultServerOrigin()
 } as const satisfies CoopRoomClientConfig;

@@ -52,6 +52,7 @@ type ExpectedShellActionType =
   | "calibrationResetRequested"
   | "capabilityProbeStarted"
   | "capabilitySnapshotReceived"
+  | "coopRoomIdDraftChanged"
   | "gameplayDebugPanelModeChanged"
   | "gameplayExited"
   | "gameplayMenuSetOpen"
@@ -346,6 +347,15 @@ type GameplayMenuTogglePayloadIsBoolean = AssertTrue<
     boolean
   >
 >;
+type CoopRoomDraftPayloadIsString = AssertTrue<
+  IsEqual<
+    Extract<
+      ThumbShooterShellControllerAction,
+      { readonly type: "coopRoomIdDraftChanged" }
+    >["coopRoomIdDraft"],
+    string
+  >
+>;
 type ProfileConfirmedPayloadUsesPlayerProfile = AssertTrue<
   IsEqual<
     Extract<
@@ -426,6 +436,7 @@ export type ClientShellGameplayTypeTests =
   | WeaponDefinitionSpreadFieldIsNumber
   | MusicVolumePayloadIsNumber
   | GameplayMenuTogglePayloadIsBoolean
+  | CoopRoomDraftPayloadIsString
   | ProfileConfirmedPayloadUsesPlayerProfile
   | GameplaySignalTypeMatches
   | GameplaySignalWeaponIdMatches;

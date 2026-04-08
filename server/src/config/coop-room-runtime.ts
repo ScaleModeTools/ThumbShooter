@@ -2,7 +2,8 @@ import {
   createCoopBirdId,
   createCoopRoomId,
   createCoopSessionId,
-  createMilliseconds
+  createMilliseconds,
+  type CoopRoomId
 } from "@thumbshooter/shared";
 
 import type { CoopRoomRuntimeConfig } from "../types/coop-room-runtime.js";
@@ -37,7 +38,9 @@ function requireCoopBirdId(rawValue: string) {
   return birdId;
 }
 
-export const coopRoomRuntimeConfig = {
+const defaultCoopRoomId = requireCoopRoomId("co-op-harbor");
+
+const baseCoopRoomRuntimeConfig = {
   arenaBounds: {
     minX: 0.08,
     maxX: 0.92,
@@ -91,8 +94,36 @@ export const coopRoomRuntimeConfig = {
     downedDriftVelocityY: 0.18
   },
   requiredReadyPlayerCount: 2,
-  roomId: requireCoopRoomId("co-op-harbor"),
   scatterRadius: 0.24,
-  sessionId: requireCoopSessionId("co-op-harbor-session-1"),
   tickIntervalMs: createMilliseconds(50)
-} as const satisfies CoopRoomRuntimeConfig;
+} as const satisfies Omit<CoopRoomRuntimeConfig, "roomId" | "sessionId">;
+
+function normalizeSessionOrdinal(rawValue: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.floor(rawValue));
+}
+
+function createRoomSessionId(
+  roomId: CoopRoomId,
+  sessionOrdinal: number
+) {
+  return requireCoopSessionId(
+    `${roomId}-session-${normalizeSessionOrdinal(sessionOrdinal)}`
+  );
+}
+
+export function createCoopRoomRuntimeConfig(
+  roomId: CoopRoomId = defaultCoopRoomId,
+  sessionOrdinal = 1
+): CoopRoomRuntimeConfig {
+  return {
+    ...baseCoopRoomRuntimeConfig,
+    roomId,
+    sessionId: createRoomSessionId(roomId, sessionOrdinal)
+  };
+}
+
+export const coopRoomRuntimeConfig = createCoopRoomRuntimeConfig();

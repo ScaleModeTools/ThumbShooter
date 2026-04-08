@@ -125,6 +125,7 @@ export function useThumbShooterShellController(): ThumbShooterShellController {
 
   return {
     capabilityStatus: state.capabilitySnapshot.status,
+    coopRoomIdDraft: state.coopRoomIdDraft,
     debugPanelMode: state.debugPanelMode,
     gameplayInputSource,
     handTrackingRuntime,
@@ -142,6 +143,12 @@ export function useThumbShooterShellController(): ThumbShooterShellController {
     setUsernameDraft: entryPolicy.setUsernameDraft,
     onBestScoreChange: profilePolicy.onBestScoreChange,
     onCalibrationProgress: profilePolicy.onCalibrationProgress,
+    onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => {
+      dispatch({
+        coopRoomIdDraft,
+        type: "coopRoomIdDraftChanged"
+      });
+    },
     onClearProfile: profilePolicy.onClearProfile,
     onEditProfile: profilePolicy.onEditProfile,
     onGameplayDebugPanelModeChange: (mode) => {

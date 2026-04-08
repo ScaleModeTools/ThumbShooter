@@ -9,6 +9,7 @@ import {
 
 import type {
   AffineAimTransformSnapshot,
+  CoopRoomId,
   CoopPlayerId,
   HandTriggerCalibrationSnapshot
 } from "@thumbshooter/shared";
@@ -44,6 +45,7 @@ interface GameplayStageScreenProps {
   readonly aimCalibration: AffineAimTransformSnapshot;
   readonly audioStatusLabel: string;
   readonly bestScore: number;
+  readonly coopRoomId: CoopRoomId;
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly inputMode: GameplayInputModeId;
   readonly onBestScoreChange: (bestScore: number) => void;
@@ -77,19 +79,24 @@ function createEphemeralCoopPlayerId(username: string): CoopPlayerId {
   return playerId;
 }
 
-const idleCoopRoomStatusSnapshot = Object.freeze({
-  joined: false,
-  lastError: null,
-  lastSnapshotTick: null,
-  playerId: null,
-  roomId: coopRoomClientConfig.roomId,
-  state: "idle"
-}) satisfies CoopRoomClientStatusSnapshot;
+function createIdleCoopRoomStatusSnapshot(
+  roomId: CoopRoomId
+): CoopRoomClientStatusSnapshot {
+  return Object.freeze({
+    joined: false,
+    lastError: null,
+    lastSnapshotTick: null,
+    playerId: null,
+    roomId,
+    state: "idle"
+  });
+}
 
 export function GameplayStageScreen({
   aimCalibration,
   audioStatusLabel,
   bestScore,
+  coopRoomId,
   debugPanelMode,
   inputMode,
   onBestScoreChange,
@@ -116,7 +123,15 @@ export function GameplayStageScreen({
     sessionMode === "co-op" ? createEphemeralCoopPlayerId(username) : null
   );
   const [coopRoomClient] = useState(() =>
-    sessionMode === "co-op" ? new CoopRoomClient() : null
+    sessionMode === "co-op"
+      ? new CoopRoomClient({
+          ...coopRoomClientConfig,
+          roomId: coopRoomId
+        })
+      : null
+  );
+  const [idleCoopRoomStatusSnapshot] = useState(() =>
+    createIdleCoopRoomStatusSnapshot(coopRoomId)
   );
   const [arenaSimulation] = useState<GameplayArenaRuntime>(() =>
     sessionMode === "co-op" && coopRoomClient !== null && coopPlayerId !== null

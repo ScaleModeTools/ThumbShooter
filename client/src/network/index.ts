@@ -1,4 +1,7 @@
-export { coopRoomClientConfig } from "./config/coop-room-client";
+export {
+  coopRoomClientConfig,
+  defaultCoopRoomId
+} from "./config/coop-room-client";
 export { CoopRoomClient } from "./classes/coop-room-client";
 export { profileStoragePlan } from "./config/profile-storage";
 export { LocalProfileStorage } from "./classes/local-profile-storage";

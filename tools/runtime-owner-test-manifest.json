@@ -85,6 +85,12 @@
       ]
     },
     {
+      "ownerPath": "server/src/classes/coop-room-directory.ts",
+      "testPaths": [
+        "tests/runtime/server/coop-room-directory.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/classes/coop-room-runtime.ts",
       "testPaths": [
         "tests/runtime/server/coop-room-runtime.test.mjs"

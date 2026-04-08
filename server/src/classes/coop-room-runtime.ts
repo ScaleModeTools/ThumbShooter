@@ -355,14 +355,7 @@ export class CoopRoomRuntime {
     }
 
     this.#dropPendingShotsForPlayer(command.playerId);
-
-    if (this.#phase === "waiting-for-players") {
-      this.#playerStates.delete(command.playerId);
-      return;
-    }
-
-    playerState.connected = false;
-    playerState.ready = false;
+    this.#playerStates.delete(command.playerId);
   }
 
   #queueShot(command: CoopFireShotCommand): void {

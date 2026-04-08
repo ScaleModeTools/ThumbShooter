@@ -21,6 +21,7 @@ import type { ThumbShooterShellViewModel } from "./thumbshooter-shell";
 
 export interface ThumbShooterShellController {
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
+  readonly coopRoomIdDraft: string;
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly gameplayInputSource: GameplayInputSource;
   readonly handTrackingRuntime: HandTrackingRuntime;
@@ -41,6 +42,7 @@ export interface ThumbShooterShellController {
     nextProfile: PlayerProfile,
     progress: "captured" | "completed"
   ) => void;
+  readonly onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => void;
   readonly onClearProfile: () => void;
   readonly onEditProfile: () => void;
   readonly onGameplaySignal: (signal: GameplaySignal) => void;
@@ -63,6 +65,7 @@ export interface ThumbShooterShellController {
 export interface ThumbShooterShellControllerState {
   readonly audioSnapshot: AudioSessionSnapshot;
   readonly capabilitySnapshot: WebGpuGameplayCapabilitySnapshot;
+  readonly coopRoomIdDraft: string;
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly gameplayShell: GameplayShellState;
   readonly hasConfirmedProfile: boolean;
@@ -104,6 +107,10 @@ export type ThumbShooterShellControllerAction =
   | {
       readonly type: "capabilitySnapshotReceived";
       readonly capabilitySnapshot: WebGpuGameplayCapabilitySnapshot;
+    }
+  | {
+      readonly type: "coopRoomIdDraftChanged";
+      readonly coopRoomIdDraft: string;
     }
   | {
       readonly type: "gameplayStartRequested";

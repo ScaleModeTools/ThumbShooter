@@ -231,7 +231,7 @@ test("CoopRoomRuntime records scatter outcomes against the shared bird field", (
   assert.equal(scatteredBird?.lastInteractionTick, 2);
 });
 
-test("CoopRoomRuntime removes waiting-room leavers and marks active-session leavers disconnected", () => {
+test("CoopRoomRuntime removes room leavers from snapshots before and after activation", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
       birds: [createBirdSeed("bird-1", "Bird 1", 0.25, 0.25)],
@@ -300,7 +300,7 @@ test("CoopRoomRuntime removes waiting-room leavers and marks active-session leav
     (playerSnapshot) => playerSnapshot.playerId === playerTwoId
   );
 
-  assert.equal(disconnectedPlayer?.connected, false);
-  assert.equal(disconnectedPlayer?.ready, false);
+  assert.equal(disconnectedPlayer, undefined);
+  assert.equal(disconnectedSnapshot.players.length, 1);
   assert.equal(disconnectedSnapshot.session.phase, "active");
 });

@@ -3,6 +3,7 @@ import type { GameplaySessionMode } from "@thumbshooter/shared";
 import { AudioSettings } from "@thumbshooter/shared";
 
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
+import { defaultCoopRoomId } from "../../network";
 
 import type {
   ThumbShooterShellControllerAction,
@@ -59,6 +60,7 @@ export function createInitialThumbShooterShellControllerState({
   return {
     audioSnapshot,
     capabilitySnapshot: initialCapabilitySnapshot,
+    coopRoomIdDraft: defaultCoopRoomId,
     debugPanelMode: "hidden",
     gameplayShell: "main-menu",
     hasConfirmedProfile: false,
@@ -119,6 +121,13 @@ export function reduceThumbShooterShellControllerState(
         ...state,
         capabilitySnapshot: action.capabilitySnapshot
       };
+    case "coopRoomIdDraftChanged":
+      return action.coopRoomIdDraft === state.coopRoomIdDraft
+        ? state
+        : {
+            ...state,
+            coopRoomIdDraft: action.coopRoomIdDraft
+          };
     case "gameplayStartRequested":
       return state.gameplayShell === "gameplay"
         ? state
@@ -212,6 +221,7 @@ export function reduceThumbShooterShellControllerState(
         permissionState: "prompt",
         profile: null,
         sessionMode: defaultSessionMode,
+        coopRoomIdDraft: defaultCoopRoomId,
         usernameDraft: "",
         debugPanelMode: "hidden"
       };

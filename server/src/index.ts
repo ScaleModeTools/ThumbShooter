@@ -23,7 +23,7 @@ import {
   createUsername
 } from "@thumbshooter/shared";
 
-import { CoopRoomRuntime } from "./classes/coop-room-runtime.js";
+import { CoopRoomDirectory } from "./classes/coop-room-directory.js";
 import type { ServerRuntimeConfig } from "./types/server-runtime-config.js";
 
 const runtimeConfig: ServerRuntimeConfig = {
@@ -31,7 +31,11 @@ const runtimeConfig: ServerRuntimeConfig = {
   port: 3210
 };
 
-const coopRoomRuntime = new CoopRoomRuntime();
+const coopRoomDirectory = new CoopRoomDirectory();
+
+function isUnknownRoomError(error: unknown): error is Error {
+  return error instanceof Error && error.message.startsWith("Unknown co-op room:");
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -290,22 +294,21 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && requestUrl.pathname === "/") {
-    const roomSnapshot = coopRoomRuntime.advanceTo(nowMs);
-    const connectedPlayerCount = roomSnapshot.players.filter(
-      (playerSnapshot) => playerSnapshot.connected
-    ).length;
+    const roomSnapshots = coopRoomDirectory.listRoomSnapshots(nowMs);
 
     writeJson(response, 200, {
-      coOpRoom: {
+      coOpRooms: roomSnapshots.map((roomSnapshot) => ({
         birdsRemaining: roomSnapshot.session.birdsRemaining,
-        connectedPlayerCount,
+        connectedPlayerCount: roomSnapshot.players.filter(
+          (playerSnapshot) => playerSnapshot.connected
+        ).length,
         phase: roomSnapshot.session.phase,
         playerCount: roomSnapshot.players.length,
         requiredReadyPlayerCount: roomSnapshot.session.requiredReadyPlayerCount,
         roomId: roomSnapshot.roomId,
         sessionId: roomSnapshot.session.sessionId,
         tick: roomSnapshot.tick.currentTick
-      },
+      })),
       rendererTarget: "webgpu",
       service: "thumbshooter-server",
       status: "co-op-contract-slice-ready"
@@ -317,19 +320,19 @@ const server = createServer(async (request, response) => {
     try {
       const roomId = resolveRoomId(matchedRoomPath.rawRoomId);
 
-      if (roomId !== coopRoomRuntime.roomId) {
+      writeJson(
+        response,
+        200,
+        createCoopRoomSnapshotEvent(coopRoomDirectory.advanceRoom(roomId, nowMs))
+      );
+    } catch (error) {
+      if (isUnknownRoomError(error)) {
         writeJson(response, 404, {
-          error: `Unknown co-op room: ${matchedRoomPath.rawRoomId}`
+          error: error.message
         });
         return;
       }
 
-      writeJson(
-        response,
-        200,
-        createCoopRoomSnapshotEvent(coopRoomRuntime.advanceTo(nowMs))
-      );
-    } catch (error) {
       writeJson(response, 400, {
         error: error instanceof Error ? error.message : "Invalid co-op room request."
       });
@@ -342,19 +345,19 @@ const server = createServer(async (request, response) => {
     try {
       const roomId = resolveRoomId(matchedRoomPath.rawRoomId);
 
-      if (roomId !== coopRoomRuntime.roomId) {
+      const body = await readJsonBody(request);
+      const command = parseCoopRoomCommand(body, roomId);
+      const commandResult = coopRoomDirectory.acceptCommand(command, nowMs);
+
+      writeJson(response, 200, commandResult);
+    } catch (error) {
+      if (isUnknownRoomError(error)) {
         writeJson(response, 404, {
-          error: `Unknown co-op room: ${matchedRoomPath.rawRoomId}`
+          error: error.message
         });
         return;
       }
 
-      const body = await readJsonBody(request);
-      const command = parseCoopRoomCommand(body, roomId);
-      const commandResult = coopRoomRuntime.acceptCommand(command, nowMs);
-
-      writeJson(response, 200, commandResult);
-    } catch (error) {
       writeJson(response, 400, {
         error:
           error instanceof Error ? error.message : "Invalid co-op room command."

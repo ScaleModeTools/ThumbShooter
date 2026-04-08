@@ -19,6 +19,7 @@ export function ThumbShooterShell() {
       capabilityReasonLabel={controller.shellView.capabilityReasonLabel}
       capabilityStatus={controller.capabilityStatus}
       calibrationQualityLabel={controller.shellView.calibrationQualityLabel}
+      coopRoomIdDraft={controller.coopRoomIdDraft}
       debugPanelMode={controller.debugPanelMode}
       gameplayInputSource={controller.gameplayInputSource}
       handTrackingRuntime={controller.handTrackingRuntime}
@@ -34,6 +35,7 @@ export function ThumbShooterShell() {
       usernameDraft={controller.usernameDraft}
       nextGameplayStep={controller.navigationSnapshot.nextGameplayStep}
       onCalibrationProgress={controller.onCalibrationProgress}
+      onCoopRoomIdDraftChange={controller.onCoopRoomIdDraftChange}
       onClearProfile={controller.onClearProfile}
       onEditProfile={controller.onEditProfile}
       onGameplaySignal={controller.onGameplaySignal}
