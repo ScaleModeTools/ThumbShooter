@@ -1,9 +1,11 @@
 import type {
   CoopPlayerId,
+  CoopPlayerPresenceSnapshotInput,
   CoopRoomId,
   CoopRoomSnapshot,
   Milliseconds,
-  Username
+  Username,
+  CoopVector3SnapshotInput
 } from "@thumbshooter/shared";
 
 export const coopRoomClientStates = [
@@ -39,5 +41,11 @@ export interface CoopRoomClientStatusSnapshot {
 
 export interface CoopRoomSnapshotStore {
   readonly roomSnapshot: CoopRoomSnapshot | null;
-  fireShot: (aimPoint: { readonly x: number; readonly y: number }) => void;
+  fireShot: (
+    origin: CoopVector3SnapshotInput,
+    aimDirection: CoopVector3SnapshotInput
+  ) => void;
+  syncPlayerPresence: (
+    presence: Omit<CoopPlayerPresenceSnapshotInput, "lastUpdatedTick" | "stateSequence">
+  ) => void;
 }

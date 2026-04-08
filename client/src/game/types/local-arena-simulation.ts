@@ -35,13 +35,14 @@ export type LocalArenaTargetFeedbackState =
 export interface LocalArenaEnemySeed {
   readonly id: string;
   readonly label: string;
+  readonly orbitRadius: number;
   readonly spawn: {
-    readonly x: number;
-    readonly y: number;
+    readonly altitude: number;
+    readonly azimuthRadians: Radians;
   };
   readonly glideVelocity: {
-    readonly x: number;
-    readonly y: number;
+    readonly altitudeUnitsPerSecond: number;
+    readonly azimuthRadiansPerSecond: number;
   };
   readonly radius: number;
   readonly scale: number;
@@ -55,6 +56,7 @@ export interface LocalArenaEnemyRenderState {
   readonly label: string;
   readonly positionX: number;
   readonly positionY: number;
+  readonly positionZ: number;
   readonly radius: number;
   readonly scale: number;
   readonly visible: boolean;
@@ -85,21 +87,39 @@ export interface LocalArenaHudSnapshot {
 }
 
 export interface LocalArenaSimulationConfig {
-  readonly arenaBounds: {
-    readonly maxX: number;
-    readonly maxY: number;
-    readonly minX: number;
-    readonly minY: number;
+  readonly birdAltitudeBounds: {
+    readonly max: number;
+    readonly min: number;
+  };
+  readonly camera: {
+    readonly initialPitchRadians: Radians;
+    readonly initialYawRadians: Radians;
+    readonly lookBounds: {
+      readonly maxPitchRadians: Radians;
+      readonly minPitchRadians: Radians;
+    };
+    readonly lookMotion: {
+      readonly deadZoneViewportFraction: number;
+      readonly maxSpeedRadiansPerSecond: number;
+      readonly responseExponent: number;
+    };
+    readonly position: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
   };
   readonly enemySeeds: readonly LocalArenaEnemySeed[];
   readonly feedback: {
     readonly holdDurationMs: Milliseconds;
   };
   readonly movement: {
-    readonly downedDriftVelocityY: number;
+    readonly downedDriftSpeed: number;
     readonly maxStepMs: Milliseconds;
+    readonly downedFallSpeed: number;
+    readonly scatterAltitudeSpeed: number;
+    readonly scatterAngularSpeed: number;
     readonly scatterDurationMs: Milliseconds;
-    readonly scatterSpeed: number;
     readonly downedDurationMs: Milliseconds;
   };
   readonly session: LocalCombatSessionConfig;

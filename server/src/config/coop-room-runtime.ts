@@ -2,6 +2,7 @@ import {
   createCoopBirdId,
   createCoopRoomId,
   createCoopSessionId,
+  createRadians,
   createMilliseconds,
   type CoopRoomId
 } from "@thumbshooter/shared";
@@ -41,60 +42,93 @@ function requireCoopBirdId(rawValue: string) {
 const defaultCoopRoomId = requireCoopRoomId("co-op-harbor");
 
 const baseCoopRoomRuntimeConfig = {
-  arenaBounds: {
-    minX: 0.08,
-    maxX: 0.92,
-    minY: 0.14,
-    maxY: 0.86
+  birdAltitudeBounds: {
+    min: 4.5,
+    max: 18.5
   },
   birds: [
     {
       birdId: requireCoopBirdId("shared-bird-1"),
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.42,
+        azimuthRadiansPerSecond: 0.24
+      },
       label: "Shared Bird 1",
-      spawn: { x: 0.22, y: 0.28 },
-      glideVelocity: { x: 0.12, y: 0.03 },
-      radius: 0.08,
-      scale: 1.05,
+      orbitRadius: 32,
+      radius: 1.35,
+      scale: 1.1,
+      spawn: {
+        altitude: 9.2,
+        azimuthRadians: createRadians(-0.42)
+      },
       wingSpeed: 6.4
     },
     {
       birdId: requireCoopBirdId("shared-bird-2"),
+      glideVelocity: {
+        altitudeUnitsPerSecond: -0.36,
+        azimuthRadiansPerSecond: -0.18
+      },
       label: "Shared Bird 2",
-      spawn: { x: 0.78, y: 0.24 },
-      glideVelocity: { x: -0.11, y: 0.04 },
-      radius: 0.082,
-      scale: 0.98,
+      orbitRadius: 36,
+      radius: 1.3,
+      scale: 1.03,
+      spawn: {
+        altitude: 11.8,
+        azimuthRadians: createRadians(0.28)
+      },
       wingSpeed: 5.8
     },
     {
       birdId: requireCoopBirdId("shared-bird-3"),
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.28,
+        azimuthRadiansPerSecond: 0.27
+      },
       label: "Shared Bird 3",
-      spawn: { x: 0.32, y: 0.7 },
-      glideVelocity: { x: 0.1, y: -0.05 },
-      radius: 0.078,
-      scale: 1.1,
+      orbitRadius: 30,
+      radius: 1.28,
+      scale: 1.08,
+      spawn: {
+        altitude: 7.6,
+        azimuthRadians: createRadians(-0.86)
+      },
       wingSpeed: 6.9
     },
     {
       birdId: requireCoopBirdId("shared-bird-4"),
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.24,
+        azimuthRadiansPerSecond: -0.23
+      },
       label: "Shared Bird 4",
-      spawn: { x: 0.74, y: 0.74 },
-      glideVelocity: { x: -0.12, y: -0.03 },
-      radius: 0.08,
-      scale: 1.02,
+      orbitRadius: 34,
+      radius: 1.32,
+      scale: 1.05,
+      spawn: {
+        altitude: 10.4,
+        azimuthRadians: createRadians(0.74)
+      },
       wingSpeed: 6.1
     }
   ],
   capacity: 4,
-  hitRadius: 0.09,
+  hitRadius: 0.42,
   movement: {
-    scatterDurationMs: createMilliseconds(820),
-    scatterSpeed: 0.24,
+    downedDriftSpeed: 2.8,
     downedDurationMs: createMilliseconds(960),
-    downedDriftVelocityY: 0.18
+    downedFallSpeed: 5.6,
+    scatterAltitudeSpeed: 3.2,
+    scatterAngularSpeed: 0.78,
+    scatterDurationMs: createMilliseconds(820)
+  },
+  playerSpawnPosition: {
+    x: 0,
+    y: 1.35,
+    z: 0
   },
   requiredReadyPlayerCount: 2,
-  scatterRadius: 0.24,
+  scatterRadius: 5.2,
   tickIntervalMs: createMilliseconds(50)
 } as const satisfies Omit<CoopRoomRuntimeConfig, "roomId" | "sessionId">;
 

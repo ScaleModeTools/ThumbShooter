@@ -21,19 +21,28 @@ function requireValue(value, label) {
   return value;
 }
 
-function createBirdSeed(id, label, x, y, velocityX = 0, velocityY = 0) {
+function createBirdSeed(
+  id,
+  label,
+  azimuthRadians,
+  altitude,
+  angularVelocity = 0,
+  altitudeVelocity = 0,
+  orbitRadius = 18
+) {
   return {
     birdId: requireValue(createCoopBirdId(id), "birdId"),
     glideVelocity: {
-      x: velocityX,
-      y: velocityY
+      altitudeUnitsPerSecond: altitudeVelocity,
+      azimuthRadiansPerSecond: angularVelocity
     },
     label,
-    radius: 0.08,
+    orbitRadius,
+    radius: 0.9,
     scale: 1,
     spawn: {
-      x,
-      y
+      altitude,
+      azimuthRadians
     },
     wingSpeed: 6
   };
@@ -41,27 +50,32 @@ function createBirdSeed(id, label, x, y, velocityX = 0, velocityY = 0) {
 
 function createRuntimeConfig(overrides = {}) {
   return {
-    arenaBounds: {
-      minX: 0.05,
-      maxX: 0.95,
-      minY: 0.05,
-      maxY: 0.95
+    birdAltitudeBounds: {
+      min: 0.5,
+      max: 6
     },
     birds: [
-      createBirdSeed("bird-1", "Bird 1", 0.25, 0.25),
-      createBirdSeed("bird-2", "Bird 2", 0.75, 0.7, -0.04, 0.03)
+      createBirdSeed("bird-1", "Bird 1", 0, 1.35),
+      createBirdSeed("bird-2", "Bird 2", 0.65, 2.1, -0.08, 0.06, 22)
     ],
     capacity: 4,
-    hitRadius: 0.09,
+    hitRadius: 0.42,
     movement: {
-      downedDriftVelocityY: 0.18,
+      downedDriftSpeed: 1.6,
       downedDurationMs: createMilliseconds(320),
+      downedFallSpeed: 4.6,
+      scatterAltitudeSpeed: 1.8,
+      scatterAngularSpeed: 0.5,
       scatterDurationMs: createMilliseconds(180),
-      scatterSpeed: 0.22
+    },
+    playerSpawnPosition: {
+      x: 0,
+      y: 1.35,
+      z: 0
     },
     requiredReadyPlayerCount: 1,
     roomId: requireValue(createCoopRoomId("harbor-room"), "roomId"),
-    scatterRadius: 0.24,
+    scatterRadius: 2.4,
     sessionId: requireValue(
       createCoopSessionId("harbor-room-session"),
       "sessionId"
@@ -74,7 +88,7 @@ function createRuntimeConfig(overrides = {}) {
 test("CoopRoomRuntime advances only on server ticks and waits for ready players before activation", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
-      birds: [createBirdSeed("bird-1", "Bird 1", 0.25, 0.25)],
+      birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)],
       requiredReadyPlayerCount: 2
     })
   );
@@ -126,7 +140,7 @@ test("CoopRoomRuntime advances only on server ticks and waits for ready players 
 test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequence", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
-      birds: [createBirdSeed("bird-1", "Bird 1", 0.25, 0.25)]
+      birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)]
     })
   );
   const roomId = runtime.roomId;
@@ -144,11 +158,17 @@ test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequ
   runtime.advanceTo(50);
   runtime.acceptCommand(
     createCoopFireShotCommand({
-      aimPoint: {
-        x: 0.25,
-        y: 0.25
+      aimDirection: {
+        x: 0,
+        y: 0,
+        z: -1
       },
       clientShotSequence: 1,
+      origin: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
       playerId,
       roomId
     }),
@@ -156,11 +176,17 @@ test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequ
   );
   runtime.acceptCommand(
     createCoopFireShotCommand({
-      aimPoint: {
-        x: 0.25,
-        y: 0.25
+      aimDirection: {
+        x: 0,
+        y: 0,
+        z: -1
       },
       clientShotSequence: 1,
+      origin: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
       playerId,
       roomId
     }),
@@ -187,7 +213,7 @@ test("CoopRoomRuntime records scatter outcomes against the shared bird field", (
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
       hitRadius: 0.03,
-      scatterRadius: 0.22
+      scatterRadius: 2.4
     })
   );
   const roomId = runtime.roomId;
@@ -205,11 +231,17 @@ test("CoopRoomRuntime records scatter outcomes against the shared bird field", (
   runtime.advanceTo(50);
   runtime.acceptCommand(
     createCoopFireShotCommand({
-      aimPoint: {
-        x: 0.18,
-        y: 0.22
+      aimDirection: {
+        x: 0.08,
+        y: 0,
+        z: -1
       },
       clientShotSequence: 3,
+      origin: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
       playerId,
       roomId
     }),
@@ -234,7 +266,7 @@ test("CoopRoomRuntime records scatter outcomes against the shared bird field", (
 test("CoopRoomRuntime removes room leavers from snapshots before and after activation", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
-      birds: [createBirdSeed("bird-1", "Bird 1", 0.25, 0.25)],
+      birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)],
       requiredReadyPlayerCount: 2
     })
   );

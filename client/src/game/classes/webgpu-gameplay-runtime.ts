@@ -24,6 +24,7 @@ import type {
 import type { GameplayArenaRuntime } from "../types/gameplay-arena-runtime";
 import type {
   GameplayArenaHudSnapshot,
+  GameplayViewportSnapshot,
   GameplayHudSnapshot,
   GameplayRuntimeConfig
 } from "../types/gameplay-runtime";
@@ -185,6 +186,15 @@ function freezeGameplayTelemetrySnapshot(
     trackingSequenceNumber: snapshot.trackingSequenceNumber,
     weaponReadiness: snapshot.weaponReadiness,
     worldTimeMs: snapshot.worldTimeMs
+  });
+}
+
+function readViewportSnapshot(
+  canvasHost: GameplaySceneCanvasHost | null
+): GameplayViewportSnapshot {
+  return Object.freeze({
+    height: Math.max(1, canvasHost?.clientHeight ?? 1),
+    width: Math.max(1, canvasHost?.clientWidth ?? 1)
   });
 }
 
@@ -529,7 +539,12 @@ export class WebGpuGameplayRuntime {
 
   #syncArenaFrame(nowMs: number, forceUiUpdate = false): void {
     const trackingSnapshot = this.#trackingSource.latestPose;
-    const arenaHudSnapshot = this.#arenaSimulation.advance(trackingSnapshot, nowMs);
+    const viewportSnapshot = readViewportSnapshot(this.#canvasHost);
+    const arenaHudSnapshot = this.#arenaSimulation.advance(
+      trackingSnapshot,
+      nowMs,
+      viewportSnapshot
+    );
     const hudSnapshot = this.#setHudSnapshot(
       "running",
       null,
@@ -540,6 +555,7 @@ export class WebGpuGameplayRuntime {
     const reticleVisualState = resolveGameplayReticleVisualState(hudSnapshot);
 
     this.#gameplayScene.syncArenaPresentation(
+      this.#arenaSimulation.cameraSnapshot,
       this.#arenaSimulation.enemyRenderStates,
       arenaHudSnapshot.aimPoint,
       reticleVisualState

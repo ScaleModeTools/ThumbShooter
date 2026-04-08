@@ -1,14 +1,17 @@
 import type {
   CoopPlayerId,
+  CoopPlayerPresenceSnapshotInput,
   CoopRoomId,
   CoopRoomSnapshot,
   Milliseconds,
-  NormalizedViewportPoint
+  CoopVector3SnapshotInput
 } from "@thumbshooter/shared";
 
+import type { LocalArenaSimulationConfig } from "./local-arena-simulation";
 import type { WeaponDefinition } from "./weapon-contract";
 
 export interface CoopArenaSimulationConfig {
+  readonly camera: LocalArenaSimulationConfig["camera"];
   readonly feedback: {
     readonly holdDurationMs: Milliseconds;
   };
@@ -21,7 +24,13 @@ export interface CoopArenaSimulationConfig {
 export interface CoopArenaRoomSource {
   readonly roomId: CoopRoomId;
   readonly roomSnapshot: CoopRoomSnapshot | null;
-  fireShot: (aimPoint: NormalizedViewportPoint) => void;
+  fireShot: (
+    origin: CoopVector3SnapshotInput,
+    aimDirection: CoopVector3SnapshotInput
+  ) => void;
+  syncPlayerPresence: (
+    presence: Omit<CoopPlayerPresenceSnapshotInput, "lastUpdatedTick" | "stateSequence">
+  ) => void;
 }
 
 export interface CoopArenaLocalIdentity {

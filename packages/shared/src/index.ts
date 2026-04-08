@@ -104,6 +104,7 @@ export {
   createCoopLeaveRoomCommand,
   createCoopPlayerActivitySnapshot,
   createCoopPlayerId,
+  createCoopPlayerPresenceSnapshot,
   createCoopPlayerSnapshot,
   createCoopRoomId,
   createCoopRoomSnapshot,
@@ -111,6 +112,8 @@ export {
   createCoopRoomTickSnapshot,
   createCoopSessionId,
   createCoopSessionSnapshot,
+  createCoopSyncPlayerPresenceCommand,
+  createCoopVector3Snapshot,
   createCoopSetPlayerReadyCommand,
   gameplaySessionModes,
   gameplayTickOwners
@@ -129,6 +132,8 @@ export type {
   CoopPlayerActivitySnapshot,
   CoopPlayerActivitySnapshotInput,
   CoopPlayerId,
+  CoopPlayerPresenceSnapshot,
+  CoopPlayerPresenceSnapshotInput,
   CoopPlayerShotOutcomeState,
   CoopPlayerSnapshot,
   CoopPlayerSnapshotInput,
@@ -146,8 +151,12 @@ export type {
   CoopSessionId,
   CoopSessionSnapshot,
   CoopSessionSnapshotInput,
+  CoopSyncPlayerPresenceCommand,
+  CoopSyncPlayerPresenceCommandInput,
   CoopSetPlayerReadyCommand,
   CoopSetPlayerReadyCommandInput,
+  CoopVector3Snapshot,
+  CoopVector3SnapshotInput,
   GameplaySessionMode,
   GameplayTickOwner
 } from "./coop-room-contract.js";

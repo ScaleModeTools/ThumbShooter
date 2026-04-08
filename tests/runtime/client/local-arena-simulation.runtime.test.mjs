@@ -18,19 +18,42 @@ after(async () => {
 
 function createArenaConfig() {
   return {
-    arenaBounds: {
-      minX: 0.05,
-      maxX: 0.95,
-      minY: 0.05,
-      maxY: 0.95
+    birdAltitudeBounds: {
+      min: 0.5,
+      max: 6
+    },
+    camera: {
+      initialPitchRadians: 0,
+      initialYawRadians: 0,
+      lookBounds: {
+        maxPitchRadians: 1.2,
+        minPitchRadians: -0.18
+      },
+      lookMotion: {
+        deadZoneViewportFraction: 0.22,
+        maxSpeedRadiansPerSecond: 1.6,
+        responseExponent: 1.55
+      },
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      }
     },
     enemySeeds: [
       {
         id: "bird-1",
         label: "Bird 1",
-        spawn: { x: 0.25, y: 0.4 },
-        glideVelocity: { x: 0, y: 0 },
-        radius: 0.08,
+        orbitRadius: 18,
+        spawn: {
+          altitude: 1.35,
+          azimuthRadians: 0
+        },
+        glideVelocity: {
+          altitudeUnitsPerSecond: 0,
+          azimuthRadiansPerSecond: 0
+        },
+        radius: 0.9,
         scale: 1,
         wingSpeed: 6
       }
@@ -40,20 +63,22 @@ function createArenaConfig() {
     },
     movement: {
       maxStepMs: 64,
+      downedDriftSpeed: 1.6,
       scatterDurationMs: 280,
-      scatterSpeed: 0.22,
       downedDurationMs: 520,
-      downedDriftVelocityY: 0.18
+      downedFallSpeed: 4.6,
+      scatterAltitudeSpeed: 1.8,
+      scatterAngularSpeed: 0.5
     },
     session: {
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
     targeting: {
-      acquireRadius: 0.1,
-      hitRadius: 0.1,
-      reticleScatterRadius: 0.14,
-      shotScatterRadius: 0.2
+      acquireRadius: 0.6,
+      hitRadius: 0.42,
+      reticleScatterRadius: 3.2,
+      shotScatterRadius: 3.6
     },
     weapon: {
       weaponId: "semiautomatic-pistol",
@@ -103,7 +128,7 @@ test("LocalArenaSimulation publishes calibrated aim, arena counts, and early sca
     },
     createArenaConfig()
   );
-  const trackingSnapshot = createTrackedHandSnapshot(1, 0.25, 0.4);
+  const trackingSnapshot = createTrackedHandSnapshot(1, 0.5, 0.5);
 
   const snapshot = simulation.advance(trackingSnapshot, 0);
 
@@ -136,10 +161,10 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
     }
   );
 
-  simulation.advance(createTrackedHandSnapshot(1, 0.25, 0.4), 0);
+  simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 0);
 
   const firedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(2, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(2, 0.5, 0.5, 1),
     16
   );
 
@@ -166,7 +191,7 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "downed");
 
   const postCompletionSnapshot = simulation.advance(
-    createTrackedHandSnapshot(3, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(3, 0.5, 0.5, 1),
     1_200
   );
 
@@ -205,20 +230,20 @@ test("LocalArenaSimulation applies trigger calibration before a shot becomes val
     }
   );
 
-  simulation.advance(createTrackedHandSnapshot(1, 0.25, 0.4), 0);
+  simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 0);
 
   const borderlineSnapshot = simulation.advance(
-    createTrackedHandSnapshot(2, 0.25, 0.4, 0.75),
+    createTrackedHandSnapshot(2, 0.5, 0.5, 0.75),
     16
   );
 
   assert.equal(borderlineSnapshot.weapon.shotsFired, 0);
   assert.equal(borderlineSnapshot.session.score, 0);
 
-  simulation.advance(createTrackedHandSnapshot(3, 0.25, 0.4), 40);
+  simulation.advance(createTrackedHandSnapshot(3, 0.5, 0.5), 40);
 
   const firedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(4, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(4, 0.5, 0.5, 1),
     64
   );
 
@@ -237,17 +262,17 @@ test("LocalArenaSimulation requires a ready state before a tracked press can fir
   );
 
   const reacquiredPressedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(1, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(1, 0.5, 0.5, 1),
     0
   );
 
   assert.equal(reacquiredPressedSnapshot.weapon.shotsFired, 0);
   assert.equal(reacquiredPressedSnapshot.session.score, 0);
 
-  simulation.advance(createTrackedHandSnapshot(2, 0.25, 0.4), 16);
+  simulation.advance(createTrackedHandSnapshot(2, 0.5, 0.5), 16);
 
   const firedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(3, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(3, 0.5, 0.5, 1),
     32
   );
 
@@ -330,4 +355,34 @@ test("LocalArenaSimulation exposes reload state and completes off-screen reloads
       weaponId: "semiautomatic-pistol"
     }
   ]);
+});
+
+test("LocalArenaSimulation turns the camera when the reticle rides the screen edge dead zone", async () => {
+  const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
+  const simulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+
+  simulation.advance(
+    createTrackedHandSnapshot(1, 0.92, 0.5),
+    0,
+    { width: 1280, height: 720 }
+  );
+  simulation.advance(
+    createTrackedHandSnapshot(2, 0.92, 0.5),
+    32,
+    { width: 1280, height: 720 }
+  );
+  simulation.advance(
+    createTrackedHandSnapshot(3, 0.92, 0.5),
+    64,
+    { width: 1280, height: 720 }
+  );
+
+  assert.ok(simulation.cameraSnapshot.yawRadians > 0.02);
+  assert.ok(Math.abs(simulation.cameraSnapshot.pitchRadians) < 0.01);
 });

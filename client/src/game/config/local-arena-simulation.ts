@@ -1,51 +1,98 @@
-import { createMilliseconds } from "@thumbshooter/shared";
+import {
+  createMilliseconds,
+  createRadians
+} from "@thumbshooter/shared";
 
 import { localCombatSessionConfig } from "./local-combat-session";
 import { firstPlayableWeaponDefinition } from "./weapon-manifest";
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 
 export const localArenaSimulationConfig = {
-  arenaBounds: {
-    minX: 0.08,
-    maxX: 0.92,
-    minY: 0.14,
-    maxY: 0.86
+  birdAltitudeBounds: {
+    min: 4.5,
+    max: 18.5
+  },
+  camera: {
+    initialPitchRadians: createRadians(0.08),
+    initialYawRadians: createRadians(0),
+    lookBounds: {
+      maxPitchRadians: createRadians(1.2),
+      minPitchRadians: createRadians(-0.18)
+    },
+    lookMotion: {
+      deadZoneViewportFraction: 0.22,
+      maxSpeedRadiansPerSecond: 1.6,
+      responseExponent: 1.55
+    },
+    position: {
+      x: 0,
+      y: 1.35,
+      z: 0
+    }
   },
   enemySeeds: [
     {
       id: "bird-1",
       label: "Bird 1",
-      spawn: { x: 0.22, y: 0.28 },
-      glideVelocity: { x: 0.12, y: 0.03 },
-      radius: 0.08,
-      scale: 1.05,
+      orbitRadius: 32,
+      spawn: {
+        altitude: 9.2,
+        azimuthRadians: createRadians(-0.42)
+      },
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.42,
+        azimuthRadiansPerSecond: 0.24
+      },
+      radius: 1.35,
+      scale: 1.1,
       wingSpeed: 6.4
     },
     {
       id: "bird-2",
       label: "Bird 2",
-      spawn: { x: 0.78, y: 0.24 },
-      glideVelocity: { x: -0.11, y: 0.04 },
-      radius: 0.082,
-      scale: 0.98,
+      orbitRadius: 36,
+      spawn: {
+        altitude: 11.8,
+        azimuthRadians: createRadians(0.28)
+      },
+      glideVelocity: {
+        altitudeUnitsPerSecond: -0.36,
+        azimuthRadiansPerSecond: -0.18
+      },
+      radius: 1.3,
+      scale: 1.03,
       wingSpeed: 5.8
     },
     {
       id: "bird-3",
       label: "Bird 3",
-      spawn: { x: 0.32, y: 0.7 },
-      glideVelocity: { x: 0.1, y: -0.05 },
-      radius: 0.078,
-      scale: 1.1,
+      orbitRadius: 30,
+      spawn: {
+        altitude: 7.6,
+        azimuthRadians: createRadians(-0.86)
+      },
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.28,
+        azimuthRadiansPerSecond: 0.27
+      },
+      radius: 1.28,
+      scale: 1.08,
       wingSpeed: 6.9
     },
     {
       id: "bird-4",
       label: "Bird 4",
-      spawn: { x: 0.74, y: 0.74 },
-      glideVelocity: { x: -0.12, y: -0.03 },
-      radius: 0.08,
-      scale: 1.02,
+      orbitRadius: 34,
+      spawn: {
+        altitude: 10.4,
+        azimuthRadians: createRadians(0.74)
+      },
+      glideVelocity: {
+        altitudeUnitsPerSecond: 0.24,
+        azimuthRadiansPerSecond: -0.23
+      },
+      radius: 1.32,
+      scale: 1.05,
       wingSpeed: 6.1
     }
   ],
@@ -54,17 +101,19 @@ export const localArenaSimulationConfig = {
   },
   movement: {
     maxStepMs: createMilliseconds(48),
-    scatterDurationMs: createMilliseconds(820),
-    scatterSpeed: 0.24,
+    downedDriftSpeed: 2.8,
     downedDurationMs: createMilliseconds(960),
-    downedDriftVelocityY: 0.18
+    downedFallSpeed: 5.6,
+    scatterAltitudeSpeed: 3.2,
+    scatterAngularSpeed: 0.78,
+    scatterDurationMs: createMilliseconds(820),
   },
   session: localCombatSessionConfig,
   targeting: {
-    acquireRadius: 0.1,
-    hitRadius: 0.09,
-    reticleScatterRadius: 0.17,
-    shotScatterRadius: 0.24
+    acquireRadius: 0.68,
+    hitRadius: 0.42,
+    reticleScatterRadius: 4.2,
+    shotScatterRadius: 5.2
   },
   weapon: firstPlayableWeaponDefinition
 } as const satisfies LocalArenaSimulationConfig;

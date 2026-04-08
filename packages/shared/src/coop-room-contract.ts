@@ -5,12 +5,6 @@ import {
   createMilliseconds,
   createRadians
 } from "./unit-measurements.js";
-import type {
-  NormalizedViewportPoint,
-  NormalizedViewportPointInput
-} from "./calibration-types.js";
-import { createNormalizedViewportPoint } from "./calibration-types.js";
-
 export const gameplaySessionModes = [
   "single-player",
   "co-op"
@@ -38,7 +32,8 @@ export const coopRoomClientCommandTypes = [
   "join-room",
   "set-player-ready",
   "leave-room",
-  "fire-shot"
+  "fire-shot",
+  "sync-player-presence"
 ] as const;
 export const coopRoomServerEventTypes = [
   "room-snapshot"
@@ -71,6 +66,18 @@ export interface CoopRoomTickSnapshotInput {
   readonly tickIntervalMs: number;
 }
 
+export interface CoopVector3Snapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface CoopVector3SnapshotInput {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export interface CoopBirdSnapshot {
   readonly behavior: CoopBirdBehaviorState;
   readonly birdId: CoopBirdId;
@@ -78,7 +85,7 @@ export interface CoopBirdSnapshot {
   readonly label: string;
   readonly lastInteractionByPlayerId: CoopPlayerId | null;
   readonly lastInteractionTick: number | null;
-  readonly position: NormalizedViewportPoint;
+  readonly position: CoopVector3Snapshot;
   readonly radius: number;
   readonly scale: number;
   readonly visible: boolean;
@@ -92,7 +99,7 @@ export interface CoopBirdSnapshotInput {
   readonly label: string;
   readonly lastInteractionByPlayerId?: CoopPlayerId | null;
   readonly lastInteractionTick?: number | null;
-  readonly position: NormalizedViewportPointInput;
+  readonly position: CoopVector3SnapshotInput;
   readonly radius: number;
   readonly scale: number;
   readonly visible: boolean;
@@ -123,6 +130,7 @@ export interface CoopPlayerSnapshot {
   readonly activity: CoopPlayerActivitySnapshot;
   readonly connected: boolean;
   readonly playerId: CoopPlayerId;
+  readonly presence: CoopPlayerPresenceSnapshot;
   readonly ready: boolean;
   readonly username: Username;
 }
@@ -131,8 +139,29 @@ export interface CoopPlayerSnapshotInput {
   readonly activity?: CoopPlayerActivitySnapshotInput;
   readonly connected?: boolean;
   readonly playerId: CoopPlayerId;
+  readonly presence?: CoopPlayerPresenceSnapshotInput;
   readonly ready?: boolean;
   readonly username: Username;
+}
+
+export interface CoopPlayerPresenceSnapshot {
+  readonly aimDirection: CoopVector3Snapshot;
+  readonly lastUpdatedTick: number | null;
+  readonly pitchRadians: Radians;
+  readonly position: CoopVector3Snapshot;
+  readonly stateSequence: number;
+  readonly weaponId: string;
+  readonly yawRadians: Radians;
+}
+
+export interface CoopPlayerPresenceSnapshotInput {
+  readonly aimDirection: CoopVector3SnapshotInput;
+  readonly lastUpdatedTick?: number | null;
+  readonly pitchRadians: number;
+  readonly position: CoopVector3SnapshotInput;
+  readonly stateSequence?: number;
+  readonly weaponId?: string;
+  readonly yawRadians: number;
 }
 
 export interface CoopSessionSnapshot {
@@ -214,25 +243,51 @@ export interface CoopLeaveRoomCommandInput {
 }
 
 export interface CoopFireShotCommand {
-  readonly aimPoint: NormalizedViewportPoint;
+  readonly aimDirection: CoopVector3Snapshot;
   readonly clientShotSequence: number;
+  readonly origin: CoopVector3Snapshot;
   readonly playerId: CoopPlayerId;
   readonly roomId: CoopRoomId;
   readonly type: "fire-shot";
 }
 
 export interface CoopFireShotCommandInput {
-  readonly aimPoint: NormalizedViewportPointInput;
+  readonly aimDirection: CoopVector3SnapshotInput;
   readonly clientShotSequence: number;
+  readonly origin: CoopVector3SnapshotInput;
   readonly playerId: CoopPlayerId;
   readonly roomId: CoopRoomId;
+}
+
+export interface CoopSyncPlayerPresenceCommand {
+  readonly aimDirection: CoopVector3Snapshot;
+  readonly pitchRadians: Radians;
+  readonly playerId: CoopPlayerId;
+  readonly position: CoopVector3Snapshot;
+  readonly roomId: CoopRoomId;
+  readonly stateSequence: number;
+  readonly type: "sync-player-presence";
+  readonly weaponId: string;
+  readonly yawRadians: Radians;
+}
+
+export interface CoopSyncPlayerPresenceCommandInput {
+  readonly aimDirection: CoopVector3SnapshotInput;
+  readonly pitchRadians: number;
+  readonly playerId: CoopPlayerId;
+  readonly position: CoopVector3SnapshotInput;
+  readonly roomId: CoopRoomId;
+  readonly stateSequence: number;
+  readonly weaponId: string;
+  readonly yawRadians: number;
 }
 
 export type CoopRoomClientCommand =
   | CoopJoinRoomCommand
   | CoopSetPlayerReadyCommand
   | CoopLeaveRoomCommand
-  | CoopFireShotCommand;
+  | CoopFireShotCommand
+  | CoopSyncPlayerPresenceCommand;
 
 export interface CoopRoomSnapshotEvent {
   readonly room: CoopRoomSnapshot;
@@ -259,6 +314,24 @@ function normalizeFiniteNonNegativeNumber(rawValue: number): number {
   }
 
   return Math.max(0, rawValue);
+}
+
+function normalizeFiniteNumber(rawValue: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  return rawValue;
+}
+
+function normalizeWeaponId(rawValue: string | undefined): string {
+  if (typeof rawValue !== "string") {
+    return "semiautomatic-pistol";
+  }
+
+  const normalizedValue = rawValue.trim();
+
+  return normalizedValue.length > 0 ? normalizedValue : "semiautomatic-pistol";
 }
 
 function normalizeLastTick(rawValue: number | null | undefined): number | null {
@@ -293,6 +366,59 @@ function createDefaultPlayerActivitySnapshot(): CoopPlayerActivitySnapshot {
     lastAcknowledgedShotSequence: 0,
     scatterEventsCaused: 0,
     shotsFired: 0
+  });
+}
+
+function createDefaultPlayerPresenceSnapshot(): CoopPlayerPresenceSnapshot {
+  return Object.freeze({
+    aimDirection: Object.freeze({
+      x: 0,
+      y: 0,
+      z: -1
+    }),
+    lastUpdatedTick: null,
+    pitchRadians: createRadians(0),
+    position: Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    stateSequence: 0,
+    weaponId: "semiautomatic-pistol",
+    yawRadians: createRadians(0)
+  });
+}
+
+export function createCoopVector3Snapshot(
+  input: CoopVector3SnapshotInput
+): CoopVector3Snapshot {
+  return Object.freeze({
+    x: normalizeFiniteNumber(input.x),
+    y: normalizeFiniteNumber(input.y),
+    z: normalizeFiniteNumber(input.z)
+  });
+}
+
+function createNormalizedDirectionSnapshot(
+  input: CoopVector3SnapshotInput
+): CoopVector3Snapshot {
+  const x = normalizeFiniteNumber(input.x);
+  const y = normalizeFiniteNumber(input.y);
+  const z = normalizeFiniteNumber(input.z);
+  const magnitude = Math.hypot(x, y, z);
+
+  if (magnitude <= 0.0001) {
+    return Object.freeze({
+      x: 0,
+      y: 0,
+      z: -1
+    });
+  }
+
+  return Object.freeze({
+    x: x / magnitude,
+    y: y / magnitude,
+    z: z / magnitude
   });
 }
 
@@ -356,7 +482,7 @@ export function createCoopBirdSnapshot(
     label: input.label,
     lastInteractionByPlayerId: input.lastInteractionByPlayerId ?? null,
     lastInteractionTick: normalizeLastTick(input.lastInteractionTick),
-    position: createNormalizedViewportPoint(input.position),
+    position: createCoopVector3Snapshot(input.position),
     radius: normalizeFiniteNonNegativeNumber(input.radius),
     scale: normalizeFiniteNonNegativeNumber(input.scale),
     visible: input.visible,
@@ -370,6 +496,21 @@ export function createCoopPlayerActivitySnapshot(
   return freezePlayerActivitySnapshot(input);
 }
 
+export function createCoopPlayerPresenceSnapshot(
+  input: CoopPlayerPresenceSnapshotInput,
+  lastUpdatedTick: number | null = input.lastUpdatedTick ?? null
+): CoopPlayerPresenceSnapshot {
+  return Object.freeze({
+    aimDirection: createNormalizedDirectionSnapshot(input.aimDirection),
+    lastUpdatedTick: normalizeLastTick(lastUpdatedTick),
+    pitchRadians: createRadians(input.pitchRadians),
+    position: createCoopVector3Snapshot(input.position),
+    stateSequence: normalizeFiniteNonNegativeInteger(input.stateSequence ?? 0),
+    weaponId: normalizeWeaponId(input.weaponId),
+    yawRadians: createRadians(input.yawRadians)
+  });
+}
+
 export function createCoopPlayerSnapshot(
   input: CoopPlayerSnapshotInput
 ): CoopPlayerSnapshot {
@@ -380,6 +521,10 @@ export function createCoopPlayerSnapshot(
         : createCoopPlayerActivitySnapshot(input.activity),
     connected: input.connected ?? true,
     playerId: input.playerId,
+    presence:
+      input.presence === undefined
+        ? createDefaultPlayerPresenceSnapshot()
+        : createCoopPlayerPresenceSnapshot(input.presence),
     ready: input.ready ?? false,
     username: input.username
   });
@@ -455,13 +600,30 @@ export function createCoopFireShotCommand(
   input: CoopFireShotCommandInput
 ): CoopFireShotCommand {
   return Object.freeze({
-    aimPoint: createNormalizedViewportPoint(input.aimPoint),
+    aimDirection: createNormalizedDirectionSnapshot(input.aimDirection),
     clientShotSequence: normalizeFiniteNonNegativeInteger(
       input.clientShotSequence
     ),
+    origin: createCoopVector3Snapshot(input.origin),
     playerId: input.playerId,
     roomId: input.roomId,
     type: "fire-shot"
+  });
+}
+
+export function createCoopSyncPlayerPresenceCommand(
+  input: CoopSyncPlayerPresenceCommandInput
+): CoopSyncPlayerPresenceCommand {
+  return Object.freeze({
+    aimDirection: createNormalizedDirectionSnapshot(input.aimDirection),
+    pitchRadians: createRadians(input.pitchRadians),
+    playerId: input.playerId,
+    position: createCoopVector3Snapshot(input.position),
+    roomId: input.roomId,
+    stateSequence: normalizeFiniteNonNegativeInteger(input.stateSequence),
+    type: "sync-player-presence",
+    weaponId: normalizeWeaponId(input.weaponId),
+    yawRadians: createRadians(input.yawRadians)
   });
 }
 

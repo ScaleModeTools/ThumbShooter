@@ -1,14 +1,16 @@
 import type {
   CoopPlayerId,
+  CoopPlayerPresenceSnapshotInput,
   CoopRoomServerEvent,
   CoopRoomSnapshot,
-  NormalizedViewportPoint
+  CoopVector3SnapshotInput
 } from "@thumbshooter/shared";
 import {
   createCoopFireShotCommand,
   createCoopJoinRoomCommand,
   createCoopLeaveRoomCommand,
-  createCoopSetPlayerReadyCommand
+  createCoopSetPlayerReadyCommand,
+  createCoopSyncPlayerPresenceCommand
 } from "@thumbshooter/shared";
 
 import { coopRoomClientConfig } from "../config/coop-room-client";
@@ -32,6 +34,13 @@ interface CoopRoomClientDependencies {
 }
 
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
+
+type PendingPlayerPresenceUpdate = Omit<
+  CoopPlayerPresenceSnapshotInput,
+  "lastUpdatedTick" | "stateSequence"
+> & {
+  readonly stateSequence: number;
+};
 
 function freezeStatusSnapshot(
   roomId: CoopRoomClientStatusSnapshot["roomId"],
@@ -89,7 +98,11 @@ export class CoopRoomClient {
 
   #joinPromise: Promise<CoopRoomSnapshot> | null = null;
   #nextClientShotSequence = 0;
+  #nextPlayerPresenceSequence = 0;
   #playerId: CoopPlayerId | null = null;
+  #playerPresenceSyncHandle: TimeoutHandle | null = null;
+  #pendingPlayerPresenceUpdate: PendingPlayerPresenceUpdate | null = null;
+  #playerPresenceSyncInFlight = false;
   #pollHandle: TimeoutHandle | null = null;
   #roomSnapshot: CoopRoomSnapshot | null = null;
   #statusSnapshot: CoopRoomClientStatusSnapshot;
@@ -205,15 +218,19 @@ export class CoopRoomClient {
     }
   }
 
-  fireShot(aimPoint: NormalizedViewportPoint): void {
+  fireShot(
+    origin: CoopVector3SnapshotInput,
+    aimDirection: CoopVector3SnapshotInput
+  ): void {
     if (this.#playerId === null || this.#statusSnapshot.state === "disposed") {
       return;
     }
 
     this.#nextClientShotSequence += 1;
     const command = createCoopFireShotCommand({
-      aimPoint,
+      aimDirection,
       clientShotSequence: this.#nextClientShotSequence,
+      origin,
       playerId: this.#playerId,
       roomId: this.#config.roomId
     });
@@ -231,6 +248,25 @@ export class CoopRoomClient {
       });
   }
 
+  syncPlayerPresence(
+    presence: Omit<CoopPlayerPresenceSnapshotInput, "lastUpdatedTick" | "stateSequence">
+  ): void {
+    if (
+      this.#playerId === null ||
+      this.#statusSnapshot.state === "disposed" ||
+      !this.#statusSnapshot.joined
+    ) {
+      return;
+    }
+
+    this.#nextPlayerPresenceSequence += 1;
+    this.#pendingPlayerPresenceUpdate = {
+      ...presence,
+      stateSequence: this.#nextPlayerPresenceSequence
+    };
+    this.#schedulePlayerPresenceSync(this.#resolvePollDelayMs());
+  }
+
   dispose(): void {
     if (this.#statusSnapshot.state === "disposed") {
       return;
@@ -242,6 +278,7 @@ export class CoopRoomClient {
         : null;
 
     this.#cancelScheduledPoll();
+    this.#cancelScheduledPlayerPresenceSync();
     this.#statusSnapshot = freezeStatusSnapshot(
       this.#config.roomId,
       this.#playerId,
@@ -351,6 +388,74 @@ export class CoopRoomClient {
     this.#pollHandle = null;
   }
 
+  #schedulePlayerPresenceSync(delayMs: number): void {
+    if (
+      this.#playerId === null ||
+      this.#statusSnapshot.state === "disposed" ||
+      this.#pendingPlayerPresenceUpdate === null
+    ) {
+      return;
+    }
+
+    if (this.#playerPresenceSyncInFlight || this.#playerPresenceSyncHandle !== null) {
+      return;
+    }
+
+    this.#playerPresenceSyncHandle = this.#setTimeout(() => {
+      this.#playerPresenceSyncHandle = null;
+      void this.#flushPlayerPresenceSync();
+    }, Math.max(0, delayMs));
+  }
+
+  #cancelScheduledPlayerPresenceSync(): void {
+    if (this.#playerPresenceSyncHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#playerPresenceSyncHandle);
+    this.#playerPresenceSyncHandle = null;
+  }
+
+  async #flushPlayerPresenceSync(): Promise<void> {
+    if (
+      this.#playerId === null ||
+      this.#statusSnapshot.state === "disposed" ||
+      this.#pendingPlayerPresenceUpdate === null
+    ) {
+      return;
+    }
+
+    const pendingUpdate = this.#pendingPlayerPresenceUpdate;
+
+    this.#pendingPlayerPresenceUpdate = null;
+    this.#playerPresenceSyncInFlight = true;
+
+    try {
+      const serverEvent = await this.#postCommand(
+        createCoopSyncPlayerPresenceCommand({
+          ...pendingUpdate,
+          weaponId: pendingUpdate.weaponId ?? "semiautomatic-pistol",
+          playerId: this.#playerId,
+          roomId: this.#config.roomId
+        })
+      );
+
+      this.#applyServerEvent(serverEvent);
+    } catch (error) {
+      this.#setError(
+        error instanceof Error
+          ? error.message
+          : "Co-op player presence sync failed."
+      );
+    } finally {
+      this.#playerPresenceSyncInFlight = false;
+
+      if (this.#pendingPlayerPresenceUpdate !== null && !this.#isDisposed()) {
+        this.#schedulePlayerPresenceSync(this.#resolvePollDelayMs());
+      }
+    }
+  }
+
   async #pollRoomSnapshot(): Promise<void> {
     if (this.#playerId === null || this.#statusSnapshot.state === "disposed") {
       return;
@@ -387,7 +492,8 @@ export class CoopRoomClient {
       | ReturnType<typeof createCoopJoinRoomCommand>
       | ReturnType<typeof createCoopSetPlayerReadyCommand>
       | ReturnType<typeof createCoopLeaveRoomCommand>
-      | ReturnType<typeof createCoopFireShotCommand>,
+      | ReturnType<typeof createCoopFireShotCommand>
+      | ReturnType<typeof createCoopSyncPlayerPresenceCommand>,
     requestInit: RequestInit = {}
   ): Promise<CoopRoomServerEvent> {
     const response = await this.#fetch(

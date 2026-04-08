@@ -12,6 +12,7 @@ export interface MutableEnemyRenderState {
   label: string;
   positionX: number;
   positionY: number;
+  positionZ: number;
   radius: number;
   scale: number;
   visible: boolean;
@@ -21,14 +22,20 @@ export interface MutableEnemyRenderState {
 export interface LocalArenaEnemyRuntimeState {
   readonly downedScale: number;
   readonly glideScale: number;
-  readonly homeVelocityX: number;
-  readonly homeVelocityY: number;
+  readonly homeAltitudeVelocity: number;
+  readonly homeAngularVelocity: number;
+  readonly orbitRadius: number;
   readonly renderState: MutableEnemyRenderState;
   readonly scatterScale: number;
   readonly wingSpeed: number;
+  altitude: number;
+  altitudeVelocity: number;
+  angularVelocity: number;
+  azimuthRadians: number;
   behaviorRemainingMs: number;
-  velocityX: number;
-  velocityY: number;
+  downedVelocityX: number;
+  downedVelocityY: number;
+  downedVelocityZ: number;
 }
 
 export type LocalArenaEnemySeed =

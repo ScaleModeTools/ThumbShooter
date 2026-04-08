@@ -130,8 +130,11 @@ export type {
 } from "./types/calibration-session";
 export type {
   GameplayArenaHudSnapshot,
+  GameplayCameraSnapshot,
   GameplayHudSnapshot,
   GameplayRuntimeConfig,
+  GameplayVector3Snapshot,
+  GameplayViewportSnapshot,
   GameplayRuntimeLifecycleState
 } from "./types/gameplay-runtime";
 export type {

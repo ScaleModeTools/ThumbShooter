@@ -15,28 +15,58 @@ after(async () => {
 
 function createArenaConfig() {
   return {
-    arenaBounds: {
-      minX: 0.05,
-      maxX: 0.95,
-      minY: 0.05,
-      maxY: 0.95
+    birdAltitudeBounds: {
+      min: 0.5,
+      max: 6
+    },
+    camera: {
+      initialPitchRadians: 0,
+      initialYawRadians: 0,
+      lookBounds: {
+        maxPitchRadians: 1.2,
+        minPitchRadians: -0.18
+      },
+      lookMotion: {
+        deadZoneViewportFraction: 0.22,
+        maxSpeedRadiansPerSecond: 1.6,
+        responseExponent: 1.55
+      },
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      }
     },
     enemySeeds: [
       {
         id: "bird-1",
         label: "Bird 1",
-        spawn: { x: 0.25, y: 0.4 },
-        glideVelocity: { x: 0.1, y: 0 },
-        radius: 0.08,
+        orbitRadius: 18,
+        spawn: {
+          altitude: 1.35,
+          azimuthRadians: 0
+        },
+        glideVelocity: {
+          altitudeUnitsPerSecond: 0,
+          azimuthRadiansPerSecond: 0.12
+        },
+        radius: 0.9,
         scale: 1,
         wingSpeed: 6
       },
       {
         id: "bird-2",
         label: "Bird 2",
-        spawn: { x: 0.7, y: 0.7 },
-        glideVelocity: { x: -0.08, y: 0.02 },
-        radius: 0.08,
+        orbitRadius: 22,
+        spawn: {
+          altitude: 2.1,
+          azimuthRadians: 0.7
+        },
+        glideVelocity: {
+          altitudeUnitsPerSecond: 0.08,
+          azimuthRadiansPerSecond: -0.1
+        },
+        radius: 0.85,
         scale: 1,
         wingSpeed: 7
       }
@@ -46,20 +76,22 @@ function createArenaConfig() {
     },
     movement: {
       maxStepMs: 64,
+      downedDriftSpeed: 1.6,
       scatterDurationMs: 120,
-      scatterSpeed: 0.22,
       downedDurationMs: 220,
-      downedDriftVelocityY: 0.18
+      downedFallSpeed: 4.6,
+      scatterAltitudeSpeed: 1.8,
+      scatterAngularSpeed: 0.5
     },
     session: {
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
     targeting: {
-      acquireRadius: 0.12,
-      hitRadius: 0.1,
-      reticleScatterRadius: 0.14,
-      shotScatterRadius: 0.2
+      acquireRadius: 0.6,
+      hitRadius: 0.42,
+      reticleScatterRadius: 3.2,
+      shotScatterRadius: 3.6
     },
     weapon: {
       weaponId: "semiautomatic-pistol",
@@ -101,17 +133,24 @@ test("local arena enemy field keeps targeting and motion behavior on typed submo
   );
   const config = createArenaConfig();
   const { enemyRuntimeStates } = enemyField.createEnemyField(config);
+  const shotOrigin = { x: 0, y: 1.35, z: 0 };
+  const shotDirection = { x: 0, y: 0, z: -1 };
 
   const targetedEnemy = enemyField.findNearestEnemyState(
     enemyRuntimeStates,
-    0.26,
-    0.4,
+    shotOrigin,
+    shotDirection,
     config.targeting.acquireRadius
   );
 
   assert.equal(targetedEnemy?.renderState.id, "bird-1");
 
-  enemyField.applyReticleScatter(enemyRuntimeStates, config, 0.25, 0.4);
+  enemyField.applyReticleScatter(
+    enemyRuntimeStates,
+    config,
+    shotOrigin,
+    shotDirection
+  );
 
   assert.equal(enemyRuntimeStates[0]?.renderState.behavior, "scatter");
 
@@ -131,15 +170,16 @@ test("local arena enemy field keeps targeting and motion behavior on typed submo
   );
 
   assert.equal(enemyRuntimeStates[0]?.renderState.behavior, "downed");
-  assert.equal(enemyRuntimeStates[0]?.velocityX, 0);
-  assert.equal(enemyRuntimeStates[0]?.velocityY, 0);
+  assert.equal(enemyRuntimeStates[0]?.downedVelocityX, 0);
+  assert.equal(enemyRuntimeStates[0]?.downedVelocityY, 0);
   assert.equal(enemyField.countDownedEnemies(enemyRuntimeStates), 1);
   assert.equal(enemyField.summarizeEnemyField(enemyRuntimeStates).downedEnemyCount, 1);
 
   enemyField.resetEnemyField(enemyRuntimeStates, config);
 
   assert.equal(enemyRuntimeStates[0]?.renderState.behavior, "glide");
-  assert.equal(enemyRuntimeStates[0]?.renderState.positionX, 0.25);
-  assert.equal(enemyRuntimeStates[0]?.renderState.positionY, 0.4);
+  assert.equal(enemyRuntimeStates[0]?.renderState.positionX, 0);
+  assert.equal(enemyRuntimeStates[0]?.renderState.positionY, 1.35);
+  assert.equal(enemyRuntimeStates[0]?.renderState.positionZ, -18);
   assert.equal(enemyField.countDownedEnemies(enemyRuntimeStates), 0);
 });

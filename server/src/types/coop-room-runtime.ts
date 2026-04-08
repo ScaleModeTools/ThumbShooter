@@ -8,34 +8,40 @@ import type {
 export interface CoopRoomBirdSeed {
   readonly birdId: CoopBirdId;
   readonly glideVelocity: {
-    readonly x: number;
-    readonly y: number;
+    readonly altitudeUnitsPerSecond: number;
+    readonly azimuthRadiansPerSecond: number;
   };
   readonly label: string;
+  readonly orbitRadius: number;
   readonly radius: number;
   readonly scale: number;
   readonly spawn: {
-    readonly x: number;
-    readonly y: number;
+    readonly altitude: number;
+    readonly azimuthRadians: number;
   };
   readonly wingSpeed: number;
 }
 
 export interface CoopRoomRuntimeConfig {
-  readonly arenaBounds: {
-    readonly maxX: number;
-    readonly maxY: number;
-    readonly minX: number;
-    readonly minY: number;
+  readonly birdAltitudeBounds: {
+    readonly max: number;
+    readonly min: number;
   };
   readonly birds: readonly CoopRoomBirdSeed[];
   readonly capacity: number;
   readonly hitRadius: number;
   readonly movement: {
-    readonly downedDriftVelocityY: number;
+    readonly downedDriftSpeed: number;
     readonly downedDurationMs: Milliseconds;
+    readonly downedFallSpeed: number;
+    readonly scatterAltitudeSpeed: number;
+    readonly scatterAngularSpeed: number;
     readonly scatterDurationMs: Milliseconds;
-    readonly scatterSpeed: number;
+  };
+  readonly playerSpawnPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
   };
   readonly requiredReadyPlayerCount: number;
   readonly roomId: CoopRoomId;

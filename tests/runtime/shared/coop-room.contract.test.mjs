@@ -46,7 +46,8 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
         lastInteractionTick: 12.7,
         position: {
           x: 1.4,
-          y: -2
+          y: -2,
+          z: Number.NaN
         },
         radius: -5,
         scale: 1.15,
@@ -68,6 +69,22 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
         },
         connected: true,
         playerId,
+        presence: {
+          aimDirection: {
+            x: 0,
+            y: 0,
+            z: -5
+          },
+          pitchRadians: Number.NaN,
+          position: {
+            x: 0,
+            y: 1.35,
+            z: 0
+          },
+          stateSequence: 2.6,
+          weaponId: "  ",
+          yawRadians: Number.POSITIVE_INFINITY
+        },
         ready: true,
         username
       }
@@ -98,36 +115,49 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
   assert.equal(snapshot.tick.currentTick, 19);
   assert.equal(snapshot.tick.tickIntervalMs, 50.4);
   assert.deepEqual(snapshot.birds[0]?.position, {
-    x: 1,
-    y: 0
+    x: 1.4,
+    y: -2,
+    z: 0
   });
   assert.equal(snapshot.birds[0]?.radius, 0);
   assert.equal(snapshot.birds[0]?.wingPhase, 0);
   assert.equal(snapshot.players[0]?.activity.lastAcknowledgedShotSequence, 4);
   assert.equal(snapshot.players[0]?.activity.shotsFired, 5);
+  assert.equal(snapshot.players[0]?.presence.stateSequence, 2);
+  assert.equal(snapshot.players[0]?.presence.weaponId, "semiautomatic-pistol");
   assert.equal(snapshot.session.requiredReadyPlayerCount, 1);
   assert.equal(Object.isFrozen(snapshot), true);
   assert.equal(Object.isFrozen(snapshot.birds), true);
   assert.equal(Object.isFrozen(snapshot.players), true);
 });
 
-test("createCoopFireShotCommand clamps viewport aim and floors client shot sequences", () => {
+test("createCoopFireShotCommand normalizes shot rays and floors client shot sequences", () => {
   const command = createCoopFireShotCommand({
-    aimPoint: {
+    aimDirection: {
       x: 2.4,
-      y: -0.4
+      y: -0.4,
+      z: -2.4
     },
     clientShotSequence: 7.8,
+    origin: {
+      x: 3,
+      y: 1.35,
+      z: 2
+    },
     playerId: requireValue(createCoopPlayerId("player-2"), "playerId"),
     roomId: requireValue(createCoopRoomId("harbor-room"), "roomId")
   });
 
   assert.equal(command.type, "fire-shot");
   assert.equal(command.clientShotSequence, 7);
-  assert.deepEqual(command.aimPoint, {
-    x: 1,
-    y: 0
-  });
+  assert.equal(command.origin.x, 3);
+  assert.equal(command.origin.y, 1.35);
+  assert.equal(command.origin.z, 2);
+  assert.ok(Math.abs(Math.hypot(
+    command.aimDirection.x,
+    command.aimDirection.y,
+    command.aimDirection.z
+  ) - 1) < 0.000001);
 });
 
 test("createCoopLeaveRoomCommand preserves player identity for explicit disconnects", () => {

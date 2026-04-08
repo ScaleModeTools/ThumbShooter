@@ -7,7 +7,6 @@ import {
   createCoopRoomSnapshotEvent,
   createCoopSessionId,
   createMilliseconds,
-  createNormalizedViewportPoint,
   createUsername
 } from "@thumbshooter/shared";
 
@@ -58,10 +57,11 @@ function createRoomSnapshotEvent({
         headingRadians: 0,
         label: "Shared Bird 1",
         position: {
-          x: 0.42,
-          y: 0.36
+          x: 0,
+          y: 1.35,
+          z: -18
         },
-        radius: 0.08,
+        radius: 0.9,
         scale: 1,
         visible: true,
         wingPhase: tick * 0.4
@@ -81,6 +81,21 @@ function createRoomSnapshotEvent({
         },
         connected: true,
         playerId,
+        presence: {
+          aimDirection: {
+            x: 0,
+            y: 0,
+            z: -1
+          },
+          pitchRadians: 0,
+          position: {
+            x: 0,
+            y: 1.35,
+            z: 0
+          },
+          weaponId: "semiautomatic-pistol",
+          yawRadians: 0
+        },
         ready: true,
         username: "coop-user"
       }
@@ -220,7 +235,10 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
   assert.equal(requests[2]?.method, "GET");
   assert.equal(scheduledPolls[0]?.delay, 50);
 
-  roomClient.fireShot(createNormalizedViewportPoint({ x: 0.42, y: 0.36 }));
+  roomClient.fireShot(
+    { x: 0, y: 1.35, z: 0 },
+    { x: 0, y: 0, z: -1 }
+  );
   await flushAsyncWork();
 
   assert.equal(requests[3]?.method, "POST");

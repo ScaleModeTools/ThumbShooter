@@ -9,7 +9,8 @@ import type {
   CoopRoomClientCommand,
   CoopRoomServerEvent,
   CoopRoomSnapshot,
-  NormalizedViewportPoint,
+  CoopSyncPlayerPresenceCommand,
+  CoopVector3Snapshot,
   Username
 } from "@thumbshooter/shared";
 import {
@@ -24,8 +25,9 @@ import type {
 } from "../types/coop-room-runtime.js";
 
 interface PendingShotCommand {
-  readonly aimPoint: NormalizedViewportPoint;
+  readonly aimDirection: CoopVector3Snapshot;
   readonly clientShotSequence: number;
+  readonly origin: CoopVector3Snapshot;
   readonly playerId: CoopPlayerId;
 }
 
@@ -33,22 +35,29 @@ interface CoopBirdRuntimeState {
   readonly birdId: CoopBirdId;
   readonly downedScale: number;
   readonly glideScale: number;
-  readonly homeVelocityX: number;
-  readonly homeVelocityY: number;
+  readonly homeAltitudeVelocity: number;
+  readonly homeAngularVelocity: number;
   readonly label: string;
+  readonly orbitRadius: number;
   readonly radius: number;
   readonly scatterScale: number;
   readonly wingSpeed: number;
+  altitude: number;
+  altitudeVelocity: number;
+  angularVelocity: number;
+  azimuthRadians: number;
   behavior: CoopBirdBehaviorState;
   behaviorRemainingMs: number;
+  downedVelocityX: number;
+  downedVelocityY: number;
+  downedVelocityZ: number;
   headingRadians: number;
   lastInteractionByPlayerId: CoopPlayerId | null;
   lastInteractionTick: number | null;
   positionX: number;
   positionY: number;
+  positionZ: number;
   scale: number;
-  velocityX: number;
-  velocityY: number;
   visible: boolean;
   wingPhase: number;
 }
@@ -60,12 +69,23 @@ interface CoopPlayerRuntimeState {
   lastAcknowledgedShotSequence: number;
   lastHitBirdId: CoopBirdId | null;
   lastOutcome: CoopPlayerShotOutcomeState | null;
+  lastPresenceTick: number | null;
+  lastPresenceSequence: number;
   lastQueuedShotSequence: number;
   lastShotTick: number | null;
+  pitchRadians: number;
+  positionX: number;
+  positionY: number;
+  positionZ: number;
   ready: boolean;
   scatterEventsCaused: number;
   shotsFired: number;
   username: Username;
+  weaponId: string;
+  yawRadians: number;
+  aimDirectionX: number;
+  aimDirectionY: number;
+  aimDirectionZ: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -84,28 +104,98 @@ function normalizeNowMs(rawValue: number): number {
   return Math.max(0, rawValue);
 }
 
+function wrapRadians(rawValue: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  let nextValue = rawValue;
+
+  while (nextValue > Math.PI) {
+    nextValue -= Math.PI * 2;
+  }
+
+  while (nextValue <= -Math.PI) {
+    nextValue += Math.PI * 2;
+  }
+
+  return nextValue;
+}
+
+function createWorldPositionFromOrbit(
+  azimuthRadians: number,
+  altitude: number,
+  orbitRadius: number
+): CoopVector3Snapshot {
+  return Object.freeze({
+    x: Math.sin(azimuthRadians) * orbitRadius,
+    y: altitude,
+    z: -Math.cos(azimuthRadians) * orbitRadius
+  });
+}
+
+function computeFlightHeadingRadians(
+  angularVelocity: number,
+  altitudeVelocity: number,
+  orbitRadius: number
+): number {
+  return Math.atan2(altitudeVelocity, angularVelocity * orbitRadius);
+}
+
+function syncBirdWorldPosition(birdState: CoopBirdRuntimeState): void {
+  const worldPosition = createWorldPositionFromOrbit(
+    birdState.azimuthRadians,
+    birdState.altitude,
+    birdState.orbitRadius
+  );
+
+  birdState.positionX = worldPosition.x;
+  birdState.positionY = worldPosition.y;
+  birdState.positionZ = worldPosition.z;
+  birdState.headingRadians = computeFlightHeadingRadians(
+    birdState.angularVelocity,
+    birdState.altitudeVelocity,
+    birdState.orbitRadius
+  );
+}
+
 function createBirdRuntimeState(seed: CoopRoomBirdSeed): CoopBirdRuntimeState {
-  const headingRadians = Math.atan2(seed.glideVelocity.y, seed.glideVelocity.x);
+  const worldPosition = createWorldPositionFromOrbit(
+    seed.spawn.azimuthRadians,
+    seed.spawn.altitude,
+    seed.orbitRadius
+  );
 
   return {
+    altitude: seed.spawn.altitude,
+    altitudeVelocity: seed.glideVelocity.altitudeUnitsPerSecond,
+    angularVelocity: seed.glideVelocity.azimuthRadiansPerSecond,
+    azimuthRadians: seed.spawn.azimuthRadians,
     behavior: "glide",
     behaviorRemainingMs: 0,
     birdId: seed.birdId,
-    downedScale: seed.scale * 0.8,
+    downedScale: seed.scale * 0.82,
+    downedVelocityX: 0,
+    downedVelocityY: 0,
+    downedVelocityZ: 0,
     glideScale: seed.scale,
-    headingRadians,
-    homeVelocityX: seed.glideVelocity.x,
-    homeVelocityY: seed.glideVelocity.y,
+    headingRadians: computeFlightHeadingRadians(
+      seed.glideVelocity.azimuthRadiansPerSecond,
+      seed.glideVelocity.altitudeUnitsPerSecond,
+      seed.orbitRadius
+    ),
+    homeAltitudeVelocity: seed.glideVelocity.altitudeUnitsPerSecond,
+    homeAngularVelocity: seed.glideVelocity.azimuthRadiansPerSecond,
     label: seed.label,
     lastInteractionByPlayerId: null,
     lastInteractionTick: null,
-    positionX: seed.spawn.x,
-    positionY: seed.spawn.y,
+    orbitRadius: seed.orbitRadius,
+    positionX: worldPosition.x,
+    positionY: worldPosition.y,
+    positionZ: worldPosition.z,
     radius: seed.radius,
     scale: seed.scale,
     scatterScale: seed.scale * 1.08,
-    velocityX: seed.glideVelocity.x,
-    velocityY: seed.glideVelocity.y,
     visible: true,
     wingPhase: 0,
     wingSpeed: seed.wingSpeed
@@ -115,19 +205,17 @@ function createBirdRuntimeState(seed: CoopRoomBirdSeed): CoopBirdRuntimeState {
 function restoreBirdGlideState(birdState: CoopBirdRuntimeState): void {
   birdState.behavior = "glide";
   birdState.behaviorRemainingMs = 0;
-  birdState.velocityX = birdState.homeVelocityX;
-  birdState.velocityY = birdState.homeVelocityY;
-  birdState.headingRadians = Math.atan2(
-    birdState.homeVelocityY,
-    birdState.homeVelocityX
-  );
+  birdState.angularVelocity = birdState.homeAngularVelocity;
+  birdState.altitudeVelocity = birdState.homeAltitudeVelocity;
   birdState.scale = birdState.glideScale;
+  syncBirdWorldPosition(birdState);
 }
 
 function settleBirdDownedState(birdState: CoopBirdRuntimeState): void {
   birdState.behaviorRemainingMs = 0;
-  birdState.velocityX = 0;
-  birdState.velocityY = 0;
+  birdState.downedVelocityX = 0;
+  birdState.downedVelocityY = 0;
+  birdState.downedVelocityZ = 0;
 }
 
 function setBirdDowned(
@@ -136,92 +224,181 @@ function setBirdDowned(
   tick: number,
   config: CoopRoomRuntimeConfig
 ): void {
+  const tangentialVelocityX =
+    Math.cos(birdState.azimuthRadians) *
+    birdState.orbitRadius *
+    birdState.angularVelocity;
+  const tangentialVelocityZ =
+    Math.sin(birdState.azimuthRadians) *
+    birdState.orbitRadius *
+    birdState.angularVelocity;
+  const tangentialMagnitude = Math.hypot(
+    tangentialVelocityX,
+    tangentialVelocityZ
+  );
+  const driftScale =
+    tangentialMagnitude <= 0.0001
+      ? 0
+      : config.movement.downedDriftSpeed / tangentialMagnitude;
+
   birdState.behavior = "downed";
   birdState.behaviorRemainingMs = config.movement.downedDurationMs;
-  birdState.velocityX *= 0.35;
-  birdState.velocityY = config.movement.downedDriftVelocityY;
+  birdState.downedVelocityX = tangentialVelocityX * driftScale;
+  birdState.downedVelocityY = -config.movement.downedFallSpeed;
+  birdState.downedVelocityZ = tangentialVelocityZ * driftScale;
   birdState.scale = birdState.downedScale;
   birdState.lastInteractionByPlayerId = playerId;
   birdState.lastInteractionTick = tick;
+}
+
+function resolveScatterDirection(value: number, fallback: number): number {
+  if (Math.abs(value) > 0.0001) {
+    return Math.sign(value);
+  }
+
+  if (Math.abs(fallback) > 0.0001) {
+    return Math.sign(fallback);
+  }
+
+  return 1;
 }
 
 function setBirdScatter(
   birdState: CoopBirdRuntimeState,
   playerId: CoopPlayerId,
   tick: number,
-  aimPointX: number,
-  aimPointY: number,
+  shotAzimuthRadians: number,
+  targetAltitude: number,
   config: CoopRoomRuntimeConfig
 ): void {
-  const deltaX = birdState.positionX - aimPointX;
-  const deltaY = birdState.positionY - aimPointY;
-  const magnitude = Math.hypot(deltaX, deltaY) || 1;
+  const azimuthDelta = wrapRadians(birdState.azimuthRadians - shotAzimuthRadians);
+  const altitudeDelta = birdState.altitude - targetAltitude;
 
   birdState.behavior = "scatter";
   birdState.behaviorRemainingMs = config.movement.scatterDurationMs;
-  birdState.velocityX = (deltaX / magnitude) * config.movement.scatterSpeed;
-  birdState.velocityY = (deltaY / magnitude) * config.movement.scatterSpeed;
-  birdState.headingRadians = Math.atan2(birdState.velocityY, birdState.velocityX);
+  birdState.angularVelocity =
+    resolveScatterDirection(azimuthDelta, birdState.homeAngularVelocity) *
+    config.movement.scatterAngularSpeed;
+  birdState.altitudeVelocity =
+    resolveScatterDirection(altitudeDelta, birdState.homeAltitudeVelocity) *
+    config.movement.scatterAltitudeSpeed;
   birdState.scale = birdState.scatterScale;
   birdState.lastInteractionByPlayerId = playerId;
   birdState.lastInteractionTick = tick;
+  syncBirdWorldPosition(birdState);
+}
+
+function createDistanceSquaredFromRay(
+  origin: CoopVector3Snapshot,
+  direction: CoopVector3Snapshot,
+  pointX: number,
+  pointY: number,
+  pointZ: number
+): {
+  readonly distanceSquared: number;
+  readonly rayDistance: number;
+} {
+  const offsetX = pointX - origin.x;
+  const offsetY = pointY - origin.y;
+  const offsetZ = pointZ - origin.z;
+  const rayDistance = offsetX * direction.x + offsetY * direction.y + offsetZ * direction.z;
+
+  if (rayDistance <= 0) {
+    return {
+      distanceSquared: Number.POSITIVE_INFINITY,
+      rayDistance
+    };
+  }
+
+  const nearestX = origin.x + direction.x * rayDistance;
+  const nearestY = origin.y + direction.y * rayDistance;
+  const nearestZ = origin.z + direction.z * rayDistance;
+  const deltaX = pointX - nearestX;
+  const deltaY = pointY - nearestY;
+  const deltaZ = pointZ - nearestZ;
+
+  return {
+    distanceSquared: deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ,
+    rayDistance
+  };
 }
 
 function findNearestLiveBird(
   birdStates: readonly CoopBirdRuntimeState[],
-  aimPointX: number,
-  aimPointY: number,
-  radius: number
+  origin: CoopVector3Snapshot,
+  direction: CoopVector3Snapshot,
+  extraRadius: number
 ): CoopBirdRuntimeState | null {
   let nearestBird: CoopBirdRuntimeState | null = null;
   let nearestDistanceSquared = Number.POSITIVE_INFINITY;
-  const radiusSquared = radius * radius;
 
   for (const birdState of birdStates) {
     if (birdState.behavior === "downed") {
       continue;
     }
 
-    const deltaX = birdState.positionX - aimPointX;
-    const deltaY = birdState.positionY - aimPointY;
-    const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+    const thresholdRadius = birdState.radius + extraRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      origin,
+      direction,
+      birdState.positionX,
+      birdState.positionY,
+      birdState.positionZ
+    );
 
-    if (distanceSquared > radiusSquared || distanceSquared >= nearestDistanceSquared) {
+    if (
+      distanceToRay.distanceSquared > thresholdRadius * thresholdRadius ||
+      distanceToRay.distanceSquared >= nearestDistanceSquared
+    ) {
       continue;
     }
 
     nearestBird = birdState;
-    nearestDistanceSquared = distanceSquared;
+    nearestDistanceSquared = distanceToRay.distanceSquared;
   }
 
   return nearestBird;
 }
 
-function scatterBirdsNearAim(
+function scatterBirdsNearShot(
   birdStates: readonly CoopBirdRuntimeState[],
-  aimPointX: number,
-  aimPointY: number,
+  origin: CoopVector3Snapshot,
+  direction: CoopVector3Snapshot,
   playerId: CoopPlayerId,
   tick: number,
   config: CoopRoomRuntimeConfig
 ): number {
   let scatteredBirdCount = 0;
-  const scatterRadiusSquared = config.scatterRadius * config.scatterRadius;
+  const shotAzimuthRadians = Math.atan2(direction.x, -direction.z);
 
   for (const birdState of birdStates) {
     if (birdState.behavior === "downed") {
       continue;
     }
 
-    const deltaX = birdState.positionX - aimPointX;
-    const deltaY = birdState.positionY - aimPointY;
-    const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+    const thresholdRadius = birdState.radius + config.scatterRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      origin,
+      direction,
+      birdState.positionX,
+      birdState.positionY,
+      birdState.positionZ
+    );
 
-    if (distanceSquared > scatterRadiusSquared) {
+    if (distanceToRay.distanceSquared > thresholdRadius * thresholdRadius) {
       continue;
     }
 
-    setBirdScatter(birdState, playerId, tick, aimPointX, aimPointY, config);
+    const targetAltitude = origin.y + direction.y * Math.max(distanceToRay.rayDistance, 0);
+
+    setBirdScatter(
+      birdState,
+      playerId,
+      tick,
+      shotAzimuthRadians,
+      targetAltitude,
+      config
+    );
     scatteredBirdCount += 1;
   }
 
@@ -294,6 +471,9 @@ export class CoopRoomRuntime {
       case "fire-shot":
         this.#queueShot(command);
         break;
+      case "sync-player-presence":
+        this.#syncPlayerPresence(command);
+        break;
     }
 
     this.#snapshot = this.#buildSnapshot();
@@ -322,22 +502,35 @@ export class CoopRoomRuntime {
     }
 
     this.#playerStates.set(command.playerId, {
+      aimDirectionX: 0,
+      aimDirectionY: 0,
+      aimDirectionZ: -1,
       connected: true,
       hitsLanded: 0,
       lastAcknowledgedShotSequence: 0,
       lastHitBirdId: null,
       lastOutcome: null,
+      lastPresenceSequence: 0,
+      lastPresenceTick: null,
       lastQueuedShotSequence: 0,
       lastShotTick: null,
+      pitchRadians: 0,
       playerId: command.playerId,
+      positionX: this.#config.playerSpawnPosition.x,
+      positionY: this.#config.playerSpawnPosition.y,
+      positionZ: this.#config.playerSpawnPosition.z,
       ready: command.ready,
       scatterEventsCaused: 0,
       shotsFired: 0,
-      username: command.username
+      username: command.username,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
     });
   }
 
-  #setPlayerReady(command: Extract<CoopRoomClientCommand, { type: "set-player-ready" }>): void {
+  #setPlayerReady(
+    command: Extract<CoopRoomClientCommand, { type: "set-player-ready" }>
+  ): void {
     const playerState = this.#playerStates.get(command.playerId);
 
     if (playerState === undefined) {
@@ -374,10 +567,35 @@ export class CoopRoomRuntime {
 
     playerState.lastQueuedShotSequence = command.clientShotSequence;
     this.#pendingShots.push({
-      aimPoint: command.aimPoint,
+      aimDirection: command.aimDirection,
       clientShotSequence: command.clientShotSequence,
+      origin: command.origin,
       playerId: command.playerId
     });
+  }
+
+  #syncPlayerPresence(command: CoopSyncPlayerPresenceCommand): void {
+    const playerState = this.#playerStates.get(command.playerId);
+
+    if (playerState === undefined) {
+      throw new Error(`Unknown co-op player: ${command.playerId}`);
+    }
+
+    if (command.stateSequence <= playerState.lastPresenceSequence) {
+      return;
+    }
+
+    playerState.aimDirectionX = command.aimDirection.x;
+    playerState.aimDirectionY = command.aimDirection.y;
+    playerState.aimDirectionZ = command.aimDirection.z;
+    playerState.lastPresenceSequence = command.stateSequence;
+    playerState.lastPresenceTick = this.#tick;
+    playerState.pitchRadians = command.pitchRadians;
+    playerState.positionX = command.position.x;
+    playerState.positionY = command.position.y;
+    playerState.positionZ = command.position.z;
+    playerState.weaponId = command.weaponId;
+    playerState.yawRadians = command.yawRadians;
   }
 
   #dropPendingShotsForPlayer(playerId: CoopPlayerId): void {
@@ -429,8 +647,8 @@ export class CoopRoomRuntime {
 
       const targetedBird = findNearestLiveBird(
         this.#birdStates,
-        pendingShot.aimPoint.x,
-        pendingShot.aimPoint.y,
+        pendingShot.origin,
+        pendingShot.aimDirection,
         this.#config.hitRadius
       );
 
@@ -443,10 +661,10 @@ export class CoopRoomRuntime {
         continue;
       }
 
-      const scatteredBirdCount = scatterBirdsNearAim(
+      const scatteredBirdCount = scatterBirdsNearShot(
         this.#birdStates,
-        pendingShot.aimPoint.x,
-        pendingShot.aimPoint.y,
+        pendingShot.origin,
+        pendingShot.aimDirection,
         pendingShot.playerId,
         this.#tick,
         this.#config
@@ -475,17 +693,12 @@ export class CoopRoomRuntime {
             0,
             birdState.behaviorRemainingMs - deltaMs
           );
-          birdState.positionX = clamp(
-            birdState.positionX + birdState.velocityX * deltaSeconds,
-            this.#config.arenaBounds.minX,
-            this.#config.arenaBounds.maxX
+          birdState.positionX += birdState.downedVelocityX * deltaSeconds;
+          birdState.positionY += birdState.downedVelocityY * deltaSeconds;
+          birdState.positionZ += birdState.downedVelocityZ * deltaSeconds;
+          birdState.headingRadians = wrapRadians(
+            birdState.headingRadians + deltaSeconds * 2.8
           );
-          birdState.positionY = clamp(
-            birdState.positionY + birdState.velocityY * deltaSeconds,
-            this.#config.arenaBounds.minY,
-            this.#config.arenaBounds.maxY + 0.14
-          );
-          birdState.headingRadians += deltaSeconds * 2.8;
 
           if (birdState.behaviorRemainingMs === 0) {
             settleBirdDownedState(birdState);
@@ -495,34 +708,24 @@ export class CoopRoomRuntime {
         continue;
       }
 
-      birdState.positionX += birdState.velocityX * deltaSeconds;
-      birdState.positionY += birdState.velocityY * deltaSeconds;
+      birdState.azimuthRadians = wrapRadians(
+        birdState.azimuthRadians + birdState.angularVelocity * deltaSeconds
+      );
+      birdState.altitude += birdState.altitudeVelocity * deltaSeconds;
 
       if (
-        birdState.positionX < this.#config.arenaBounds.minX ||
-        birdState.positionX > this.#config.arenaBounds.maxX
+        birdState.altitude < this.#config.birdAltitudeBounds.min ||
+        birdState.altitude > this.#config.birdAltitudeBounds.max
       ) {
-        birdState.velocityX *= -1;
-        birdState.positionX = clamp(
-          birdState.positionX,
-          this.#config.arenaBounds.minX,
-          this.#config.arenaBounds.maxX
+        birdState.altitudeVelocity *= -1;
+        birdState.altitude = clamp(
+          birdState.altitude,
+          this.#config.birdAltitudeBounds.min,
+          this.#config.birdAltitudeBounds.max
         );
       }
 
-      if (
-        birdState.positionY < this.#config.arenaBounds.minY ||
-        birdState.positionY > this.#config.arenaBounds.maxY
-      ) {
-        birdState.velocityY *= -1;
-        birdState.positionY = clamp(
-          birdState.positionY,
-          this.#config.arenaBounds.minY,
-          this.#config.arenaBounds.maxY
-        );
-      }
-
-      birdState.headingRadians = Math.atan2(birdState.velocityY, birdState.velocityX);
+      syncBirdWorldPosition(birdState);
 
       if (birdState.behavior === "scatter") {
         birdState.behaviorRemainingMs = Math.max(
@@ -574,7 +777,8 @@ export class CoopRoomRuntime {
         lastInteractionTick: birdState.lastInteractionTick,
         position: {
           x: birdState.positionX,
-          y: birdState.positionY
+          y: birdState.positionY,
+          z: birdState.positionZ
         },
         radius: birdState.radius,
         scale: birdState.scale,
@@ -598,6 +802,23 @@ export class CoopRoomRuntime {
           },
           connected: playerState.connected,
           playerId: playerState.playerId,
+          presence: {
+            aimDirection: {
+              x: playerState.aimDirectionX,
+              y: playerState.aimDirectionY,
+              z: playerState.aimDirectionZ
+            },
+            lastUpdatedTick: playerState.lastPresenceTick,
+            pitchRadians: playerState.pitchRadians,
+            position: {
+              x: playerState.positionX,
+              y: playerState.positionY,
+              z: playerState.positionZ
+            },
+            stateSequence: playerState.lastPresenceSequence,
+            weaponId: playerState.weaponId,
+            yawRadians: playerState.yawRadians
+          },
           ready: playerState.ready,
           username: playerState.username
         })),

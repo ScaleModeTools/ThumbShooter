@@ -6,8 +6,13 @@ import {
   type NormalizedViewportPoint
 } from "@thumbshooter/shared";
 
+import { gameplayRuntimeConfig } from "../config/gameplay-runtime";
 import { handAimObservationConfig } from "../config/hand-aim-observation";
 import { localArenaSimulationConfig } from "../config/local-arena-simulation";
+import {
+  advanceGameplayCameraSnapshot,
+  createGameplayCameraSnapshot
+} from "../states/gameplay-space";
 import { evaluateHandTriggerGesture } from "../types/hand-trigger-gesture";
 import { readObservedAimPoint } from "../types/hand-aim-observation";
 import {
@@ -24,9 +29,11 @@ import {
 } from "../states/local-arena-enemy-field";
 import type { GameplaySignal } from "../types/gameplay-signal";
 import type { LatestHandTrackingSnapshot } from "../types/hand-tracking";
-import {
-  createSinglePlayerGameplaySessionSnapshot
-} from "../types/gameplay-session";
+import { createSinglePlayerGameplaySessionSnapshot } from "../types/gameplay-session";
+import type {
+  GameplayCameraSnapshot,
+  GameplayViewportSnapshot
+} from "../types/gameplay-runtime";
 import type {
   LocalArenaEnemyRenderState,
   LocalArenaHudSnapshot,
@@ -37,6 +44,11 @@ import type {
 } from "../types/local-arena-simulation";
 import { LocalCombatSession } from "./local-combat-session";
 import { WeaponRuntime } from "./weapon-runtime";
+
+const defaultViewportSnapshot = Object.freeze({
+  height: 1,
+  width: 1
+}) satisfies GameplayViewportSnapshot;
 
 function freezeTargetFeedbackSnapshot(
   state: LocalArenaTargetFeedbackState,
@@ -92,6 +104,7 @@ export class LocalArenaSimulation {
   readonly #triggerCalibration: HandTriggerCalibrationSnapshot | null;
   readonly #weaponRuntime: WeaponRuntime;
 
+  #cameraSnapshot: GameplayCameraSnapshot;
   #feedbackEnemyId: string | null = null;
   #feedbackEnemyLabel: string | null = null;
   #feedbackHoldUntilMs = 0;
@@ -120,7 +133,12 @@ export class LocalArenaSimulation {
 
     this.#enemyRuntimeStates = enemyField.enemyRuntimeStates;
     this.#enemyRenderStates = enemyField.enemyRenderStates;
+    this.#cameraSnapshot = createGameplayCameraSnapshot(config.camera);
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
+  }
+
+  get cameraSnapshot(): GameplayCameraSnapshot {
+    return this.#cameraSnapshot;
   }
 
   get enemyRenderStates(): readonly LocalArenaEnemyRenderState[] {
@@ -137,7 +155,8 @@ export class LocalArenaSimulation {
 
   advance(
     trackingSnapshot: LatestHandTrackingSnapshot,
-    nowMs: number = readNowMs()
+    nowMs: number = readNowMs(),
+    viewportSnapshot: GameplayViewportSnapshot = defaultViewportSnapshot
   ): LocalArenaHudSnapshot {
     const safeNowMs = Number.isFinite(nowMs) ? nowMs : this.#worldTimeMs;
     const deltaMs =
@@ -155,6 +174,16 @@ export class LocalArenaSimulation {
       trackingSnapshot.trackingState === "tracked"
         ? this.#projectAimPoint(trackingSnapshot)
         : { aimPoint: null, isReticleOffscreen: false };
+
+    this.#cameraSnapshot = advanceGameplayCameraSnapshot(
+      this.#cameraSnapshot,
+      projectedAimPoint.aimPoint,
+      viewportSnapshot,
+      gameplayRuntimeConfig.camera.fieldOfViewDegrees,
+      this.#config.camera,
+      deltaMs / 1000
+    );
+
     const triggerPressed =
       trackingSnapshot.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
@@ -173,15 +202,15 @@ export class LocalArenaSimulation {
       applyReticleScatter(
         this.#enemyRuntimeStates,
         this.#config,
-        projectedAimPoint.aimPoint.x,
-        projectedAimPoint.aimPoint.y
+        this.#cameraSnapshot.position,
+        this.#cameraSnapshot.aimDirection
       );
     }
 
     if (weaponFrame.fired && projectedAimPoint.aimPoint !== null) {
       this.#resolveShot(
-        projectedAimPoint.aimPoint.x,
-        projectedAimPoint.aimPoint.y,
+        this.#cameraSnapshot.position,
+        this.#cameraSnapshot.aimDirection,
         safeNowMs
       );
     }
@@ -218,6 +247,7 @@ export class LocalArenaSimulation {
 
   reset(trackingSnapshot?: LatestHandTrackingSnapshot): void {
     this.#combatSession.reset();
+    this.#cameraSnapshot = createGameplayCameraSnapshot(this.#config.camera);
     this.#feedbackEnemyId = null;
     this.#feedbackEnemyLabel = null;
     this.#feedbackHoldUntilMs = 0;
@@ -293,7 +323,11 @@ export class LocalArenaSimulation {
     return false;
   }
 
-  #resolveShot(aimX: number, aimY: number, nowMs: number): void {
+  #resolveShot(
+    shotOrigin: GameplayCameraSnapshot["position"],
+    shotDirection: GameplayCameraSnapshot["aimDirection"],
+    nowMs: number
+  ): void {
     this.#emitGameplaySignal?.({
       type: "weapon-fired",
       weaponId: this.#weaponRuntime.definition.weaponId
@@ -301,8 +335,8 @@ export class LocalArenaSimulation {
 
     const hitEnemy = findNearestEnemyState(
       this.#enemyRuntimeStates,
-      aimX,
-      aimY,
+      shotOrigin,
+      shotDirection,
       this.#config.targeting.hitRadius
     );
 
@@ -331,7 +365,12 @@ export class LocalArenaSimulation {
       this.#setFeedback("miss", null, null, nowMs);
     }
 
-    scatterEnemiesFromShot(this.#enemyRuntimeStates, this.#config, aimX, aimY);
+    scatterEnemiesFromShot(
+      this.#enemyRuntimeStates,
+      this.#config,
+      shotOrigin,
+      shotDirection
+    );
   }
 
   #setFeedback(
@@ -379,8 +418,8 @@ export class LocalArenaSimulation {
 
     const targetedEnemy = findNearestEnemyState(
       this.#enemyRuntimeStates,
-      aimPoint.x,
-      aimPoint.y,
+      this.#cameraSnapshot.position,
+      this.#cameraSnapshot.aimDirection,
       this.#config.targeting.acquireRadius
     );
 
@@ -405,9 +444,7 @@ export class LocalArenaSimulation {
       trackingSnapshot.pose,
       handAimObservationConfig
     );
-    const rawAimPoint = this.#affineAimTransform.projectUnclamped(
-      observedAimPoint
-    );
+    const rawAimPoint = this.#affineAimTransform.projectUnclamped(observedAimPoint);
     const isReticleOffscreen =
       rawAimPoint.x < 0 ||
       rawAimPoint.x > 1 ||

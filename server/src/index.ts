@@ -10,6 +10,7 @@ import type {
   CoopLeaveRoomCommand,
   CoopRoomClientCommand,
   CoopRoomId,
+  CoopSyncPlayerPresenceCommand,
   CoopSetPlayerReadyCommand
 } from "@thumbshooter/shared";
 import {
@@ -18,6 +19,7 @@ import {
   createCoopLeaveRoomCommand,
   createCoopRoomSnapshotEvent,
   createCoopSetPlayerReadyCommand,
+  createCoopSyncPlayerPresenceCommand,
   createCoopJoinRoomCommand,
   createCoopRoomId,
   createUsername
@@ -41,13 +43,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isNormalizedPointInput(
+function isVector3Input(
   value: unknown
-): value is { readonly x: number; readonly y: number } {
+): value is { readonly x: number; readonly y: number; readonly z: number } {
   return (
     isRecord(value) &&
     typeof value.x === "number" &&
-    typeof value.y === "number"
+    typeof value.y === "number" &&
+    typeof value.z === "number"
   );
 }
 
@@ -163,18 +166,59 @@ function parseFireShotCommand(
     throw new Error("Invalid playerId.");
   }
 
-  if (!isNormalizedPointInput(body.aimPoint)) {
-    throw new Error("Expected aimPoint.x and aimPoint.y numeric fields.");
+  if (!isVector3Input(body.origin)) {
+    throw new Error("Expected origin.x, origin.y, and origin.z numeric fields.");
+  }
+
+  if (!isVector3Input(body.aimDirection)) {
+    throw new Error(
+      "Expected aimDirection.x, aimDirection.y, and aimDirection.z numeric fields."
+    );
   }
 
   return createCoopFireShotCommand({
-    aimPoint: body.aimPoint,
+    aimDirection: body.aimDirection,
     clientShotSequence: readNumberField(
       body.clientShotSequence,
       "clientShotSequence"
     ),
+    origin: body.origin,
     playerId,
     roomId
+  });
+}
+
+function parseSyncPlayerPresenceCommand(
+  body: Record<string, unknown>,
+  roomId: CoopRoomId
+): CoopSyncPlayerPresenceCommand {
+  const playerId = createCoopPlayerId(
+    readStringField(body.playerId, "playerId")
+  );
+
+  if (playerId === null) {
+    throw new Error("Invalid playerId.");
+  }
+
+  if (!isVector3Input(body.position)) {
+    throw new Error("Expected position.x, position.y, and position.z numeric fields.");
+  }
+
+  if (!isVector3Input(body.aimDirection)) {
+    throw new Error(
+      "Expected aimDirection.x, aimDirection.y, and aimDirection.z numeric fields."
+    );
+  }
+
+  return createCoopSyncPlayerPresenceCommand({
+    aimDirection: body.aimDirection,
+    pitchRadians: readNumberField(body.pitchRadians, "pitchRadians"),
+    playerId,
+    position: body.position,
+    roomId,
+    stateSequence: readNumberField(body.stateSequence, "stateSequence"),
+    weaponId: readStringField(body.weaponId, "weaponId"),
+    yawRadians: readNumberField(body.yawRadians, "yawRadians")
   });
 }
 
@@ -197,6 +241,8 @@ function parseCoopRoomCommand(
       return parseLeaveRoomCommand(body, roomId);
     case "fire-shot":
       return parseFireShotCommand(body, roomId);
+    case "sync-player-presence":
+      return parseSyncPlayerPresenceCommand(body, roomId);
     default:
       throw new Error(`Unsupported co-op command type: ${commandType}`);
   }

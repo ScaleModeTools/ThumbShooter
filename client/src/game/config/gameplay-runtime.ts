@@ -7,36 +7,22 @@ import type { GameplayRuntimeConfig } from "../types/gameplay-runtime";
 
 export const gameplayRuntimeConfig = {
   camera: {
-    far: 320,
-    fieldOfViewDegrees: createDegrees(34),
+    far: 260,
+    fieldOfViewDegrees: createDegrees(58),
     near: 0.1,
-    position: {
-      x: 0,
-      y: 4.6,
-      z: 15.5
-    },
-    target: {
-      x: 0,
-      y: 4.1,
-      z: 0
-    }
   },
   enemies: {
     bodyColor: [0.95, 0.98, 0.99],
     downedColor: [0.96, 0.39, 0.31],
-    flightDepth: {
-      far: 25,
-      near: 18
-    },
     scatterColor: [0.98, 0.78, 0.36],
     wingColor: [0.82, 0.9, 0.97],
     bodySize: {
-      width: 0.11,
-      height: 0.026
+      width: 1.5,
+      height: 0.38
     },
     wingSize: {
-      width: 0.12,
-      height: 0.024
+      width: 1.6,
+      height: 0.24
     },
     wingSweepRadians: createRadians(0.58)
   },
@@ -56,7 +42,7 @@ export const gameplayRuntimeConfig = {
   ocean: {
     emissiveColor: [0.08, 0.28, 0.37],
     farColor: [0.05, 0.22, 0.34],
-    height: -3.2,
+    height: 0,
     nearColor: [0.12, 0.45, 0.58],
     planeDepth: 320,
     planeWidth: 320,
@@ -75,7 +61,7 @@ export const gameplayRuntimeConfig = {
     }
   },
   reticle: {
-    depth: 9.5,
+    depth: 7.5,
     haloInnerRadius: 0.071,
     haloOuterRadius: 0.125,
     innerRadius: 0.045,

@@ -9,8 +9,14 @@ import {
   type NormalizedViewportPoint
 } from "@thumbshooter/shared";
 
+import { gameplayRuntimeConfig } from "../config/gameplay-runtime";
 import { handAimObservationConfig } from "../config/hand-aim-observation";
 import { coopArenaSimulationConfig } from "../config/coop-arena-simulation";
+import {
+  advanceGameplayCameraSnapshot,
+  createDistanceSquaredFromRay,
+  createGameplayCameraSnapshot
+} from "../states/gameplay-space";
 import { evaluateHandTriggerGesture } from "../types/hand-trigger-gesture";
 import { readObservedAimPoint } from "../types/hand-aim-observation";
 import type { GameplaySignal } from "../types/gameplay-signal";
@@ -25,11 +31,11 @@ import type {
   CoopArenaSimulationConfig
 } from "../types/coop-arena-simulation";
 import type {
-  GameplayArenaHudSnapshot
+  GameplayArenaHudSnapshot,
+  GameplayCameraSnapshot,
+  GameplayViewportSnapshot
 } from "../types/gameplay-runtime";
-import type {
-  MutableEnemyRenderState
-} from "../types/local-arena-enemy-field";
+import type { MutableEnemyRenderState } from "../types/local-arena-enemy-field";
 import type {
   LocalArenaArenaSnapshot,
   LocalArenaEnemyRenderState,
@@ -38,6 +44,11 @@ import type {
   LocalArenaWeaponSnapshot
 } from "../types/local-arena-simulation";
 import { WeaponRuntime } from "./weapon-runtime";
+
+const defaultViewportSnapshot = Object.freeze({
+  height: 1,
+  width: 1
+}) satisfies GameplayViewportSnapshot;
 
 function freezeArenaSnapshot(
   liveEnemyCount: number,
@@ -106,6 +117,7 @@ function createEnemyRenderState(
     label,
     positionX: 0,
     positionY: 0,
+    positionZ: 0,
     radius: 0,
     scale: 1,
     visible: false,
@@ -142,29 +154,38 @@ function summarizeEnemyRenderStates(
 
 function findNearestVisibleEnemyRenderState(
   enemyRenderStates: readonly LocalArenaEnemyRenderState[],
-  aimX: number,
-  aimY: number,
+  shotOrigin: GameplayCameraSnapshot["position"],
+  shotDirection: GameplayCameraSnapshot["aimDirection"],
   radius: number
 ): LocalArenaEnemyRenderState | null {
   let nearestEnemyState: LocalArenaEnemyRenderState | null = null;
   let nearestDistanceSquared = Number.POSITIVE_INFINITY;
-  const radiusSquared = radius * radius;
 
   for (const enemyState of enemyRenderStates) {
     if (!enemyState.visible || enemyState.behavior === "downed") {
       continue;
     }
 
-    const deltaX = enemyState.positionX - aimX;
-    const deltaY = enemyState.positionY - aimY;
-    const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+    const thresholdRadius = enemyState.radius + radius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      shotOrigin,
+      shotDirection,
+      {
+        x: enemyState.positionX,
+        y: enemyState.positionY,
+        z: enemyState.positionZ
+      }
+    );
 
-    if (distanceSquared > radiusSquared || distanceSquared >= nearestDistanceSquared) {
+    if (
+      distanceToRay.distanceSquared > thresholdRadius * thresholdRadius ||
+      distanceToRay.distanceSquared >= nearestDistanceSquared
+    ) {
       continue;
     }
 
     nearestEnemyState = enemyState;
-    nearestDistanceSquared = distanceSquared;
+    nearestDistanceSquared = distanceToRay.distanceSquared;
   }
 
   return nearestEnemyState;
@@ -194,6 +215,7 @@ export class CoopArenaSimulation {
   readonly #triggerCalibration: HandTriggerCalibrationSnapshot | null;
   readonly #weaponRuntime: WeaponRuntime;
 
+  #cameraSnapshot: GameplayCameraSnapshot;
   #feedbackEnemyId: string | null = null;
   #feedbackEnemyLabel: string | null = null;
   #feedbackHoldUntilMs = 0;
@@ -201,6 +223,7 @@ export class CoopArenaSimulation {
   #hudSnapshot: GameplayArenaHudSnapshot;
   #lastAcknowledgedShotSequence = 0;
   #lastKnownHitCount = 0;
+  #lastStepAtMs: number | null = null;
   #triggerReadyLatch = false;
   #worldTimeMs = 0;
 
@@ -217,7 +240,12 @@ export class CoopArenaSimulation {
     this.#roomSource = roomSource;
     this.#triggerCalibration = dependencies.triggerCalibration ?? null;
     this.#weaponRuntime = new WeaponRuntime(config.weapon);
+    this.#cameraSnapshot = createGameplayCameraSnapshot(config.camera);
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
+  }
+
+  get cameraSnapshot(): GameplayCameraSnapshot {
+    return this.#cameraSnapshot;
   }
 
   get enemyRenderStates(): readonly LocalArenaEnemyRenderState[] {
@@ -234,11 +262,17 @@ export class CoopArenaSimulation {
 
   advance(
     trackingSnapshot: LatestHandTrackingSnapshot,
-    nowMs: number = readNowMs()
+    nowMs: number = readNowMs(),
+    viewportSnapshot: GameplayViewportSnapshot = defaultViewportSnapshot
   ): GameplayArenaHudSnapshot {
     const safeNowMs = Number.isFinite(nowMs) ? nowMs : readNowMs();
+    const deltaMs =
+      this.#lastStepAtMs === null
+        ? 0
+        : Math.max(0, Math.min(48, safeNowMs - this.#lastStepAtMs));
     const roomSnapshot = this.#roomSource.roomSnapshot;
 
+    this.#lastStepAtMs = safeNowMs;
     this.#syncEnemyRenderStates(roomSnapshot);
     this.#worldTimeMs =
       roomSnapshot === null
@@ -249,6 +283,16 @@ export class CoopArenaSimulation {
       trackingSnapshot.trackingState === "tracked"
         ? this.#projectAimPoint(trackingSnapshot)
         : { aimPoint: null, isReticleOffscreen: false };
+
+    this.#cameraSnapshot = advanceGameplayCameraSnapshot(
+      this.#cameraSnapshot,
+      projectedAimPoint.aimPoint,
+      viewportSnapshot,
+      gameplayRuntimeConfig.camera.fieldOfViewDegrees,
+      this.#config.camera,
+      deltaMs / 1000
+    );
+
     const triggerPressed =
       trackingSnapshot.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
@@ -271,8 +315,19 @@ export class CoopArenaSimulation {
         type: "weapon-fired",
         weaponId: this.#weaponRuntime.definition.weaponId
       });
-      this.#roomSource.fireShot(projectedAimPoint.aimPoint);
+      this.#roomSource.fireShot(
+        this.#cameraSnapshot.position,
+        this.#cameraSnapshot.aimDirection
+      );
     }
+
+    this.#roomSource.syncPlayerPresence?.({
+      aimDirection: this.#cameraSnapshot.aimDirection,
+      pitchRadians: this.#cameraSnapshot.pitchRadians,
+      position: this.#cameraSnapshot.position,
+      weaponId: this.#weaponRuntime.definition.weaponId,
+      yawRadians: this.#cameraSnapshot.yawRadians
+    });
 
     if (weaponFrame.reloaded) {
       this.#emitGameplaySignal?.({
@@ -320,6 +375,7 @@ export class CoopArenaSimulation {
       (playerSnapshot) => playerSnapshot.playerId === this.#localPlayerId
     );
 
+    this.#cameraSnapshot = createGameplayCameraSnapshot(this.#config.camera);
     this.#feedbackEnemyId = null;
     this.#feedbackEnemyLabel = null;
     this.#feedbackHoldUntilMs = 0;
@@ -327,6 +383,7 @@ export class CoopArenaSimulation {
     this.#lastAcknowledgedShotSequence =
       localPlayerSnapshot?.activity.lastAcknowledgedShotSequence ?? 0;
     this.#lastKnownHitCount = localPlayerSnapshot?.activity.hitsLanded ?? 0;
+    this.#lastStepAtMs = null;
     this.#triggerReadyLatch = false;
     this.#weaponRuntime.reset(
       trackingSnapshot?.trackingState === "tracked"
@@ -453,6 +510,7 @@ export class CoopArenaSimulation {
       enemyRenderState.label = birdSnapshot.label;
       enemyRenderState.positionX = birdSnapshot.position.x;
       enemyRenderState.positionY = birdSnapshot.position.y;
+      enemyRenderState.positionZ = birdSnapshot.position.z;
       enemyRenderState.radius = birdSnapshot.radius;
       enemyRenderState.scale = birdSnapshot.scale;
       enemyRenderState.visible = birdSnapshot.visible;
@@ -537,8 +595,8 @@ export class CoopArenaSimulation {
 
     const targetedEnemy = findNearestVisibleEnemyRenderState(
       this.#enemyRenderStates,
-      aimPoint.x,
-      aimPoint.y,
+      this.#cameraSnapshot.position,
+      this.#cameraSnapshot.aimDirection,
       this.#config.targeting.acquireRadius
     );
 
@@ -563,9 +621,7 @@ export class CoopArenaSimulation {
       trackingSnapshot.pose,
       handAimObservationConfig
     );
-    const rawAimPoint = this.#affineAimTransform.projectUnclamped(
-      observedAimPoint
-    );
+    const rawAimPoint = this.#affineAimTransform.projectUnclamped(observedAimPoint);
     const isReticleOffscreen =
       rawAimPoint.x < 0 ||
       rawAimPoint.x > 1 ||

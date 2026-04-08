@@ -38,10 +38,11 @@ import {
   vec3
 } from "three/tsl";
 
+import type { GameplayReticleVisualState } from "../types/gameplay-presentation";
 import type {
-  GameplayReticleVisualState
-} from "../types/gameplay-presentation";
-import type { GameplayRuntimeConfig } from "../types/gameplay-runtime";
+  GameplayCameraSnapshot,
+  GameplayRuntimeConfig
+} from "../types/gameplay-runtime";
 import type {
   LocalArenaEnemyBehaviorState,
   LocalArenaEnemyRenderState
@@ -168,6 +169,7 @@ export function createGameplayScene(
   readonly scene: Scene;
   resetPresentation(): void;
   syncArenaPresentation(
+    cameraSnapshot: GameplayCameraSnapshot,
     arenaEnemyStates: readonly LocalArenaEnemyRenderState[],
     aimPoint: NormalizedViewportPoint | null,
     reticleVisualState: GameplayReticleVisualState
@@ -192,16 +194,8 @@ export function createGameplayScene(
   const reticleRuntime = createReticleRuntime(config);
   const enemyMeshes = createEnemyMeshes(config, enemyStates);
 
-  camera.position.set(
-    config.camera.position.x,
-    config.camera.position.y,
-    config.camera.position.z
-  );
-  camera.lookAt(
-    config.camera.target.x,
-    config.camera.target.y,
-    config.camera.target.z
-  );
+  camera.position.set(0, 0, 0);
+  camera.lookAt(0, 0, -1);
   camera.updateMatrixWorld(true);
 
   scene.background = toThreeColor(config.environment.horizonColor);
@@ -232,7 +226,13 @@ export function createGameplayScene(
         enemyMesh.anchorGroup.visible = true;
       }
     },
-    syncArenaPresentation(arenaEnemyStates, aimPoint, reticleVisualState) {
+    syncArenaPresentation(
+      cameraSnapshot,
+      arenaEnemyStates,
+      aimPoint,
+      reticleVisualState
+    ) {
+      syncCamera(camera, cameraSnapshot);
       ensureEnemyMeshCount(enemyMeshes, arenaEnemyStates, scene, config);
       updateProjectionRuntime(camera, projectionRuntime);
       syncReticleGroup(
@@ -247,7 +247,6 @@ export function createGameplayScene(
         enemyMeshes,
         arenaEnemyStates,
         camera,
-        projectionRuntime,
         config
       );
     },
@@ -292,14 +291,27 @@ function createSunLight(config: GameplayRuntimeConfig): DirectionalLight {
   );
 
   light.position.copy(sunOffset);
-  light.target.position.set(
-    config.camera.target.x,
-    config.camera.target.y,
-    config.camera.target.z
-  );
+  light.target.position.set(0, 0, 0);
   light.target.updateMatrixWorld();
 
   return light;
+}
+
+function syncCamera(
+  camera: PerspectiveCamera,
+  cameraSnapshot: GameplayCameraSnapshot
+): void {
+  camera.position.set(
+    cameraSnapshot.position.x,
+    cameraSnapshot.position.y,
+    cameraSnapshot.position.z
+  );
+  camera.lookAt(
+    cameraSnapshot.position.x + cameraSnapshot.lookDirection.x,
+    cameraSnapshot.position.y + cameraSnapshot.lookDirection.y,
+    cameraSnapshot.position.z + cameraSnapshot.lookDirection.z
+  );
+  camera.updateMatrixWorld(true);
 }
 
 function createSkyMesh(config: GameplayRuntimeConfig): Mesh {
@@ -641,7 +653,6 @@ function syncEnemyMeshes(
   enemyMeshes: readonly EnemyMeshRuntime[],
   enemyStates: readonly LocalArenaEnemyRenderState[],
   camera: PerspectiveCamera,
-  projectionRuntime: ProjectionRuntime,
   config: GameplayRuntimeConfig
 ): void {
   for (let index = 0; index < enemyMeshes.length; index += 1) {
@@ -660,13 +671,6 @@ function syncEnemyMeshes(
     enemyMesh.anchorGroup.visible = enemyState.visible;
     enemyMesh.billboardGroup.quaternion.copy(camera.quaternion);
 
-    const depthBlend = MathUtils.clamp(enemyState.positionY, 0, 1);
-    const depthFromCamera = MathUtils.lerp(
-      config.enemies.flightDepth.far,
-      config.enemies.flightDepth.near,
-      depthBlend
-    );
-    const projectionScale = computeProjectionHalfHeight(camera, depthFromCamera);
     const motionLift =
       Math.sin(enemyState.wingPhase * 0.5) * config.enemies.bodySize.height * 0.28;
     const wingSwing =
@@ -677,16 +681,13 @@ function syncEnemyMeshes(
       enemyState.behavior === "downed"
         ? 0.52
         : enemyState.behavior === "scatter"
-          ? -0.14
+        ? -0.14
           : -0.08;
 
-    projectNormalizedPointToPlane(
-      camera,
-      projectionRuntime,
+    enemyMesh.anchorGroup.position.set(
       enemyState.positionX,
       enemyState.positionY,
-      depthFromCamera,
-      enemyMesh.anchorGroup.position
+      enemyState.positionZ
     );
     enemyMesh.flightGroup.position.y = motionLift;
     enemyMesh.flightGroup.rotation.set(
@@ -694,7 +695,7 @@ function syncEnemyMeshes(
       0,
       enemyState.headingRadians
     );
-    enemyMesh.flightGroup.scale.setScalar(projectionScale * enemyState.scale);
+    enemyMesh.flightGroup.scale.setScalar(enemyState.scale);
     enemyMesh.leftWingPivot.rotation.y = wingSwing;
     enemyMesh.rightWingPivot.rotation.y = -wingSwing;
   }

@@ -9,6 +9,10 @@ import type {
   LocalArenaEnemyRuntimeState,
   LocalArenaEnemySeed
 } from "../types/local-arena-enemy-field";
+import {
+  computeFlightHeadingRadians,
+  createWorldPositionFromOrbit
+} from "./gameplay-space";
 
 function freezeArenaSnapshot(
   liveEnemyCount: number,
@@ -25,29 +29,46 @@ function freezeArenaSnapshot(
 function createEnemyRuntimeState(
   seed: LocalArenaEnemySeed
 ): LocalArenaEnemyRuntimeState {
+  const worldPosition = createWorldPositionFromOrbit(
+    seed.spawn.azimuthRadians,
+    seed.spawn.altitude,
+    seed.orbitRadius
+  );
+
   return {
+    altitude: seed.spawn.altitude,
+    altitudeVelocity: seed.glideVelocity.altitudeUnitsPerSecond,
+    angularVelocity: seed.glideVelocity.azimuthRadiansPerSecond,
+    azimuthRadians: seed.spawn.azimuthRadians,
     behaviorRemainingMs: 0,
-    downedScale: seed.scale * 0.8,
+    downedScale: seed.scale * 0.82,
+    downedVelocityX: 0,
+    downedVelocityY: 0,
+    downedVelocityZ: 0,
     glideScale: seed.scale,
-    homeVelocityX: seed.glideVelocity.x,
-    homeVelocityY: seed.glideVelocity.y,
+    homeAltitudeVelocity: seed.glideVelocity.altitudeUnitsPerSecond,
+    homeAngularVelocity: seed.glideVelocity.azimuthRadiansPerSecond,
+    orbitRadius: seed.orbitRadius,
     renderState: {
       behavior: "glide",
       headingRadians: createRadians(
-        Math.atan2(seed.glideVelocity.y, seed.glideVelocity.x)
+        computeFlightHeadingRadians(
+          seed.glideVelocity.azimuthRadiansPerSecond,
+          seed.glideVelocity.altitudeUnitsPerSecond,
+          seed.orbitRadius
+        )
       ),
       id: seed.id,
       label: seed.label,
-      positionX: seed.spawn.x,
-      positionY: seed.spawn.y,
+      positionX: worldPosition.x,
+      positionY: worldPosition.y,
+      positionZ: worldPosition.z,
       radius: seed.radius,
       scale: seed.scale,
       visible: true,
       wingPhase: 0
     },
     scatterScale: seed.scale * 1.08,
-    velocityX: seed.glideVelocity.x,
-    velocityY: seed.glideVelocity.y,
     wingSpeed: seed.wingSpeed
   };
 }
@@ -114,16 +135,31 @@ export function resetEnemyField(
   for (let index = 0; index < enemyRuntimeStates.length; index += 1) {
     const enemyState = enemyRuntimeStates[index]!;
     const seed = config.enemySeeds[index]!;
+    const worldPosition = createWorldPositionFromOrbit(
+      seed.spawn.azimuthRadians,
+      seed.spawn.altitude,
+      seed.orbitRadius
+    );
 
+    enemyState.altitude = seed.spawn.altitude;
+    enemyState.altitudeVelocity = enemyState.homeAltitudeVelocity;
+    enemyState.angularVelocity = enemyState.homeAngularVelocity;
+    enemyState.azimuthRadians = seed.spawn.azimuthRadians;
     enemyState.behaviorRemainingMs = 0;
-    enemyState.velocityX = enemyState.homeVelocityX;
-    enemyState.velocityY = enemyState.homeVelocityY;
+    enemyState.downedVelocityX = 0;
+    enemyState.downedVelocityY = 0;
+    enemyState.downedVelocityZ = 0;
     enemyState.renderState.behavior = "glide";
     enemyState.renderState.headingRadians = createRadians(
-      Math.atan2(enemyState.homeVelocityY, enemyState.homeVelocityX)
+      computeFlightHeadingRadians(
+        enemyState.homeAngularVelocity,
+        enemyState.homeAltitudeVelocity,
+        enemyState.orbitRadius
+      )
     );
-    enemyState.renderState.positionX = seed.spawn.x;
-    enemyState.renderState.positionY = seed.spawn.y;
+    enemyState.renderState.positionX = worldPosition.x;
+    enemyState.renderState.positionY = worldPosition.y;
+    enemyState.renderState.positionZ = worldPosition.z;
     enemyState.renderState.scale = enemyState.glideScale;
     enemyState.renderState.visible = true;
     enemyState.renderState.wingPhase = 0;

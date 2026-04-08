@@ -26,6 +26,7 @@ import type {
   Radians,
   ReticleId,
   SoundEffectEngine,
+  CoopVector3Snapshot,
   Username
 } from "@thumbshooter/shared";
 import {
@@ -67,7 +68,8 @@ type ExpectedCoopRoomClientCommandType =
   | "join-room"
   | "set-player-ready"
   | "leave-room"
-  | "fire-shot";
+  | "fire-shot"
+  | "sync-player-presence";
 
 type CalibrationAnchorIdMatches = AssertTrue<
   IsEqual<CalibrationAnchorId, ExpectedCalibrationAnchorId>
@@ -195,8 +197,8 @@ type CoopRoomTickIntervalUsesMilliseconds = AssertTrue<
 type CoopRoomBirdHeadingUsesRadians = AssertTrue<
   IsEqual<CoopRoomSnapshot["birds"][number]["headingRadians"], Radians>
 >;
-type CoopRoomBirdPositionUsesNormalizedPoint = AssertTrue<
-  IsEqual<CoopRoomSnapshot["birds"][number]["position"], NormalizedViewportPoint>
+type CoopRoomBirdPositionUsesWorldPoint = AssertTrue<
+  IsEqual<CoopRoomSnapshot["birds"][number]["position"], CoopVector3Snapshot>
 >;
 type CoopRoomPlayerUsernameUsesSharedUsername = AssertTrue<
   IsEqual<CoopRoomSnapshot["players"][number]["username"], Username>
@@ -242,6 +244,6 @@ export type SharedContractTypeTests =
   | CoopRoomTickOwnerUsesServer
   | CoopRoomTickIntervalUsesMilliseconds
   | CoopRoomBirdHeadingUsesRadians
-  | CoopRoomBirdPositionUsesNormalizedPoint
+  | CoopRoomBirdPositionUsesWorldPoint
   | CoopRoomPlayerUsernameUsesSharedUsername
   | CoopRoomRequiredReadyCountUsesNumber;

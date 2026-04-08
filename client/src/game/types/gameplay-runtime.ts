@@ -37,21 +37,30 @@ export interface GameplayHudSnapshot extends GameplayArenaHudSnapshot {
   readonly lifecycle: GameplayRuntimeLifecycleState;
 }
 
+export interface GameplayViewportSnapshot {
+  readonly height: number;
+  readonly width: number;
+}
+
+export interface GameplayVector3Snapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface GameplayCameraSnapshot {
+  readonly aimDirection: GameplayVector3Snapshot;
+  readonly lookDirection: GameplayVector3Snapshot;
+  readonly pitchRadians: Radians;
+  readonly position: GameplayVector3Snapshot;
+  readonly yawRadians: Radians;
+}
+
 export interface GameplayRuntimeConfig {
   readonly camera: {
     readonly far: number;
     readonly fieldOfViewDegrees: Degrees;
     readonly near: number;
-    readonly position: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
-    };
-    readonly target: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
-    };
   };
   readonly enemies: {
     readonly bodyColor: readonly [number, number, number];
@@ -60,10 +69,6 @@ export interface GameplayRuntimeConfig {
       readonly width: number;
     };
     readonly downedColor: readonly [number, number, number];
-    readonly flightDepth: {
-      readonly far: number;
-      readonly near: number;
-    };
     readonly scatterColor: readonly [number, number, number];
     readonly wingColor: readonly [number, number, number];
     readonly wingSize: {

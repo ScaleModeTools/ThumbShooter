@@ -41,10 +41,11 @@ function createRoomSnapshot({
         headingRadians: 0,
         label: "Shared Bird 1",
         position: {
-          x: 0.25,
-          y: 0.4
+          x: 0,
+          y: 2.8,
+          z: -18
         },
-        radius: 0.08,
+        radius: 0.9,
         scale: 1,
         visible: true,
         wingPhase: tick * 0.3
@@ -64,6 +65,21 @@ function createRoomSnapshot({
         },
         connected: true,
         playerId,
+        presence: {
+          aimDirection: {
+            x: 0,
+            y: 0,
+            z: -1
+          },
+          pitchRadians: 0,
+          position: {
+            x: 0,
+            y: 1.35,
+            z: 0
+          },
+          weaponId: "semiautomatic-pistol",
+          yawRadians: 0
+        },
         ready: true,
         username: "coop-user"
       }
@@ -107,8 +123,14 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
       sessionId,
       tick: 0
     }),
-    fireShot(aimPoint) {
-      firedShots.push(aimPoint);
+    fireShot(origin, aimDirection) {
+      firedShots.push({
+        aimDirection,
+        origin
+      });
+    },
+    syncPlayerPresence() {
+      // Presence sync is exercised through the room client runtime tests.
     }
   };
   const simulation = new CoopArenaSimulation(
@@ -127,7 +149,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
   );
 
   const targetedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(1, 0.25, 0.4),
+    createTrackedHandSnapshot(1, 0.5, 0.5),
     0
   );
 
@@ -137,7 +159,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "glide");
 
   const firedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(2, 0.25, 0.4, 1),
+    createTrackedHandSnapshot(2, 0.5, 0.5, 1),
     16
   );
 
@@ -163,7 +185,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
   });
 
   const resolvedSnapshot = simulation.advance(
-    createTrackedHandSnapshot(3, 0.25, 0.4),
+    createTrackedHandSnapshot(3, 0.5, 0.5),
     64
   );
 

@@ -75,19 +75,42 @@ class ThrowingRenderer extends FakeRenderer {
 
 function createArenaConfig() {
   return {
-    arenaBounds: {
-      minX: 0.05,
-      maxX: 0.95,
-      minY: 0.05,
-      maxY: 0.95
+    birdAltitudeBounds: {
+      min: 0.5,
+      max: 6
+    },
+    camera: {
+      initialPitchRadians: 0,
+      initialYawRadians: 0,
+      lookBounds: {
+        maxPitchRadians: 1.2,
+        minPitchRadians: -0.18
+      },
+      lookMotion: {
+        deadZoneViewportFraction: 0.22,
+        maxSpeedRadiansPerSecond: 1.6,
+        responseExponent: 1.55
+      },
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      }
     },
     enemySeeds: [
       {
         id: "bird-1",
         label: "Bird 1",
-        spawn: { x: 0.25, y: 0.4 },
-        glideVelocity: { x: 0, y: 0 },
-        radius: 0.08,
+        orbitRadius: 18,
+        spawn: {
+          altitude: 1.35,
+          azimuthRadians: 0
+        },
+        glideVelocity: {
+          altitudeUnitsPerSecond: 0,
+          azimuthRadiansPerSecond: 0
+        },
+        radius: 0.9,
         scale: 1,
         wingSpeed: 6
       }
@@ -97,20 +120,22 @@ function createArenaConfig() {
     },
     movement: {
       maxStepMs: 64,
+      downedDriftSpeed: 1.6,
       scatterDurationMs: 280,
-      scatterSpeed: 0.22,
       downedDurationMs: 520,
-      downedDriftVelocityY: 0.18
+      downedFallSpeed: 4.6,
+      scatterAltitudeSpeed: 1.8,
+      scatterAngularSpeed: 0.5
     },
     session: {
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
     targeting: {
-      acquireRadius: 0.1,
-      hitRadius: 0.1,
-      reticleScatterRadius: 0.14,
-      shotScatterRadius: 0.2
+      acquireRadius: 0.6,
+      hitRadius: 0.42,
+      reticleScatterRadius: 3.2,
+      shotScatterRadius: 3.6
     },
     weapon: {
       weaponId: "semiautomatic-pistol",
@@ -199,7 +224,7 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
       trackingState: "tracked",
       sequenceNumber: 1,
       timestampMs: 10,
-      pose: createTrackedHandPose(0.25, 0.4, 0)
+      pose: createTrackedHandPose(0.5, 0.5, 0)
     }
   };
   const expectedObservedAimPoint = readObservedAimPoint(
@@ -267,7 +292,7 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
     trackingState: "tracked",
     sequenceNumber: 2,
     timestampMs: 20,
-    pose: createTrackedHandPose(0.25, 0.4, 1)
+    pose: createTrackedHandPose(0.5, 0.5, 1)
   };
 
   scheduledFrame();
@@ -315,7 +340,7 @@ test("WebGpuGameplayRuntime publishes throttled UI updates for shell observers",
       trackingState: "tracked",
       sequenceNumber: 1,
       timestampMs: 10,
-      pose: createTrackedHandPose(0.25, 0.4, 0)
+      pose: createTrackedHandPose(0.5, 0.5, 0)
     }
   };
   const renderer = new FakeRenderer();

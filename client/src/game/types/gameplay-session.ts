@@ -1,4 +1,5 @@
 import type {
+  CoopVector3Snapshot,
   CoopPlayerId,
   CoopPlayerShotOutcomeState,
   CoopRoomId,
@@ -20,15 +21,21 @@ export interface SinglePlayerGameplaySessionSnapshot
 }
 
 export interface CoopGameplaySessionPlayerSnapshot {
+  readonly aimDirection: CoopVector3Snapshot;
   readonly connected: boolean;
   readonly hitsLanded: number;
   readonly isLocalPlayer: boolean;
+  readonly lastPresenceTick: number | null;
   readonly lastOutcome: CoopPlayerShotOutcomeState | null;
+  readonly pitchRadians: number;
   readonly playerId: CoopPlayerId;
+  readonly position: CoopVector3Snapshot;
   readonly ready: boolean;
   readonly scatterEventsCaused: number;
   readonly shotsFired: number;
   readonly username: Username;
+  readonly weaponId: string;
+  readonly yawRadians: number;
 }
 
 export interface CoopGameplaySessionSnapshot {
@@ -60,15 +67,21 @@ function freezeCoopGameplaySessionPlayerSnapshot(
   playerSnapshot: CoopGameplaySessionPlayerSnapshot
 ): CoopGameplaySessionPlayerSnapshot {
   return Object.freeze({
+    aimDirection: playerSnapshot.aimDirection,
     connected: playerSnapshot.connected,
     hitsLanded: playerSnapshot.hitsLanded,
     isLocalPlayer: playerSnapshot.isLocalPlayer,
+    lastPresenceTick: playerSnapshot.lastPresenceTick,
     lastOutcome: playerSnapshot.lastOutcome,
+    pitchRadians: playerSnapshot.pitchRadians,
     playerId: playerSnapshot.playerId,
+    position: playerSnapshot.position,
     ready: playerSnapshot.ready,
     scatterEventsCaused: playerSnapshot.scatterEventsCaused,
     shotsFired: playerSnapshot.shotsFired,
-    username: playerSnapshot.username
+    username: playerSnapshot.username,
+    weaponId: playerSnapshot.weaponId,
+    yawRadians: playerSnapshot.yawRadians
   });
 }
 
@@ -132,15 +145,21 @@ export function createCoopGameplaySessionSnapshot(
     }
 
     return freezeCoopGameplaySessionPlayerSnapshot({
+      aimDirection: playerSnapshot.presence.aimDirection,
       connected: playerSnapshot.connected,
       hitsLanded: playerSnapshot.activity.hitsLanded,
       isLocalPlayer: playerSnapshot.playerId === localPlayerId,
+      lastPresenceTick: playerSnapshot.presence.lastUpdatedTick,
       lastOutcome: playerSnapshot.activity.lastOutcome,
+      pitchRadians: playerSnapshot.presence.pitchRadians,
       playerId: playerSnapshot.playerId,
+      position: playerSnapshot.presence.position,
       ready: playerSnapshot.ready,
       scatterEventsCaused: playerSnapshot.activity.scatterEventsCaused,
       shotsFired: playerSnapshot.activity.shotsFired,
-      username: playerSnapshot.username
+      username: playerSnapshot.username,
+      weaponId: playerSnapshot.presence.weaponId,
+      yawRadians: playerSnapshot.presence.yawRadians
     });
   });
 

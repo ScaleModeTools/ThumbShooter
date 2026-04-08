@@ -1,75 +1,49 @@
+import type { GameplayVector3Snapshot } from "../types/gameplay-runtime";
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 import type { LocalArenaEnemyRuntimeState } from "../types/local-arena-enemy-field";
+import { createDistanceSquaredFromRay, wrapRadians } from "./gameplay-space";
 
-function distanceSquared(
-  leftX: number,
-  leftY: number,
-  rightX: number,
-  rightY: number
-): number {
-  const deltaX = leftX - rightX;
-  const deltaY = leftY - rightY;
-
-  return deltaX * deltaX + deltaY * deltaY;
-}
-
-function normalizeVector(
-  x: number,
-  y: number,
-  fallbackX: number,
-  fallbackY: number
-): { readonly x: number; readonly y: number } {
-  const vectorLength = Math.hypot(x, y);
-
-  if (vectorLength > 0.0001) {
-    return Object.freeze({
-      x: x / vectorLength,
-      y: y / vectorLength
-    });
+function resolveScatterDirection(value: number, fallback: number): number {
+  if (Math.abs(value) > 0.0001) {
+    return Math.sign(value);
   }
 
-  const fallbackLength = Math.hypot(fallbackX, fallbackY);
-
-  if (fallbackLength > 0.0001) {
-    return Object.freeze({
-      x: fallbackX / fallbackLength,
-      y: fallbackY / fallbackLength
-    });
+  if (Math.abs(fallback) > 0.0001) {
+    return Math.sign(fallback);
   }
 
-  return Object.freeze({
-    x: 1,
-    y: 0
-  });
+  return 1;
 }
 
 function setEnemyScatter(
   enemyState: LocalArenaEnemyRuntimeState,
   config: LocalArenaSimulationConfig,
-  aimX: number,
-  aimY: number
+  shotOrigin: GameplayVector3Snapshot,
+  shotDirection: GameplayVector3Snapshot,
+  rayDistance: number
 ): void {
-  const scatterDirection = normalizeVector(
-    enemyState.renderState.positionX - aimX,
-    enemyState.renderState.positionY - aimY,
-    enemyState.homeVelocityX,
-    enemyState.homeVelocityY
-  );
+  const shotAzimuth = Math.atan2(shotDirection.x, -shotDirection.z);
+  const altitudeTarget = shotOrigin.y + shotDirection.y * Math.max(rayDistance, 0);
+  const azimuthDelta = wrapRadians(enemyState.azimuthRadians - shotAzimuth);
+  const altitudeDelta = enemyState.altitude - altitudeTarget;
 
   enemyState.behaviorRemainingMs = config.movement.scatterDurationMs;
-  enemyState.velocityX = scatterDirection.x * config.movement.scatterSpeed;
-  enemyState.velocityY = scatterDirection.y * config.movement.scatterSpeed;
+  enemyState.angularVelocity =
+    resolveScatterDirection(azimuthDelta, enemyState.homeAngularVelocity) *
+    config.movement.scatterAngularSpeed;
+  enemyState.altitudeVelocity =
+    resolveScatterDirection(altitudeDelta, enemyState.homeAltitudeVelocity) *
+    config.movement.scatterAltitudeSpeed;
   enemyState.renderState.behavior = "scatter";
   enemyState.renderState.scale = enemyState.scatterScale;
 }
 
 export function findNearestEnemyState(
   enemyRuntimeStates: readonly LocalArenaEnemyRuntimeState[],
-  aimX: number,
-  aimY: number,
+  shotOrigin: GameplayVector3Snapshot,
+  shotDirection: GameplayVector3Snapshot,
   radius: number
 ): LocalArenaEnemyRuntimeState | null {
-  const radiusSquared = radius * radius;
   let bestDistanceSquared = Number.POSITIVE_INFINITY;
   let bestEnemy: LocalArenaEnemyRuntimeState | null = null;
 
@@ -78,18 +52,22 @@ export function findNearestEnemyState(
       continue;
     }
 
-    const nextDistanceSquared = distanceSquared(
-      enemyState.renderState.positionX,
-      enemyState.renderState.positionY,
-      aimX,
-      aimY
+    const thresholdRadius = enemyState.renderState.radius + radius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      shotOrigin,
+      shotDirection,
+      {
+        x: enemyState.renderState.positionX,
+        y: enemyState.renderState.positionY,
+        z: enemyState.renderState.positionZ
+      }
     );
 
     if (
-      nextDistanceSquared <= radiusSquared &&
-      nextDistanceSquared < bestDistanceSquared
+      distanceToRay.distanceSquared <= thresholdRadius * thresholdRadius &&
+      distanceToRay.distanceSquared < bestDistanceSquared
     ) {
-      bestDistanceSquared = nextDistanceSquared;
+      bestDistanceSquared = distanceToRay.distanceSquared;
       bestEnemy = enemyState;
     }
   }
@@ -100,26 +78,33 @@ export function findNearestEnemyState(
 export function applyReticleScatter(
   enemyRuntimeStates: readonly LocalArenaEnemyRuntimeState[],
   config: LocalArenaSimulationConfig,
-  aimX: number,
-  aimY: number
+  shotOrigin: GameplayVector3Snapshot,
+  shotDirection: GameplayVector3Snapshot
 ): void {
-  const radiusSquared =
-    config.targeting.reticleScatterRadius * config.targeting.reticleScatterRadius;
-
   for (const enemyState of enemyRuntimeStates) {
     if (enemyState.renderState.behavior === "downed") {
       continue;
     }
 
-    if (
-      distanceSquared(
-        enemyState.renderState.positionX,
-        enemyState.renderState.positionY,
-        aimX,
-        aimY
-      ) <= radiusSquared
-    ) {
-      setEnemyScatter(enemyState, config, aimX, aimY);
+    const thresholdRadius = enemyState.renderState.radius + config.targeting.reticleScatterRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      shotOrigin,
+      shotDirection,
+      {
+        x: enemyState.renderState.positionX,
+        y: enemyState.renderState.positionY,
+        z: enemyState.renderState.positionZ
+      }
+    );
+
+    if (distanceToRay.distanceSquared <= thresholdRadius * thresholdRadius) {
+      setEnemyScatter(
+        enemyState,
+        config,
+        shotOrigin,
+        shotDirection,
+        distanceToRay.rayDistance
+      );
     }
   }
 }
@@ -127,26 +112,33 @@ export function applyReticleScatter(
 export function scatterEnemiesFromShot(
   enemyRuntimeStates: readonly LocalArenaEnemyRuntimeState[],
   config: LocalArenaSimulationConfig,
-  aimX: number,
-  aimY: number
+  shotOrigin: GameplayVector3Snapshot,
+  shotDirection: GameplayVector3Snapshot
 ): void {
-  const radiusSquared =
-    config.targeting.shotScatterRadius * config.targeting.shotScatterRadius;
-
   for (const enemyState of enemyRuntimeStates) {
     if (enemyState.renderState.behavior === "downed") {
       continue;
     }
 
-    if (
-      distanceSquared(
-        enemyState.renderState.positionX,
-        enemyState.renderState.positionY,
-        aimX,
-        aimY
-      ) <= radiusSquared
-    ) {
-      setEnemyScatter(enemyState, config, aimX, aimY);
+    const thresholdRadius = enemyState.renderState.radius + config.targeting.shotScatterRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      shotOrigin,
+      shotDirection,
+      {
+        x: enemyState.renderState.positionX,
+        y: enemyState.renderState.positionY,
+        z: enemyState.renderState.positionZ
+      }
+    );
+
+    if (distanceToRay.distanceSquared <= thresholdRadius * thresholdRadius) {
+      setEnemyScatter(
+        enemyState,
+        config,
+        shotOrigin,
+        shotDirection,
+        distanceToRay.rayDistance
+      );
     }
   }
 }

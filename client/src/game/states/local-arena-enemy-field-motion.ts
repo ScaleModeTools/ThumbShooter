@@ -2,39 +2,60 @@ import { createRadians } from "@thumbshooter/shared";
 
 import type { LocalArenaSimulationConfig } from "../types/local-arena-simulation";
 import type { LocalArenaEnemyRuntimeState } from "../types/local-arena-enemy-field";
+import {
+  clamp,
+  computeFlightHeadingRadians,
+  createWorldPositionFromOrbit,
+  wrapRadians
+} from "./gameplay-space";
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
-  return Math.min(max, Math.max(min, value));
+function restoreEnemyGlide(enemyState: LocalArenaEnemyRuntimeState): void {
+  enemyState.behaviorRemainingMs = 0;
+  enemyState.angularVelocity = enemyState.homeAngularVelocity;
+  enemyState.altitudeVelocity = enemyState.homeAltitudeVelocity;
+  enemyState.renderState.behavior = "glide";
+  enemyState.renderState.headingRadians = createRadians(
+    computeFlightHeadingRadians(
+      enemyState.homeAngularVelocity,
+      enemyState.homeAltitudeVelocity,
+      enemyState.orbitRadius
+    )
+  );
+  enemyState.renderState.scale = enemyState.glideScale;
 }
 
 function settleEnemyDowned(enemyState: LocalArenaEnemyRuntimeState): void {
   enemyState.behaviorRemainingMs = 0;
-  enemyState.velocityX = 0;
-  enemyState.velocityY = 0;
-}
-
-function restoreEnemyGlide(enemyState: LocalArenaEnemyRuntimeState): void {
-  enemyState.behaviorRemainingMs = 0;
-  enemyState.velocityX = enemyState.homeVelocityX;
-  enemyState.velocityY = enemyState.homeVelocityY;
-  enemyState.renderState.behavior = "glide";
-  enemyState.renderState.headingRadians = createRadians(
-    Math.atan2(enemyState.homeVelocityY, enemyState.homeVelocityX)
-  );
-  enemyState.renderState.scale = enemyState.glideScale;
+  enemyState.downedVelocityX = 0;
+  enemyState.downedVelocityY = 0;
+  enemyState.downedVelocityZ = 0;
 }
 
 export function setEnemyDowned(
   enemyState: LocalArenaEnemyRuntimeState,
   config: LocalArenaSimulationConfig
 ): void {
+  const tangentialVelocityX =
+    Math.cos(enemyState.azimuthRadians) *
+    enemyState.orbitRadius *
+    enemyState.angularVelocity;
+  const tangentialVelocityZ =
+    Math.sin(enemyState.azimuthRadians) *
+    enemyState.orbitRadius *
+    enemyState.angularVelocity;
+  const tangentialMagnitude = Math.hypot(
+    tangentialVelocityX,
+    tangentialVelocityZ
+  );
+  const driftScale =
+    tangentialMagnitude <= 0.0001
+      ? 0
+      : config.movement.downedDriftSpeed / tangentialMagnitude;
+
   enemyState.behaviorRemainingMs = config.movement.downedDurationMs;
-  enemyState.velocityX *= 0.35;
-  enemyState.velocityY = config.movement.downedDriftVelocityY;
+  enemyState.downedVelocityX = tangentialVelocityX * driftScale;
+  enemyState.downedVelocityY = -config.movement.downedFallSpeed;
+  enemyState.downedVelocityZ = tangentialVelocityZ * driftScale;
   enemyState.renderState.behavior = "downed";
   enemyState.renderState.scale = enemyState.downedScale;
 }
@@ -59,18 +80,11 @@ export function stepEnemyField(
           0,
           enemyState.behaviorRemainingMs - deltaMs
         );
-        enemyState.renderState.positionX = clamp(
-          enemyState.renderState.positionX + enemyState.velocityX * deltaSeconds,
-          config.arenaBounds.minX,
-          config.arenaBounds.maxX
-        );
-        enemyState.renderState.positionY = clamp(
-          enemyState.renderState.positionY + enemyState.velocityY * deltaSeconds,
-          config.arenaBounds.minY,
-          config.arenaBounds.maxY + 0.14
-        );
+        enemyState.renderState.positionX += enemyState.downedVelocityX * deltaSeconds;
+        enemyState.renderState.positionY += enemyState.downedVelocityY * deltaSeconds;
+        enemyState.renderState.positionZ += enemyState.downedVelocityZ * deltaSeconds;
         enemyState.renderState.headingRadians = createRadians(
-          enemyState.renderState.headingRadians + deltaSeconds * 2.8
+          wrapRadians(enemyState.renderState.headingRadians + deltaSeconds * 2.8)
         );
 
         if (enemyState.behaviorRemainingMs === 0) {
@@ -81,35 +95,38 @@ export function stepEnemyField(
       continue;
     }
 
-    enemyState.renderState.positionX += enemyState.velocityX * deltaSeconds;
-    enemyState.renderState.positionY += enemyState.velocityY * deltaSeconds;
+    enemyState.azimuthRadians = wrapRadians(
+      enemyState.azimuthRadians + enemyState.angularVelocity * deltaSeconds
+    );
+    enemyState.altitude += enemyState.altitudeVelocity * deltaSeconds;
 
     if (
-      enemyState.renderState.positionX < config.arenaBounds.minX ||
-      enemyState.renderState.positionX > config.arenaBounds.maxX
+      enemyState.altitude < config.birdAltitudeBounds.min ||
+      enemyState.altitude > config.birdAltitudeBounds.max
     ) {
-      enemyState.velocityX *= -1;
-      enemyState.renderState.positionX = clamp(
-        enemyState.renderState.positionX,
-        config.arenaBounds.minX,
-        config.arenaBounds.maxX
+      enemyState.altitudeVelocity *= -1;
+      enemyState.altitude = clamp(
+        enemyState.altitude,
+        config.birdAltitudeBounds.min,
+        config.birdAltitudeBounds.max
       );
     }
 
-    if (
-      enemyState.renderState.positionY < config.arenaBounds.minY ||
-      enemyState.renderState.positionY > config.arenaBounds.maxY
-    ) {
-      enemyState.velocityY *= -1;
-      enemyState.renderState.positionY = clamp(
-        enemyState.renderState.positionY,
-        config.arenaBounds.minY,
-        config.arenaBounds.maxY
-      );
-    }
+    const worldPosition = createWorldPositionFromOrbit(
+      enemyState.azimuthRadians,
+      enemyState.altitude,
+      enemyState.orbitRadius
+    );
 
+    enemyState.renderState.positionX = worldPosition.x;
+    enemyState.renderState.positionY = worldPosition.y;
+    enemyState.renderState.positionZ = worldPosition.z;
     enemyState.renderState.headingRadians = createRadians(
-      Math.atan2(enemyState.velocityY, enemyState.velocityX)
+      computeFlightHeadingRadians(
+        enemyState.angularVelocity,
+        enemyState.altitudeVelocity,
+        enemyState.orbitRadius
+      )
     );
 
     if (enemyState.renderState.behavior === "scatter") {
