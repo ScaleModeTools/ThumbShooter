@@ -18,7 +18,6 @@ export function ThumbShooterShell() {
       bestScore={controller.profile?.snapshot.bestScore ?? 0}
       capabilityReasonLabel={controller.shellView.capabilityReasonLabel}
       capabilityStatus={controller.capabilityStatus}
-      canEnterGameplayShell={controller.navigationSnapshot.canEnterGameplayShell}
       calibrationQualityLabel={controller.shellView.calibrationQualityLabel}
       debugPanelMode={controller.debugPanelMode}
       gameplayInputSource={controller.gameplayInputSource}
@@ -32,6 +31,7 @@ export function ThumbShooterShell() {
       profile={controller.profile}
       selectedReticleLabel={controller.shellView.selectedReticleLabel}
       usernameDraft={controller.usernameDraft}
+      nextGameplayStep={controller.navigationSnapshot.nextGameplayStep}
       onCalibrationProgress={controller.onCalibrationProgress}
       onClearProfile={controller.onClearProfile}
       onEditProfile={controller.onEditProfile}

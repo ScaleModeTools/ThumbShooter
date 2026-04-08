@@ -131,6 +131,18 @@ test("reduceThumbShooterShellControllerState keeps shell mutations behind typed 
   assert.equal(state.isMenuOpen, false);
 
   state = reduceThumbShooterShellControllerState(state, {
+    type: "inputModeChanged",
+    inputMode: "camera-thumb-shooter"
+  });
+  state = reduceThumbShooterShellControllerState(state, {
+    type: "calibrationResetRequested"
+  });
+
+  assert.equal(state.gameplayShell, "gameplay");
+  assert.equal(state.profile?.hasAimCalibration, false);
+  assert.equal(state.isMenuOpen, false);
+
+  state = reduceThumbShooterShellControllerState(state, {
     type: "profileCleared",
     audioSnapshot: createAudioSnapshot()
   });

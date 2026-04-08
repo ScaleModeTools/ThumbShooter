@@ -14,6 +14,7 @@ import {
 import type { HandTrackingRuntime } from "../../game/classes/hand-tracking-runtime";
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
 import type {
+  GameplayEntryStepId,
   NavigationStepId,
   WebcamPermissionState
 } from "../../navigation";
@@ -37,7 +38,6 @@ interface ShellStageRouterProps {
   readonly bestScore: number;
   readonly capabilityReasonLabel: string;
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
-  readonly canEnterGameplayShell: boolean;
   readonly calibrationQualityLabel: string;
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly gameplayInputSource: GameplayInputSource;
@@ -45,6 +45,7 @@ interface ShellStageRouterProps {
   readonly hasStoredProfile: boolean;
   readonly inputMode: GameplayInputModeId;
   readonly loginError: string | null;
+  readonly nextGameplayStep: GameplayEntryStepId | null;
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
@@ -92,7 +93,6 @@ export function ShellStageRouter({
   bestScore,
   capabilityReasonLabel,
   capabilityStatus,
-  canEnterGameplayShell,
   calibrationQualityLabel,
   debugPanelMode,
   gameplayInputSource,
@@ -100,6 +100,7 @@ export function ShellStageRouter({
   hasStoredProfile,
   inputMode,
   loginError,
+  nextGameplayStep,
   permissionError,
   permissionState,
   profile,
@@ -161,8 +162,8 @@ export function ShellStageRouter({
           calibrationQualityLabel={calibrationQualityLabel}
           capabilityReasonLabel={capabilityReasonLabel}
           capabilityStatus={capabilityStatus}
-          canStartGame={canEnterGameplayShell}
           inputMode={inputMode}
+          nextGameplayStep={nextGameplayStep}
           onInputModeChange={onInputModeChange}
           onRecalibrationRequest={onRecalibrationRequest}
           onStartGame={onGameplayStartRequest}

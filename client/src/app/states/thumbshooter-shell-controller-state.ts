@@ -102,7 +102,7 @@ export function reduceThumbShooterShellControllerState(
           }
         : {
             ...state,
-            gameplayShell: "main-menu",
+            gameplayShell: "gameplay",
             isMenuOpen: false,
             profile: state.profile.resetCalibration()
           };

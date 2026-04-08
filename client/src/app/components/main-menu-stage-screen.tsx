@@ -3,6 +3,7 @@ import {
   resolveGameplayInputMode,
   type GameplayInputModeId
 } from "../../game";
+import type { GameplayEntryStepId } from "../../navigation";
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,8 +27,8 @@ interface MainMenuStageScreenProps {
   readonly calibrationQualityLabel: string;
   readonly capabilityReasonLabel: string;
   readonly capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"];
-  readonly canStartGame: boolean;
   readonly inputMode: GameplayInputModeId;
+  readonly nextGameplayStep: GameplayEntryStepId | null;
   readonly onInputModeChange: (inputMode: GameplayInputModeId) => void;
   readonly onRecalibrationRequest: () => void;
   readonly onStartGame: () => void;
@@ -35,10 +36,18 @@ interface MainMenuStageScreenProps {
 
 function resolveStartButtonLabel(
   capabilityStatus: WebGpuGameplayCapabilitySnapshot["status"],
-  canStartGame: boolean
+  nextGameplayStep: GameplayEntryStepId | null
 ): string {
-  if (canStartGame) {
+  if (nextGameplayStep === "gameplay") {
     return "Start game";
+  }
+
+  if (nextGameplayStep === "calibration") {
+    return "Continue to calibration";
+  }
+
+  if (nextGameplayStep === "permissions") {
+    return "Continue to webcam setup";
   }
 
   if (capabilityStatus === "checking") {
@@ -53,8 +62,8 @@ export function MainMenuStageScreen({
   calibrationQualityLabel,
   capabilityReasonLabel,
   capabilityStatus,
-  canStartGame,
   inputMode,
+  nextGameplayStep,
   onInputModeChange,
   onRecalibrationRequest,
   onStartGame
@@ -146,11 +155,11 @@ export function MainMenuStageScreen({
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button
-                disabled={!canStartGame}
+                disabled={nextGameplayStep === null}
                 onClick={onStartGame}
                 type="button"
               >
-                {resolveStartButtonLabel(capabilityStatus, canStartGame)}
+                {resolveStartButtonLabel(capabilityStatus, nextGameplayStep)}
               </Button>
 
               {selectedInputMode.requiresCalibration ? (
