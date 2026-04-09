@@ -7,6 +7,8 @@ server_host="127.0.0.1"
 server_port="3210"
 local_dev_dir="$repo_root/.local-dev"
 server_pid_file="$local_dev_dir/thumbshooter-dev-server.pid"
+shared_watch_log="$local_dev_dir/thumbshooter-dev-shared-watch.log"
+server_watch_log="$local_dev_dir/thumbshooter-dev-server-watch.log"
 
 cd "$repo_root"
 mkdir -p "$local_dev_dir"
@@ -28,6 +30,45 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
+
+started_watch_pid=""
+
+start_watch_build() {
+  local log_file="$1"
+  shift
+
+  : > "$log_file"
+
+  "$@" > >(tee "$log_file") 2>&1 &
+  started_watch_pid="$!"
+  pids+=("$started_watch_pid")
+}
+
+wait_for_watch_build_ready() {
+  local label="$1"
+  local log_file="$2"
+  local watch_pid="$3"
+
+  while true; do
+    if [[ -f "$log_file" ]]; then
+      if grep -Eq 'Found 0 errors?\. Watching for file changes\.' "$log_file"; then
+        return 0
+      fi
+
+      if grep -Eq 'Found [1-9][0-9]* errors?\. Watching for file changes\.' "$log_file"; then
+        echo "ThumbShooter $label watch build reported errors during startup."
+        return 1
+      fi
+    fi
+
+    if ! kill -0 "$watch_pid" 2>/dev/null; then
+      echo "ThumbShooter $label watch build exited before startup completed."
+      return 1
+    fi
+
+    sleep 0.1
+  done
+}
 
 resolve_existing_dev_server_pid() {
   if [[ ! -f "$server_pid_file" ]]; then
@@ -162,11 +203,20 @@ node \
 ./node_modules/.bin/tsc -p "$repo_root/packages/shared/tsconfig.json"
 ./node_modules/.bin/tsc -p "$repo_root/server/tsconfig.json"
 
-npm run watch:build --workspace @thumbshooter/shared &
-pids+=($!)
+start_watch_build \
+  "$shared_watch_log" \
+  npm run watch:build --workspace @thumbshooter/shared
+shared_watch_pid="$started_watch_pid"
 
-npm run watch:build --workspace @thumbshooter/server &
-pids+=($!)
+start_watch_build \
+  "$server_watch_log" \
+  npm run watch:build --workspace @thumbshooter/server
+server_watch_pid="$started_watch_pid"
+
+wait_for_watch_build_ready "shared" "$shared_watch_log" "$shared_watch_pid"
+wait_for_watch_build_ready "server" "$server_watch_log" "$server_watch_pid"
+
+echo "ThumbShooter dev watch builds are ready. Starting server runtime."
 
 node \
   --watch \
