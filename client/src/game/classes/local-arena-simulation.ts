@@ -247,6 +247,20 @@ export class LocalArenaSimulation {
 
   reset(trackingSnapshot?: LatestHandTrackingSnapshot): void {
     this.#combatSession.reset();
+    this.#resetRoundState(trackingSnapshot);
+  }
+
+  restartSession(trackingSnapshot?: LatestHandTrackingSnapshot): void {
+    if (this.#combatSession.phase === "completed") {
+      this.#combatSession.advanceRound();
+    } else {
+      this.#combatSession.reset();
+    }
+
+    this.#resetRoundState(trackingSnapshot);
+  }
+
+  #resetRoundState(trackingSnapshot?: LatestHandTrackingSnapshot): void {
     this.#cameraSnapshot = createGameplayCameraSnapshot(this.#config.camera);
     this.#feedbackEnemyId = null;
     this.#feedbackEnemyLabel = null;

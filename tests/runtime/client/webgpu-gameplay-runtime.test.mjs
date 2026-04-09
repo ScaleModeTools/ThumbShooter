@@ -128,6 +128,8 @@ function createArenaConfig() {
       scatterAngularSpeed: 0.5
     },
     session: {
+      durationLossPerRoundMs: 500,
+      minimumRoundDurationMs: 2_000,
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
@@ -308,7 +310,9 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
 
   assert.equal(restartSnapshot.lifecycle, "running");
   assert.equal(restartSnapshot.session.phase, "active");
-  assert.equal(restartSnapshot.session.score, 0);
+  assert.equal(restartSnapshot.session.roundNumber, 2);
+  assert.equal(restartSnapshot.session.score, 100);
+  assert.equal(restartSnapshot.session.roundDurationMs, 3_500);
   assert.equal(restartSnapshot.arena.liveEnemyCount, 1);
   assert.equal(runtime.telemetrySnapshot.renderedFrameCount >= 2, true);
 

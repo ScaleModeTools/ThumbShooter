@@ -19,6 +19,7 @@ function normalizeCount(value: number): number {
 function freezeSessionSnapshot(
   phase: LocalCombatSessionPhase,
   roundDurationMs: LocalCombatSessionSnapshot["roundDurationMs"],
+  roundNumber: number,
   roundTimeRemainingMs: number,
   hitsThisSession: number,
   killsThisSession: number,
@@ -31,10 +32,25 @@ function freezeSessionSnapshot(
     phase,
     restartReady: phase !== "active",
     roundDurationMs,
+    roundNumber,
     roundTimeRemainingMs: createMilliseconds(roundTimeRemainingMs),
     score,
     streak
   });
+}
+
+function resolveRoundDurationMs(
+  roundNumber: number,
+  config: LocalCombatSessionConfig
+): number {
+  const roundIndex = Math.max(0, Math.floor(roundNumber) - 1);
+  const durationReductionMs =
+    roundIndex * Number(config.durationLossPerRoundMs);
+
+  return Math.max(
+    Number(config.minimumRoundDurationMs),
+    Number(config.roundDurationMs) - durationReductionMs
+  );
 }
 
 export class LocalCombatSession {
@@ -46,6 +62,8 @@ export class LocalCombatSession {
   #killsThisSession = 0;
   #lastUpdatedAtMs: number | null = null;
   #phase: LocalCombatSessionPhase = "active";
+  #roundDurationMs: LocalCombatSessionSnapshot["roundDurationMs"];
+  #roundNumber = 1;
   #score = 0;
   #snapshot: LocalCombatSessionSnapshot;
   #streak = 0;
@@ -56,6 +74,7 @@ export class LocalCombatSession {
   ) {
     this.#config = config;
     this.#enemyCount = normalizeCount(enemyCount);
+    this.#roundDurationMs = createMilliseconds(resolveRoundDurationMs(1, config));
     this.#snapshot = this.#buildSnapshot();
   }
 
@@ -87,11 +106,11 @@ export class LocalCombatSession {
 
     this.#lastUpdatedAtMs = safeNowMs;
     this.#elapsedRoundTimeMs = Math.min(
-      this.#config.roundDurationMs,
+      Number(this.#roundDurationMs),
       this.#elapsedRoundTimeMs + elapsedDeltaMs
     );
 
-    if (this.#elapsedRoundTimeMs >= this.#config.roundDurationMs) {
+    if (this.#elapsedRoundTimeMs >= Number(this.#roundDurationMs)) {
       this.#phase = "failed";
       this.#streak = 0;
     }
@@ -121,12 +140,34 @@ export class LocalCombatSession {
     return this.#snapshot;
   }
 
+  advanceRound(): void {
+    if (this.#phase !== "completed") {
+      return;
+    }
+
+    this.#elapsedRoundTimeMs = 0;
+    this.#hitsThisSession = 0;
+    this.#killsThisSession = 0;
+    this.#lastUpdatedAtMs = null;
+    this.#phase = "active";
+    this.#roundNumber += 1;
+    this.#roundDurationMs = createMilliseconds(
+      resolveRoundDurationMs(this.#roundNumber, this.#config)
+    );
+    this.#streak = 0;
+    this.#snapshot = this.#buildSnapshot();
+  }
+
   reset(): void {
     this.#elapsedRoundTimeMs = 0;
     this.#hitsThisSession = 0;
     this.#killsThisSession = 0;
     this.#lastUpdatedAtMs = null;
     this.#phase = "active";
+    this.#roundDurationMs = createMilliseconds(
+      resolveRoundDurationMs(1, this.#config)
+    );
+    this.#roundNumber = 1;
     this.#score = 0;
     this.#streak = 0;
     this.#snapshot = this.#buildSnapshot();
@@ -148,8 +189,9 @@ export class LocalCombatSession {
   #buildSnapshot(): LocalCombatSessionSnapshot {
     return freezeSessionSnapshot(
       this.#phase,
-      this.#config.roundDurationMs,
-      Math.max(0, this.#config.roundDurationMs - this.#elapsedRoundTimeMs),
+      this.#roundDurationMs,
+      this.#roundNumber,
+      Math.max(0, Number(this.#roundDurationMs) - this.#elapsedRoundTimeMs),
       this.#hitsThisSession,
       this.#killsThisSession,
       this.#score,

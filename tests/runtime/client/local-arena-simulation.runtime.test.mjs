@@ -71,6 +71,8 @@ function createArenaConfig() {
       scatterAngularSpeed: 0.5
     },
     session: {
+      durationLossPerRoundMs: 500,
+      minimumRoundDurationMs: 2_000,
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
@@ -145,7 +147,7 @@ test("LocalArenaSimulation publishes calibrated aim, arena counts, and early sca
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "scatter");
 });
 
-test("LocalArenaSimulation completes the round on a kill and reset starts a fresh session", async () => {
+test("LocalArenaSimulation completes the round and restartSession advances to a harder round", async () => {
   const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
   const emittedSignals = [];
   const simulation = new LocalArenaSimulation(
@@ -175,6 +177,7 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
   assert.equal(firedSnapshot.session.killsThisSession, 1);
   assert.equal(firedSnapshot.session.streak, 1);
   assert.equal(firedSnapshot.session.phase, "completed");
+  assert.equal(firedSnapshot.session.roundNumber, 1);
   assert.equal(firedSnapshot.session.restartReady, true);
   assert.equal(firedSnapshot.targetFeedback.state, "hit");
   assert.equal(firedSnapshot.targetFeedback.enemyLabel, "Bird 1");
@@ -198,13 +201,16 @@ test("LocalArenaSimulation completes the round on a kill and reset starts a fres
   assert.equal(postCompletionSnapshot.weapon.shotsFired, 1);
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "downed");
 
-  simulation.reset();
+  simulation.restartSession();
 
   const resetSnapshot = simulation.hudSnapshot;
 
   assert.equal(resetSnapshot.session.phase, "active");
-  assert.equal(resetSnapshot.session.score, 0);
+  assert.equal(resetSnapshot.session.roundNumber, 2);
+  assert.equal(resetSnapshot.session.score, 100);
   assert.equal(resetSnapshot.session.killsThisSession, 0);
+  assert.equal(resetSnapshot.session.roundDurationMs, 3_500);
+  assert.equal(resetSnapshot.session.roundTimeRemainingMs, 3_500);
   assert.equal(resetSnapshot.arena.liveEnemyCount, 1);
   assert.equal(resetSnapshot.weapon.triggerHeld, false);
   assert.equal(resetSnapshot.weapon.hitsLanded, 0);

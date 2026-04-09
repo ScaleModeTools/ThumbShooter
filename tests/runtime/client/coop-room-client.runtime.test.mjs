@@ -353,6 +353,84 @@ test("CoopRoomClient posts leader kick-player commands", async () => {
   assert.match(String(requests[1]?.body), /"targetPlayerId":"player-2"/);
 });
 
+test("CoopRoomClient accepts a new room session even when its tick restarts", async () => {
+  const { CoopRoomClient } = await clientLoader.load("/src/network/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const activeSessionId = createCoopSessionId("co-op-harbor-session-1");
+  const freshSessionId = createCoopSessionId("co-op-harbor-session-2");
+  const playerId = createCoopPlayerId("coop-player-1");
+  const username = createUsername("coop-user");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(activeSessionId, null);
+  assert.notEqual(freshSessionId, null);
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  const requests = [];
+  const scheduledPolls = [];
+  const responseQueue = [
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId: activeSessionId,
+      tick: 4,
+      phase: "active"
+    }),
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId: freshSessionId,
+      tick: 0,
+      phase: "waiting-for-players"
+    })
+  ];
+  const roomClient = new CoopRoomClient(
+    {
+      defaultPollIntervalMs: createMilliseconds(75),
+      roomId,
+      serverOrigin: "http://127.0.0.1:3210"
+    },
+    {
+      async fetch(input, init) {
+        const queuedResponse = responseQueue.shift();
+
+        assert.notEqual(queuedResponse, undefined);
+        requests.push({
+          cache: init?.cache ?? null,
+          method: init?.method ?? "GET",
+          url: String(input)
+        });
+
+        return createJsonResponse(true, queuedResponse);
+      },
+      setTimeout(callback, delay) {
+        scheduledPolls.push({
+          callback,
+          delay
+        });
+        return scheduledPolls.length;
+      },
+      clearTimeout() {}
+    }
+  );
+
+  await roomClient.ensureJoined({
+    playerId,
+    ready: false,
+    username
+  });
+
+  scheduledPolls.shift()?.callback();
+  await flushAsyncWork();
+
+  assert.equal(requests[1]?.method, "GET");
+  assert.equal(requests[1]?.cache, "no-store");
+  assert.equal(roomClient.roomSnapshot?.session.sessionId, freshSessionId);
+  assert.equal(roomClient.roomSnapshot?.tick.currentTick, 0);
+  assert.equal(roomClient.roomSnapshot?.session.phase, "waiting-for-players");
+});
+
 test("CoopRoomClient stops polling when the server reports local room membership loss", async () => {
   const { CoopRoomClient } = await clientLoader.load("/src/network/index.ts");
   const roomId = createCoopRoomId("co-op-harbor");

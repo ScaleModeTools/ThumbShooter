@@ -18,5 +18,6 @@ export interface GameplayArenaRuntime {
     nowMs?: number,
     viewportSnapshot?: GameplayViewportSnapshot
   ) => GameplayArenaHudSnapshot;
+  restartSession: (trackingSnapshot?: LatestHandTrackingSnapshot) => void;
   reset: (trackingSnapshot?: LatestHandTrackingSnapshot) => void;
 }

@@ -80,6 +80,25 @@ function resolveStartButtonLabel(
   return "Start game unavailable";
 }
 
+function resolveCoopRoomActionLabel(
+  nextGameplayStep: GameplayEntryStepId | null,
+  action: "create" | "join"
+): string {
+  if (nextGameplayStep === "calibration") {
+    return "Continue to calibration";
+  }
+
+  if (nextGameplayStep === "permissions") {
+    return "Continue to webcam setup";
+  }
+
+  if (nextGameplayStep === "gameplay") {
+    return action === "create" ? "Create room" : "Join room";
+  }
+
+  return "Launch unavailable";
+}
+
 function createSuggestedCoopRoomIdDraft(): string {
   const suffix =
     globalThis.crypto?.randomUUID?.().slice(0, 6) ??
@@ -156,10 +175,13 @@ export function MainMenuStageScreen({
     null
   );
   const [coopRoomDirectoryLoading, setCoopRoomDirectoryLoading] = useState(false);
+  const normalizedCoopRoomIdDraft =
+    sessionMode === "co-op" ? createCoopRoomId(coopRoomIdDraft) : null;
   const coopRoomIdValid =
-    sessionMode !== "co-op" || createCoopRoomId(coopRoomIdDraft) !== null;
+    sessionMode !== "co-op" || normalizedCoopRoomIdDraft !== null;
   const startButtonDisabled =
     nextGameplayStep === null || !coopRoomIdValid;
+  const coopLaunchUnavailable = nextGameplayStep === null;
   const sortedCoopRoomEntries = [...coopRoomEntries].sort((leftRoom, rightRoom) => {
     const phasePriority = (roomEntry: CoopRoomDirectoryEntrySnapshot): number => {
       if (roomEntry.phase === "active") {
@@ -181,9 +203,22 @@ export function MainMenuStageScreen({
 
     return leftRoom.roomId.localeCompare(rightRoom.roomId);
   });
+  const selectedExistingRoom =
+    normalizedCoopRoomIdDraft === null
+      ? null
+      : sortedCoopRoomEntries.find(
+          (roomEntry) => roomEntry.roomId === normalizedCoopRoomIdDraft
+        ) ?? null;
+  const createRoomActionDisabled =
+    coopLaunchUnavailable ||
+    normalizedCoopRoomIdDraft === null ||
+    selectedExistingRoom !== null;
+  const showActionRow =
+    sessionMode === "single-player" || selectedInputMode.requiresCalibration;
 
   useEffect(() => {
     if (sessionMode !== "co-op") {
+      setCoopRoomEntries([]);
       setCoopRoomDirectoryError(null);
       setCoopRoomDirectoryLoading(false);
       return;
@@ -210,6 +245,7 @@ export function MainMenuStageScreen({
           return;
         }
 
+        setCoopRoomEntries([]);
         setCoopRoomDirectoryError(
           error instanceof Error
             ? error.message
@@ -334,23 +370,12 @@ export function MainMenuStageScreen({
                     <div className="flex flex-col gap-1">
                       <Label>Sessions in progress</Label>
                       <p className="text-sm text-muted-foreground">
-                        Browse active rooms or lobbies before entering co-op.
+                        Join an active room directly, or create a new code below.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {coopRoomDirectoryLoading ? (
-                        <Badge variant="secondary">Refreshing</Badge>
-                      ) : null}
-                      <Button
-                        onClick={() => {
-                          onCoopRoomIdDraftChange(createSuggestedCoopRoomIdDraft());
-                        }}
-                        type="button"
-                        variant="outline"
-                      >
-                        New room code
-                      </Button>
-                    </div>
+                    {coopRoomDirectoryLoading ? (
+                      <Badge variant="secondary">Refreshing</Badge>
+                    ) : null}
                   </div>
 
                   {coopRoomDirectoryError !== null ? (
@@ -367,7 +392,9 @@ export function MainMenuStageScreen({
                   ) : (
                     <div className="mt-4 grid gap-3">
                       {sortedCoopRoomEntries.map((roomEntry) => {
-                        const selectedRoom = roomEntry.roomId === coopRoomIdDraft;
+                        const selectedRoom =
+                          normalizedCoopRoomIdDraft !== null &&
+                          roomEntry.roomId === normalizedCoopRoomIdDraft;
 
                         return (
                           <div
@@ -394,22 +421,14 @@ export function MainMenuStageScreen({
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button
-                                onClick={() => {
-                                  onCoopRoomIdDraftChange(roomEntry.roomId);
-                                }}
-                                type="button"
-                                variant="outline"
-                              >
-                                Select room
-                              </Button>
-                              <Button
+                                disabled={coopLaunchUnavailable}
                                 onClick={() => {
                                   onCoopRoomIdDraftChange(roomEntry.roomId);
                                   onStartGame();
                                 }}
                                 type="button"
                               >
-                                Join room
+                                {resolveCoopRoomActionLabel(nextGameplayStep, "join")}
                               </Button>
                             </div>
                           </div>
@@ -421,10 +440,10 @@ export function MainMenuStageScreen({
 
                 <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/70 px-4 py-4">
                   <div className="flex flex-col gap-1">
-                    <Label htmlFor="main-menu-coop-room-id">Start new room</Label>
+                    <Label htmlFor="main-menu-coop-room-id">Create fresh room</Label>
                     <p className="text-sm text-muted-foreground">
-                      Use any non-empty room code to create a fresh co-op lobby
-                      when no live session fits.
+                      Pick a code that is not already live. A fresh lobby is created
+                      when you enter it.
                     </p>
                   </div>
                   <Input
@@ -438,13 +457,35 @@ export function MainMenuStageScreen({
                   />
                   <p
                     className={`text-sm ${
-                      coopRoomIdValid ? "text-muted-foreground" : "text-destructive"
+                      coopRoomIdValid && selectedExistingRoom === null
+                        ? "text-muted-foreground"
+                        : "text-destructive"
                     }`}
                   >
-                    {coopRoomIdValid
-                      ? "Reuse an existing room code to regroup, or keep this code to create a new lobby."
-                      : "Enter a non-empty room code before entering co-op."}
+                    {!coopRoomIdValid
+                      ? "Enter a non-empty room code before creating a room."
+                      : selectedExistingRoom !== null
+                        ? "This code is already live. Join it from the list above or generate another code for a fresh lobby."
+                        : "This code is available for a fresh lobby."}
                   </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={createRoomActionDisabled}
+                      onClick={onStartGame}
+                      type="button"
+                    >
+                      {resolveCoopRoomActionLabel(nextGameplayStep, "create")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        onCoopRoomIdDraftChange(createSuggestedCoopRoomIdDraft());
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      New code
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -474,30 +515,34 @@ export function MainMenuStageScreen({
 
             <Separator />
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button
-                disabled={startButtonDisabled}
-                onClick={onStartGame}
-                type="button"
-              >
-                {resolveStartButtonLabel(
-                  capabilityStatus,
-                  nextGameplayStep,
-                  coopRoomIdValid,
-                  sessionMode
-                )}
-              </Button>
+            {showActionRow ? (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                {sessionMode === "single-player" ? (
+                  <Button
+                    disabled={startButtonDisabled}
+                    onClick={onStartGame}
+                    type="button"
+                  >
+                    {resolveStartButtonLabel(
+                      capabilityStatus,
+                      nextGameplayStep,
+                      coopRoomIdValid,
+                      sessionMode
+                    )}
+                  </Button>
+                ) : null}
 
-              {selectedInputMode.requiresCalibration ? (
-                <Button
-                  onClick={onRecalibrationRequest}
-                  type="button"
-                  variant="outline"
-                >
-                  Recalibrate
-                </Button>
-              ) : null}
-            </div>
+                {selectedInputMode.requiresCalibration ? (
+                  <Button
+                    onClick={onRecalibrationRequest}
+                    type="button"
+                    variant="outline"
+                  >
+                    Recalibrate
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

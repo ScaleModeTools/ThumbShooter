@@ -84,6 +84,8 @@ function createArenaConfig() {
       scatterAngularSpeed: 0.5
     },
     session: {
+      durationLossPerRoundMs: 500,
+      minimumRoundDurationMs: 2_000,
       roundDurationMs: 4_000,
       scorePerKill: 100
     },
@@ -182,4 +184,35 @@ test("local arena enemy field keeps targeting and motion behavior on typed submo
   assert.equal(enemyRuntimeStates[0]?.renderState.positionY, 1.35);
   assert.equal(enemyRuntimeStates[0]?.renderState.positionZ, -18);
   assert.equal(enemyField.countDownedEnemies(enemyRuntimeStates), 0);
+});
+
+test("local arena reticle scatter keeps its current escape direction until the scatter finishes", async () => {
+  const enemyField = await clientLoader.load(
+    "/src/game/states/local-arena-enemy-field.ts"
+  );
+  const config = createArenaConfig();
+  const { enemyRuntimeStates } = enemyField.createEnemyField(config);
+  const shotOrigin = { x: 0, y: 1.35, z: 0 };
+
+  enemyField.applyReticleScatter(enemyRuntimeStates, config, shotOrigin, {
+    x: 0.2,
+    y: 0,
+    z: -1
+  });
+
+  const firstScatterEnemy = enemyRuntimeStates[0];
+
+  assert.equal(firstScatterEnemy?.renderState.behavior, "scatter");
+
+  const firstAngularVelocity = firstScatterEnemy?.angularVelocity;
+  const firstAltitudeVelocity = firstScatterEnemy?.altitudeVelocity;
+
+  enemyField.applyReticleScatter(enemyRuntimeStates, config, shotOrigin, {
+    x: -0.2,
+    y: 0,
+    z: -1
+  });
+
+  assert.equal(enemyRuntimeStates[0]?.angularVelocity, firstAngularVelocity);
+  assert.equal(enemyRuntimeStates[0]?.altitudeVelocity, firstAltitudeVelocity);
 });

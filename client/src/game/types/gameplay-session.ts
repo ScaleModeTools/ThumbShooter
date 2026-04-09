@@ -106,6 +106,7 @@ export function createSinglePlayerGameplaySessionSnapshot(
     phase: sessionSnapshot.phase,
     restartReady: sessionSnapshot.restartReady,
     roundDurationMs: sessionSnapshot.roundDurationMs,
+    roundNumber: sessionSnapshot.roundNumber,
     roundTimeRemainingMs: sessionSnapshot.roundTimeRemainingMs,
     score: sessionSnapshot.score,
     streak: sessionSnapshot.streak

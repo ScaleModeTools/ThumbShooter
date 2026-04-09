@@ -40,6 +40,7 @@ function requireCoopBirdId(rawValue: string) {
 }
 
 const defaultCoopRoomId = requireCoopRoomId("co-op-harbor");
+const roomSessionBootSequence = `${Date.now()}`.padStart(13, "0");
 
 const baseCoopRoomRuntimeConfig = {
   birdAltitudeBounds: {
@@ -153,7 +154,9 @@ function createRoomSessionId(
   sessionOrdinal: number
 ) {
   return requireCoopSessionId(
-    `${roomId}-session-${normalizeSessionOrdinal(sessionOrdinal)}`
+    `${roomId}-session-${roomSessionBootSequence}-${normalizeSessionOrdinal(
+      sessionOrdinal
+    )}`
   );
 }
 

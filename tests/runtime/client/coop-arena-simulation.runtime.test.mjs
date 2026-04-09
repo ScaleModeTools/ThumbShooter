@@ -31,7 +31,11 @@ function createRoomSnapshot({
   playerShots = 0,
   lastAcknowledgedShotSequence = 0,
   lastOutcome = null,
-  birdBehavior = "glide"
+  birdBehavior = "glide",
+  birdPositionX = 0,
+  birdPositionY = 2.8,
+  birdPositionZ = -18,
+  birdWingPhase = tick * 0.3
 }) {
   return createCoopRoomSnapshot({
     birds: [
@@ -41,14 +45,14 @@ function createRoomSnapshot({
         headingRadians: 0,
         label: "Shared Bird 1",
         position: {
-          x: 0,
-          y: 2.8,
-          z: -18
+          x: birdPositionX,
+          y: birdPositionY,
+          z: birdPositionZ
         },
         radius: 0.9,
         scale: 1,
         visible: true,
-        wingPhase: tick * 0.3
+        wingPhase: birdWingPhase
       }
     ],
     capacity: 4,
@@ -203,4 +207,63 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
       type: "enemy-hit-confirmed"
     }
   ]);
+});
+
+test("CoopArenaSimulation projects authoritative birds forward between shared room ticks", async () => {
+  const { CoopArenaSimulation } = await clientLoader.load("/src/game/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const sessionId = createCoopSessionId("co-op-harbor-session-1");
+  const playerId = createCoopPlayerId("coop-player-1");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(sessionId, null);
+  assert.notEqual(playerId, null);
+
+  const roomSource = {
+    roomId,
+    roomSnapshot: createRoomSnapshot({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0,
+      birdPositionZ: -18,
+      birdWingPhase: 0
+    }),
+    fireShot() {},
+    syncPlayerPresence() {}
+  };
+  const simulation = new CoopArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    roomSource,
+    undefined,
+    {
+      playerId
+    }
+  );
+
+  simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 0);
+
+  roomSource.roomSnapshot = createRoomSnapshot({
+    playerId,
+    roomId,
+    sessionId,
+    tick: 1,
+    birdPositionZ: -17,
+    birdWingPhase: 0.3
+  });
+
+  simulation.advance(createTrackedHandSnapshot(2, 0.5, 0.5), 50);
+
+  const projectedSnapshot = simulation.advance(
+    createTrackedHandSnapshot(3, 0.5, 0.5),
+    75
+  );
+
+  assert.equal(projectedSnapshot.session.phase, "active");
+  assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) > -17);
+  assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) < -16.4);
+  assert.ok((simulation.enemyRenderStates[0]?.wingPhase ?? 0) > 0.3);
 });

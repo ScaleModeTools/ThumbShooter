@@ -319,7 +319,7 @@ export class WebGpuGameplayRuntime {
   }
 
   restartSession(nowMs: number = this.#readNowMs()): GameplayHudSnapshot {
-    this.#arenaSimulation.reset(this.#trackingSource.latestPose);
+    this.#arenaSimulation.restartSession(this.#trackingSource.latestPose);
 
     if (
       this.#renderer !== null &&

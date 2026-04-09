@@ -82,7 +82,10 @@ export function applyReticleScatter(
   shotDirection: GameplayVector3Snapshot
 ): void {
   for (const enemyState of enemyRuntimeStates) {
-    if (enemyState.renderState.behavior === "downed") {
+    if (
+      enemyState.renderState.behavior === "downed" ||
+      enemyState.renderState.behavior === "scatter"
+    ) {
       continue;
     }
 

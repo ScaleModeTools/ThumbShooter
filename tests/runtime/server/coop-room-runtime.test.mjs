@@ -373,6 +373,90 @@ test("CoopRoomRuntime scatters shared birds from synced reticle presence without
   assert.equal(scatterSnapshot.birds[0]?.lastInteractionByPlayerId, playerId);
 });
 
+test("CoopRoomRuntime keeps tracked-reticle scatter moving in one direction until the bird settles", () => {
+  const runtime = new CoopRoomRuntime(
+    createRuntimeConfig({
+      birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)],
+      reticleScatterRadius: 0.08
+    })
+  );
+  const roomId = runtime.roomId;
+  const playerId = requireValue(createCoopPlayerId("player-steady-aim"), "playerId");
+
+  runtime.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: true,
+      roomId,
+      username: requireValue(createUsername("echo"), "username")
+    }),
+    0
+  );
+  runtime.acceptCommand(
+    createCoopStartSessionCommand({
+      playerId,
+      roomId
+    }),
+    10
+  );
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: 0.02,
+        y: 0,
+        z: -1
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 1,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    20
+  );
+
+  const firstScatterSnapshot = runtime.advanceTo(50);
+
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: -0.02,
+        y: 0,
+        z: -1
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 2,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    60
+  );
+
+  const continuedScatterSnapshot = runtime.advanceTo(100);
+
+  assert.equal(firstScatterSnapshot.birds[0]?.behavior, "scatter");
+  assert.equal(continuedScatterSnapshot.birds[0]?.behavior, "scatter");
+  assert.equal(firstScatterSnapshot.birds[0]?.lastInteractionTick, 1);
+  assert.equal(continuedScatterSnapshot.birds[0]?.lastInteractionTick, 1);
+  assert.ok(
+    (continuedScatterSnapshot.birds[0]?.position.x ?? 0) <
+      (firstScatterSnapshot.birds[0]?.position.x ?? 0)
+  );
+});
+
 test("CoopRoomRuntime blocks non-ready observers from affecting an active session", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({

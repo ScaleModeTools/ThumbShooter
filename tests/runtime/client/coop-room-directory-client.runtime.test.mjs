@@ -59,8 +59,11 @@ test("CoopRoomDirectoryClient fetches typed room summaries from the server root"
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch(input) {
-        requests.push(String(input));
+      async fetch(input, init) {
+        requests.push({
+          cache: init?.cache ?? null,
+          url: String(input)
+        });
         return createJsonResponse(true, directorySnapshot);
       }
     }
@@ -68,7 +71,8 @@ test("CoopRoomDirectoryClient fetches typed room summaries from the server root"
 
   const fetchedSnapshot = await directoryClient.fetchSnapshot();
 
-  assert.equal(requests[0], "http://127.0.0.1:3210/");
+  assert.equal(requests[0]?.url, "http://127.0.0.1:3210/");
+  assert.equal(requests[0]?.cache, "no-store");
   assert.equal(fetchedSnapshot.coOpRooms[0]?.roomId, "co-op-harbor");
   assert.equal(fetchedSnapshot.coOpRooms[0]?.readyPlayerCount, 2);
   assert.equal(fetchedSnapshot.coOpRooms[0]?.capacity, 4);

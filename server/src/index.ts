@@ -355,6 +355,7 @@ function writeJson(
 ): void {
   writeCorsHeaders(response);
   response.writeHead(statusCode, {
+    "cache-control": "no-store, max-age=0",
     "content-type": "application/json"
   });
   response.end(JSON.stringify(payload));

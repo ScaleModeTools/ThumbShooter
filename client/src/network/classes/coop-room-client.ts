@@ -102,6 +102,61 @@ function resolveMembershipLossMessage(message: string): string | null {
   return null;
 }
 
+function parseRoomSessionOrder(
+  sessionId: CoopRoomSnapshot["session"]["sessionId"]
+): {
+  readonly bootSequence: number;
+  readonly ordinal: number;
+} | null {
+  const matchedSessionOrder = /-session-(?:(\d+)-)?(\d+)$/.exec(sessionId);
+
+  if (matchedSessionOrder === null) {
+    return null;
+  }
+
+  const bootSequence =
+    matchedSessionOrder[1] === undefined
+      ? 0
+      : Number.parseInt(matchedSessionOrder[1], 10);
+  const ordinal = Number.parseInt(matchedSessionOrder[2] ?? "", 10);
+
+  if (
+    !Number.isFinite(bootSequence) ||
+    !Number.isFinite(ordinal) ||
+    bootSequence < 0 ||
+    ordinal < 0
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    bootSequence,
+    ordinal
+  });
+}
+
+function isNewerRoomSession(
+  currentSnapshot: CoopRoomSnapshot,
+  nextSnapshot: CoopRoomSnapshot
+): boolean {
+  if (currentSnapshot.session.sessionId === nextSnapshot.session.sessionId) {
+    return false;
+  }
+
+  const currentSessionOrder = parseRoomSessionOrder(currentSnapshot.session.sessionId);
+  const nextSessionOrder = parseRoomSessionOrder(nextSnapshot.session.sessionId);
+
+  if (currentSessionOrder === null || nextSessionOrder === null) {
+    return false;
+  }
+
+  if (nextSessionOrder.bootSequence !== currentSessionOrder.bootSequence) {
+    return nextSessionOrder.bootSequence > currentSessionOrder.bootSequence;
+  }
+
+  return nextSessionOrder.ordinal > currentSessionOrder.ordinal;
+}
+
 function resolveFetchDependency(
   fetchDependency: typeof globalThis.fetch | undefined
 ): typeof globalThis.fetch {
@@ -425,6 +480,10 @@ export class CoopRoomClient {
       return true;
     }
 
+    if (this.#roomSnapshot.session.sessionId !== nextSnapshot.session.sessionId) {
+      return isNewerRoomSession(this.#roomSnapshot, nextSnapshot);
+    }
+
     const currentTick = this.#roomSnapshot.tick.currentTick;
     const nextTick = nextSnapshot.tick.currentTick;
 
@@ -547,7 +606,10 @@ export class CoopRoomClient {
           this.#config.serverOrigin,
           this.#config.roomId,
           this.#playerId
-        )
+        ),
+        {
+          cache: "no-store"
+        }
       );
       const payload = await response.json();
 

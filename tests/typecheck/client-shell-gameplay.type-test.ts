@@ -302,6 +302,9 @@ type GameplayHudReloadRemainingUsesMilliseconds = AssertTrue<
 type CombatSessionDurationUsesMilliseconds = AssertTrue<
   IsEqual<LocalCombatSessionSnapshot["roundDurationMs"], Milliseconds>
 >;
+type CombatSessionRoundNumberIsNumber = AssertTrue<
+  IsEqual<LocalCombatSessionSnapshot["roundNumber"], number>
+>;
 type CombatSessionRemainingUsesMilliseconds = AssertTrue<
   IsEqual<LocalCombatSessionSnapshot["roundTimeRemainingMs"], Milliseconds>
 >;

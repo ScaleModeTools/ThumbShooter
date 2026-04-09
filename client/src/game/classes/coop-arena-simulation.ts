@@ -106,6 +106,28 @@ interface ProjectedAimPoint {
   readonly isReticleOffscreen: boolean;
 }
 
+interface CoopBirdProjectionState {
+  behavior: LocalArenaEnemyRenderState["behavior"];
+  birdId: string;
+  headingRadians: number;
+  headingRadiansPerSecond: number;
+  label: string;
+  lastSnapshotTick: number | null;
+  positionX: number;
+  positionY: number;
+  positionZ: number;
+  radius: number;
+  scale: number;
+  scalePerSecond: number;
+  snapshotAppliedAtMs: number;
+  velocityX: number;
+  velocityY: number;
+  velocityZ: number;
+  visible: boolean;
+  wingPhase: number;
+  wingPhasePerSecond: number;
+}
+
 function createEnemyRenderState(
   birdId: string,
   label: string
@@ -123,6 +145,59 @@ function createEnemyRenderState(
     visible: false,
     wingPhase: 0
   };
+}
+
+function createBirdProjectionState(
+  birdId: string,
+  label: string
+): CoopBirdProjectionState {
+  return {
+    behavior: "glide",
+    birdId,
+    headingRadians: 0,
+    headingRadiansPerSecond: 0,
+    label,
+    lastSnapshotTick: null,
+    positionX: 0,
+    positionY: 0,
+    positionZ: 0,
+    radius: 0,
+    scale: 1,
+    scalePerSecond: 0,
+    snapshotAppliedAtMs: 0,
+    velocityX: 0,
+    velocityY: 0,
+    velocityZ: 0,
+    visible: false,
+    wingPhase: 0,
+    wingPhasePerSecond: 0
+  };
+}
+
+function clampProjectionDeltaMs(deltaMs: number, tickIntervalMs: number): number {
+  if (!Number.isFinite(deltaMs) || !Number.isFinite(tickIntervalMs)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(deltaMs, tickIntervalMs));
+}
+
+function wrapRadians(rawValue: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  let wrappedValue = rawValue;
+
+  while (wrappedValue > Math.PI) {
+    wrappedValue -= Math.PI * 2;
+  }
+
+  while (wrappedValue <= -Math.PI) {
+    wrappedValue += Math.PI * 2;
+  }
+
+  return wrappedValue;
 }
 
 function summarizeEnemyRenderStates(
@@ -207,6 +282,7 @@ function resolveBirdLabel(
 
 export class CoopArenaSimulation {
   readonly #affineAimTransform: AffineAimTransform;
+  readonly #birdProjectionStates: CoopBirdProjectionState[] = [];
   readonly #config: CoopArenaSimulationConfig;
   readonly #enemyRenderStates: MutableEnemyRenderState[] = [];
   readonly #emitGameplaySignal: ((signal: GameplaySignal) => void) | null;
@@ -273,7 +349,7 @@ export class CoopArenaSimulation {
     const roomSnapshot = this.#roomSource.roomSnapshot;
 
     this.#lastStepAtMs = safeNowMs;
-    this.#syncEnemyRenderStates(roomSnapshot);
+    this.#syncEnemyRenderStates(roomSnapshot, safeNowMs);
     this.#worldTimeMs =
       roomSnapshot === null
         ? 0
@@ -391,12 +467,17 @@ export class CoopArenaSimulation {
         ? this.#readTriggerPressed(trackingSnapshot)
         : false
     );
-    this.#syncEnemyRenderStates(roomSnapshot);
+    this.#birdProjectionStates.length = 0;
+    this.#syncEnemyRenderStates(roomSnapshot, readNowMs());
     this.#worldTimeMs =
       roomSnapshot === null
         ? 0
         : roomSnapshot.tick.currentTick * Number(roomSnapshot.tick.tickIntervalMs);
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
+  }
+
+  restartSession(trackingSnapshot?: LatestHandTrackingSnapshot): void {
+    this.reset(trackingSnapshot);
   }
 
   #buildHudSnapshot(
@@ -485,38 +566,174 @@ export class CoopArenaSimulation {
     }
   }
 
-  #syncEnemyRenderStates(roomSnapshot: CoopRoomSnapshot | null): void {
-    const birdSnapshots = roomSnapshot?.birds ?? [];
+  #syncEnemyRenderStates(roomSnapshot: CoopRoomSnapshot | null, nowMs: number): void {
+    if (roomSnapshot === null) {
+      this.#birdProjectionStates.length = 0;
 
-    for (let index = this.#enemyRenderStates.length; index < birdSnapshots.length; index += 1) {
+      for (const enemyRenderState of this.#enemyRenderStates) {
+        enemyRenderState.visible = false;
+      }
+
+      return;
+    }
+
+    const birdSnapshots = roomSnapshot.birds;
+    const roomTick = roomSnapshot.tick.currentTick;
+    const tickIntervalMs = Math.max(0, Number(roomSnapshot.tick.tickIntervalMs));
+
+    for (let index = 0; index < birdSnapshots.length; index += 1) {
       const birdSnapshot = birdSnapshots[index]!;
 
-      this.#enemyRenderStates.push(
-        createEnemyRenderState(birdSnapshot.birdId, birdSnapshot.label)
-      );
+      if (this.#enemyRenderStates[index] === undefined) {
+        this.#enemyRenderStates.push(
+          createEnemyRenderState(birdSnapshot.birdId, birdSnapshot.label)
+        );
+      }
+
+      if (this.#birdProjectionStates[index] === undefined) {
+        this.#birdProjectionStates.push(
+          createBirdProjectionState(birdSnapshot.birdId, birdSnapshot.label)
+        );
+      }
     }
 
     for (let index = 0; index < this.#enemyRenderStates.length; index += 1) {
       const enemyRenderState = this.#enemyRenderStates[index]!;
+      const birdProjectionState = this.#birdProjectionStates[index];
       const birdSnapshot = birdSnapshots[index];
 
-      if (birdSnapshot === undefined) {
+      if (birdSnapshot === undefined || birdProjectionState === undefined) {
+        if (birdProjectionState !== undefined) {
+          birdProjectionState.lastSnapshotTick = null;
+          birdProjectionState.visible = false;
+        }
+
         enemyRenderState.visible = false;
         continue;
       }
 
-      enemyRenderState.behavior = birdSnapshot.behavior;
-      enemyRenderState.headingRadians = birdSnapshot.headingRadians;
-      enemyRenderState.id = birdSnapshot.birdId;
-      enemyRenderState.label = birdSnapshot.label;
-      enemyRenderState.positionX = birdSnapshot.position.x;
-      enemyRenderState.positionY = birdSnapshot.position.y;
-      enemyRenderState.positionZ = birdSnapshot.position.z;
-      enemyRenderState.radius = birdSnapshot.radius;
-      enemyRenderState.scale = birdSnapshot.scale;
-      enemyRenderState.visible = birdSnapshot.visible;
-      enemyRenderState.wingPhase = birdSnapshot.wingPhase;
+      this.#syncBirdProjectionState(
+        birdProjectionState,
+        birdSnapshot,
+        roomTick,
+        tickIntervalMs,
+        nowMs
+      );
+      this.#applyBirdProjectionState(
+        birdProjectionState,
+        enemyRenderState,
+        nowMs,
+        tickIntervalMs
+      );
     }
+  }
+
+  #syncBirdProjectionState(
+    birdProjectionState: CoopBirdProjectionState,
+    birdSnapshot: CoopRoomSnapshot["birds"][number],
+    roomTick: number,
+    tickIntervalMs: number,
+    nowMs: number
+  ): void {
+    const birdChanged = birdProjectionState.birdId !== birdSnapshot.birdId;
+    const hasNewSnapshotTick = birdProjectionState.lastSnapshotTick !== roomTick;
+
+    if (!birdChanged && !hasNewSnapshotTick) {
+      return;
+    }
+
+    const sameBird = !birdChanged;
+    const previousSnapshotTick = birdProjectionState.lastSnapshotTick;
+    const tickDelta =
+      sameBird && previousSnapshotTick !== null ? roomTick - previousSnapshotTick : 0;
+    const snapshotDeltaSeconds =
+      tickDelta > 0 && tickIntervalMs > 0
+        ? (tickDelta * tickIntervalMs) / 1000
+        : 0;
+
+    if (
+      sameBird &&
+      snapshotDeltaSeconds > 0 &&
+      birdProjectionState.visible &&
+      birdSnapshot.visible
+    ) {
+      birdProjectionState.velocityX =
+        (birdSnapshot.position.x - birdProjectionState.positionX) /
+        snapshotDeltaSeconds;
+      birdProjectionState.velocityY =
+        (birdSnapshot.position.y - birdProjectionState.positionY) /
+        snapshotDeltaSeconds;
+      birdProjectionState.velocityZ =
+        (birdSnapshot.position.z - birdProjectionState.positionZ) /
+        snapshotDeltaSeconds;
+      birdProjectionState.headingRadiansPerSecond =
+        wrapRadians(birdSnapshot.headingRadians - birdProjectionState.headingRadians) /
+        snapshotDeltaSeconds;
+      birdProjectionState.scalePerSecond =
+        (birdSnapshot.scale - birdProjectionState.scale) / snapshotDeltaSeconds;
+      birdProjectionState.wingPhasePerSecond =
+        (birdSnapshot.wingPhase - birdProjectionState.wingPhase) /
+        snapshotDeltaSeconds;
+    } else {
+      birdProjectionState.velocityX = 0;
+      birdProjectionState.velocityY = 0;
+      birdProjectionState.velocityZ = 0;
+      birdProjectionState.headingRadiansPerSecond = 0;
+      birdProjectionState.scalePerSecond = 0;
+      birdProjectionState.wingPhasePerSecond = 0;
+    }
+
+    birdProjectionState.behavior = birdSnapshot.behavior;
+    birdProjectionState.birdId = birdSnapshot.birdId;
+    birdProjectionState.headingRadians = birdSnapshot.headingRadians;
+    birdProjectionState.label = birdSnapshot.label;
+    birdProjectionState.lastSnapshotTick = roomTick;
+    birdProjectionState.positionX = birdSnapshot.position.x;
+    birdProjectionState.positionY = birdSnapshot.position.y;
+    birdProjectionState.positionZ = birdSnapshot.position.z;
+    birdProjectionState.radius = birdSnapshot.radius;
+    birdProjectionState.scale = birdSnapshot.scale;
+    birdProjectionState.snapshotAppliedAtMs = nowMs;
+    birdProjectionState.visible = birdSnapshot.visible;
+    birdProjectionState.wingPhase = birdSnapshot.wingPhase;
+  }
+
+  #applyBirdProjectionState(
+    birdProjectionState: CoopBirdProjectionState,
+    enemyRenderState: MutableEnemyRenderState,
+    nowMs: number,
+    tickIntervalMs: number
+  ): void {
+    const projectionSeconds =
+      clampProjectionDeltaMs(
+        nowMs - birdProjectionState.snapshotAppliedAtMs,
+        tickIntervalMs
+      ) / 1000;
+
+    enemyRenderState.behavior = birdProjectionState.behavior;
+    enemyRenderState.headingRadians = createRadians(
+      wrapRadians(
+        birdProjectionState.headingRadians +
+          birdProjectionState.headingRadiansPerSecond * projectionSeconds
+      )
+    );
+    enemyRenderState.id = birdProjectionState.birdId;
+    enemyRenderState.label = birdProjectionState.label;
+    enemyRenderState.positionX =
+      birdProjectionState.positionX + birdProjectionState.velocityX * projectionSeconds;
+    enemyRenderState.positionY =
+      birdProjectionState.positionY + birdProjectionState.velocityY * projectionSeconds;
+    enemyRenderState.positionZ =
+      birdProjectionState.positionZ + birdProjectionState.velocityZ * projectionSeconds;
+    enemyRenderState.radius = birdProjectionState.radius;
+    enemyRenderState.scale = Math.max(
+      0,
+      birdProjectionState.scale + birdProjectionState.scalePerSecond * projectionSeconds
+    );
+    enemyRenderState.visible = birdProjectionState.visible;
+    enemyRenderState.wingPhase =
+      birdProjectionState.wingPhase +
+      birdProjectionState.wingPhasePerSecond * projectionSeconds;
   }
 
   #readTriggerPressed(

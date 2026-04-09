@@ -15,12 +15,15 @@ export interface LocalCombatSessionSnapshot {
   readonly phase: LocalCombatSessionPhase;
   readonly restartReady: boolean;
   readonly roundDurationMs: Milliseconds;
+  readonly roundNumber: number;
   readonly roundTimeRemainingMs: Milliseconds;
   readonly score: number;
   readonly streak: number;
 }
 
 export interface LocalCombatSessionConfig {
+  readonly durationLossPerRoundMs: Milliseconds;
+  readonly minimumRoundDurationMs: Milliseconds;
   readonly roundDurationMs: Milliseconds;
   readonly scorePerKill: number;
 }

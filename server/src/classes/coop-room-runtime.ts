@@ -384,13 +384,17 @@ function scatterBirdsNearShot(
   playerId: CoopPlayerId,
   tick: number,
   config: CoopRoomRuntimeConfig,
-  scatterRadius: number = config.scatterRadius
+  scatterRadius: number = config.scatterRadius,
+  allowScatterRefresh = true
 ): number {
   let scatteredBirdCount = 0;
   const shotAzimuthRadians = Math.atan2(direction.x, -direction.z);
 
   for (const birdState of birdStates) {
-    if (birdState.behavior === "downed") {
+    if (
+      birdState.behavior === "downed" ||
+      (!allowScatterRefresh && birdState.behavior === "scatter")
+    ) {
       continue;
     }
 
@@ -847,7 +851,8 @@ export class CoopRoomRuntime {
         playerState.playerId,
         this.#tick,
         this.#config,
-        this.#config.reticleScatterRadius
+        this.#config.reticleScatterRadius,
+        false
       );
     }
   }

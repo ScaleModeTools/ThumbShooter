@@ -203,10 +203,16 @@ function formatSessionStatus(hudSnapshot: GameplayHudSnapshot): string {
   }
 
   if (hudSnapshot.session.phase === "active") {
-    return `${formatRoundTime(hudSnapshot.session.roundTimeRemainingMs)} remaining`;
+    return `Round ${hudSnapshot.session.roundNumber} • ${formatRoundTime(
+      hudSnapshot.session.roundTimeRemainingMs
+    )} remaining`;
   }
 
-  return "Restart ready";
+  if (hudSnapshot.session.phase === "completed") {
+    return `Round ${hudSnapshot.session.roundNumber} cleared`;
+  }
+
+  return `Run ended on round ${hudSnapshot.session.roundNumber}`;
 }
 
 function formatRoundSummary(
@@ -230,18 +236,18 @@ function formatRoundSummary(
 
   if (hudSnapshot.session.phase === "completed") {
     return {
-      headline: "Arena cleared",
+      headline: `Round ${hudSnapshot.session.roundNumber} cleared`,
       detail:
         hudSnapshot.session.score > bestScore
-          ? `All enemies downed. New best score: ${displayedBestScore}.`
-          : `All enemies downed with ${hudSnapshot.session.score} points.`,
+          ? `New best score: ${displayedBestScore}. Round ${hudSnapshot.session.roundNumber + 1} is ready.`
+          : `All enemies downed with ${hudSnapshot.session.score} total points. Round ${hudSnapshot.session.roundNumber + 1} is ready.`,
       showRestart: true
     };
   }
 
   return {
-    headline: "Round failed",
-    detail: `Timer expired with ${hudSnapshot.arena.liveEnemyCount} enemies still airborne.`,
+    headline: "Run failed",
+    detail: `Timer expired in round ${hudSnapshot.session.roundNumber} with ${hudSnapshot.arena.liveEnemyCount} enemies still airborne.`,
     showRestart: true
   };
 }
@@ -351,6 +357,11 @@ export function GameplayHudOverlay({
   const gameStrongPanelClassName =
     "surface-game-panel-strong rounded-[1.75rem] p-5";
   const gameInsetPanelClassName = "surface-game-inset rounded-xl p-4";
+  const singlePlayerRestartLabel =
+    hudSnapshot.session.mode === "single-player" &&
+    hudSnapshot.session.phase === "completed"
+      ? `Start round ${hudSnapshot.session.roundNumber + 1}`
+      : "Restart run";
 
   return (
     <div className="relative flex h-full flex-col gap-6 p-6">
@@ -394,7 +405,9 @@ export function GameplayHudOverlay({
               type="button"
               variant="secondary"
             >
-              Restart round
+              {hudSnapshot.session.mode === "single-player"
+                ? singlePlayerRestartLabel
+                : "Restart round"}
             </Button>
           ) : null}
         </div>

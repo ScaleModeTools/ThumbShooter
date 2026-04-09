@@ -40,7 +40,10 @@ export class CoopRoomDirectoryClient {
 
   async fetchSnapshot(): Promise<CoopRoomDirectorySnapshot> {
     const response = await this.#fetch(
-      resolveCoopRoomDirectoryUrl(this.#config.serverOrigin)
+      resolveCoopRoomDirectoryUrl(this.#config.serverOrigin),
+      {
+        cache: "no-store"
+      }
     );
     const payload = await response.json();
 
