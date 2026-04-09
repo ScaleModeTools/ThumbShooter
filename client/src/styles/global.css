@@ -315,24 +315,28 @@
 
   .type-game-body {
     color: var(--game-muted);
+    font-variant-numeric: tabular-nums;
     font-size: 0.875rem;
     line-height: 1.625;
   }
 
   .type-game-detail {
     color: var(--game-muted);
+    font-variant-numeric: tabular-nums;
     font-size: 0.75rem;
     line-height: 1.5;
   }
 
   .type-body {
     color: var(--foreground);
+    font-variant-numeric: tabular-nums;
     font-size: 0.875rem;
     line-height: 1.625;
   }
 
   .type-body-muted {
     color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
     font-size: 0.875rem;
     line-height: 1.625;
   }
@@ -390,6 +394,7 @@
     color: var(--foreground);
     font-family: var(--font-heading);
     font-optical-sizing: auto;
+    font-variant-numeric: tabular-nums;
     font-size: 1.5rem;
     font-weight: 600;
     letter-spacing: var(--tracking-tight);
@@ -443,6 +448,7 @@
     color: var(--game-kicker);
     font-family: var(--font-heading);
     font-optical-sizing: auto;
+    font-variant-numeric: tabular-nums;
     font-size: 0.75rem;
     letter-spacing: 0.22em;
     line-height: 1.25rem;
@@ -453,6 +459,7 @@
     color: var(--game-foreground);
     font-family: var(--font-heading);
     font-optical-sizing: auto;
+    font-variant-numeric: tabular-nums;
     font-size: 1.5rem;
     font-weight: 600;
     letter-spacing: var(--tracking-tight);

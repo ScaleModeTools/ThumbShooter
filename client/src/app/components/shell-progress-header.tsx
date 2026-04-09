@@ -1,4 +1,14 @@
+import { StableInlineText } from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
+
+const audioStatusLabels = [
+  "Awaiting user gesture",
+  "Unlocking audio",
+  "Audio unlock failed",
+  "Audio unavailable",
+  "Audio unlocked",
+  "Audio unlocked, Strudel primed"
+] as const;
 
 interface ShellProgressHeaderProps {
   readonly audioStatusLabel: string;
@@ -55,20 +65,29 @@ export function ShellProgressHeader({
           <div className="grid gap-3 rounded-[1.5rem] border border-border/70 bg-muted/35 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="type-label">Session state</p>
-              <Badge variant="outline">{audioStatusLabel}</Badge>
+              <Badge variant="outline">
+                <StableInlineText
+                  reserveTexts={audioStatusLabels}
+                  text={audioStatusLabel}
+                />
+              </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
                 <p className="type-caption">
                   Music
                 </p>
-                <p className="type-metric mt-2">{musicVolumeLabel}</p>
+                <p className="type-metric mt-2">
+                  <StableInlineText text={musicVolumeLabel} />
+                </p>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
                 <p className="type-caption">
                   SFX
                 </p>
-                <p className="type-metric mt-2">{sfxVolumeLabel}</p>
+                <p className="type-metric mt-2">
+                  <StableInlineText text={sfxVolumeLabel} />
+                </p>
               </div>
             </div>
             <div className="type-body-muted rounded-xl border border-border/70 bg-background/70 px-3 py-3">

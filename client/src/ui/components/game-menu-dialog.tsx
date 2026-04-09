@@ -7,6 +7,7 @@ import {
   type GameplayInputModeId,
   type GameplaySessionMode
 } from "../../game";
+import { StableInlineText } from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,16 @@ import {
 } from "@/components/ui/toggle-group";
 
 type SliderValue = [number];
+
+const debugModeButtonLabels = ["Active", "Enable"] as const;
+const audioStatusLabels = [
+  "Awaiting user gesture",
+  "Unlocking audio",
+  "Audio unlock failed",
+  "Audio unavailable",
+  "Audio unlocked",
+  "Audio unlocked, Strudel primed"
+] as const;
 
 interface GameMenuDialogProps {
   readonly audioStatusLabel: string;
@@ -77,8 +88,15 @@ export function GameMenuDialog({
       >
         <DialogHeader className="gap-3">
           <div className="flex flex-wrap gap-2">
-            <Badge>{gameplayStatusLabel}</Badge>
-            <Badge variant="secondary">{audioStatusLabel}</Badge>
+            <Badge>
+              <StableInlineText text={gameplayStatusLabel} />
+            </Badge>
+            <Badge variant="secondary">
+              <StableInlineText
+                reserveTexts={audioStatusLabels}
+                text={audioStatusLabel}
+              />
+            </Badge>
             <Badge variant="outline">
               Entry: {gameMenuPlan.entryActions.join(" / ")}
             </Badge>
@@ -205,7 +223,9 @@ export function GameMenuDialog({
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <Label htmlFor="menu-music-volume">Music volume</Label>
-                  <Badge variant="secondary">{musicVolume[0]}%</Badge>
+                  <Badge variant="secondary">
+                    <StableInlineText text={`${musicVolume[0]}%`} />
+                  </Badge>
                 </div>
                 <Slider
                   id="menu-music-volume"
@@ -222,7 +242,9 @@ export function GameMenuDialog({
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <Label htmlFor="menu-sfx-volume">SFX volume</Label>
-                  <Badge variant="secondary">{sfxVolume[0]}%</Badge>
+                  <Badge variant="secondary">
+                    <StableInlineText text={`${sfxVolume[0]}%`} />
+                  </Badge>
                 </div>
                 <Slider
                   id="menu-sfx-volume"
@@ -271,7 +293,10 @@ export function GameMenuDialog({
                         type="button"
                         variant={debugPanelMode === mode.mode ? "secondary" : "outline"}
                       >
-                        {debugPanelMode === mode.mode ? "Active" : "Enable"}
+                        <StableInlineText
+                          reserveTexts={debugModeButtonLabels}
+                          text={debugPanelMode === mode.mode ? "Active" : "Enable"}
+                        />
                       </Button>
                     </div>
                   ))}

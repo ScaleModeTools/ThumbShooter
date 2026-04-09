@@ -1,5 +1,6 @@
 import { gameFoundationConfig } from "../../game/config/game-foundation";
 import type { WebcamPermissionState } from "../../navigation";
+import { StableInlineText } from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,23 @@ interface PermissionStageScreenProps {
   readonly onRequestPermission: () => void;
 }
 
+const permissionRequestLabels = [
+  "Requesting permission",
+  "Enable webcam for thumb-shooter"
+] as const;
+const permissionStatusLabels = [
+  "Permission: prompt",
+  "Permission: requesting",
+  "Permission: granted",
+  "Permission: denied",
+  "Permission: unsupported"
+] as const;
+const webGpuStatusLabels = [
+  "WebGPU: checking",
+  "WebGPU: supported",
+  "WebGPU: unsupported"
+] as const;
+
 export function PermissionStageScreen({
   capabilityReasonLabel,
   capabilityStatus,
@@ -36,8 +54,18 @@ export function PermissionStageScreen({
       <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap gap-2">
-            <Badge>{`Permission: ${permissionState}`}</Badge>
-            <Badge variant="secondary">{`WebGPU: ${capabilityStatus}`}</Badge>
+            <Badge>
+              <StableInlineText
+                reserveTexts={permissionStatusLabels}
+                text={`Permission: ${permissionState}`}
+              />
+            </Badge>
+            <Badge variant="secondary">
+              <StableInlineText
+                reserveTexts={webGpuStatusLabels}
+                text={`WebGPU: ${capabilityStatus}`}
+              />
+            </Badge>
           </div>
 
           <div className="rounded-[1.5rem] border border-border/70 bg-muted/35 p-5">
@@ -65,9 +93,14 @@ export function PermissionStageScreen({
               onClick={onRequestPermission}
               type="button"
             >
-              {permissionState === "requesting"
-                ? "Requesting permission"
-                : "Enable webcam for thumb-shooter"}
+              <StableInlineText
+                reserveTexts={permissionRequestLabels}
+                text={
+                  permissionState === "requesting"
+                    ? "Requesting permission"
+                    : "Enable webcam for thumb-shooter"
+                }
+              />
             </Button>
           </div>
         </div>

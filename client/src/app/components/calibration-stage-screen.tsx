@@ -18,6 +18,7 @@ import type {
   HandTrackingPoseSnapshot,
   TrackedHandTrackingSnapshot
 } from "../../game/types/hand-tracking";
+import { StableInlineText } from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,31 @@ import { ImmersiveStageFrame } from "./immersive-stage-frame";
 
 const calibrationPreviewMirrored = true;
 const calibrationPreviewFitMode = "cover";
+const handTrackingLifecycleLabels = [
+  "idle",
+  "booting",
+  "ready",
+  "failed"
+] as const;
+const calibrationCaptureStateLabels = [
+  "waiting-for-hand",
+  "ready-to-capture",
+  "release-trigger",
+  "complete",
+  "failed"
+] as const;
+const calibrationAnchorLabels = [
+  "Center",
+  "Top Left",
+  "Top Right",
+  "Bottom Left",
+  "Bottom Right",
+  "Top Center",
+  "Mid Right",
+  "Mid Left",
+  "Bottom Center",
+  "complete"
+] as const;
 
 interface CalibrationStageScreenProps {
   readonly handTrackingRuntime: HandTrackingRuntime;
@@ -443,9 +469,16 @@ export function CalibrationStageScreen({
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">Optional calibration</Badge>
             <Badge variant="secondary">
-              {`${captureSnapshot.capturedSampleCount}/${captureSnapshot.totalAnchorCount}`}
+              <StableInlineText
+                text={`${captureSnapshot.capturedSampleCount}/${captureSnapshot.totalAnchorCount}`}
+              />
             </Badge>
-            <Badge variant="outline">{runtimeLifecycle}</Badge>
+            <Badge variant="outline">
+              <StableInlineText
+                reserveTexts={handTrackingLifecycleLabels}
+                text={runtimeLifecycle}
+              />
+            </Badge>
           </div>
           <p className="type-game-heading mt-3">
             Thumb-shooter calibration
@@ -474,9 +507,17 @@ export function CalibrationStageScreen({
 
         <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap justify-end gap-2 sm:inset-x-4 sm:top-4">
           <Badge variant="secondary">
-            {captureSnapshot.currentAnchorLabel ?? "complete"}
+            <StableInlineText
+              reserveTexts={calibrationAnchorLabels}
+              text={captureSnapshot.currentAnchorLabel ?? "complete"}
+            />
           </Badge>
-          <Badge variant="outline">{captureSnapshot.captureState}</Badge>
+          <Badge variant="outline">
+            <StableInlineText
+              reserveTexts={calibrationCaptureStateLabels}
+              text={captureSnapshot.captureState}
+            />
+          </Badge>
           <Badge variant="outline">
             {gameFoundationConfig.calibration.transformModel}
           </Badge>
@@ -485,7 +526,9 @@ export function CalibrationStageScreen({
         <div className="surface-game-overlay absolute bottom-3 left-3 z-10 w-[min(28rem,calc(100%-1.5rem))] rounded-[1.25rem] p-4 sm:bottom-4 sm:left-4 sm:w-[28rem]">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">Pose capture</Badge>
-            <Badge variant="secondary">{`${poseCaptureSamples.length} samples`}</Badge>
+            <Badge variant="secondary">
+              <StableInlineText text={`${poseCaptureSamples.length} samples`} />
+            </Badge>
           </div>
           <p className="type-game-body mt-3 text-game-foreground">
             The hand overlay now follows the thumb, index, and trigger contact

@@ -6,8 +6,28 @@ import {
   type GameplayHudSnapshot,
   type GameplayInputModeId
 } from "../../game";
+import {
+  PretextParagraph,
+  StableInlineText
+} from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+const coopReadyActionLabels = ["Ready up", "Unready"] as const;
+const coopLobbyBadgeReserveTexts = [
+  "Single-player",
+  "Joining room",
+  "Room cleared",
+  "Ready to launch"
+] as const;
+const audioStatusLabels = [
+  "Awaiting user gesture",
+  "Unlocking audio",
+  "Audio unlock failed",
+  "Audio unavailable",
+  "Audio unlocked",
+  "Audio unlocked, Strudel primed"
+] as const;
 
 interface GameplayHudOverlayProps {
   readonly audioStatusLabel: string;
@@ -455,7 +475,10 @@ export function GameplayHudOverlay({
     <div className="relative z-10 flex h-full select-none flex-col gap-6 p-6" ref={overlayRef}>
       <div className="flex flex-wrap items-start justify-end gap-3">
         <Badge variant="outline">
-          {audioStatusLabel}
+          <StableInlineText
+            reserveTexts={audioStatusLabels}
+            text={audioStatusLabel}
+          />
         </Badge>
         <div className="flex gap-3">
           {runtimeError !== null ? (
@@ -479,7 +502,7 @@ export function GameplayHudOverlay({
 
       {runtimeError !== null ? (
         <div className="surface-game-danger ml-auto max-w-lg rounded-[1.5rem] px-4 py-3 text-sm">
-          {runtimeError}
+          <PretextParagraph text={runtimeError} />
         </div>
       ) : null}
 
@@ -495,7 +518,10 @@ export function GameplayHudOverlay({
               ? `${hudSnapshot.session.score} points`
               : `${hudSnapshot.session.teamHitsLanded} team hits`}
           </p>
-          <p className="type-game-body mt-3">{roundSummary.detail}</p>
+          <PretextParagraph
+            className="type-game-body mt-3"
+            text={roundSummary.detail}
+          />
           {roundSummary.showRestart ? (
             <Button
               className="mt-5"
@@ -526,7 +552,10 @@ export function GameplayHudOverlay({
           <p className="type-game-value mt-2">
             {formatSessionPhase(hudSnapshot)}
           </p>
-          <p className="type-game-body mt-2">{formatSessionStatus(hudSnapshot)}</p>
+          <PretextParagraph
+            className="type-game-body mt-2"
+            text={formatSessionStatus(hudSnapshot)}
+          />
         </div>
         <div className={gamePanelClassName}>
           <p className="type-game-title">
@@ -558,9 +587,10 @@ export function GameplayHudOverlay({
         </div>
         <div className={gamePanelClassName}>
           <p className="type-game-title">{weaponLabel}</p>
-          <p className="type-game-body mt-2">
-            {formatWeaponReadiness(hudSnapshot, inputMode)}
-          </p>
+          <PretextParagraph
+            className="type-game-body mt-2"
+            text={formatWeaponReadiness(hudSnapshot, inputMode)}
+          />
           <p className="type-game-caption mt-2">
             {formatClipState(hudSnapshot)}
           </p>
@@ -584,25 +614,31 @@ export function GameplayHudOverlay({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="type-game-title">Team activity</p>
-              <p className="type-game-body mt-1">
-                Shared room snapshots drive teammate status, round cadence, shot outcomes, and bird pressure.
-              </p>
+              <PretextParagraph
+                className="type-game-body mt-1"
+                text="Shared room snapshots drive teammate status, round cadence, shot outcomes, and bird pressure."
+              />
             </div>
             <div className="flex items-center gap-3">
               <Badge variant="outline">
-                {formatCoopLobbyBadge(hudSnapshot)}
+                <StableInlineText
+                  reserveTexts={coopLobbyBadgeReserveTexts}
+                  text={formatCoopLobbyBadge(hudSnapshot)}
+                />
               </Badge>
               {coopStartActionAvailable ? (
                 <Button
+                  aria-busy={coopStartActionBusy || undefined}
                   disabled={coopStartActionDisabled || coopStartActionBusy}
                   onClick={onStartCoopSession}
                   type="button"
                 >
-                  {coopStartActionBusy ? "Starting..." : "Start game"}
+                  <StableInlineText text="Start game" />
                 </Button>
               ) : null}
               {coopReadyActionAvailable ? (
                 <Button
+                  aria-busy={coopReadyActionBusy || undefined}
                   className={
                     reticleHoveringReadyAction
                       ? "ring-2 ring-sky-300/70 shadow-[0_0_0_5px_rgb(56_189_248_/_0.18)]"
@@ -614,7 +650,10 @@ export function GameplayHudOverlay({
                   type="button"
                   variant="secondary"
                 >
-                  {coopReadyActionBusy ? "Updating..." : coopReadyActionLabel}
+                  <StableInlineText
+                    reserveTexts={coopReadyActionLabels}
+                    text={coopReadyActionLabel}
+                  />
                 </Button>
               ) : null}
             </div>
@@ -622,7 +661,7 @@ export function GameplayHudOverlay({
 
           {hudSnapshot.session.players.length === 0 ? (
             <div className={`${gameInsetPanelClassName} type-game-body mt-4`}>
-              Waiting for the room snapshot to confirm your player slot.
+              <PretextParagraph text="Waiting for the room snapshot to confirm your player slot." />
             </div>
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -644,13 +683,21 @@ export function GameplayHudOverlay({
                       ) : null}
                     </div>
                   </div>
-                  <p className="type-game-body mt-2">
-                    {formatCoopPlayerOutcome(playerSnapshot, hudSnapshot.session.phase)}
-                  </p>
+                  <PretextParagraph
+                    className="type-game-body mt-2"
+                    text={formatCoopPlayerOutcome(
+                      playerSnapshot,
+                      hudSnapshot.session.phase
+                    )}
+                  />
                   {hudSnapshot.session.phase === "waiting-for-players" &&
                   hudSnapshot.session.localPlayerIsLeader &&
                   !playerSnapshot.isLocalPlayer ? (
                     <Button
+                      aria-busy={
+                        coopKickActionPendingPlayerId === playerSnapshot.playerId ||
+                        undefined
+                      }
                       className="mt-3"
                       disabled={coopKickActionPendingPlayerId !== null}
                       onClick={() => {
@@ -660,9 +707,7 @@ export function GameplayHudOverlay({
                       type="button"
                       variant="destructive"
                     >
-                      {coopKickActionPendingPlayerId === playerSnapshot.playerId
-                        ? "Removing..."
-                        : "Boot player"}
+                      Boot player
                     </Button>
                   ) : null}
                   <p className="type-game-caption mt-3">

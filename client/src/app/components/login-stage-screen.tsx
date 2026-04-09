@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 
 import { profileStoragePlan } from "../../network";
+import { StableInlineText } from "@/components/text-stability";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,6 +23,11 @@ interface LoginStageScreenProps {
   readonly setUsernameDraft: (value: string) => void;
   readonly usernameDraft: string;
 }
+
+const loginSubmitLabels = [
+  "Resume local profile",
+  "Create local profile"
+] as const;
 
 export function LoginStageScreen({
   hasStoredProfile,
@@ -60,7 +66,14 @@ export function LoginStageScreen({
 
             <div className="flex flex-wrap gap-3">
               <Button type="submit">
-                {hasStoredProfile ? "Resume local profile" : "Create local profile"}
+                <StableInlineText
+                  reserveTexts={loginSubmitLabels}
+                  text={
+                    hasStoredProfile
+                      ? "Resume local profile"
+                      : "Create local profile"
+                  }
+                />
               </Button>
               {hasStoredProfile ? (
                 <Button onClick={onClearProfile} type="button" variant="outline">

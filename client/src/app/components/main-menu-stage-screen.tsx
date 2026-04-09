@@ -16,6 +16,7 @@ import {
 } from "../../network";
 import type { GameplayEntryStepId } from "../../navigation";
 import type { WebGpuGameplayCapabilitySnapshot } from "../../game/types/webgpu-capability";
+import { StableInlineText } from "@/components/text-stability";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,6 +99,44 @@ function resolveCoopRoomActionLabel(
 
   return "Launch unavailable";
 }
+
+const startButtonLabels = [
+  "Enter a room code",
+  "Enter room",
+  "Start game",
+  "Continue to calibration",
+  "Continue to webcam setup",
+  "Checking gameplay support",
+  "Start game unavailable"
+] as const;
+
+const coopRoomActionLabels = [
+  "Continue to calibration",
+  "Continue to webcam setup",
+  "Create room",
+  "Join room",
+  "Launch unavailable"
+] as const;
+const coopRoomPhaseLabels = [
+  "Lobby",
+  "Cooldown",
+  "Live",
+  "Failed",
+  "Cleared"
+] as const;
+const webGpuStatusBadgeLabels = [
+  "WebGPU checking",
+  "WebGPU supported",
+  "WebGPU unsupported"
+] as const;
+const audioStatusLabels = [
+  "Awaiting user gesture",
+  "Unlocking audio",
+  "Audio unlock failed",
+  "Audio unavailable",
+  "Audio unlocked",
+  "Audio unlocked, Strudel primed"
+] as const;
 
 function createSuggestedCoopRoomIdDraft(): string {
   const suffix =
@@ -289,8 +328,18 @@ export function MainMenuStageScreen({
     >
       <div className="flex flex-wrap gap-2">
         <Badge>{selectedInputMode.label}</Badge>
-        <Badge variant="secondary">{audioStatusLabel}</Badge>
-        <Badge variant="outline">{`WebGPU ${capabilityStatus}`}</Badge>
+        <Badge variant="secondary">
+          <StableInlineText
+            reserveTexts={audioStatusLabels}
+            text={audioStatusLabel}
+          />
+        </Badge>
+        <Badge variant="outline">
+          <StableInlineText
+            reserveTexts={webGpuStatusBadgeLabels}
+            text={`WebGPU ${capabilityStatus}`}
+          />
+        </Badge>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -421,14 +470,17 @@ export function MainMenuStageScreen({
                                 <Badge
                                   variant={selectedRoom ? "secondary" : "outline"}
                                 >
-                                  {resolveCoopRoomPhaseLabel(roomEntry)}
+                                  <StableInlineText
+                                    reserveTexts={coopRoomPhaseLabels}
+                                    text={resolveCoopRoomPhaseLabel(roomEntry)}
+                                  />
                                 </Badge>
                                 {selectedRoom ? (
                                   <Badge variant="secondary">Selected</Badge>
                                 ) : null}
                               </div>
                               <p className="text-sm text-muted-foreground">
-                                {formatCoopRoomStatus(roomEntry)}
+                                <StableInlineText text={formatCoopRoomStatus(roomEntry)} />
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -440,7 +492,13 @@ export function MainMenuStageScreen({
                                 }}
                                 type="button"
                               >
-                                {resolveCoopRoomActionLabel(nextGameplayStep, "join")}
+                                <StableInlineText
+                                  reserveTexts={coopRoomActionLabels}
+                                  text={resolveCoopRoomActionLabel(
+                                    nextGameplayStep,
+                                    "join"
+                                  )}
+                                />
                               </Button>
                             </div>
                           </div>
@@ -486,7 +544,13 @@ export function MainMenuStageScreen({
                       onClick={onStartGame}
                       type="button"
                     >
-                      {resolveCoopRoomActionLabel(nextGameplayStep, "create")}
+                      <StableInlineText
+                        reserveTexts={coopRoomActionLabels}
+                        text={resolveCoopRoomActionLabel(
+                          nextGameplayStep,
+                          "create"
+                        )}
+                      />
                     </Button>
                     <Button
                       onClick={() => {
@@ -535,12 +599,15 @@ export function MainMenuStageScreen({
                     onClick={onStartGame}
                     type="button"
                   >
-                    {resolveStartButtonLabel(
-                      capabilityStatus,
-                      nextGameplayStep,
-                      coopRoomIdValid,
-                      sessionMode
-                    )}
+                    <StableInlineText
+                      reserveTexts={startButtonLabels}
+                      text={resolveStartButtonLabel(
+                        capabilityStatus,
+                        nextGameplayStep,
+                        coopRoomIdValid,
+                        sessionMode
+                      )}
+                    />
                   </Button>
                 ) : null}
 
