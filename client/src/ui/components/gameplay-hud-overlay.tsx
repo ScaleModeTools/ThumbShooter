@@ -347,6 +347,10 @@ export function GameplayHudOverlay({
       ? hudSnapshot.session.players.find((playerSnapshot) => playerSnapshot.isLocalPlayer) ??
         null
       : null;
+  const gamePanelClassName = "surface-game-panel rounded-[1.5rem] p-4";
+  const gameStrongPanelClassName =
+    "surface-game-panel-strong rounded-[1.75rem] p-5";
+  const gameInsetPanelClassName = "surface-game-inset rounded-xl p-4";
 
   return (
     <div className="relative flex h-full flex-col gap-6 p-6">
@@ -365,7 +369,7 @@ export function GameplayHudOverlay({
       </div>
 
       {runtimeError !== null ? (
-        <div className="ml-auto max-w-lg rounded-[1.5rem] border border-red-300/30 bg-red-500/12 px-4 py-3 text-sm text-red-100 backdrop-blur-md">
+        <div className="surface-game-danger ml-auto max-w-lg rounded-[1.5rem] px-4 py-3 text-sm">
           {runtimeError}
         </div>
       ) : null}
@@ -373,16 +377,16 @@ export function GameplayHudOverlay({
       <div className="flex-1" />
 
       {roundSummary !== null ? (
-        <div className="mx-auto w-full max-w-xl rounded-[1.75rem] border border-white/16 bg-slate-950/55 p-5 text-center backdrop-blur-md">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/52">
+        <div className={`${gameStrongPanelClassName} mx-auto w-full max-w-xl text-center`}>
+          <p className="type-game-banner">
             {roundSummary.headline}
           </p>
-          <p className="mt-3 text-2xl font-semibold text-white">
+          <p className="type-game-value mt-3">
             {hudSnapshot.session.mode === "single-player"
               ? `${hudSnapshot.session.score} points`
               : `${hudSnapshot.session.teamHitsLanded} team hits`}
           </p>
-          <p className="mt-3 text-sm text-white/72">{roundSummary.detail}</p>
+          <p className="type-game-body mt-3">{roundSummary.detail}</p>
           {roundSummary.showRestart ? (
             <Button
               className="mt-5"
@@ -397,79 +401,79 @@ export function GameplayHudOverlay({
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">Player</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{username}</p>
-          <p className="mt-2 text-sm text-white/72">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">Player</p>
+          <p className="type-game-value mt-2">{username}</p>
+          <p className="type-game-body mt-2">
             {hudSnapshot.session.mode === "co-op"
               ? `${selectedReticleLabel} • Co-op`
               : selectedReticleLabel}
           </p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">Session</p>
-          <p className="mt-2 text-2xl font-semibold text-white">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">Session</p>
+          <p className="type-game-value mt-2">
             {formatSessionPhase(hudSnapshot)}
           </p>
-          <p className="mt-2 text-sm text-white/72">{formatSessionStatus(hudSnapshot)}</p>
+          <p className="type-game-body mt-2">{formatSessionStatus(hudSnapshot)}</p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">
             {hudSnapshot.session.mode === "co-op" ? "Team" : "Score"}
           </p>
-          <p className="mt-2 text-2xl font-semibold text-white">
+          <p className="type-game-value mt-2">
             {hudSnapshot.session.mode === "co-op"
               ? hudSnapshot.session.teamHitsLanded
               : hudSnapshot.session.score}
           </p>
-          <p className="mt-2 text-sm text-white/72">
+          <p className="type-game-body mt-2">
             {hudSnapshot.session.mode === "co-op"
               ? `${hudSnapshot.session.teamShotsFired} team shots`
               : `Best ${displayedBestScore}`}
           </p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">Combat</p>
-          <p className="mt-2 text-2xl font-semibold text-white">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">Combat</p>
+          <p className="type-game-value mt-2">
             {hudSnapshot.session.mode === "co-op"
               ? `${coopLocalPlayer?.hitsLanded ?? 0}`
               : `x${hudSnapshot.session.streak}`}
           </p>
-          <p className="mt-2 text-sm text-white/72">
+          <p className="type-game-body mt-2">
             {hudSnapshot.session.mode === "co-op"
               ? `${coopLocalPlayer?.shotsFired ?? 0} local shots`
               : `${hudSnapshot.session.killsThisSession} kills this round`}
           </p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">{weaponLabel}</p>
-          <p className="mt-2 text-sm text-white/82">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">{weaponLabel}</p>
+          <p className="type-game-body mt-2">
             {formatWeaponReadiness(hudSnapshot, inputMode)}
           </p>
-          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
+          <p className="type-game-caption mt-2">
             {formatClipState(hudSnapshot)}
           </p>
-          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
+          <p className="type-game-caption mt-2">
             {`${hudSnapshot.weapon.shotsFired} shots / ${hudSnapshot.weapon.hitsLanded} hits`}
           </p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-          <p className="text-sm font-medium text-white">Arena</p>
-          <p className="mt-2 text-sm text-white/82">
+        <div className={gamePanelClassName}>
+          <p className="type-game-title">Arena</p>
+          <p className="type-game-body mt-2">
             {formatArenaState(hudSnapshot)}
           </p>
-          <p className="mt-2 text-sm text-white/72">
+          <p className="type-game-body mt-2">
             {formatTargetFeedback(hudSnapshot, inputMode)}
           </p>
         </div>
       </div>
 
       {hudSnapshot.session.mode === "co-op" ? (
-        <div className="rounded-[1.75rem] border border-white/12 bg-white/6 p-5 backdrop-blur-md">
+        <div className="surface-game-panel rounded-[1.75rem] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Team activity</p>
-              <p className="mt-1 text-sm text-white/72">
+              <p className="type-game-title">Team activity</p>
+              <p className="type-game-body mt-1">
                 Shared room snapshots drive teammate status, round cadence, shot outcomes, and bird pressure.
               </p>
             </div>
@@ -498,18 +502,18 @@ export function GameplayHudOverlay({
           </div>
 
           {hudSnapshot.session.players.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-white/12 bg-slate-950/38 p-4 text-sm text-white/72">
+            <div className={`${gameInsetPanelClassName} type-game-body mt-4`}>
               Waiting for the room snapshot to confirm your player slot.
             </div>
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {hudSnapshot.session.players.map((playerSnapshot) => (
                 <div
-                  className="rounded-xl border border-white/12 bg-slate-950/38 p-4"
+                  className={gameInsetPanelClassName}
                   key={playerSnapshot.playerId}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-white">
+                    <p className="type-game-title">
                       {playerSnapshot.username}
                     </p>
                     <div className="flex items-center gap-2">
@@ -521,7 +525,7 @@ export function GameplayHudOverlay({
                       ) : null}
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-white/72">
+                  <p className="type-game-body mt-2">
                     {formatCoopPlayerOutcome(playerSnapshot, hudSnapshot.session.phase)}
                   </p>
                   {hudSnapshot.session.phase === "waiting-for-players" &&
@@ -542,10 +546,10 @@ export function GameplayHudOverlay({
                         : "Boot player"}
                     </Button>
                   ) : null}
-                  <p className="mt-3 text-xs uppercase tracking-[0.22em] text-white/52">
+                  <p className="type-game-caption mt-3">
                     {`${playerSnapshot.hitsLanded} hits / ${playerSnapshot.shotsFired} shots`}
                   </p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/52">
+                  <p className="type-game-caption mt-2">
                     {`${playerSnapshot.scatterEventsCaused} scatter events`}
                   </p>
                 </div>

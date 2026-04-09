@@ -28,14 +28,14 @@ export function ShellProgressHeader({
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium tracking-[0.24em] text-muted-foreground uppercase">
+              <p className="type-kicker">
                 ThumbShooter
               </p>
-              <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+              <h1 className="type-display max-w-4xl">
                 Login confirms your local profile, then the main menu handles
                 input choice and gameplay launch.
               </h1>
-              <p className="max-w-3xl text-base text-muted-foreground sm:text-lg">
+              <p className="type-lead max-w-3xl">
                 Mouse players can enter the arena without touching webcam
                 permissions. Thumb-shooter setup stays available from the menu
                 when you want worker tracking, webcam permission, and nine-point
@@ -54,24 +54,24 @@ export function ShellProgressHeader({
 
           <div className="grid gap-3 rounded-[1.5rem] border border-border/70 bg-muted/35 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium">Session state</p>
+              <p className="type-label">Session state</p>
               <Badge variant="outline">{audioStatusLabel}</Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
-                <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                <p className="type-caption">
                   Music
                 </p>
-                <p className="mt-2 text-2xl font-semibold">{musicVolumeLabel}</p>
+                <p className="type-metric mt-2">{musicVolumeLabel}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
-                <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                <p className="type-caption">
                   SFX
                 </p>
-                <p className="mt-2 text-2xl font-semibold">{sfxVolumeLabel}</p>
+                <p className="type-metric mt-2">{sfxVolumeLabel}</p>
               </div>
             </div>
-            <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+            <div className="type-body-muted rounded-xl border border-border/70 bg-background/70 px-3 py-3">
               Capability: {capabilityReasonLabel}
             </div>
           </div>

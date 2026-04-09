@@ -47,15 +47,15 @@ export function GameplayDeveloperPanel({
         size="sm"
       >
         <CardHeader className="border-b border-border/60 pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+          <CardTitle className="type-caption">
             Developer
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 text-xs">
           {metrics.map((metric) => (
             <div className="flex items-baseline justify-between gap-3" key={metric.label}>
-              <span className="text-muted-foreground">{metric.label}</span>
-              <span className="font-medium text-foreground">{metric.value}</span>
+              <span className="type-detail-muted">{metric.label}</span>
+              <span className="type-detail font-medium">{metric.value}</span>
             </div>
           ))}
         </CardContent>

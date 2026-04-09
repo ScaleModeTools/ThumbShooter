@@ -27,10 +27,10 @@ export function StageScreenLayout({
       <CardHeader className="gap-3 border-b border-border/70 pb-5">
         <Badge variant="outline">{eyebrow}</Badge>
         <div className="flex flex-col gap-2">
-          <CardTitle className="text-3xl font-semibold tracking-tight">
+          <CardTitle className="type-section-title">
             {title}
           </CardTitle>
-          <CardDescription className="max-w-2xl text-base">
+          <CardDescription className="type-lead max-w-2xl">
             {description}
           </CardDescription>
         </div>

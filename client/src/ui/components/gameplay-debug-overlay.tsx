@@ -56,7 +56,7 @@ export function GameplayDebugOverlay({
         />
       ) : null}
 
-      <div className="absolute right-4 bottom-4 w-[min(22rem,calc(100%-2rem))] rounded-[1.4rem] border border-white/14 bg-slate-950/72 p-4 text-white shadow-[0_16px_48px_rgb(15_23_42_/_0.32)] backdrop-blur-md">
+      <div className="surface-game-overlay absolute right-4 bottom-4 w-[min(22rem,calc(100%-2rem))] rounded-[1.4rem] p-4 shadow-[0_16px_48px_rgb(15_23_42_/_0.32)]">
         <div className="flex flex-wrap gap-2">
           <Badge>{mode === "telemetry" ? "Telemetry" : "Aim inspector"}</Badge>
           <Badge variant="secondary">
@@ -67,57 +67,57 @@ export function GameplayDebugOverlay({
           </Badge>
         </div>
 
-        <div className="mt-4 grid gap-2 text-xs text-white/78 sm:grid-cols-2">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Frame {gameplayTelemetry.renderedFrameCount} ·{" "}
             {gameplayTelemetry.frameRate.toFixed(1)} fps
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Delta {formatMillis(gameplayTelemetry.frameDeltaMs)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Worker {formatMillis(trackingTelemetry.workerLatencyMs)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Pose age {formatMillis(gameplayTelemetry.trackingPoseAgeMs)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Aim {formatPoint(gameplayTelemetry.aimPoint)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Observed aim {formatPoint(gameplayTelemetry.observedAimPoint)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Thumb drop{" "}
             {gameplayTelemetry.thumbDropDistance === null
               ? "n/a"
               : gameplayTelemetry.thumbDropDistance.toFixed(3)}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             World {Math.round(gameplayTelemetry.worldTimeMs)} ms
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Session {gameplayTelemetry.sessionPhase}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Feedback {gameplayTelemetry.targetFeedbackState}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Weapon {gameplayTelemetry.weaponReadiness}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Frames {trackingTelemetry.framesProcessed}/{trackingTelemetry.framesDispatched}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Skips {trackingTelemetry.inFlightFrameSkips}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Stale {trackingTelemetry.staleSnapshotsIgnored}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Sequence {trackingTelemetry.latestSequenceNumber}
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Snapshot {formatMillis(trackingTelemetry.latestPoseAgeMs)}
           </div>
         </div>

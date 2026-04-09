@@ -94,8 +94,8 @@ export function GameMenuDialog({
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Controls</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="type-label">Controls</p>
+                <p className="type-body-muted">
                   {selectedInputMode.description}
                 </p>
               </div>
@@ -107,7 +107,7 @@ export function GameMenuDialog({
             <div className="grid gap-2 md:grid-cols-3">
               {selectedInputMode.controlsSummary.map((instruction) => (
                 <div
-                  className="rounded-xl border border-border/70 bg-muted/30 px-3 py-3 text-sm text-muted-foreground"
+                  className="type-body-muted rounded-xl border border-border/70 bg-muted/30 px-3 py-3"
                   key={instruction}
                 >
                   {instruction}
@@ -121,8 +121,8 @@ export function GameMenuDialog({
           <section className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Session mode</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="type-label">Session mode</p>
+                <p className="type-body-muted">
                   Changing the authority model returns the session to the main menu.
                 </p>
               </div>
@@ -155,8 +155,8 @@ export function GameMenuDialog({
           <section className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Input mode</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="type-label">Input mode</p>
+                <p className="type-body-muted">
                   Changing the active input returns the session to the main menu.
                 </p>
               </div>
@@ -191,8 +191,8 @@ export function GameMenuDialog({
           <section className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Audio mix</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="type-label">Audio mix</p>
+                <p className="type-body-muted">
                   Shell settings persist to the local player profile immediately.
                 </p>
               </div>
@@ -245,8 +245,8 @@ export function GameMenuDialog({
               <section className="flex flex-col gap-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium">Developer overlays</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="type-label">Developer overlays</p>
+                    <p className="type-body-muted">
                       Development-only telemetry stays separate from the player HUD.
                     </p>
                   </div>
@@ -261,8 +261,8 @@ export function GameMenuDialog({
                       className="rounded-xl border border-border/70 bg-muted/30 p-3"
                       key={mode.mode}
                     >
-                      <p className="text-sm font-medium text-foreground">{mode.label}</p>
-                      <p className="mt-2 text-sm text-muted-foreground">
+                      <p className="type-label">{mode.label}</p>
+                      <p className="type-body-muted mt-2">
                         {mode.description}
                       </p>
                       <Button
@@ -287,8 +287,8 @@ export function GameMenuDialog({
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <p className="text-sm font-medium">Calibration</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="type-label">Calibration</p>
+                <p className="type-body-muted">
                   {selectedInputMode.requiresCalibration
                     ? `${gameMenuPlan.recalibrationAction.replaceAll("-", " ")} · ${calibrationQualityLabel}`
                     : "Mouse mode bypasses calibration and hand tracking."}

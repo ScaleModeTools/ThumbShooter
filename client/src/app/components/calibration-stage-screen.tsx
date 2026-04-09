@@ -375,7 +375,7 @@ export function CalibrationStageScreen({
   }, [handleCalibrationProgressEvent, handTrackingRuntime, session]);
 
   return (
-    <ImmersiveStageFrame className="bg-slate-950">
+    <ImmersiveStageFrame className="bg-game-stage">
       <section className="relative min-h-0 flex-1 overflow-hidden" ref={previewViewportRef}>
         <div
           className="absolute inset-0"
@@ -394,10 +394,7 @@ export function CalibrationStageScreen({
             }}
           />
         </div>
-        <div
-          className="absolute inset-0"
-          style={{ backgroundColor: "rgb(2 6 23 / 0.38)" }}
-        />
+        <div className="absolute inset-0 bg-game-backdrop" />
         <div
           className="pointer-events-none absolute inset-0 z-10"
           style={{ transform: calibrationPreviewMirrored ? "scaleX(-1)" : undefined }}
@@ -442,7 +439,7 @@ export function CalibrationStageScreen({
           </svg>
         </div>
 
-        <div className="absolute left-3 top-3 z-10 max-w-xs rounded-[1.25rem] border border-white/10 bg-slate-950/78 p-4 backdrop-blur-md sm:left-4 sm:top-4">
+        <div className="surface-game-overlay absolute left-3 top-3 z-10 max-w-xs rounded-[1.25rem] p-4 sm:left-4 sm:top-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">Optional calibration</Badge>
             <Badge variant="secondary">
@@ -450,22 +447,22 @@ export function CalibrationStageScreen({
             </Badge>
             <Badge variant="outline">{runtimeLifecycle}</Badge>
           </div>
-          <p className="mt-3 text-lg font-semibold text-white">
+          <p className="type-game-heading mt-3">
             Thumb-shooter calibration
           </p>
-          <p className="mt-2 text-sm leading-6 text-slate-300">
+          <p className="type-game-body mt-2">
             Only needed for camera mode. Capture all nine targets to align hand
             aim with gameplay.
           </p>
-          <p className="mt-3 text-sm leading-6 text-slate-200">{captureGuidance}</p>
-          <p className="mt-2 text-xs uppercase tracking-[0.28em] text-slate-400">
+          <p className="type-game-body mt-3 text-game-foreground">{captureGuidance}</p>
+          <p className="type-game-caption mt-2">
             {`Hand ${trackingState}`}
           </p>
 
           {runtimeFailureReason !== null ? (
-            <div className="mt-4 flex flex-col gap-3 rounded-[1rem] border border-destructive/40 bg-destructive/10 p-3">
-              <p className="text-sm font-medium text-destructive">Tracking failed</p>
-              <p className="text-sm leading-6 text-destructive">
+            <div className="surface-game-danger mt-4 flex flex-col gap-3 rounded-[1rem] p-3">
+              <p className="type-label text-current">Tracking failed</p>
+              <p className="type-body text-current">
                 {runtimeFailureReason}
               </p>
               <Button onClick={handleRetryRuntime} type="button" variant="outline">
@@ -485,17 +482,17 @@ export function CalibrationStageScreen({
           </Badge>
         </div>
 
-        <div className="absolute bottom-3 left-3 z-10 w-[min(28rem,calc(100%-1.5rem))] rounded-[1.25rem] border border-white/10 bg-slate-950/78 p-4 backdrop-blur-md sm:bottom-4 sm:left-4 sm:w-[28rem]">
+        <div className="surface-game-overlay absolute bottom-3 left-3 z-10 w-[min(28rem,calc(100%-1.5rem))] rounded-[1.25rem] p-4 sm:bottom-4 sm:left-4 sm:w-[28rem]">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">Pose capture</Badge>
             <Badge variant="secondary">{`${poseCaptureSamples.length} samples`}</Badge>
           </div>
-          <p className="mt-3 text-sm leading-6 text-slate-200">
+          <p className="type-game-body mt-3 text-game-foreground">
             The hand overlay now follows the thumb, index, and trigger contact
             points. The blue ring is the projected aim point, so it
             intentionally sits in front of the finger instead of on the hand.
           </p>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
+          <p className="type-game-detail mt-2">
             This preview is mirrored and cover-fitted to the stage, and the
             overlay now shares the same intrinsic media box and browser fit
             rules as the webcam feed. Wrist landmark 0 was never part of this
@@ -589,9 +586,9 @@ export function CalibrationStageScreen({
             </Button>
           </div>
 
-          <p className="mt-3 text-xs leading-5 text-slate-400">{poseCaptureStatus}</p>
+          <p className="type-game-detail mt-3">{poseCaptureStatus}</p>
 
-          <pre className="mt-3 max-h-56 overflow-auto rounded-[1rem] border border-white/10 bg-slate-900/82 p-3 text-[11px] leading-5 text-slate-200">
+          <pre className="surface-game-inset type-game-detail mt-3 max-h-56 overflow-auto rounded-[1rem] p-3 text-[11px]">
             {poseCaptureExportJson}
           </pre>
         </div>
@@ -616,7 +613,7 @@ export function CalibrationStageScreen({
                     ? "border-emerald-300/80 bg-emerald-300/18 text-emerald-100"
                     : isCurrent
                       ? "border-sky-300 bg-sky-300/16 text-sky-100"
-                      : "border-white/28 bg-white/6 text-white/72"
+                      : "border-game-border bg-game-surface text-game-muted"
                 ].join(" ")}
               >
                 {anchorIndex + 1}
