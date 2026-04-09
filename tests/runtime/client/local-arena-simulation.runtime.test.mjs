@@ -392,3 +392,40 @@ test("LocalArenaSimulation turns the camera when the reticle rides the screen ed
   assert.ok(simulation.cameraSnapshot.yawRadians > 0.02);
   assert.ok(Math.abs(simulation.cameraSnapshot.pitchRadians) < 0.01);
 });
+
+test("LocalArenaSimulation keeps the camera fixed after the round is no longer active", async () => {
+  const { LocalArenaSimulation } = await clientLoader.load("/src/game/index.ts");
+  const simulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+
+  simulation.advance(
+    createTrackedHandSnapshot(1, 0.5, 0.5),
+    0,
+    { width: 1280, height: 720 }
+  );
+  simulation.advance(
+    createTrackedHandSnapshot(2, 0.5, 0.5, 1),
+    16,
+    { width: 1280, height: 720 }
+  );
+
+  assert.equal(simulation.hudSnapshot.session.phase, "completed");
+
+  const yawBeforeInactiveAdvance = simulation.cameraSnapshot.yawRadians;
+  const pitchBeforeInactiveAdvance = simulation.cameraSnapshot.pitchRadians;
+
+  const inactiveSnapshot = simulation.advance(
+    createTrackedHandSnapshot(3, 0.92, 0.12),
+    64,
+    { width: 1280, height: 720 }
+  );
+
+  assert.equal(inactiveSnapshot.session.phase, "completed");
+  assert.equal(simulation.cameraSnapshot.yawRadians, yawBeforeInactiveAdvance);
+  assert.equal(simulation.cameraSnapshot.pitchRadians, pitchBeforeInactiveAdvance);
+});

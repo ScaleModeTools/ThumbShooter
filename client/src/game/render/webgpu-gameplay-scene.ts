@@ -207,8 +207,7 @@ export function createGameplayScene(
     createHemisphereLight(config),
     createSunLight(config),
     skyMesh,
-    oceanMesh,
-    reticleRuntime.anchorGroup
+    oceanMesh
   );
 
   for (const enemyMesh of enemyMeshes) {

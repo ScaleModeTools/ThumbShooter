@@ -359,26 +359,28 @@ export class CoopArenaSimulation {
       trackingSnapshot.trackingState === "tracked"
         ? this.#projectAimPoint(trackingSnapshot)
         : { aimPoint: null, isReticleOffscreen: false };
-
-    this.#cameraSnapshot = advanceGameplayCameraSnapshot(
-      this.#cameraSnapshot,
-      projectedAimPoint.aimPoint,
-      viewportSnapshot,
-      gameplayRuntimeConfig.camera.fieldOfViewDegrees,
-      this.#config.camera,
-      deltaMs / 1000
-    );
-
-    const triggerPressed =
-      trackingSnapshot.trackingState === "tracked"
-        ? this.#readTriggerPressed(trackingSnapshot)
-        : this.#clearTriggerReadyLatch();
     const session =
       roomSnapshot === null
         ? createPendingCoopGameplaySessionSnapshot(this.#roomSource.roomId)
         : createCoopGameplaySessionSnapshot(roomSnapshot, this.#localPlayerId);
     const sessionActive =
       session.phase === "active" && session.roundPhase === "combat";
+
+    if (sessionActive) {
+      this.#cameraSnapshot = advanceGameplayCameraSnapshot(
+        this.#cameraSnapshot,
+        projectedAimPoint.aimPoint,
+        viewportSnapshot,
+        gameplayRuntimeConfig.camera.fieldOfViewDegrees,
+        this.#config.camera,
+        deltaMs / 1000
+      );
+    }
+
+    const triggerPressed =
+      trackingSnapshot.trackingState === "tracked"
+        ? this.#readTriggerPressed(trackingSnapshot)
+        : this.#clearTriggerReadyLatch();
     const weaponFrame = this.#weaponRuntime.advance({
       hasTrackedHand: trackingSnapshot.trackingState === "tracked",
       isReticleOffscreen: projectedAimPoint.isReticleOffscreen,

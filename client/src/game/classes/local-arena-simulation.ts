@@ -174,22 +174,24 @@ export class LocalArenaSimulation {
       trackingSnapshot.trackingState === "tracked"
         ? this.#projectAimPoint(trackingSnapshot)
         : { aimPoint: null, isReticleOffscreen: false };
+    const sessionPhase = this.#combatSession.beginFrame(safeNowMs).phase;
+    const sessionActive = sessionPhase === "active";
 
-    this.#cameraSnapshot = advanceGameplayCameraSnapshot(
-      this.#cameraSnapshot,
-      projectedAimPoint.aimPoint,
-      viewportSnapshot,
-      gameplayRuntimeConfig.camera.fieldOfViewDegrees,
-      this.#config.camera,
-      deltaMs / 1000
-    );
+    if (sessionActive) {
+      this.#cameraSnapshot = advanceGameplayCameraSnapshot(
+        this.#cameraSnapshot,
+        projectedAimPoint.aimPoint,
+        viewportSnapshot,
+        gameplayRuntimeConfig.camera.fieldOfViewDegrees,
+        this.#config.camera,
+        deltaMs / 1000
+      );
+    }
 
     const triggerPressed =
       trackingSnapshot.trackingState === "tracked"
         ? this.#readTriggerPressed(trackingSnapshot)
         : this.#clearTriggerReadyLatch();
-    const sessionPhase = this.#combatSession.beginFrame(safeNowMs).phase;
-    const sessionActive = sessionPhase === "active";
     const weaponFrame = this.#weaponRuntime.advance({
       hasTrackedHand: trackingSnapshot.trackingState === "tracked",
       isReticleOffscreen: projectedAimPoint.isReticleOffscreen,

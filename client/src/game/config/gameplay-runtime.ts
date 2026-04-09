@@ -29,7 +29,7 @@ export const gameplayRuntimeConfig = {
   environment: {
     domeRadius: 240,
     fogColor: [0.67, 0.79, 0.9],
-    fogDensity: 0.009,
+    fogDensity: 0.003,
     horizonColor: [0.78, 0.89, 0.98],
     sunColor: [1, 0.9, 0.72],
     sunDirection: {

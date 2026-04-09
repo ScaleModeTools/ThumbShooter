@@ -246,7 +246,33 @@
   --ui-tracking-normal: -0.01em;
 }
 
+@keyframes gameplay-reticle-drift {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  25% {
+    transform: translate(-50%, -50%) rotate(1.72deg);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  75% {
+    transform: translate(-50%, -50%) rotate(-1.72deg);
+  }
+
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
 @layer utilities {
+  .animate-gameplay-reticle-drift {
+    animation: gameplay-reticle-drift 4.49s ease-in-out infinite;
+  }
+
   .type-ui-title {
     color: var(--foreground);
     font-family: var(--font-heading);

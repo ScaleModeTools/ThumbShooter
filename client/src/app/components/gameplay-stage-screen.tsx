@@ -36,7 +36,8 @@ import {
 import {
   GameplayDebugOverlay,
   GameplayDeveloperPanel,
-  GameplayHudOverlay
+  GameplayHudOverlay,
+  GameplayReticleOverlay
 } from "../../ui";
 
 import { ImmersiveStageFrame } from "./immersive-stage-frame";
@@ -395,6 +396,10 @@ export function GameplayStageScreen({
             />
           </>
         ) : null}
+        <GameplayReticleOverlay
+          aimPoint={hudSnapshot.aimPoint}
+          visualState={gameplayTelemetry.reticleVisualState}
+        />
         <GameplayHudOverlay
           audioStatusLabel={audioStatusLabel}
           bestScore={bestScore}

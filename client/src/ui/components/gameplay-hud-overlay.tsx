@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 import {
   resolveGameplayInputMode,
   type CoopGameplaySessionPlayerSnapshot,
@@ -324,6 +326,33 @@ function formatCoopPlayerOutcome(
   return "Last shot missed";
 }
 
+function isAimPointInsideElement(
+  aimPoint: GameplayHudSnapshot["aimPoint"],
+  overlayElement: HTMLDivElement | null,
+  targetElement: HTMLElement | null
+): boolean {
+  if (aimPoint === null || overlayElement === null || targetElement === null) {
+    return false;
+  }
+
+  const overlayRect = overlayElement.getBoundingClientRect();
+
+  if (overlayRect.width <= 0 || overlayRect.height <= 0) {
+    return false;
+  }
+
+  const targetRect = targetElement.getBoundingClientRect();
+  const aimClientX = overlayRect.left + overlayRect.width * aimPoint.x;
+  const aimClientY = overlayRect.top + overlayRect.height * aimPoint.y;
+
+  return (
+    aimClientX >= targetRect.left &&
+    aimClientX <= targetRect.right &&
+    aimClientY >= targetRect.top &&
+    aimClientY <= targetRect.bottom
+  );
+}
+
 export function GameplayHudOverlay({
   audioStatusLabel,
   bestScore,
@@ -375,18 +404,74 @@ export function GameplayHudOverlay({
     hudSnapshot.session.phase === "completed"
       ? `Start round ${hudSnapshot.session.roundNumber + 1}`
       : "Restart run";
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const coopReadyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousTriggerHeldRef = useRef(hudSnapshot.weapon.triggerHeld);
+  const [reticleHoveringReadyAction, setReticleHoveringReadyAction] =
+    useState(false);
+  const readyActionShootable =
+    inputMode !== "mouse" &&
+    coopReadyActionAvailable &&
+    !coopReadyActionDisabled &&
+    !coopReadyActionBusy;
+
+  useEffect(() => {
+    setReticleHoveringReadyAction(
+      readyActionShootable &&
+        isAimPointInsideElement(
+          hudSnapshot.aimPoint,
+          overlayRef.current,
+          coopReadyButtonRef.current
+        )
+    );
+  }, [
+    hudSnapshot.aimPoint,
+    readyActionShootable,
+    coopReadyActionAvailable,
+    coopReadyActionBusy,
+    coopReadyActionDisabled
+  ]);
+
+  useEffect(() => {
+    const triggerHeld = hudSnapshot.weapon.triggerHeld;
+    const triggerPressedThisFrame =
+      triggerHeld && !previousTriggerHeldRef.current;
+
+    previousTriggerHeldRef.current = triggerHeld;
+
+    if (!readyActionShootable || !reticleHoveringReadyAction || !triggerPressedThisFrame) {
+      return;
+    }
+
+    onToggleCoopReady();
+  }, [
+    hudSnapshot.weapon.triggerHeld,
+    onToggleCoopReady,
+    readyActionShootable,
+    reticleHoveringReadyAction
+  ]);
 
   return (
-    <div className="relative flex h-full flex-col gap-6 p-6">
+    <div className="relative z-10 flex h-full select-none flex-col gap-6 p-6" ref={overlayRef}>
       <div className="flex flex-wrap items-start justify-end gap-3">
-        <Badge variant="outline">{audioStatusLabel}</Badge>
+        <Badge variant="outline">
+          {audioStatusLabel}
+        </Badge>
         <div className="flex gap-3">
           {runtimeError !== null ? (
-            <Button onClick={onRetryRuntime} type="button" variant="outline">
+            <Button
+              onClick={onRetryRuntime}
+              type="button"
+              variant="outline"
+            >
               Retry runtime
             </Button>
           ) : null}
-          <Button onClick={onOpenMenu} type="button" variant="secondary">
+          <Button
+            onClick={onOpenMenu}
+            type="button"
+            variant="secondary"
+          >
             Open menu
           </Button>
         </div>
@@ -504,7 +589,9 @@ export function GameplayHudOverlay({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant="outline">{formatCoopLobbyBadge(hudSnapshot)}</Badge>
+              <Badge variant="outline">
+                {formatCoopLobbyBadge(hudSnapshot)}
+              </Badge>
               {coopStartActionAvailable ? (
                 <Button
                   disabled={coopStartActionDisabled || coopStartActionBusy}
@@ -516,8 +603,14 @@ export function GameplayHudOverlay({
               ) : null}
               {coopReadyActionAvailable ? (
                 <Button
+                  className={
+                    reticleHoveringReadyAction
+                      ? "ring-2 ring-sky-300/70 shadow-[0_0_0_5px_rgb(56_189_248_/_0.18)]"
+                      : undefined
+                  }
                   disabled={coopReadyActionDisabled || coopReadyActionBusy}
                   onClick={onToggleCoopReady}
+                  ref={coopReadyButtonRef}
                   type="button"
                   variant="secondary"
                 >
