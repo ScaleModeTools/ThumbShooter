@@ -407,6 +407,78 @@ test("WebGpuGameplayRuntime publishes throttled UI updates for shell observers",
   unsubscribe();
 });
 
+test("WebGpuGameplayRuntime publishes reticle updates on every frame", async () => {
+  const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
+    "/src/game/index.ts"
+  );
+  const trackingSource = {
+    latestPose: {
+      trackingState: "tracked",
+      sequenceNumber: 1,
+      timestampMs: 10,
+      pose: createTrackedHandPose(0.5, 0.5, 0)
+    }
+  };
+  const renderer = new FakeRenderer();
+  const arenaSimulation = new LocalArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    createArenaConfig()
+  );
+  let nowMs = 1_000;
+  let scheduledFrame = null;
+  const reticleUpdates = [];
+  const runtime = new WebGpuGameplayRuntime(
+    trackingSource,
+    arenaSimulation,
+    undefined,
+    {
+      cancelAnimationFrame() {},
+      createRenderer: () => renderer,
+      devicePixelRatio: 1,
+      readNowMs: () => nowMs,
+      requestAnimationFrame(callback) {
+        scheduledFrame = callback;
+        return 1;
+      }
+    }
+  );
+  const unsubscribe = runtime.subscribeReticleUpdates((aimPoint, visualState) => {
+    reticleUpdates.push({ aimPoint, visualState });
+  });
+
+  await runtime.start(
+    {
+      clientHeight: 720,
+      clientWidth: 1280
+    },
+    {
+      gpu: {}
+    }
+  );
+
+  assert.equal(reticleUpdates.length, 2);
+  assert.equal(reticleUpdates[0].visualState, "hidden");
+  assert.notEqual(reticleUpdates[1].aimPoint, null);
+  assert.equal(reticleUpdates[1].visualState, "targeted");
+
+  nowMs = 1_050;
+  scheduledFrame();
+  nowMs = 1_060;
+  scheduledFrame();
+
+  assert.equal(reticleUpdates.length, 4);
+  assert.equal(reticleUpdates.at(-1)?.visualState, "targeted");
+
+  runtime.dispose();
+
+  assert.equal(reticleUpdates.at(-1)?.visualState, "hidden");
+
+  unsubscribe();
+});
+
 test("WebGpuGameplayRuntime ignores stale async boots after disposal", async () => {
   const { LocalArenaSimulation, WebGpuGameplayRuntime } = await clientLoader.load(
     "/src/game/index.ts"

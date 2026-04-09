@@ -397,8 +397,7 @@ export function GameplayStageScreen({
           </>
         ) : null}
         <GameplayReticleOverlay
-          aimPoint={hudSnapshot.aimPoint}
-          visualState={gameplayTelemetry.reticleVisualState}
+          reticleSource={gameplayRuntime}
         />
         <GameplayHudOverlay
           audioStatusLabel={audioStatusLabel}

@@ -226,6 +226,11 @@ async function withGameplayBootLock<T>(task: () => Promise<T>): Promise<T> {
 
 const gameplayUiUpdateIntervalMs = 150;
 
+type ReticleUpdateListener = (
+  aimPoint: NormalizedViewportPoint | null,
+  visualState: GameplayReticleVisualState
+) => void;
+
 export class WebGpuGameplayRuntime {
   readonly #arenaSimulation: GameplayArenaRuntime;
   readonly #config: GameplayRuntimeConfig;
@@ -236,6 +241,7 @@ export class WebGpuGameplayRuntime {
   readonly #cancelAnimationFrame: typeof globalThis.cancelAnimationFrame;
   readonly #gameplayScene: ReturnType<typeof createGameplayScene>;
   readonly #trackingSource: GameplayTrackingSource;
+  readonly #reticleUpdateListeners = new Set<ReticleUpdateListener>();
   readonly #uiUpdateListeners = new Set<() => void>();
 
   #animationFrameHandle = 0;
@@ -284,6 +290,14 @@ export class WebGpuGameplayRuntime {
     return this.#hudSnapshot;
   }
 
+  get reticleAimPoint(): NormalizedViewportPoint | null {
+    return this.#hudSnapshot.aimPoint;
+  }
+
+  get reticleVisualState(): GameplayReticleVisualState {
+    return this.#reticleVisualState;
+  }
+
   get telemetrySnapshot(): GameplayTelemetrySnapshot {
     const renderInfo = this.#renderer?.info?.render;
 
@@ -315,6 +329,14 @@ export class WebGpuGameplayRuntime {
 
     return () => {
       this.#uiUpdateListeners.delete(listener);
+    };
+  }
+
+  subscribeReticleUpdates(listener: ReticleUpdateListener): () => void {
+    this.#reticleUpdateListeners.add(listener);
+
+    return () => {
+      this.#reticleUpdateListeners.delete(listener);
     };
   }
 
@@ -497,6 +519,8 @@ export class WebGpuGameplayRuntime {
         true
       );
     }
+
+    this.#publishReticleUpdate();
   }
 
   #queueNextFrame(): void {
@@ -561,6 +585,7 @@ export class WebGpuGameplayRuntime {
       reticleVisualState
     );
     this.#reticleVisualState = reticleVisualState;
+    this.#publishReticleUpdate();
     this.#lastObservedAimPoint =
       trackingSnapshot.trackingState === "tracked"
         ? readObservedAimPoint(trackingSnapshot.pose, handAimObservationConfig)
@@ -594,6 +619,7 @@ export class WebGpuGameplayRuntime {
     this.#renderer = null;
     this.#canvasHost = null;
     this.#reticleVisualState = "hidden";
+    this.#publishReticleUpdate();
     this.#setHudSnapshot(
       "failed",
       failureReason,
@@ -630,6 +656,12 @@ export class WebGpuGameplayRuntime {
 
     for (const listener of this.#uiUpdateListeners) {
       listener();
+    }
+  }
+
+  #publishReticleUpdate(): void {
+    for (const listener of this.#reticleUpdateListeners) {
+      listener(this.#hudSnapshot.aimPoint, this.#reticleVisualState);
     }
   }
 }
