@@ -78,8 +78,12 @@ function createRuntimeConfig(overrides = {}) {
     },
     playerInactivityTimeoutMs: createMilliseconds(250),
     rounds: {
+      behaviorSpeedScalePerRound: 0.08,
+      birdCountIncreasePerRound: 0,
+      birdSpeedScalePerRound: 0,
       cooldownDurationMs: createMilliseconds(100),
       durationLossPerRoundMs: createMilliseconds(500),
+      initialBirdCount: 2,
       initialDurationMs: createMilliseconds(10_000),
       minimumDurationMs: createMilliseconds(3_000)
     },
@@ -587,8 +591,12 @@ test("CoopRoomRuntime auto-progresses into the next round after cooldown", () =>
     createRuntimeConfig({
       birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)],
       rounds: {
+        behaviorSpeedScalePerRound: 0,
+        birdCountIncreasePerRound: 0,
+        birdSpeedScalePerRound: 0,
         cooldownDurationMs: createMilliseconds(50),
         durationLossPerRoundMs: createMilliseconds(0),
+        initialBirdCount: 1,
         initialDurationMs: createMilliseconds(100),
         minimumDurationMs: createMilliseconds(100)
       }
@@ -642,6 +650,153 @@ test("CoopRoomRuntime auto-progresses into the next round after cooldown", () =>
   assert.equal(nextRoundSnapshot.session.roundPhase, "combat");
   assert.equal(nextRoundSnapshot.session.birdsRemaining, 1);
   assert.equal(nextRoundSnapshot.birds[0]?.behavior, "glide");
+});
+
+test("CoopRoomRuntime fails the session when round time expires before the bird-clear condition", () => {
+  const runtime = new CoopRoomRuntime(
+    createRuntimeConfig({
+      birds: [createBirdSeed("bird-1", "Bird 1", 0, 1.35)],
+      rounds: {
+        behaviorSpeedScalePerRound: 0,
+        birdCountIncreasePerRound: 0,
+        birdSpeedScalePerRound: 0,
+        cooldownDurationMs: createMilliseconds(50),
+        durationLossPerRoundMs: createMilliseconds(0),
+        initialBirdCount: 1,
+        initialDurationMs: createMilliseconds(100),
+        minimumDurationMs: createMilliseconds(100)
+      }
+    })
+  );
+  const roomId = runtime.roomId;
+  const playerId = requireValue(createCoopPlayerId("player-timeout"), "playerId");
+
+  runtime.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: true,
+      roomId,
+      username: requireValue(createUsername("timeout"), "username")
+    }),
+    0
+  );
+  runtime.acceptCommand(
+    createCoopStartSessionCommand({
+      playerId,
+      roomId
+    }),
+    10
+  );
+
+  runtime.advanceTo(50);
+  const failedSnapshot = runtime.advanceTo(150);
+  const laterSnapshot = runtime.advanceTo(250);
+
+  assert.equal(failedSnapshot.session.phase, "failed");
+  assert.equal(failedSnapshot.session.roundNumber, 1);
+  assert.equal(failedSnapshot.session.roundPhase, "combat");
+  assert.equal(failedSnapshot.session.roundPhaseRemainingMs, 0);
+  assert.equal(failedSnapshot.session.birdsRemaining, 1);
+  assert.equal(laterSnapshot.session.phase, "failed");
+  assert.equal(laterSnapshot.session.roundNumber, 1);
+});
+
+test("CoopRoomRuntime resolves later rounds from an authoritative round plan", () => {
+  const runtime = new CoopRoomRuntime(
+    createRuntimeConfig({
+      birds: [
+        createBirdSeed("bird-1", "Bird 1", 0, 1.35),
+        createBirdSeed("bird-2", "Bird 2", 0.6, 2.1, -0.08, 0.06, 22)
+      ],
+      rounds: {
+        behaviorSpeedScalePerRound: 0.5,
+        birdCountIncreasePerRound: 1,
+        birdSpeedScalePerRound: 0.5,
+        cooldownDurationMs: createMilliseconds(50),
+        durationLossPerRoundMs: createMilliseconds(0),
+        initialBirdCount: 1,
+        initialDurationMs: createMilliseconds(200),
+        minimumDurationMs: createMilliseconds(200)
+      }
+    })
+  );
+  const roomId = runtime.roomId;
+  const playerId = requireValue(createCoopPlayerId("player-round-plan"), "playerId");
+
+  runtime.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: true,
+      roomId,
+      username: requireValue(createUsername("planner"), "username")
+    }),
+    0
+  );
+  runtime.acceptCommand(
+    createCoopStartSessionCommand({
+      playerId,
+      roomId
+    }),
+    10
+  );
+
+  runtime.advanceTo(50);
+  runtime.acceptCommand(
+    createCoopFireShotCommand({
+      aimDirection: {
+        x: 0,
+        y: 0,
+        z: -1
+      },
+      clientShotSequence: 1,
+      origin: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      playerId,
+      roomId
+    }),
+    60
+  );
+
+  const roundOneClearSnapshot = runtime.advanceTo(100);
+  const roundTwoStartSnapshot = runtime.advanceTo(150);
+
+  runtime.acceptCommand(
+    createCoopFireShotCommand({
+      aimDirection: {
+        x: 0,
+        y: 0,
+        z: -1
+      },
+      clientShotSequence: 2,
+      origin: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      playerId,
+      roomId
+    }),
+    160
+  );
+
+  const roundTwoHitSnapshot = runtime.advanceTo(200);
+
+  assert.equal(roundOneClearSnapshot.session.roundPhase, "cooldown");
+  assert.equal(roundOneClearSnapshot.birds.length, 1);
+  assert.equal(roundOneClearSnapshot.session.birdsRemaining, 0);
+  assert.equal(roundTwoStartSnapshot.session.roundNumber, 2);
+  assert.equal(roundTwoStartSnapshot.session.roundPhase, "combat");
+  assert.equal(roundTwoStartSnapshot.birds.length, 2);
+  assert.equal(roundTwoStartSnapshot.session.birdsRemaining, 2);
+  assert.equal(roundTwoHitSnapshot.session.roundNumber, 2);
+  assert.equal(roundTwoHitSnapshot.birds.length, 2);
+  assert.ok(
+    (roundTwoHitSnapshot.birds[0]?.position.y ?? 0) <
+      (roundOneClearSnapshot.birds[0]?.position.y ?? 0)
+  );
 });
 
 test("CoopRoomRuntime removes room leavers from snapshots before and after activation", () => {

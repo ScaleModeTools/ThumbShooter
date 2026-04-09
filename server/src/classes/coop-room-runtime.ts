@@ -64,6 +64,24 @@ interface CoopBirdRuntimeState {
   wingPhase: number;
 }
 
+interface CoopRoundMovementConfig {
+  readonly downedDriftSpeed: number;
+  readonly downedDurationMs: number;
+  readonly downedFallSpeed: number;
+  readonly scatterAltitudeSpeed: number;
+  readonly scatterAngularSpeed: number;
+  readonly scatterDurationMs: number;
+}
+
+interface CoopRoundPlan {
+  readonly birdSeeds: readonly CoopRoomBirdSeed[];
+  readonly movement: CoopRoundMovementConfig;
+  readonly passBirdCount: number;
+  readonly reticleScatterRadius: number;
+  readonly roundDurationMs: number;
+  readonly shotScatterRadius: number;
+}
+
 interface CoopPlayerRuntimeState {
   readonly playerId: CoopPlayerId;
   connected: boolean;
@@ -205,6 +223,18 @@ function createBirdRuntimeState(seed: CoopRoomBirdSeed): CoopBirdRuntimeState {
   };
 }
 
+function resolveRoundBirdCount(
+  roundNumber: number,
+  config: CoopRoomRuntimeConfig
+): number {
+  const roundIndex = Math.max(0, Math.floor(roundNumber) - 1);
+  const requestedBirdCount =
+    config.rounds.initialBirdCount +
+    roundIndex * config.rounds.birdCountIncreasePerRound;
+
+  return Math.max(1, Math.min(config.birds.length, Math.floor(requestedBirdCount)));
+}
+
 function resolveRoundDurationMs(
   roundNumber: number,
   config: CoopRoomRuntimeConfig
@@ -217,6 +247,76 @@ function resolveRoundDurationMs(
     Number(config.rounds.minimumDurationMs),
     Number(config.rounds.initialDurationMs) - durationReductionMs
   );
+}
+
+function scaleFiniteValue(rawValue: number, scale: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  return rawValue * scale;
+}
+
+function createRoundBirdSeed(
+  seed: CoopRoomBirdSeed,
+  birdSpeedScale: number
+): CoopRoomBirdSeed {
+  return {
+    ...seed,
+    glideVelocity: {
+      altitudeUnitsPerSecond: scaleFiniteValue(
+        seed.glideVelocity.altitudeUnitsPerSecond,
+        birdSpeedScale
+      ),
+      azimuthRadiansPerSecond: scaleFiniteValue(
+        seed.glideVelocity.azimuthRadiansPerSecond,
+        birdSpeedScale
+      )
+    },
+    wingSpeed: scaleFiniteValue(seed.wingSpeed, birdSpeedScale)
+  };
+}
+
+function resolveRoundPlan(
+  roundNumber: number,
+  config: CoopRoomRuntimeConfig
+): CoopRoundPlan {
+  const roundIndex = Math.max(0, Math.floor(roundNumber) - 1);
+  const birdSpeedScale = Math.max(
+    0.1,
+    1 + roundIndex * config.rounds.birdSpeedScalePerRound
+  );
+  const behaviorScale = Math.max(
+    0.1,
+    1 + roundIndex * config.rounds.behaviorSpeedScalePerRound
+  );
+  const tickIntervalMs = Math.max(1, Number(config.tickIntervalMs));
+  const passBirdCount = resolveRoundBirdCount(roundNumber, config);
+  const birdSeeds = config.birds
+    .slice(0, passBirdCount)
+    .map((seed) => createRoundBirdSeed(seed, birdSpeedScale));
+
+  return {
+    birdSeeds: Object.freeze(birdSeeds),
+    movement: Object.freeze({
+      downedDriftSpeed: config.movement.downedDriftSpeed * behaviorScale,
+      downedDurationMs: Math.max(
+        tickIntervalMs,
+        Number(config.movement.downedDurationMs) / behaviorScale
+      ),
+      downedFallSpeed: config.movement.downedFallSpeed * behaviorScale,
+      scatterAltitudeSpeed: config.movement.scatterAltitudeSpeed * behaviorScale,
+      scatterAngularSpeed: config.movement.scatterAngularSpeed * behaviorScale,
+      scatterDurationMs: Math.max(
+        tickIntervalMs,
+        Number(config.movement.scatterDurationMs) / behaviorScale
+      )
+    }),
+    passBirdCount,
+    reticleScatterRadius: config.reticleScatterRadius,
+    roundDurationMs: resolveRoundDurationMs(roundNumber, config),
+    shotScatterRadius: config.scatterRadius
+  };
 }
 
 function restoreBirdGlideState(birdState: CoopBirdRuntimeState): void {
@@ -239,7 +339,7 @@ function setBirdDowned(
   birdState: CoopBirdRuntimeState,
   playerId: CoopPlayerId,
   tick: number,
-  config: CoopRoomRuntimeConfig
+  movement: CoopRoundMovementConfig
 ): void {
   const tangentialVelocityX =
     Math.cos(birdState.azimuthRadians) *
@@ -256,12 +356,12 @@ function setBirdDowned(
   const driftScale =
     tangentialMagnitude <= 0.0001
       ? 0
-      : config.movement.downedDriftSpeed / tangentialMagnitude;
+      : movement.downedDriftSpeed / tangentialMagnitude;
 
   birdState.behavior = "downed";
-  birdState.behaviorRemainingMs = config.movement.downedDurationMs;
+  birdState.behaviorRemainingMs = movement.downedDurationMs;
   birdState.downedVelocityX = tangentialVelocityX * driftScale;
-  birdState.downedVelocityY = -config.movement.downedFallSpeed;
+  birdState.downedVelocityY = -movement.downedFallSpeed;
   birdState.downedVelocityZ = tangentialVelocityZ * driftScale;
   birdState.scale = birdState.downedScale;
   birdState.lastInteractionByPlayerId = playerId;
@@ -286,19 +386,19 @@ function setBirdScatter(
   tick: number,
   shotAzimuthRadians: number,
   targetAltitude: number,
-  config: CoopRoomRuntimeConfig
+  movement: CoopRoundMovementConfig
 ): void {
   const azimuthDelta = wrapRadians(birdState.azimuthRadians - shotAzimuthRadians);
   const altitudeDelta = birdState.altitude - targetAltitude;
 
   birdState.behavior = "scatter";
-  birdState.behaviorRemainingMs = config.movement.scatterDurationMs;
+  birdState.behaviorRemainingMs = movement.scatterDurationMs;
   birdState.angularVelocity =
     resolveScatterDirection(azimuthDelta, birdState.homeAngularVelocity) *
-    config.movement.scatterAngularSpeed;
+    movement.scatterAngularSpeed;
   birdState.altitudeVelocity =
     resolveScatterDirection(altitudeDelta, birdState.homeAltitudeVelocity) *
-    config.movement.scatterAltitudeSpeed;
+    movement.scatterAltitudeSpeed;
   birdState.scale = birdState.scatterScale;
   birdState.lastInteractionByPlayerId = playerId;
   birdState.lastInteractionTick = tick;
@@ -383,8 +483,8 @@ function scatterBirdsNearShot(
   direction: CoopVector3Snapshot,
   playerId: CoopPlayerId,
   tick: number,
-  config: CoopRoomRuntimeConfig,
-  scatterRadius: number = config.scatterRadius,
+  roundPlan: CoopRoundPlan,
+  scatterRadius: number = roundPlan.shotScatterRadius,
   allowScatterRefresh = true
 ): number {
   let scatteredBirdCount = 0;
@@ -419,7 +519,7 @@ function scatterBirdsNearShot(
       tick,
       shotAzimuthRadians,
       targetAltitude,
-      config
+      roundPlan.movement
     );
     scatteredBirdCount += 1;
   }
@@ -432,6 +532,7 @@ export class CoopRoomRuntime {
   readonly #config: CoopRoomRuntimeConfig;
   readonly #pendingShots: PendingShotCommand[] = [];
   readonly #playerStates = new Map<CoopPlayerId, CoopPlayerRuntimeState>();
+  #roundPlan: CoopRoundPlan;
 
   #lastAdvancedAtMs: number | null = null;
   #leaderPlayerId: CoopPlayerId | null = null;
@@ -447,8 +548,11 @@ export class CoopRoomRuntime {
 
   constructor(config: CoopRoomRuntimeConfig = coopRoomRuntimeConfig) {
     this.#config = config;
-    this.#birdStates = config.birds.map((seed) => createBirdRuntimeState(seed));
-    this.#roundDurationMs = resolveRoundDurationMs(1, config);
+    this.#roundPlan = resolveRoundPlan(1, config);
+    this.#birdStates = this.#roundPlan.birdSeeds.map((seed) =>
+      createBirdRuntimeState(seed)
+    );
+    this.#roundDurationMs = this.#roundPlan.roundDurationMs;
     this.#roundPhaseRemainingMs = this.#roundDurationMs;
     this.#snapshot = this.#buildSnapshot();
   }
@@ -757,8 +861,13 @@ export class CoopRoomRuntime {
         this.#roundPhaseRemainingMs - Number(this.#config.tickIntervalMs)
       );
 
-      if (this.#countRemainingBirds() === 0 || this.#roundPhaseRemainingMs === 0) {
+      if (this.#countRemainingBirds() === 0) {
         this.#beginRoundCooldown();
+        return;
+      }
+
+      if (this.#roundPhaseRemainingMs === 0) {
+        this.#failSession();
       }
 
       return;
@@ -801,7 +910,12 @@ export class CoopRoomRuntime {
       );
 
       if (targetedBird !== null) {
-        setBirdDowned(targetedBird, pendingShot.playerId, this.#tick, this.#config);
+        setBirdDowned(
+          targetedBird,
+          pendingShot.playerId,
+          this.#tick,
+          this.#roundPlan.movement
+        );
         playerState.hitsLanded += 1;
         playerState.lastOutcome = "hit";
         playerState.lastHitBirdId = targetedBird.birdId;
@@ -815,7 +929,7 @@ export class CoopRoomRuntime {
         pendingShot.aimDirection,
         pendingShot.playerId,
         this.#tick,
-        this.#config
+        this.#roundPlan
       );
 
       if (scatteredBirdCount > 0) {
@@ -850,8 +964,8 @@ export class CoopRoomRuntime {
         },
         playerState.playerId,
         this.#tick,
-        this.#config,
-        this.#config.reticleScatterRadius,
+        this.#roundPlan,
+        this.#roundPlan.reticleScatterRadius,
         false
       );
     }
@@ -987,10 +1101,18 @@ export class CoopRoomRuntime {
     this.#roundPhaseRemainingMs = Number(this.#config.rounds.cooldownDurationMs);
   }
 
+  #failSession(): void {
+    this.#dropAllPendingShots();
+    this.#phase = "failed";
+    this.#roundPhaseRemainingMs = 0;
+  }
+
   #startRound(roundNumber: number): void {
     this.#dropAllPendingShots();
-    this.#roundDurationMs = resolveRoundDurationMs(roundNumber, this.#config);
+    this.#roundPlan = resolveRoundPlan(roundNumber, this.#config);
+    this.#roundDurationMs = this.#roundPlan.roundDurationMs;
     this.#roundNumber = Math.max(1, Math.floor(roundNumber));
+    this.#phase = "active";
     this.#roundPhase = "combat";
     this.#roundPhaseRemainingMs = this.#roundDurationMs;
     this.#resetBirdsForRound();
@@ -1004,7 +1126,7 @@ export class CoopRoomRuntime {
     this.#birdStates.splice(
       0,
       this.#birdStates.length,
-      ...this.#config.birds.map((seed) => createBirdRuntimeState(seed))
+      ...this.#roundPlan.birdSeeds.map((seed) => createBirdRuntimeState(seed))
     );
   }
 
@@ -1021,7 +1143,8 @@ export class CoopRoomRuntime {
   }
 
   #buildSnapshot(): CoopRoomSnapshot {
-    const birdsCleared = this.#birdStates.length - this.#countRemainingBirds();
+    const birdsRemaining = this.#countRemainingBirds();
+    const birdsCleared = this.#roundPlan.passBirdCount - birdsRemaining;
 
     return createCoopRoomSnapshot({
       birds: this.#birdStates.map((birdState) => ({
@@ -1081,7 +1204,7 @@ export class CoopRoomRuntime {
       roomId: this.#config.roomId,
       session: {
         birdsCleared,
-        birdsRemaining: this.#countRemainingBirds(),
+        birdsRemaining,
         leaderPlayerId: this.#leaderPlayerId,
         phase: this.#phase,
         roundDurationMs: this.#roundDurationMs,

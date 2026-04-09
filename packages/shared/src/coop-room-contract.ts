@@ -20,7 +20,8 @@ export const coopRoundPhases = [
 export const coopRoomPhases = [
   "waiting-for-players",
   "active",
-  "completed"
+  "completed",
+  "failed"
 ] as const;
 export const coopBirdBehaviorStates = [
   "glide",

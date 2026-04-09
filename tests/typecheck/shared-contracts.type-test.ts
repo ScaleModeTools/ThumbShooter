@@ -65,7 +65,11 @@ type ExpectedGameplayTickOwner = "client" | "server";
 type ExpectedSoundEffectEngine = "web-audio-api";
 type ExpectedAffineAimTransformFitQuality = "stable" | "usable" | "degraded";
 type ExpectedCoopRoundPhase = "combat" | "cooldown";
-type ExpectedCoopRoomPhase = "waiting-for-players" | "active" | "completed";
+type ExpectedCoopRoomPhase =
+  | "waiting-for-players"
+  | "active"
+  | "completed"
+  | "failed";
 type ExpectedCoopBirdBehaviorState = "glide" | "scatter" | "downed";
 type ExpectedCoopPlayerShotOutcomeState = "miss" | "scatter" | "hit";
 type ExpectedCoopRoomClientCommandType =

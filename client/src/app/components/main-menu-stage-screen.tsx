@@ -122,6 +122,10 @@ function resolveCoopRoomPhaseLabel(
     return "Live";
   }
 
+  if (roomEntry.phase === "failed") {
+    return "Failed";
+  }
+
   return "Cleared";
 }
 
@@ -144,6 +148,10 @@ function formatCoopRoomStatus(
     }
 
     return `Round ${roomEntry.roundNumber} • ${roomEntry.birdsRemaining} birds remaining`;
+  }
+
+  if (roomEntry.phase === "failed") {
+    return `Round ${roomEntry.roundNumber} failed with ${roomEntry.birdsRemaining} birds remaining`;
   }
 
   return `${roomEntry.connectedPlayerCount}/${roomEntry.capacity} connected • ${roomEntry.readyPlayerCount}/${roomEntry.requiredReadyPlayerCount} ready`;
@@ -192,7 +200,11 @@ export function MainMenuStageScreen({
         return 1;
       }
 
-      return 2;
+      if (roomEntry.phase === "failed") {
+        return 2;
+      }
+
+      return 3;
     };
 
     const priorityDelta = phasePriority(leftRoom) - phasePriority(rightRoom);

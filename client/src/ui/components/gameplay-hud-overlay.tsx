@@ -168,6 +168,10 @@ function formatSessionPhase(hudSnapshot: GameplayHudSnapshot): string {
 
 function formatSessionStatus(hudSnapshot: GameplayHudSnapshot): string {
   if (hudSnapshot.session.mode === "co-op") {
+    if (hudSnapshot.session.phase === "failed") {
+      return `Round ${hudSnapshot.session.roundNumber} failed with ${hudSnapshot.session.birdsRemaining} birds still airborne`;
+    }
+
     if (hudSnapshot.session.phase === "waiting-for-players") {
       if (hudSnapshot.session.playerCount === 0) {
         return "Joining room...";
@@ -225,11 +229,11 @@ function formatRoundSummary(
       detail:
         hudSnapshot.session.phase === "completed"
           ? `Team landed ${hudSnapshot.session.teamHitsLanded} hits across ${hudSnapshot.session.teamShotsFired} shots.`
-          : `${hudSnapshot.session.birdsRemaining} birds are still airborne.`,
+          : `Timer expired in round ${hudSnapshot.session.roundNumber} with ${hudSnapshot.session.birdsRemaining} birds still airborne.`,
       headline:
         hudSnapshot.session.phase === "completed"
           ? "Harbor cleared"
-          : "Room still in progress",
+          : "Room failed",
       showRestart: false
     };
   }
@@ -259,6 +263,10 @@ function formatCoopLobbyBadge(hudSnapshot: GameplayHudSnapshot): string {
 
   if (hudSnapshot.session.phase === "completed") {
     return "Room cleared";
+  }
+
+  if (hudSnapshot.session.phase === "failed") {
+    return `Round ${hudSnapshot.session.roundNumber} failed`;
   }
 
   if (hudSnapshot.session.phase === "active") {
@@ -295,6 +303,10 @@ function formatCoopPlayerOutcome(
     }
 
     return playerSnapshot.isLeader ? "Party leader" : "Not ready";
+  }
+
+  if (phase === "failed" && playerSnapshot.lastOutcome === null) {
+    return playerSnapshot.ready ? "Session failed" : "Observed failed round";
   }
 
   if (playerSnapshot.lastOutcome === null) {
@@ -345,7 +357,8 @@ export function GameplayHudOverlay({
       ? hudSnapshot.session.restartReady
         ? formatRoundSummary(hudSnapshot, bestScore, displayedBestScore)
         : null
-      : hudSnapshot.session.phase === "completed"
+      : hudSnapshot.session.phase === "completed" ||
+          hudSnapshot.session.phase === "failed"
         ? formatRoundSummary(hudSnapshot, bestScore, displayedBestScore)
         : null;
   const coopLocalPlayer =

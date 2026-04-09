@@ -45,8 +45,12 @@ export interface CoopRoomRuntimeConfig {
   };
   readonly playerInactivityTimeoutMs: Milliseconds;
   readonly rounds: {
+    readonly behaviorSpeedScalePerRound: number;
+    readonly birdCountIncreasePerRound: number;
+    readonly birdSpeedScalePerRound: number;
     readonly cooldownDurationMs: Milliseconds;
     readonly durationLossPerRoundMs: Milliseconds;
+    readonly initialBirdCount: number;
     readonly initialDurationMs: Milliseconds;
     readonly minimumDurationMs: Milliseconds;
   };

@@ -130,8 +130,12 @@ const baseCoopRoomRuntimeConfig = {
   },
   playerInactivityTimeoutMs: createMilliseconds(10_000),
   rounds: {
+    behaviorSpeedScalePerRound: 0.08,
+    birdCountIncreasePerRound: 1,
+    birdSpeedScalePerRound: 0.1,
     cooldownDurationMs: createMilliseconds(3_000),
     durationLossPerRoundMs: createMilliseconds(1_000),
+    initialBirdCount: 2,
     initialDurationMs: createMilliseconds(25_000),
     minimumDurationMs: createMilliseconds(12_000)
   },
