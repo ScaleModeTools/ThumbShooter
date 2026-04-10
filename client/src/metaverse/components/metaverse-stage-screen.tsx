@@ -24,12 +24,13 @@ import {
   resolveMetaverseControlMode
 } from "../config/metaverse-control-modes";
 import {
-  defaultMetaverseLocomotionMode,
-  metaverseLocomotionModes,
+  createMetaverseLocalPlayerIdentity,
+  createMetaversePresenceClient
+} from "../config/metaverse-presence-network";
+import {
   resolveMetaverseLocomotionMode
 } from "../config/metaverse-locomotion-modes";
 import type { MetaverseControlModeId } from "../types/metaverse-control-mode";
-import type { MetaverseLocomotionModeId } from "../types/metaverse-locomotion-mode";
 import type {
   MetaverseAttachmentProofConfig,
   MetaverseCharacterProofConfig,
@@ -78,15 +79,21 @@ export function MetaverseStageScreen({
 }: MetaverseStageScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [metaverseRuntime] = useState(
-    () =>
-      new WebGpuMetaverseRuntime(undefined, {
+    () => {
+      const localPlayerIdentity = createMetaverseLocalPlayerIdentity(
+        username,
+        characterProofConfig?.characterId ?? "metaverse-mannequin-v1"
+      );
+
+      return new WebGpuMetaverseRuntime(undefined, {
         attachmentProofConfig,
         characterProofConfig,
-        environmentProofConfig
-      })
+        createMetaversePresenceClient,
+        environmentProofConfig,
+        localPlayerIdentity
+      });
+    }
   );
-  const [metaverseLocomotionMode, setMetaverseLocomotionMode] =
-    useState<MetaverseLocomotionModeId>(defaultMetaverseLocomotionMode);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const subscribeUiUpdates = useCallback(
     (notifyReact: () => void) => metaverseRuntime.subscribeUiUpdates(notifyReact),
@@ -99,16 +106,12 @@ export function MetaverseStageScreen({
   );
   const selectedControlMode = resolveMetaverseControlMode(metaverseControlMode);
   const selectedLocomotionMode = resolveMetaverseLocomotionMode(
-    metaverseLocomotionMode
+    hudSnapshot.locomotionMode
   );
 
   useEffect(() => {
     metaverseRuntime.setControlMode(metaverseControlMode);
   }, [metaverseControlMode, metaverseRuntime]);
-
-  useEffect(() => {
-    metaverseRuntime.setLocomotionMode(metaverseLocomotionMode);
-  }, [metaverseLocomotionMode, metaverseRuntime]);
 
   useEffect(() => {
     if (canvasRef.current === null) {
@@ -164,36 +167,14 @@ export function MetaverseStageScreen({
                 Welcome back, {username}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Keep hub traversal and hub controls separate. Grounded mode now
-                runs through a capsule body on the ocean plane, while fly stays
-                available as the fallback inspection path.
+                Keep hub traversal and hub controls separate. Surface travel,
+                swimming, and mounted travel now transition from runtime state
+                instead of a manual locomotion selector.
               </p>
               <div className="mt-4 flex flex-col gap-3">
-                <ToggleGroup
-                  className="w-full justify-start"
-                  onValueChange={(nextValue) => {
-                    if (nextValue.length === 0) {
-                      return;
-                    }
-
-                    setMetaverseLocomotionMode(
-                      nextValue as MetaverseLocomotionModeId
-                    );
-                  }}
-                  type="single"
-                  value={metaverseLocomotionMode}
-                  variant="outline"
-                >
-                  {metaverseLocomotionModes.map((locomotionMode) => (
-                    <ToggleGroupItem
-                      className="flex-1"
-                      key={locomotionMode.id}
-                      value={locomotionMode.id}
-                    >
-                      {locomotionMode.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
+                <div className="rounded-3xl border border-border/70 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                  Current locomotion state: {selectedLocomotionMode.label}
+                </div>
                 <div className="rounded-3xl border border-border/70 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
                   {selectedLocomotionMode.description}
                 </div>
@@ -254,6 +235,12 @@ export function MetaverseStageScreen({
                 <div className="rounded-full border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
                   Locomotion: {resolveMetaverseLocomotionMode(hudSnapshot.locomotionMode).label}
                 </div>
+                <div className="rounded-full border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                  Presence: {hudSnapshot.presence.state}
+                </div>
+                <div className="rounded-full border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                  Remote players: {hudSnapshot.presence.remotePlayerCount}
+                </div>
               </div>
             </div>
 
@@ -271,6 +258,11 @@ export function MetaverseStageScreen({
                   ? "The first portal leads to Duck Hunt. More experiences can join this shell while hub controls stay separate from experience-local gameplay input."
                   : focusDistanceLabel}
               </p>
+              {hudSnapshot.presence.lastError !== null ? (
+                <p className="mt-3 text-sm text-amber-200">
+                  Presence issue: {hudSnapshot.presence.lastError}
+                </p>
+              ) : null}
               {runtimeError !== null ? (
                 <p className="mt-3 text-sm text-destructive">{runtimeError}</p>
               ) : null}
@@ -288,7 +280,9 @@ export function MetaverseStageScreen({
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {mountedEnvironment !== null
-                    ? "Leave the seat to restore the mannequin to its pre-mount anchor."
+                    ? mountedEnvironment.environmentAssetId === "metaverse-hub-skiff-v1"
+                      ? "Hub movement controls now drive the skiff. Propulsion cuts out when the hull is beached on hard ground."
+                      : "Leave the seat to restore the mannequin to its pre-mount anchor."
                     : mountDistanceLabel}
                 </p>
                 <div className="mt-4">

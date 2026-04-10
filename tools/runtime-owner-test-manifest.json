@@ -37,6 +37,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/metaverse/classes/metaverse-traversal-runtime.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-traversal-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/physics/classes/metaverse-grounded-body-runtime.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-grounded-body-runtime.test.mjs"
@@ -74,6 +80,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/network/classes/metaverse-presence-client.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-presence-client.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/network/classes/coop-room-directory-client.ts",
       "testPaths": [
         "tests/runtime/client/coop-room-directory-client.runtime.test.mjs"
@@ -104,9 +116,21 @@
       ]
     },
     {
+      "ownerPath": "server/src/metaverse/classes/metaverse-presence-runtime.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-presence-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/metaverse/adapters/metaverse-session-http-adapter.ts",
       "testPaths": [
         "tests/runtime/server/metaverse-session-http-adapter.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/adapters/metaverse-presence-http-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-presence-http-adapter.test.mjs"
       ]
     },
     {

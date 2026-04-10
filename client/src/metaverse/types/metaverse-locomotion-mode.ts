@@ -1,4 +1,9 @@
-export const metaverseLocomotionModeIds = ["grounded", "fly"] as const;
+export const metaverseLocomotionModeIds = [
+  "grounded",
+  "swim",
+  "fly",
+  "mounted"
+] as const;
 
 export type MetaverseLocomotionModeId =
   (typeof metaverseLocomotionModeIds)[number];

@@ -29,6 +29,7 @@ import {
   Vector3
 } from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkinnedGroup } from "three/addons/utils/SkeletonUtils.js";
 import {
   abs,
   cameraPosition,
@@ -63,6 +64,8 @@ import type {
   FocusedExperiencePortalSnapshot,
   FocusedMountableSnapshot,
   MetaverseCameraSnapshot,
+  MetaverseRemoteCharacterPresentationSnapshot,
+  MetaverseVector3Snapshot,
   MountedEnvironmentSnapshot,
   MetaversePortalConfig,
   MetaverseRuntimeConfig
@@ -119,6 +122,11 @@ interface MetaverseCharacterProofRuntime {
     AnimationAction
   >;
   readonly anchorGroup: Group;
+  readonly characterId: string;
+  readonly clipsByVocabulary: ReadonlyMap<
+    MetaverseCharacterAnimationVocabularyId,
+    AnimationClip
+  >;
   readonly mixer: AnimationMixer;
   readonly seatSocketNode: Object3D;
   readonly scene: Group;
@@ -182,6 +190,11 @@ interface MetaverseSceneDependencies {
   warn?: (message: string) => void;
 }
 
+interface DynamicEnvironmentPoseSnapshot {
+  readonly position: MetaverseVector3Snapshot;
+  readonly yawRadians: number;
+}
+
 const socketDebugMarkerColors = {
   hand_l_socket: [0.28, 0.72, 1],
   hand_r_socket: [1, 0.42, 0.34],
@@ -207,6 +220,36 @@ const environmentLodSwitchHysteresisMeters = 1.25;
 
 function createDefaultSceneAssetLoader(): SceneAssetLoader {
   return new GLTFLoader() as SceneAssetLoader;
+}
+
+function freezeVector3(
+  x: number,
+  y: number,
+  z: number
+): MetaverseVector3Snapshot {
+  return Object.freeze({
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
+    z: Number.isFinite(z) ? z : 0
+  });
+}
+
+function wrapRadians(rawValue: number): number {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  let nextValue = rawValue;
+
+  while (nextValue > Math.PI) {
+    nextValue -= Math.PI * 2;
+  }
+
+  while (nextValue <= -Math.PI) {
+    nextValue += Math.PI * 2;
+  }
+
+  return nextValue;
 }
 
 function toThreeColor(rgb: readonly [number, number, number]): Color {
@@ -292,6 +335,10 @@ function collectRenderableMeshes(scene: Group, label: string): readonly Mesh[] {
 
 function cloneGroup(group: Group): Group {
   return group.clone(true);
+}
+
+function cloneCharacterScene(scene: Group): Group {
+  return cloneSkinnedGroup(scene) as Group;
 }
 
 function finalizeStaticSceneGraph(root: Object3D): void {
@@ -422,10 +469,34 @@ function measurePlacementDistanceSquared(
   return dx * dx + dy * dy + dz * dz;
 }
 
+function resolveDynamicEnvironmentBasePose(
+  dynamicAssetRuntime: MetaverseEnvironmentDynamicAssetRuntime,
+  dynamicEnvironmentPoseOverrides: ReadonlyMap<string, DynamicEnvironmentPoseSnapshot>
+): DynamicEnvironmentPoseSnapshot {
+  const overriddenPose = dynamicEnvironmentPoseOverrides.get(
+    dynamicAssetRuntime.environmentAssetId
+  );
+
+  if (overriddenPose !== undefined) {
+    return overriddenPose;
+  }
+
+  return Object.freeze({
+    position: freezeVector3(
+      dynamicAssetRuntime.basePlacement.position.x,
+      dynamicAssetRuntime.basePlacement.position.y,
+      dynamicAssetRuntime.basePlacement.position.z
+    ),
+    yawRadians: wrapRadians(dynamicAssetRuntime.basePlacement.rotationYRadians)
+  });
+}
+
 function syncEnvironmentProofRuntime(
   environmentProofRuntime: MetaverseEnvironmentProofRuntime,
   cameraSnapshot: MetaverseCameraSnapshot,
-  nowMs: number
+  nowMs: number,
+  dynamicEnvironmentPoseOverrides: ReadonlyMap<string, DynamicEnvironmentPoseSnapshot> =
+    new Map()
 ): void {
   for (const staticPlacementRuntime of environmentProofRuntime.staticPlacements) {
     const lodIndex = resolveEnvironmentLodIndex(
@@ -464,15 +535,20 @@ function syncEnvironmentProofRuntime(
   }
 
   for (const dynamicAssetRuntime of environmentProofRuntime.dynamicAssets) {
+    const basePose = resolveDynamicEnvironmentBasePose(
+      dynamicAssetRuntime,
+      dynamicEnvironmentPoseOverrides
+    );
+
     dynamicAssetRuntime.anchorGroup.position.set(
-      dynamicAssetRuntime.basePlacement.position.x,
-      dynamicAssetRuntime.basePlacement.position.y +
+      basePose.position.x,
+      basePose.position.y +
         Math.sin(nowMs * 0.0014 + dynamicAssetRuntime.motionPhase) * 0.18,
-      dynamicAssetRuntime.basePlacement.position.z
+      basePose.position.z
     );
     dynamicAssetRuntime.anchorGroup.rotation.set(
       Math.sin(nowMs * 0.001 + dynamicAssetRuntime.motionPhase) * 0.03,
-      dynamicAssetRuntime.basePlacement.rotationYRadians +
+      basePose.yawRadians +
         Math.sin(nowMs * 0.0008 + dynamicAssetRuntime.motionPhase) * 0.05,
       Math.sin(nowMs * 0.0011 + dynamicAssetRuntime.motionPhase) * 0.04
     );
@@ -654,13 +730,160 @@ function syncCharacterAnimation(
     return;
   }
 
+  const previousVocabulary = characterProofRuntime.activeAnimationVocabulary;
+
+  nextAction.enabled = true;
+  nextAction.setEffectiveTimeScale(1);
+  nextAction.setEffectiveWeight(1);
+  nextAction.zeroSlopeAtStart = true;
+  nextAction.zeroSlopeAtEnd = nextVocabulary === "idle";
   nextAction.reset().play();
 
   if (previousAction !== undefined && previousAction !== nextAction) {
-    nextAction.crossFadeFrom(previousAction, 0.18, true);
+    previousAction.zeroSlopeAtEnd = nextVocabulary === "idle";
+
+    if (previousVocabulary === "idle" && nextVocabulary === "walk") {
+      nextAction.setEffectiveTimeScale(1.08);
+      nextAction.crossFadeFrom(previousAction, 0.24, true);
+    } else if (previousVocabulary === "walk" && nextVocabulary === "idle") {
+      previousAction.setEffectiveTimeScale(0.92);
+      nextAction.crossFadeFrom(previousAction, 0.32, false);
+    } else {
+      nextAction.crossFadeFrom(previousAction, 0.18, true);
+    }
   }
 
   characterProofRuntime.activeAnimationVocabulary = nextVocabulary;
+}
+
+function createCharacterProofRuntime(
+  characterId: string,
+  characterScene: Group,
+  clipsByVocabulary: ReadonlyMap<
+    MetaverseCharacterAnimationVocabularyId,
+    AnimationClip
+  >
+): MetaverseCharacterProofRuntime {
+  const anchorGroup = new Group();
+  const seatSocketNode = findSocketNode(characterScene, "seat_socket");
+  const mixer = new AnimationMixer(characterScene);
+  const actionsByVocabulary = new Map<
+    MetaverseCharacterAnimationVocabularyId,
+    AnimationAction
+  >();
+
+  anchorGroup.name = `metaverse_character/${characterId}`;
+  anchorGroup.position.set(
+    metaverseCharacterAnchorPosition.x,
+    metaverseCharacterAnchorPosition.y,
+    metaverseCharacterAnchorPosition.z
+  );
+  anchorGroup.rotation.y = metaverseCharacterProofAnchorRotationYRadians;
+  anchorGroup.add(characterScene);
+  anchorGroup.updateMatrixWorld(true);
+
+  for (const [vocabulary, clip] of clipsByVocabulary) {
+    actionsByVocabulary.set(vocabulary, mixer.clipAction(clip));
+  }
+
+  const idleAction = actionsByVocabulary.get("idle");
+
+  if (idleAction === undefined) {
+    throw new Error(
+      `Metaverse character ${characterId} requires an idle animation vocabulary.`
+    );
+  }
+
+  idleAction.play();
+
+  return {
+    activeAnimationVocabulary: "idle",
+    actionsByVocabulary,
+    anchorGroup,
+    characterId,
+    clipsByVocabulary,
+    mixer,
+    seatSocketNode,
+    scene: characterScene
+  };
+}
+
+function cloneMetaverseCharacterProofRuntime(
+  sourceRuntime: MetaverseCharacterProofRuntime,
+  playerId: string
+): MetaverseCharacterProofRuntime {
+  const clonedRuntime = createCharacterProofRuntime(
+    sourceRuntime.characterId,
+    cloneCharacterScene(sourceRuntime.scene),
+    sourceRuntime.clipsByVocabulary
+  );
+
+  clonedRuntime.anchorGroup.name = `metaverse_character/${sourceRuntime.characterId}/${playerId}`;
+
+  return clonedRuntime;
+}
+
+function syncRemoteCharacterPresentations(
+  scene: Scene,
+  sourceCharacterRuntime: MetaverseCharacterProofRuntime | null,
+  remoteCharacterRuntimesByPlayerId: Map<string, MetaverseCharacterProofRuntime>,
+  remoteCharacterPresentations: readonly MetaverseRemoteCharacterPresentationSnapshot[],
+  deltaSeconds: number
+): void {
+  if (sourceCharacterRuntime === null) {
+    for (const remoteCharacterRuntime of remoteCharacterRuntimesByPlayerId.values()) {
+      remoteCharacterRuntime.anchorGroup.parent?.remove(
+        remoteCharacterRuntime.anchorGroup
+      );
+    }
+
+    remoteCharacterRuntimesByPlayerId.clear();
+    return;
+  }
+
+  const activePlayerIds = new Set<string>();
+
+  for (const remoteCharacterPresentation of remoteCharacterPresentations) {
+    activePlayerIds.add(remoteCharacterPresentation.playerId);
+
+    let remoteCharacterRuntime = remoteCharacterRuntimesByPlayerId.get(
+      remoteCharacterPresentation.playerId
+    );
+
+    if (remoteCharacterRuntime === undefined) {
+      remoteCharacterRuntime = cloneMetaverseCharacterProofRuntime(
+        sourceCharacterRuntime,
+        remoteCharacterPresentation.playerId
+      );
+      remoteCharacterRuntimesByPlayerId.set(
+        remoteCharacterPresentation.playerId,
+        remoteCharacterRuntime
+      );
+      scene.add(remoteCharacterRuntime.anchorGroup);
+    }
+
+    syncCharacterAnimation(
+      remoteCharacterRuntime,
+      remoteCharacterPresentation.presentation.animationVocabulary
+    );
+    remoteCharacterRuntime.mixer.update(deltaSeconds);
+    syncCharacterPresentation(
+      remoteCharacterRuntime,
+      remoteCharacterPresentation.presentation,
+      null
+    );
+  }
+
+  for (const [playerId, remoteCharacterRuntime] of remoteCharacterRuntimesByPlayerId) {
+    if (activePlayerIds.has(playerId)) {
+      continue;
+    }
+
+    remoteCharacterRuntime.anchorGroup.parent?.remove(
+      remoteCharacterRuntime.anchorGroup
+    );
+    remoteCharacterRuntimesByPlayerId.delete(playerId);
+  }
 }
 
 function mountCharacterOnEnvironmentAsset(
@@ -823,22 +1046,9 @@ async function loadMetaverseCharacterProofRuntime(
 
   validateCharacterScale(characterAsset.scene, characterProofConfig.label, warn);
 
-  const anchorGroup = new Group();
-  const seatSocketNode = findSocketNode(characterAsset.scene, "seat_socket");
-
-  anchorGroup.name = `metaverse_character/${characterProofConfig.characterId}`;
-  anchorGroup.position.set(
-    metaverseCharacterAnchorPosition.x,
-    metaverseCharacterAnchorPosition.y,
-    metaverseCharacterAnchorPosition.z
-  );
-  anchorGroup.rotation.y = metaverseCharacterProofAnchorRotationYRadians;
-  anchorGroup.add(characterAsset.scene);
-  anchorGroup.updateMatrixWorld(true);
-  const mixer = new AnimationMixer(characterAsset.scene);
-  const actionsByVocabulary = new Map<
+  const clipsByVocabulary = new Map<
     MetaverseCharacterAnimationVocabularyId,
-    AnimationAction
+    AnimationClip
   >();
 
   for (const animationClipConfig of characterProofConfig.animationClips) {
@@ -866,36 +1076,20 @@ async function loadMetaverseCharacterProofRuntime(
       );
     }
 
-    if (actionsByVocabulary.has(animationClipConfig.vocabulary)) {
+    if (clipsByVocabulary.has(animationClipConfig.vocabulary)) {
       throw new Error(
         `Metaverse character ${characterProofConfig.characterId} has duplicate animation vocabulary ${animationClipConfig.vocabulary}.`
       );
     }
 
-    actionsByVocabulary.set(
-      animationClipConfig.vocabulary,
-      mixer.clipAction(clip)
-    );
+    clipsByVocabulary.set(animationClipConfig.vocabulary, clip);
   }
 
-  const idleAction = actionsByVocabulary.get("idle");
-
-  if (idleAction === undefined) {
-    throw new Error(
-      `Metaverse character ${characterProofConfig.characterId} requires an idle animation vocabulary.`
-    );
-  }
-
-  idleAction.play();
-
-  return {
-    activeAnimationVocabulary: "idle",
-    actionsByVocabulary,
-    anchorGroup,
-    mixer,
-    seatSocketNode,
-    scene: characterAsset.scene
-  };
+  return createCharacterProofRuntime(
+    characterProofConfig.characterId,
+    characterAsset.scene,
+    clipsByVocabulary
+  );
 }
 
 async function loadMetaverseAttachmentProofRuntime(
@@ -1433,8 +1627,16 @@ export function createMetaverseScene(
     focusedPortal: FocusedExperiencePortalSnapshot | null,
     nowMs: number,
     deltaSeconds: number,
-    characterPresentation?: MetaverseCharacterPresentationSnapshot | null
+    characterPresentation?: MetaverseCharacterPresentationSnapshot | null,
+    remoteCharacterPresentations?: readonly MetaverseRemoteCharacterPresentationSnapshot[]
   ): MetaverseSceneInteractionSnapshot;
+  readDynamicEnvironmentPose(
+    environmentAssetId: string
+  ): DynamicEnvironmentPoseSnapshot | null;
+  setDynamicEnvironmentPose(
+    environmentAssetId: string,
+    poseSnapshot: DynamicEnvironmentPoseSnapshot | null
+  ): void;
   syncViewport(
     renderer: MetaverseSceneRendererHost,
     canvasHost: MetaverseSceneCanvasHost,
@@ -1463,6 +1665,14 @@ export function createMetaverseScene(
   let proofSliceBootPromise: Promise<void> | null = null;
   let proofSliceBooted = false;
   let sceneInteractionSnapshot = createSceneInteractionSnapshot(null, null);
+  const dynamicEnvironmentPoseOverrides = new Map<
+    string,
+    DynamicEnvironmentPoseSnapshot
+  >();
+  const remoteCharacterRuntimesByPlayerId = new Map<
+    string,
+    MetaverseCharacterProofRuntime
+  >();
 
   camera.position.set(
     config.camera.spawnPosition.x,
@@ -1567,7 +1777,7 @@ export function createMetaverseScene(
               z: camera.position.z
             },
             yawRadians: 0
-          }, 0);
+          }, 0, dynamicEnvironmentPoseOverrides);
         }
 
         sceneInteractionSnapshot = createSceneInteractionSnapshot(
@@ -1616,6 +1826,14 @@ export function createMetaverseScene(
         portalMesh.anchorGroup.scale.setScalar(1);
       }
 
+      dynamicEnvironmentPoseOverrides.clear();
+      for (const remoteCharacterRuntime of remoteCharacterRuntimesByPlayerId.values()) {
+        remoteCharacterRuntime.anchorGroup.parent?.remove(
+          remoteCharacterRuntime.anchorGroup
+        );
+      }
+      remoteCharacterRuntimesByPlayerId.clear();
+
       sceneInteractionSnapshot = createSceneInteractionSnapshot(null, null);
     },
     async prewarm(renderer) {
@@ -1630,7 +1848,8 @@ export function createMetaverseScene(
       focusedPortal,
       nowMs,
       deltaSeconds,
-      characterPresentation = null
+      characterPresentation = null,
+      remoteCharacterPresentations = []
     ) {
       syncCamera(camera, cameraSnapshot);
       if (characterProofRuntime !== null) {
@@ -1641,7 +1860,12 @@ export function createMetaverseScene(
         characterProofRuntime.mixer.update(deltaSeconds);
       }
       if (environmentProofRuntime !== null) {
-        syncEnvironmentProofRuntime(environmentProofRuntime, cameraSnapshot, nowMs);
+        syncEnvironmentProofRuntime(
+          environmentProofRuntime,
+          cameraSnapshot,
+          nowMs,
+          dynamicEnvironmentPoseOverrides
+        );
       }
       if (characterProofRuntime !== null) {
         syncCharacterPresentation(
@@ -1653,6 +1877,13 @@ export function createMetaverseScene(
       if (characterProofRuntime !== null && mountedCharacterRuntime !== null) {
         applyCharacterSeatMountTransform(characterProofRuntime);
       }
+      syncRemoteCharacterPresentations(
+        scene,
+        characterProofRuntime,
+        remoteCharacterRuntimesByPlayerId,
+        remoteCharacterPresentations,
+        deltaSeconds
+      );
 
       for (const portalMesh of portalMeshes) {
         syncPortalPresentation(portalMesh, focusedPortal, nowMs);
@@ -1668,6 +1899,42 @@ export function createMetaverseScene(
       );
 
       return sceneInteractionSnapshot;
+    },
+    readDynamicEnvironmentPose(environmentAssetId) {
+      if (environmentProofRuntime === null) {
+        return null;
+      }
+
+      const dynamicEnvironment = environmentProofRuntime.dynamicAssets.find(
+        (candidate) => candidate.environmentAssetId === environmentAssetId
+      );
+
+      if (dynamicEnvironment === undefined) {
+        return null;
+      }
+
+      return resolveDynamicEnvironmentBasePose(
+        dynamicEnvironment,
+        dynamicEnvironmentPoseOverrides
+      );
+    },
+    setDynamicEnvironmentPose(environmentAssetId, poseSnapshot) {
+      if (poseSnapshot === null) {
+        dynamicEnvironmentPoseOverrides.delete(environmentAssetId);
+        return;
+      }
+
+      dynamicEnvironmentPoseOverrides.set(
+        environmentAssetId,
+        Object.freeze({
+          position: freezeVector3(
+            poseSnapshot.position.x,
+            poseSnapshot.position.y,
+            poseSnapshot.position.z
+          ),
+          yawRadians: wrapRadians(poseSnapshot.yawRadians)
+        })
+      );
     },
     syncViewport(renderer, canvasHost, devicePixelRatio) {
       const width = Math.max(1, canvasHost.clientWidth);

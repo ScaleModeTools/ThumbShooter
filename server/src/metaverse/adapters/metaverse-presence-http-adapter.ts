@@ -1,0 +1,323 @@
+import type {
+  IncomingMessage,
+  ServerResponse
+} from "node:http";
+
+import {
+  createMetaverseJoinPresenceCommand,
+  createMetaverseLeavePresenceCommand,
+  createMetaversePlayerId,
+  createMetaversePresenceRosterEvent,
+  createMetaverseSyncPresenceCommand,
+  createUsername,
+  metaversePresenceAnimationVocabularyIds,
+  metaversePresenceLocomotionModeIds,
+  type MetaversePresenceAnimationVocabularyId,
+  type MetaversePresenceCommand
+} from "@webgpu-metaverse/shared";
+
+import { MetaversePresenceRuntime } from "../classes/metaverse-presence-runtime.js";
+
+function writeCorsHeaders(
+  response: ServerResponse<IncomingMessage>
+): void {
+  response.setHeader("access-control-allow-origin", "*");
+  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-max-age", "86400");
+}
+
+function writeJson(
+  response: ServerResponse<IncomingMessage>,
+  statusCode: number,
+  payload: unknown
+): void {
+  writeCorsHeaders(response);
+  response.writeHead(statusCode, {
+    "cache-control": "no-store, max-age=0",
+    "content-type": "application/json"
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function isUnknownPlayerError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    error.message.startsWith("Unknown metaverse player:")
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isVector3Input(
+  value: unknown
+): value is { readonly x: number; readonly y: number; readonly z: number } {
+  return (
+    isRecord(value) &&
+    typeof value.x === "number" &&
+    typeof value.y === "number" &&
+    typeof value.z === "number"
+  );
+}
+
+function readStringField(value: unknown, fieldName: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Expected string field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function readNumberField(value: unknown, fieldName: string): number {
+  if (typeof value !== "number") {
+    throw new Error(`Expected numeric field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function resolvePlayerId(rawPlayerId: string) {
+  const playerId = createMetaversePlayerId(rawPlayerId);
+
+  if (playerId === null) {
+    throw new Error("Invalid playerId.");
+  }
+
+  return playerId;
+}
+
+function parsePresencePose(body: Record<string, unknown>) {
+  if (!isVector3Input(body.position)) {
+    throw new Error("Expected position.x, position.y, and position.z numeric fields.");
+  }
+
+  const animationVocabulary =
+    body.animationVocabulary === undefined
+      ? undefined
+      : readStringField(body.animationVocabulary, "animationVocabulary");
+  const locomotionMode =
+    body.locomotionMode === undefined
+      ? undefined
+      : readStringField(body.locomotionMode, "locomotionMode");
+
+  if (
+    animationVocabulary !== undefined &&
+    !metaversePresenceAnimationVocabularyIds.includes(
+      animationVocabulary as MetaversePresenceAnimationVocabularyId
+    )
+  ) {
+    throw new Error(`Unsupported animationVocabulary: ${animationVocabulary}`);
+  }
+
+  if (
+    locomotionMode !== undefined &&
+    !metaversePresenceLocomotionModeIds.includes(
+      locomotionMode as typeof metaversePresenceLocomotionModeIds[number]
+    )
+  ) {
+    throw new Error(`Unsupported locomotionMode: ${locomotionMode}`);
+  }
+
+  return {
+    ...(animationVocabulary === undefined
+      ? {}
+      : {
+          animationVocabulary:
+            animationVocabulary as MetaversePresenceAnimationVocabularyId
+        }),
+    ...(locomotionMode === undefined
+      ? {}
+      : {
+          locomotionMode:
+            locomotionMode as typeof metaversePresenceLocomotionModeIds[number]
+        }),
+    position: body.position,
+    ...(body.stateSequence === undefined
+      ? {}
+      : {
+          stateSequence: readNumberField(body.stateSequence, "stateSequence")
+        }),
+    yawRadians: readNumberField(body.yawRadians, "yawRadians")
+  };
+}
+
+function parseJoinPresenceCommand(body: Record<string, unknown>) {
+  const username = createUsername(readStringField(body.username, "username"));
+
+  if (username === null) {
+    throw new Error("Invalid username.");
+  }
+
+  return createMetaverseJoinPresenceCommand({
+    characterId: readStringField(body.characterId, "characterId"),
+    playerId: resolvePlayerId(readStringField(body.playerId, "playerId")),
+    pose: parsePresencePose(body),
+    username
+  });
+}
+
+function parseLeavePresenceCommand(body: Record<string, unknown>) {
+  return createMetaverseLeavePresenceCommand({
+    playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+  });
+}
+
+function parseSyncPresenceCommand(body: Record<string, unknown>) {
+  return createMetaverseSyncPresenceCommand({
+    playerId: resolvePlayerId(readStringField(body.playerId, "playerId")),
+    pose: parsePresencePose(body)
+  });
+}
+
+function parsePresenceCommand(body: unknown): MetaversePresenceCommand {
+  if (!isRecord(body)) {
+    throw new Error("Expected a JSON object body.");
+  }
+
+  const commandType = readStringField(body.type, "type");
+
+  switch (commandType) {
+    case "join-presence":
+      return parseJoinPresenceCommand(body);
+    case "leave-presence":
+      return parseLeavePresenceCommand(body);
+    case "sync-presence":
+      return parseSyncPresenceCommand(body);
+    default:
+      throw new Error(`Unsupported metaverse presence command type: ${commandType}`);
+  }
+}
+
+function readJsonBody(
+  request: IncomingMessage
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+
+    request.on("data", (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    request.on("end", () => {
+      if (chunks.length === 0) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function isMetaversePresencePath(pathname: string): boolean {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+
+  return (
+    segments.length === 2 &&
+    segments[0] === "metaverse" &&
+    segments[1] === "presence"
+  );
+}
+
+function isMetaversePresenceCommandPath(pathname: string): boolean {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+
+  return (
+    segments.length === 3 &&
+    segments[0] === "metaverse" &&
+    segments[1] === "presence" &&
+    segments[2] === "commands"
+  );
+}
+
+export class MetaversePresenceHttpAdapter {
+  readonly #metaversePresenceRuntime: MetaversePresenceRuntime;
+
+  constructor(metaversePresenceRuntime: MetaversePresenceRuntime) {
+    this.#metaversePresenceRuntime = metaversePresenceRuntime;
+  }
+
+  async handleRequest(
+    request: IncomingMessage,
+    response: ServerResponse<IncomingMessage>,
+    requestUrl: URL,
+    nowMs: number
+  ): Promise<boolean> {
+    if (request.method === "GET" && isMetaversePresencePath(requestUrl.pathname)) {
+      try {
+        const observerPlayerIdRaw = requestUrl.searchParams.get("playerId");
+        const observerPlayerId =
+          observerPlayerIdRaw === null
+            ? undefined
+            : resolvePlayerId(observerPlayerIdRaw);
+
+        writeJson(
+          response,
+          200,
+          createMetaversePresenceRosterEvent(
+            this.#metaversePresenceRuntime.readRosterSnapshot(
+              nowMs,
+              observerPlayerId
+            )
+          )
+        );
+      } catch (error) {
+        if (isUnknownPlayerError(error)) {
+          writeJson(response, 409, {
+            error: error.message
+          });
+          return true;
+        }
+
+        writeJson(response, 400, {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Invalid metaverse presence request."
+        });
+      }
+
+      return true;
+    }
+
+    if (
+      request.method === "POST" &&
+      isMetaversePresenceCommandPath(requestUrl.pathname)
+    ) {
+      try {
+        const body = await readJsonBody(request);
+        const command = parsePresenceCommand(body);
+
+        writeJson(
+          response,
+          200,
+          this.#metaversePresenceRuntime.acceptCommand(command, nowMs)
+        );
+      } catch (error) {
+        if (isUnknownPlayerError(error)) {
+          writeJson(response, 409, {
+            error: error.message
+          });
+          return true;
+        }
+
+        writeJson(response, 400, {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Invalid metaverse presence command."
+        });
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+}

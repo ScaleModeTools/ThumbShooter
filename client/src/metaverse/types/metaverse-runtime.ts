@@ -13,8 +13,19 @@ export const metaverseRuntimeLifecycleStates = [
   "failed"
 ] as const;
 
+export const metaversePresenceHudStates = [
+  "disabled",
+  "idle",
+  "joining",
+  "connected",
+  "error",
+  "disposed"
+] as const;
+
 export type MetaverseRuntimeLifecycleState =
   (typeof metaverseRuntimeLifecycleStates)[number];
+export type MetaversePresenceHudState =
+  (typeof metaversePresenceHudStates)[number];
 
 export const metaverseCharacterAnimationVocabularyIds = [
   "idle",
@@ -44,6 +55,12 @@ export interface MetaverseCharacterPresentationSnapshot {
   readonly animationVocabulary: MetaverseCharacterAnimationVocabularyId;
   readonly position: MetaverseVector3Snapshot;
   readonly yawRadians: number;
+}
+
+export interface MetaverseRemoteCharacterPresentationSnapshot {
+  readonly characterId: string;
+  readonly playerId: string;
+  readonly presentation: MetaverseCharacterPresentationSnapshot;
 }
 
 export interface MetaverseCharacterAnimationClipProofConfig {
@@ -141,6 +158,12 @@ export interface MetaverseHudSnapshot {
   readonly lifecycle: MetaverseRuntimeLifecycleState;
   readonly locomotionMode: MetaverseLocomotionModeId;
   readonly mountedEnvironment: MountedEnvironmentSnapshot | null;
+  readonly presence: {
+    readonly joined: boolean;
+    readonly lastError: string | null;
+    readonly remotePlayerCount: number;
+    readonly state: MetaversePresenceHudState;
+  };
 }
 
 export interface MetaverseRuntimeConfig {
@@ -169,15 +192,21 @@ export interface MetaverseRuntimeConfig {
     readonly worldRadius: number;
   };
   readonly groundedBody: {
+    readonly accelerationCurveExponent: number;
     readonly accelerationUnitsPerSecondSquared: number;
+    readonly airborneMovementDampingFactor: number;
     readonly baseSpeedUnitsPerSecond: number;
+    readonly boostCurveExponent: number;
     readonly boostMultiplier: number;
     readonly capsuleHalfHeightMeters: number;
     readonly capsuleRadiusMeters: number;
     readonly controllerOffsetMeters: number;
     readonly decelerationUnitsPerSecondSquared: number;
+    readonly dragCurveExponent: number;
     readonly eyeHeightMeters: number;
     readonly gravityUnitsPerSecond: number;
+    readonly maxSlopeClimbAngleRadians: number;
+    readonly minSlopeSlideAngleRadians: number;
     readonly maxTurnSpeedRadiansPerSecond: number;
     readonly snapToGroundDistanceMeters: number;
     readonly stepHeightMeters: number;
@@ -213,6 +242,30 @@ export interface MetaverseRuntimeConfig {
       readonly ripple: number;
       readonly secondary: number;
     };
+  };
+  readonly skiff: {
+    readonly accelerationCurveExponent: number;
+    readonly accelerationUnitsPerSecondSquared: number;
+    readonly baseSpeedUnitsPerSecond: number;
+    readonly boostCurveExponent: number;
+    readonly boostMultiplier: number;
+    readonly cameraEyeHeightMeters: number;
+    readonly decelerationUnitsPerSecondSquared: number;
+    readonly dragCurveExponent: number;
+    readonly maxTurnSpeedRadiansPerSecond: number;
+    readonly waterContactProbeRadiusMeters: number;
+    readonly waterlineHeightMeters: number;
+  };
+  readonly swim: {
+    readonly accelerationCurveExponent: number;
+    readonly accelerationUnitsPerSecondSquared: number;
+    readonly baseSpeedUnitsPerSecond: number;
+    readonly boostCurveExponent: number;
+    readonly boostMultiplier: number;
+    readonly cameraEyeHeightMeters: number;
+    readonly decelerationUnitsPerSecondSquared: number;
+    readonly dragCurveExponent: number;
+    readonly maxTurnSpeedRadiansPerSecond: number;
   };
   readonly portals: readonly MetaversePortalConfig[];
 }

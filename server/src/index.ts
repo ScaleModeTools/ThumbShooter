@@ -6,6 +6,8 @@ import {
 
 import { DuckHuntCoopRoomHttpAdapter } from "./experiences/duck-hunt/adapters/duck-hunt-coop-room-http-adapter.js";
 import { CoopRoomDirectory } from "./experiences/duck-hunt/classes/coop-room-directory.js";
+import { MetaversePresenceHttpAdapter } from "./metaverse/adapters/metaverse-presence-http-adapter.js";
+import { MetaversePresenceRuntime } from "./metaverse/classes/metaverse-presence-runtime.js";
 import { MetaverseSessionHttpAdapter } from "./metaverse/adapters/metaverse-session-http-adapter.js";
 import { MetaverseSessionRuntime } from "./metaverse/classes/metaverse-session-runtime.js";
 import type { ServerRuntimeConfig } from "./types/server-runtime-config.js";
@@ -18,6 +20,10 @@ const runtimeConfig: ServerRuntimeConfig = {
 const coopRoomDirectory = new CoopRoomDirectory();
 const duckHuntCoopRoomHttpAdapter = new DuckHuntCoopRoomHttpAdapter(
   coopRoomDirectory
+);
+const metaversePresenceRuntime = new MetaversePresenceRuntime();
+const metaversePresenceHttpAdapter = new MetaversePresenceHttpAdapter(
+  metaversePresenceRuntime
 );
 const metaverseSessionRuntime = new MetaverseSessionRuntime();
 const metaverseSessionHttpAdapter = new MetaverseSessionHttpAdapter(
@@ -65,6 +71,17 @@ const server = createServer(async (request, response) => {
   }
 
   if (metaverseSessionHttpAdapter.handleRequest(request, response, requestUrl)) {
+    return;
+  }
+
+  if (
+    await metaversePresenceHttpAdapter.handleRequest(
+      request,
+      response,
+      requestUrl,
+      nowMs
+    )
+  ) {
     return;
   }
 

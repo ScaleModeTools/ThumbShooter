@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createMetaverseJoinPresenceCommand,
+  createMetaversePlayerId,
+  createMetaversePresenceRosterSnapshot,
   createMetaverseSessionSnapshot,
   createPortalLaunchSelectionSnapshot,
+  createUsername,
   experienceCatalog,
   readExperienceCatalogEntry,
   readExperienceTickOwner
@@ -54,4 +58,62 @@ test("createMetaverseSessionSnapshot freezes the available experience ids", () =
 
   assert.deepEqual(sessionSnapshot.availableExperienceIds, ["duck-hunt"]);
   assert.ok(Object.isFrozen(sessionSnapshot.availableExperienceIds));
+});
+
+test("metaverse presence contracts freeze roster and normalize ids", () => {
+  const playerId = createMetaversePlayerId(" harbor-pilot-1 ");
+  const username = createUsername("Harbor Pilot");
+
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  const rosterInput = [
+    {
+      characterId: " metaverse-mannequin-v1 ",
+      playerId,
+      pose: {
+        animationVocabulary: "walk",
+        locomotionMode: "swim",
+        position: {
+          x: 2,
+          y: 0.5,
+          z: -4
+        },
+        stateSequence: 3.8,
+        yawRadians: Math.PI * 3
+      },
+      username
+    }
+  ];
+  const rosterSnapshot = createMetaversePresenceRosterSnapshot({
+    players: rosterInput,
+    snapshotSequence: 5.9,
+    tickIntervalMs: 120
+  });
+  const joinCommand = createMetaverseJoinPresenceCommand({
+    characterId: " metaverse-mannequin-v1 ",
+    playerId,
+    pose: {
+      position: {
+        x: 2,
+        y: 0.5,
+        z: -4
+      },
+      yawRadians: Math.PI * 3
+    },
+    username
+  });
+
+  rosterInput.push(rosterInput[0]);
+
+  assert.equal(rosterSnapshot.players.length, 1);
+  assert.equal(rosterSnapshot.players[0]?.characterId, "metaverse-mannequin-v1");
+  assert.equal(rosterSnapshot.players[0]?.pose.stateSequence, 3);
+  assert.equal(rosterSnapshot.players[0]?.pose.yawRadians, Math.PI * 3);
+  assert.equal(rosterSnapshot.snapshotSequence, 5);
+  assert.ok(Object.isFrozen(rosterSnapshot.players));
+  assert.ok(Object.isFrozen(rosterSnapshot.players[0]));
+  assert.equal(joinCommand.playerId, "harbor-pilot-1");
+  assert.equal(joinCommand.pose.animationVocabulary, "idle");
+  assert.equal(joinCommand.pose.locomotionMode, "grounded");
 });

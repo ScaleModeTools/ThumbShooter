@@ -109,6 +109,45 @@ export type {
   MetaverseSessionSnapshotInput
 } from "./metaverse/metaverse-session-contract.js";
 export {
+  metaversePresenceAnimationVocabularyIds,
+  metaversePresenceCommandTypes,
+  metaversePresenceLocomotionModeIds,
+  metaversePresenceServerEventTypes,
+  createMetaverseJoinPresenceCommand,
+  createMetaverseLeavePresenceCommand,
+  createMetaversePlayerId,
+  createMetaversePresencePlayerSnapshot,
+  createMetaversePresencePoseSnapshot,
+  createMetaversePresenceRosterEvent,
+  createMetaversePresenceRosterSnapshot,
+  createMetaversePresenceVector3Snapshot,
+  createMetaverseSyncPresenceCommand
+} from "./metaverse/metaverse-presence-contract.js";
+export type {
+  MetaverseJoinPresenceCommand,
+  MetaverseJoinPresenceCommandInput,
+  MetaverseLeavePresenceCommand,
+  MetaverseLeavePresenceCommandInput,
+  MetaversePlayerId,
+  MetaversePresenceAnimationVocabularyId,
+  MetaversePresenceCommand,
+  MetaversePresenceCommandType,
+  MetaversePresenceLocomotionModeId,
+  MetaversePresencePlayerSnapshot,
+  MetaversePresencePlayerSnapshotInput,
+  MetaversePresencePoseSnapshot,
+  MetaversePresencePoseSnapshotInput,
+  MetaversePresenceRosterEvent,
+  MetaversePresenceRosterSnapshot,
+  MetaversePresenceRosterSnapshotInput,
+  MetaversePresenceServerEvent,
+  MetaversePresenceServerEventType,
+  MetaversePresenceVector3Snapshot,
+  MetaversePresenceVector3SnapshotInput,
+  MetaverseSyncPresenceCommand,
+  MetaverseSyncPresenceCommandInput
+} from "./metaverse/metaverse-presence-contract.js";
+export {
   createPortalLaunchSelectionSnapshot
 } from "./metaverse/portal-launch-contract.js";
 export type {

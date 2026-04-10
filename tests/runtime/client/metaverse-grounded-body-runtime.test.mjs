@@ -64,6 +64,8 @@ class FakeCharacterController {
   constructor(world) {
     this.grounded = false;
     this.lastMovement = new FakeRapierVector3(0, 0, 0);
+    this.maxSlopeClimbAngle = null;
+    this.minSlopeSlideAngle = null;
     this.snapDistance = 0;
     this.stepHeight = 0;
     this.world = world;
@@ -142,6 +144,14 @@ class FakeCharacterController {
 
   free() {}
 
+  setMaxSlopeClimbAngle(angle) {
+    this.maxSlopeClimbAngle = angle;
+  }
+
+  setMinSlopeSlideAngle(angle) {
+    this.minSlopeSlideAngle = angle;
+  }
+
   setApplyImpulsesToDynamicBodies() {}
 
   setCharacterMass() {}
@@ -180,12 +190,17 @@ class FakeCharacterController {
 class FakeRapierWorld {
   constructor() {
     this.colliders = [];
+    this.lastCharacterController = null;
     this.queryColliders = [];
     this.timestep = 1 / 60;
   }
 
   createCharacterController() {
-    return new FakeCharacterController(this);
+    const controller = new FakeCharacterController(this);
+
+    this.lastCharacterController = controller;
+
+    return controller;
   }
 
   createCollider(colliderDesc) {
@@ -213,37 +228,46 @@ class FakeRapierWorld {
 }
 
 function createFakePhysicsRuntime(RapierPhysicsRuntime) {
-  return new RapierPhysicsRuntime({
-    async createPhysicsAddon() {
-      return {
-        RAPIER: {
-          ColliderDesc: {
-            capsule(halfHeight, radius) {
-              return new FakeColliderDesc("capsule", {
-                halfHeight,
-                radius
-              });
+  return createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime).physicsRuntime;
+}
+
+function createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime) {
+  const world = new FakeRapierWorld();
+
+  return {
+    physicsRuntime: new RapierPhysicsRuntime({
+      async createPhysicsAddon() {
+        return {
+          RAPIER: {
+            ColliderDesc: {
+              capsule(halfHeight, radius) {
+                return new FakeColliderDesc("capsule", {
+                  halfHeight,
+                  radius
+                });
+              },
+              cuboid(halfExtentX, halfExtentY, halfExtentZ) {
+                return new FakeColliderDesc("cuboid", {
+                  halfExtentX,
+                  halfExtentY,
+                  halfExtentZ
+                });
+              },
+              trimesh(vertices, indices) {
+                return new FakeColliderDesc("trimesh", {
+                  indices,
+                  vertices
+                });
+              }
             },
-            cuboid(halfExtentX, halfExtentY, halfExtentZ) {
-              return new FakeColliderDesc("cuboid", {
-                halfExtentX,
-                halfExtentY,
-                halfExtentZ
-              });
-            },
-            trimesh(vertices, indices) {
-              return new FakeColliderDesc("trimesh", {
-                indices,
-                vertices
-              });
-            }
+            Vector3: FakeRapierVector3
           },
-          Vector3: FakeRapierVector3
-        },
-        world: new FakeRapierWorld()
-      };
-    }
-  });
+          world
+        };
+      }
+    }),
+    world
+  };
 }
 
 before(async () => {
@@ -467,6 +491,79 @@ test("MetaverseGroundedBodyRuntime stops at a tall blocker", async () => {
   } finally {
     groundedBodyRuntime.dispose();
     physicsRuntime.removeCollider(crateCollider);
+    physicsRuntime.removeCollider(groundCollider);
+  }
+});
+
+test("MetaverseGroundedBodyRuntime applies slope rules and exposes jump readiness from computed grounding", async () => {
+  const { MetaverseGroundedBodyRuntime, RapierPhysicsRuntime } =
+    await clientLoader.load("/src/physics/index.ts");
+  const { physicsRuntime, world } =
+    createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime);
+
+  await physicsRuntime.init();
+
+  const groundCollider = physicsRuntime.createFixedCuboidCollider(
+    { x: 4, y: 0.5, z: 4 },
+    { x: 0, y: -0.5, z: 0 }
+  );
+  const groundedBodyRuntime = new MetaverseGroundedBodyRuntime(
+    {
+      accelerationCurveExponent: 1.2,
+      accelerationUnitsPerSecondSquared: 18,
+      airborneMovementDampingFactor: 0.4,
+      baseSpeedUnitsPerSecond: 4.5,
+      boostCurveExponent: 1.1,
+      boostMultiplier: 1.25,
+      capsuleHalfHeightMeters: 0.48,
+      capsuleRadiusMeters: 0.34,
+      controllerOffsetMeters: 0.02,
+      decelerationUnitsPerSecondSquared: 24,
+      dragCurveExponent: 1.45,
+      eyeHeightMeters: 1.62,
+      gravityUnitsPerSecond: 18,
+      maxSlopeClimbAngleRadians: Math.PI * 0.2,
+      maxTurnSpeedRadiansPerSecond: Math.PI * 0.5,
+      minSlopeSlideAngleRadians: Math.PI * 0.3,
+      snapToGroundDistanceMeters: 0.22,
+      stepHeightMeters: 0.28,
+      stepWidthMeters: 0.2,
+      spawnPosition: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      worldRadius: 10
+    },
+    physicsRuntime
+  );
+
+  try {
+    await groundedBodyRuntime.init(0);
+    groundedBodyRuntime.teleport(
+      {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      0
+    );
+
+    const snapshot = groundedBodyRuntime.advance(
+      {
+        boost: false,
+        moveAxis: 0,
+        turnAxis: 0
+      },
+      1 / 60
+    );
+
+    assert.equal(world.lastCharacterController.maxSlopeClimbAngle, Math.PI * 0.2);
+    assert.equal(world.lastCharacterController.minSlopeSlideAngle, Math.PI * 0.3);
+    assert.equal(snapshot.grounded, true);
+    assert.equal(snapshot.jumpReady, true);
+  } finally {
+    groundedBodyRuntime.dispose();
     physicsRuntime.removeCollider(groundCollider);
   }
 });

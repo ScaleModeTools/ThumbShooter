@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
+import {
+  createMetaversePresenceRosterSnapshot,
+  createMetaversePlayerId,
+  createUsername
+} from "@webgpu-metaverse/shared";
+
 import { createClientModuleLoader } from "./load-client-module.mjs";
 
 let clientLoader;
@@ -251,6 +257,369 @@ class FakeMetaverseRenderer {
   }
 }
 
+class FakeMetaversePresenceClient {
+  constructor(localPlayerId, localUsername, remotePlayerId) {
+    this.disposeCalls = 0;
+    this.ensureJoinedRequests = [];
+    this.listeners = new Set();
+    this.localPlayerId = localPlayerId;
+    this.localUsername = localUsername;
+    this.remotePlayerId = remotePlayerId;
+    this.rosterSnapshot = null;
+    this.statusSnapshot = Object.freeze({
+      joined: false,
+      lastError: null,
+      lastSnapshotSequence: null,
+      playerId: null,
+      state: "idle"
+    });
+    this.syncPresenceCalls = [];
+  }
+
+  ensureJoined(request) {
+    this.ensureJoinedRequests.push(request);
+    this.statusSnapshot = Object.freeze({
+      joined: true,
+      lastError: null,
+      lastSnapshotSequence: 1,
+      playerId: this.localPlayerId,
+      state: "connected"
+    });
+    this.rosterSnapshot = createMetaversePresenceRosterSnapshot({
+      players: [
+        {
+          characterId: request.characterId,
+          playerId: this.localPlayerId,
+          pose: {
+            ...request.pose,
+            stateSequence: 1
+          },
+          username: this.localUsername
+        },
+        {
+          characterId: "metaverse-mannequin-v1",
+          playerId: this.remotePlayerId,
+          pose: {
+            animationVocabulary: "walk",
+            locomotionMode: "swim",
+            position: {
+              x: -3,
+              y: 0.2,
+              z: 8
+            },
+            stateSequence: 1,
+            yawRadians: 0.45
+          },
+          username: "Remote Sailor"
+        }
+      ],
+      snapshotSequence: 1,
+      tickIntervalMs: 120
+    });
+    this.#notifyUpdates();
+
+    return Promise.resolve(this.rosterSnapshot);
+  }
+
+  subscribeUpdates(listener) {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  syncPresence(pose) {
+    this.syncPresenceCalls.push(pose);
+  }
+
+  dispose() {
+    this.disposeCalls += 1;
+    this.statusSnapshot = Object.freeze({
+      joined: false,
+      lastError: null,
+      lastSnapshotSequence: this.statusSnapshot.lastSnapshotSequence,
+      playerId: this.localPlayerId,
+      state: "disposed"
+    });
+    this.#notifyUpdates();
+  }
+
+  #notifyUpdates() {
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
+function createInteractiveWindowHarness() {
+  const listenersByType = new Map();
+  let scheduledFrame = null;
+
+  const windowHarness = {
+    addEventListener(type, listener) {
+      const listeners = listenersByType.get(type) ?? [];
+
+      listeners.push(listener);
+      listenersByType.set(type, listeners);
+    },
+    cancelAnimationFrame() {
+      scheduledFrame = null;
+    },
+    devicePixelRatio: 1,
+    removeEventListener(type, listener) {
+      const listeners = listenersByType.get(type) ?? [];
+      const nextListeners = listeners.filter((candidate) => candidate !== listener);
+
+      listenersByType.set(type, nextListeners);
+    },
+    requestAnimationFrame(callback) {
+      scheduledFrame = callback;
+      return 1;
+    }
+  };
+
+  return {
+    advanceFrame(nowMs) {
+      assert.ok(scheduledFrame);
+      const pendingFrame = scheduledFrame;
+
+      pendingFrame(nowMs);
+    },
+    dispatch(type, event = {}) {
+      const listeners = listenersByType.get(type) ?? [];
+
+      for (const listener of listeners) {
+        listener({
+          preventDefault() {},
+          target: null,
+          ...event
+        });
+      }
+    },
+    window: windowHarness
+  };
+}
+
+async function createSkiffMountProofSlice() {
+  const {
+    AnimationClip,
+    Bone,
+    BoxGeometry,
+    Float32BufferAttribute,
+    Group,
+    Mesh,
+    MeshStandardMaterial,
+    Skeleton,
+    SkinnedMesh,
+    Uint16BufferAttribute
+  } = await import("three/webgpu");
+  const bodyGeometry = new BoxGeometry(0.4, 1.2, 0.3);
+  const vertexCount = bodyGeometry.attributes.position.count;
+  const skinIndices = new Uint16Array(vertexCount * 4);
+  const skinWeights = new Float32Array(vertexCount * 4);
+
+  for (let index = 0; index < vertexCount; index += 1) {
+    skinIndices[index * 4] = 0;
+    skinWeights[index * 4] = 1;
+  }
+
+  bodyGeometry.setAttribute("skinIndex", new Uint16BufferAttribute(skinIndices, 4));
+  bodyGeometry.setAttribute("skinWeight", new Float32BufferAttribute(skinWeights, 4));
+
+  const rootBone = new Bone();
+  rootBone.name = "humanoid_root";
+  const hipsBone = new Bone();
+  hipsBone.name = "hips";
+  hipsBone.position.y = 0.32;
+  rootBone.add(hipsBone);
+  const spineBone = new Bone();
+  spineBone.name = "spine";
+  spineBone.position.y = 0.32;
+  hipsBone.add(spineBone);
+  const chestBone = new Bone();
+  chestBone.name = "chest";
+  chestBone.position.y = 0.24;
+  spineBone.add(chestBone);
+  const neckBone = new Bone();
+  neckBone.name = "neck";
+  neckBone.position.y = 0.14;
+  chestBone.add(neckBone);
+  const socketNames = [
+    "head_socket",
+    "hand_l_socket",
+    "hand_r_socket",
+    "hip_socket",
+    "seat_socket"
+  ];
+  const socketBones = socketNames.map((socketName) => {
+    const socketBone = new Bone();
+
+    socketBone.name = socketName;
+
+    return socketBone;
+  });
+
+  neckBone.add(socketBones[0]);
+  chestBone.add(socketBones[1], socketBones[2]);
+  hipsBone.add(socketBones[3], socketBones[4]);
+  socketBones[0].position.y = 0.12;
+  socketBones[1].position.x = -0.35;
+  socketBones[2].position.x = 0.35;
+  socketBones[3].position.set(0.2, -0.08, -0.08);
+  socketBones[4].position.set(0, 0, -0.08);
+
+  const skinnedMesh = new SkinnedMesh(
+    bodyGeometry,
+    new MeshStandardMaterial({ color: 0xa8b8d1 })
+  );
+  const characterScene = new Group();
+  const skeleton = new Skeleton([
+    rootBone,
+    hipsBone,
+    spineBone,
+    chestBone,
+    neckBone,
+    ...socketBones
+  ]);
+
+  skinnedMesh.add(rootBone);
+  skinnedMesh.bind(skeleton);
+  characterScene.add(skinnedMesh);
+
+  const idleClip = new AnimationClip("idle", -1, []);
+  const walkClip = new AnimationClip("walk", -1, []);
+  const skiffScene = new Group();
+  const skiffHull = new Mesh(
+    new BoxGeometry(4.2, 0.6, 1.8),
+    new MeshStandardMaterial({ color: 0x475569 })
+  );
+  const seatSocket = new Group();
+
+  skiffHull.position.y = 0.3;
+  seatSocket.name = "seat_socket";
+  seatSocket.position.set(0, 1, 0);
+  skiffScene.name = "metaverse_hub_skiff_root";
+  skiffScene.add(skiffHull, seatSocket);
+
+  return {
+    characterProofConfig: {
+      animationClips: [
+        {
+          clipName: "idle",
+          sourcePath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+          vocabulary: "idle"
+        },
+        {
+          clipName: "walk",
+          sourcePath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+          vocabulary: "walk"
+        }
+      ],
+      characterId: "metaverse-mannequin-v1",
+      label: "Metaverse mannequin",
+      modelPath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+      socketNames
+    },
+    createSceneAssetLoader: () => ({
+      async loadAsync(path) {
+        if (path === "/models/metaverse/environment/metaverse-hub-skiff.gltf") {
+          return {
+            animations: [],
+            scene: skiffScene
+          };
+        }
+
+        return {
+          animations: [idleClip, walkClip],
+          scene: characterScene
+        };
+      }
+    }),
+    environmentProofConfig: {
+      assets: [
+        {
+          collisionPath: "/models/metaverse/environment/metaverse-hub-skiff-collision.gltf",
+          collider: {
+            center: { x: 0, y: 1.05, z: 0 },
+            shape: "box",
+            size: { x: 5.2, y: 2.4, z: 2.8 }
+          },
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          label: "Metaverse hub skiff",
+          lods: [
+            {
+              maxDistanceMeters: null,
+              modelPath: "/models/metaverse/environment/metaverse-hub-skiff.gltf",
+              tier: "high"
+            }
+          ],
+          mount: {
+            seatSocketName: "seat_socket"
+          },
+          placement: "dynamic",
+          placements: [
+            {
+              position: { x: 0, y: 0.12, z: 24 },
+              rotationYRadians: Math.PI,
+              scale: 1
+            }
+          ],
+          physicsColliders: null
+        }
+      ]
+    }
+  };
+}
+
+async function createStaticSurfaceProofSlice() {
+  const { Group } = await import("three/webgpu");
+
+  return {
+    createSceneAssetLoader: () => ({
+      async loadAsync() {
+        return {
+          animations: [],
+          scene: new Group()
+        };
+      }
+    }),
+    environmentProofConfig: {
+      assets: [
+        {
+          collisionPath: null,
+          collider: null,
+          environmentAssetId: "metaverse-hub-surface-test-v1",
+          label: "Metaverse hub surface test",
+          lods: [
+            {
+              maxDistanceMeters: null,
+              modelPath: "/models/metaverse/environment/metaverse-hub-surface-test.gltf",
+              tier: "high"
+            }
+          ],
+          mount: null,
+          placement: "static",
+          placements: [
+            {
+              position: { x: 0, y: -0.1, z: 24 },
+              rotationYRadians: 0,
+              scale: 1
+            }
+          ],
+          physicsColliders: [
+            {
+              center: { x: 0, y: 0, z: 0 },
+              shape: "box",
+              size: { x: 8, y: 0.4, z: 8 }
+            }
+          ]
+        }
+      ]
+    }
+  };
+}
+
 before(async () => {
   clientLoader = await createClientModuleLoader();
 });
@@ -271,6 +640,8 @@ test("WebGpuMetaverseRuntime starts from an idle snapshot and rejects missing na
   assert.equal(runtime.hudSnapshot.mountedEnvironment, null);
   assert.equal(runtime.hudSnapshot.controlMode, "keyboard");
   assert.equal(runtime.hudSnapshot.locomotionMode, "grounded");
+  assert.equal(runtime.hudSnapshot.presence.state, "disabled");
+  assert.equal(runtime.hudSnapshot.presence.remotePlayerCount, 0);
 
   await assert.rejects(
     () => runtime.start({}, {}),
@@ -351,7 +722,7 @@ test("WebGpuMetaverseRuntime prewarms the booted scene before the first render w
     });
 
     assert.equal(startSnapshot.lifecycle, "running");
-    assert.equal(startSnapshot.locomotionMode, "grounded");
+    assert.equal(startSnapshot.locomotionMode, "swim");
     assert.equal(renderer.initCalls, 1);
     assert.equal(renderer.compileAsyncCalls.length, 1);
     assert.equal(renderer.renderCalls, 1);
@@ -359,7 +730,7 @@ test("WebGpuMetaverseRuntime prewarms the booted scene before the first render w
     assert.deepEqual(renderer.sizes.at(0), [1280, 720]);
     assert.equal(renderer.compileAsyncCalls[0]?.scene?.isScene, true);
     assert.equal(renderer.compileAsyncCalls[0]?.camera?.isPerspectiveCamera, true);
-    assert.equal(startSnapshot.camera.position.y, 1.62);
+    assert.equal(startSnapshot.camera.position.y, 1.38);
     assert.equal(typeof scheduledFrame, "function");
 
     runtime.dispose();
@@ -370,11 +741,89 @@ test("WebGpuMetaverseRuntime prewarms the booted scene before the first render w
   }
 });
 
-test("WebGpuMetaverseRuntime switches between grounded and fly locomotion without losing the current camera truth", async () => {
+test("WebGpuMetaverseRuntime boots metaverse presence without moving traversal policy out of the runtime owner", async () => {
   const [{ WebGpuMetaverseRuntime }, { RapierPhysicsRuntime }] = await Promise.all([
     clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
     clientLoader.load("/src/physics/index.ts")
   ]);
+  const renderer = new FakeMetaverseRenderer();
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const username = createUsername("Harbor Pilot");
+  const originalWindow = globalThis.window;
+  const fakeCanvas = {
+    addEventListener() {},
+    clientHeight: 720,
+    clientWidth: 1280,
+    removeEventListener() {}
+  };
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(username, null);
+
+  globalThis.window = {
+    addEventListener() {},
+    cancelAnimationFrame() {},
+    devicePixelRatio: 1,
+    removeEventListener() {},
+    requestAnimationFrame() {
+      return 1;
+    }
+  };
+
+  try {
+    const fakePresenceClient = new FakeMetaversePresenceClient(
+      localPlayerId,
+      username,
+      remotePlayerId
+    );
+    const runtime = new WebGpuMetaverseRuntime(undefined, {
+      cancelAnimationFrame: globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+      createMetaversePresenceClient: () => fakePresenceClient,
+      createRenderer: () => renderer,
+      localPlayerIdentity: {
+        characterId: "metaverse-mannequin-v1",
+        playerId: localPlayerId,
+        username
+      },
+      physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+      requestAnimationFrame: globalThis.window.requestAnimationFrame.bind(globalThis.window)
+    });
+
+    await runtime.start(fakeCanvas, {
+      gpu: {}
+    });
+
+    assert.equal(fakePresenceClient.ensureJoinedRequests.length, 1);
+    assert.ok(fakePresenceClient.syncPresenceCalls.length >= 1);
+    assert.equal(runtime.hudSnapshot.presence.state, "connected");
+    assert.equal(runtime.hudSnapshot.presence.remotePlayerCount, 1);
+    assert.equal(
+      fakePresenceClient.syncPresenceCalls.at(-1)?.locomotionMode,
+      runtime.hudSnapshot.locomotionMode
+    );
+
+    runtime.dispose();
+
+    assert.equal(fakePresenceClient.disposeCalls, 1);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("WebGpuMetaverseRuntime resolves grounded surface travel automatically when solid support is present", async () => {
+  const [
+    { WebGpuMetaverseRuntime },
+    { metaverseRuntimeConfig },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { createSceneAssetLoader, environmentProofConfig } =
+    await createStaticSurfaceProofSlice();
   const renderer = new FakeMetaverseRenderer();
   const originalWindow = globalThis.window;
   const fakeCanvas = {
@@ -395,34 +844,195 @@ test("WebGpuMetaverseRuntime switches between grounded and fly locomotion withou
   };
 
   try {
-    const runtime = new WebGpuMetaverseRuntime(undefined, {
-      cancelAnimationFrame: globalThis.window.cancelAnimationFrame.bind(globalThis.window),
-      createRenderer: () => renderer,
-      physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
-      requestAnimationFrame: globalThis.window.requestAnimationFrame.bind(globalThis.window)
-    });
+    const runtime = new WebGpuMetaverseRuntime(
+      {
+        ...metaverseRuntimeConfig,
+        portals: []
+      },
+      {
+        cancelAnimationFrame: globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+        createRenderer: () => renderer,
+        createSceneAssetLoader,
+        environmentProofConfig,
+        physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+        requestAnimationFrame: globalThis.window.requestAnimationFrame.bind(globalThis.window)
+      }
+    );
     const startSnapshot = await runtime.start(fakeCanvas, {
       gpu: {}
     });
 
     assert.equal(startSnapshot.locomotionMode, "grounded");
-    assert.equal(startSnapshot.camera.position.y, 1.62);
-
-    runtime.setLocomotionMode("fly");
-
-    assert.equal(runtime.hudSnapshot.locomotionMode, "fly");
-    assert.equal(runtime.hudSnapshot.camera.position.y, 1.62);
-
-    runtime.setLocomotionMode("grounded");
-
-    assert.equal(runtime.hudSnapshot.locomotionMode, "grounded");
-    assert.equal(runtime.hudSnapshot.camera.position.y, 1.62);
+    assert.ok(runtime.hudSnapshot.camera.position.y > 1.62);
     assert.equal(runtime.hudSnapshot.camera.position.x, 0);
     assert.equal(runtime.hudSnapshot.camera.position.z, 24);
 
     runtime.dispose();
   } finally {
     globalThis.window = originalWindow;
+  }
+});
+
+test("WebGpuMetaverseRuntime starts in swim locomotion over open water and advances waterborne movement", async () => {
+  const [{ WebGpuMetaverseRuntime }, { RapierPhysicsRuntime }] = await Promise.all([
+    clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const renderer = new FakeMetaverseRenderer();
+  const originalWindow = globalThis.window;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const windowHarness = createInteractiveWindowHarness();
+  const fakeCanvas = {
+    addEventListener() {},
+    clientHeight: 720,
+    clientWidth: 1280,
+    removeEventListener() {}
+  };
+  let nowMs = 0;
+
+  globalThis.window = windowHarness.window;
+  globalThis.HTMLElement = class FakeHTMLElement {};
+
+  try {
+    const runtime = new WebGpuMetaverseRuntime(undefined, {
+      cancelAnimationFrame: globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+      createRenderer: () => renderer,
+      physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+      readNowMs: () => nowMs,
+      requestAnimationFrame: globalThis.window.requestAnimationFrame.bind(globalThis.window)
+    });
+
+    await runtime.start(fakeCanvas, {
+      gpu: {}
+    });
+
+    assert.equal(runtime.hudSnapshot.locomotionMode, "swim");
+    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.38) < 0.001);
+
+    const startingZ = runtime.hudSnapshot.camera.position.z;
+
+    windowHarness.dispatch("keydown", {
+      code: "KeyW"
+    });
+    nowMs = 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
+    assert.ok(runtime.hudSnapshot.camera.position.z > startingZ);
+    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.38) < 0.001);
+
+    runtime.dispose();
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.HTMLElement = originalHTMLElement;
+  }
+});
+
+test("WebGpuMetaverseRuntime routes mounted hub input through skiff locomotion and camera yaw", async () => {
+  const [
+    { WebGpuMetaverseRuntime },
+    { metaverseRuntimeConfig },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { characterProofConfig, createSceneAssetLoader, environmentProofConfig } =
+    await createSkiffMountProofSlice();
+  const renderer = new FakeMetaverseRenderer();
+  const originalWindow = globalThis.window;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const windowHarness = createInteractiveWindowHarness();
+  const fakeCanvas = {
+    addEventListener() {},
+    clientHeight: 720,
+    clientWidth: 1280,
+    removeEventListener() {}
+  };
+  let nowMs = 0;
+
+  globalThis.window = windowHarness.window;
+  globalThis.HTMLElement = class FakeHTMLElement {};
+
+  try {
+    const runtime = new WebGpuMetaverseRuntime(
+      {
+        ...metaverseRuntimeConfig,
+        camera: {
+          ...metaverseRuntimeConfig.camera,
+          spawnPosition: {
+            x: 0,
+            y: 1.62,
+            z: 24
+          }
+        },
+        groundedBody: {
+          ...metaverseRuntimeConfig.groundedBody,
+          spawnPosition: {
+            x: 0,
+            y: 0,
+            z: 24
+          }
+        },
+        portals: []
+      },
+      {
+        cancelAnimationFrame: globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+        characterProofConfig,
+        createRenderer: () => renderer,
+        createSceneAssetLoader,
+        environmentProofConfig,
+        physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+        readNowMs: () => nowMs,
+        requestAnimationFrame: globalThis.window.requestAnimationFrame.bind(globalThis.window)
+      }
+    );
+
+    await runtime.start(fakeCanvas, {
+      gpu: {}
+    });
+
+    assert.equal(
+      runtime.hudSnapshot.focusedMountable?.environmentAssetId,
+      "metaverse-hub-skiff-v1"
+    );
+
+    runtime.toggleMount();
+
+    assert.equal(
+      runtime.hudSnapshot.mountedEnvironment?.environmentAssetId,
+      "metaverse-hub-skiff-v1"
+    );
+    assert.equal(runtime.hudSnapshot.locomotionMode, "mounted");
+
+    const mountedCamera = runtime.hudSnapshot.camera;
+
+    windowHarness.dispatch("keydown", {
+      code: "KeyD"
+    });
+    windowHarness.dispatch("keydown", {
+      code: "KeyW"
+    });
+    nowMs = 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
+    assert.ok(
+      Math.abs(runtime.hudSnapshot.camera.yawRadians - mountedCamera.yawRadians) > 0.01
+    );
+    assert.ok(
+      runtime.hudSnapshot.camera.position.x !== mountedCamera.position.x ||
+        runtime.hudSnapshot.camera.position.z !== mountedCamera.position.z
+    );
+
+    runtime.toggleMount();
+
+    assert.equal(runtime.hudSnapshot.mountedEnvironment, null);
+    assert.equal(runtime.hudSnapshot.locomotionMode, "swim");
+
+    runtime.dispose();
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.HTMLElement = originalHTMLElement;
   }
 });
 
@@ -728,7 +1338,18 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       animationVocabulary: "walk",
       position: { x: 3.2, y: 0, z: -5.4 },
       yawRadians: 0.7
-    }
+    },
+    [
+      {
+        characterId: "metaverse-mannequin-v1",
+        playerId: "remote-pilot-2",
+        presentation: {
+          animationVocabulary: "walk",
+          position: { x: -1.5, y: 0, z: -6.2 },
+          yawRadians: -0.4
+        }
+      }
+    ]
   );
 
   assert.equal(characterRoot.visible, true);
@@ -745,6 +1366,14 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
   assert.equal(attachmentRoot.parent?.name, "hand_r_socket");
   assert.equal(attachmentRoot.position.length(), 0);
   assert.deepEqual(attachmentRoot.quaternion.toArray(), [0, 0, 0, 1]);
+  const remoteCharacterRoot = sceneRuntime.scene.getObjectByName(
+    "metaverse_character/metaverse-mannequin-v1/remote-pilot-2"
+  );
+
+  assert.ok(remoteCharacterRoot);
+  assert.equal(remoteCharacterRoot.position.x, -1.5);
+  assert.equal(remoteCharacterRoot.position.z, -6.2);
+  assert.equal(remoteCharacterRoot.rotation.y, -0.4);
 
   sceneRuntime.scene.updateMatrixWorld(true);
 
@@ -771,7 +1400,8 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
     null,
     100,
     0,
-    null
+    null,
+    []
   );
 
   assert.equal(characterRoot.visible, false);
@@ -779,6 +1409,12 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
   assert.equal(attachmentRoot.position.length(), 0);
   assert.deepEqual(attachmentRoot.quaternion.toArray(), [0, 0, 0, 1]);
   assert.ok(initialAttachmentQuaternion.angleTo(nextAttachmentQuaternion) > 0.001);
+  assert.equal(
+    sceneRuntime.scene.getObjectByName(
+      "metaverse_character/metaverse-mannequin-v1/remote-pilot-2"
+    ),
+    undefined
+  );
 });
 
 test("createMetaverseScene switches environment LOD tiers and instantiates repeated props", async () => {

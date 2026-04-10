@@ -3,6 +3,8 @@ export { CoopRoomDirectoryClient } from "./classes/coop-room-directory-client";
 export { profileStoragePlan } from "./config/profile-storage";
 export { LocalProfileStorage } from "./classes/local-profile-storage";
 export { coopRoomClientStates } from "./types/coop-room-client";
+export { MetaversePresenceClient } from "./classes/metaverse-presence-client";
+export { metaversePresenceClientStates } from "./types/metaverse-presence-client";
 export type { ProfileStoragePlan } from "./types/profile-storage";
 export type {
   CoopRoomDirectoryClientConfig
@@ -14,6 +16,13 @@ export type {
   CoopRoomJoinRequest,
   CoopRoomSnapshotStore
 } from "./types/coop-room-client";
+export type {
+  MetaversePresenceClientConfig,
+  MetaversePresenceClientState,
+  MetaversePresenceClientStatusSnapshot,
+  MetaversePresenceJoinRequest,
+  MetaversePresenceSnapshotStore
+} from "./types/metaverse-presence-client";
 export type {
   StoredCalibrationRecord,
   StoredPlayerProfileRecord,

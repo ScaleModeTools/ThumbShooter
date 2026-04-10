@@ -34,15 +34,21 @@ export const metaverseRuntimeConfig = {
     worldRadius: 110
   },
   groundedBody: {
+    accelerationCurveExponent: 1.22,
     accelerationUnitsPerSecondSquared: 22,
+    airborneMovementDampingFactor: 0.42,
     baseSpeedUnitsPerSecond: 8.5,
+    boostCurveExponent: 1.08,
     boostMultiplier: 1.75,
     capsuleHalfHeightMeters: 0.48,
     capsuleRadiusMeters: 0.34,
     controllerOffsetMeters: 0.02,
     decelerationUnitsPerSecondSquared: 30,
+    dragCurveExponent: 1.5,
     eyeHeightMeters: 1.62,
     gravityUnitsPerSecond: 18,
+    maxSlopeClimbAngleRadians: Math.PI * 0.26,
+    minSlopeSlideAngleRadians: Math.PI * 0.34,
     maxTurnSpeedRadiansPerSecond: 1.9,
     snapToGroundDistanceMeters: 0.22,
     stepHeightMeters: 0.28,
@@ -82,6 +88,30 @@ export const metaverseRuntimeConfig = {
       ripple: 1.28,
       secondary: 0.87
     }
+  },
+  skiff: {
+    accelerationCurveExponent: 1.08,
+    accelerationUnitsPerSecondSquared: 12,
+    baseSpeedUnitsPerSecond: 10.5,
+    boostCurveExponent: 1.02,
+    boostMultiplier: 1.55,
+    cameraEyeHeightMeters: 1.74,
+    decelerationUnitsPerSecondSquared: 14,
+    dragCurveExponent: 1.3,
+    maxTurnSpeedRadiansPerSecond: 1.45,
+    waterContactProbeRadiusMeters: 1.75,
+    waterlineHeightMeters: 0.12
+  },
+  swim: {
+    accelerationCurveExponent: 1.15,
+    accelerationUnitsPerSecondSquared: 11,
+    baseSpeedUnitsPerSecond: 4.8,
+    boostCurveExponent: 1.1,
+    boostMultiplier: 1.35,
+    cameraEyeHeightMeters: 1.38,
+    decelerationUnitsPerSecondSquared: 12,
+    dragCurveExponent: 1.35,
+    maxTurnSpeedRadiansPerSecond: 1.75
   },
   portals: [
     {

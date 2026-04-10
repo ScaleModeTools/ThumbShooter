@@ -22,21 +22,28 @@ export interface MetaverseGroundedBodySnapshot {
   readonly capsuleRadiusMeters: number;
   readonly eyeHeightMeters: number;
   readonly grounded: boolean;
+  readonly jumpReady: boolean;
   readonly planarSpeedUnitsPerSecond: number;
   readonly position: PhysicsVector3Snapshot;
   readonly yawRadians: number;
 }
 
 export interface MetaverseGroundedBodyConfig {
+  readonly accelerationCurveExponent: number;
   readonly accelerationUnitsPerSecondSquared: number;
+  readonly airborneMovementDampingFactor: number;
   readonly baseSpeedUnitsPerSecond: number;
+  readonly boostCurveExponent: number;
   readonly boostMultiplier: number;
   readonly capsuleHalfHeightMeters: number;
   readonly capsuleRadiusMeters: number;
   readonly controllerOffsetMeters: number;
   readonly decelerationUnitsPerSecondSquared: number;
+  readonly dragCurveExponent: number;
   readonly eyeHeightMeters: number;
   readonly gravityUnitsPerSecond: number;
+  readonly maxSlopeClimbAngleRadians: number;
+  readonly minSlopeSlideAngleRadians: number;
   readonly maxTurnSpeedRadiansPerSecond: number;
   readonly snapToGroundDistanceMeters: number;
   readonly stepHeightMeters: number;
