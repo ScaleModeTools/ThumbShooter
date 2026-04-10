@@ -10,7 +10,7 @@ small. Duck Hunt reuse is a follow-up goal, not part of this first execution.
 
 Add one grounded player-body path to the metaverse runtime that:
 
-- uses `three/addons/physics/RapierPhysics.js` as the current physics entrypoint
+- uses repo-owned `@dimforge/rapier3d` through `client/src/physics`
 - keeps physics engine details out of asset manifests
 - keeps the current fly path intact as a separate locomotion mode
 - reuses the existing mannequin asset as the visible body proof
@@ -32,7 +32,9 @@ Add one grounded player-body path to the metaverse runtime that:
 
 ## Local References
 
-- official addon doc:
+- official Rapier docs:
+  - `https://rapier.rs/docs/user_guides/javascript/getting_started_js/`
+- optional Three debug helper reference:
   - `https://threejs.org/docs/pages/RapierPhysics.html`
 - local upstream checkout:
   - `examples/rapier.js`
@@ -48,8 +50,8 @@ Add one grounded player-body path to the metaverse runtime that:
 Status: completed.
 
 - upstream `rapier.js` is checked out at `examples/rapier.js`
-- use this as a local source reference and fallback if the addon import path
-  ever needs tighter repo control
+- use this as a local source reference if package behavior or upstream loading
+  details ever need verification
 - do not import product code from this checkout
 
 ### Step 1 — Add Physics Domain Steering Surface
@@ -58,7 +60,7 @@ Status: completed.
 
 - add `client/src/physics/AGENTS.md`
 - lock that physics stays runtime-only, React-free, and manifest-agnostic
-- keep `RapierPhysics` and `RapierHelper` ownership centralized there
+- keep `@dimforge/rapier3d` and `RapierHelper` ownership centralized there
 
 ### Step 2 — Add Shared Physics Runtime Skeleton
 
@@ -72,7 +74,7 @@ Create the minimum shared client-local physics owner:
 
 Implementation target:
 
-- bootstrap `RapierPhysics()` once for the owning runtime
+- bootstrap repo-owned Rapier once for the owning runtime
 - expose the addon handle, world access, and optional debug-helper access
 - keep Rapier-specific imports inside `client/src/physics`
 
@@ -86,6 +88,9 @@ Exit check:
 
 - completed: the metaverse runtime now requests physics ownership through
   `client/src/physics` without importing Rapier directly
+- completed follow-up: `client/src/physics` now imports `@dimforge/rapier3d`
+  directly instead of relying on the Three addon CDN path, and the client
+  build hardens that path through Vite wasm support
 
 ### Step 3 — Add Grounded Body Types And Controller Owner
 
@@ -242,5 +247,5 @@ Only after this slice passes should the repo consider:
 
 1. reusing the grounded body snapshot shape in Duck Hunt
 2. adding explicit simple colliders for hub props beyond the ground plane
-3. deciding whether the addon's CDN loading behavior must be replaced with a
-   repo-owned local load path
+3. deciding whether the current repo-owned Rapier load path needs more than the
+   present Vite wasm support, or a vendored adapter

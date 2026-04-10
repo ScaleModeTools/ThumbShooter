@@ -81,9 +81,14 @@ export interface RapierWorldHandle {
   removeCollider(collider: RapierColliderHandle, wakeUp: boolean): void;
 }
 
+export interface RapierWorldConstructor {
+  new (gravity: RapierVectorLike): RapierWorldHandle;
+}
+
 export interface RapierApiHandle {
   readonly ColliderDesc: RapierColliderDescFactory;
   readonly Vector3: RapierVectorConstructor;
+  readonly World: RapierWorldConstructor;
 }
 
 export interface RapierPhysicsAddon {

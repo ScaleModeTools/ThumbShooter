@@ -1,9 +1,9 @@
 import type { Object3D } from "three/webgpu";
 import { RapierHelper } from "three/addons/helpers/RapierHelper.js";
-import { RapierPhysics } from "three/addons/physics/RapierPhysics.js";
 
 import type {
   PhysicsVector3Snapshot,
+  RapierApiHandle,
   RapierCharacterControllerHandle,
   RapierColliderHandle,
   RapierPhysicsAddon
@@ -16,12 +16,24 @@ interface RapierPhysicsRuntimeDependencies {
   readonly createPhysicsAddon?: () => Promise<RapierPhysicsAddon>;
 }
 
+const defaultGravity = Object.freeze({
+  x: 0,
+  y: -9.81,
+  z: 0
+});
+
 function toFiniteNumber(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
 async function createDefaultPhysicsAddon(): Promise<RapierPhysicsAddon> {
-  return (await RapierPhysics()) as RapierPhysicsAddon;
+  const rapierModule = (await import("@dimforge/rapier3d")) as unknown as
+    RapierApiHandle;
+
+  return {
+    RAPIER: rapierModule,
+    world: new rapierModule.World(defaultGravity)
+  } satisfies RapierPhysicsAddon;
 }
 
 function createDefaultDebugHelper(

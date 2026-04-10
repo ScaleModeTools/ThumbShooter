@@ -623,6 +623,16 @@ function verifyExternalPackageBoundaries(repoRoot, sourceFiles, errors) {
           `Illegal MediaPipe import in ${repoRelativePath}: @mediapipe/tasks-vision belongs in client/src/tracking/workers only.`
         );
       }
+
+      if (
+        (specifier === "@dimforge/rapier3d" ||
+          specifier.startsWith("@dimforge/rapier3d/")) &&
+        !repoRelativePath.startsWith("client/src/physics/")
+      ) {
+        errors.push(
+          `Illegal Rapier import in ${repoRelativePath}: @dimforge/rapier3d belongs in client/src/physics only.`
+        );
+      }
     }
 
     if (

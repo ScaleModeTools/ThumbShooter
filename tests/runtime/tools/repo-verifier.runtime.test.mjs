@@ -163,7 +163,8 @@ test("collectRepoVerificationErrors reports illegal runtime package ownership an
   const repoRoot = createFixtureRepo({
     "client/src/experiences/duck-hunt/classes/webgpu-gameplay-runtime.ts": `import { ShaderMaterial } from "three"; export const runtime = ShaderMaterial; `,
     "client/src/app/vision-screen.ts": `import { HandLandmarker } from "@mediapipe/tasks-vision"; export const view = HandLandmarker; `,
-    "client/src/app/audio-screen.ts": `export async function bootAudio() { return import("@strudel/web"); } `
+    "client/src/app/audio-screen.ts": `export async function bootAudio() { return import("@strudel/web"); } `,
+    "client/src/app/physics-screen.ts": `export async function bootPhysics() { return import("@dimforge/rapier3d"); } `
   });
 
   const errors = collectRepoVerificationErrors({ repoRoot, trackedFiles: [] });
@@ -196,6 +197,14 @@ test("collectRepoVerificationErrors reports illegal runtime package ownership an
     errors.some((error) =>
       error.includes(
         "Illegal Strudel import in client/src/app/audio-screen.ts: import the lightweight @strudel/web/web.mjs entrypoint instead of the package root."
+      )
+    )
+  );
+
+  assert.ok(
+    errors.some((error) =>
+      error.includes(
+        "Illegal Rapier import in client/src/app/physics-screen.ts: @dimforge/rapier3d belongs in client/src/physics only."
       )
     )
   );

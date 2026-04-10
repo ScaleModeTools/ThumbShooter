@@ -47,7 +47,9 @@ const MetaverseStageScreen = lazy(async () =>
   }))
 );
 const DuckHuntGameplayStageScreen = lazy(async () =>
-  import("../../experiences/duck-hunt/components").then((module) => ({
+  import(
+    "../../experiences/duck-hunt/components/duck-hunt-gameplay-stage-screen"
+  ).then((module) => ({
     default: module.DuckHuntGameplayStageScreen
   }))
 );

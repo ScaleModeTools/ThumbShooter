@@ -3,6 +3,7 @@ import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import wasm from "vite-plugin-wasm";
 
 const strudelBrowserEntrypoint = fileURLToPath(
   new URL("../node_modules/@strudel/web/web.mjs", import.meta.url)
@@ -16,6 +17,7 @@ const strudelOptimizeDeps = [
   "@strudel/web/web.mjs",
   "@strudel/webaudio"
 ] as const;
+const physicsOptimizeDeps = ["@dimforge/rapier3d"] as const;
 
 export default defineConfig({
   build: {
@@ -40,9 +42,9 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: [...strudelOptimizeDeps]
+    exclude: [...strudelOptimizeDeps, ...physicsOptimizeDeps]
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), wasm(), tailwindcss()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
