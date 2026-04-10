@@ -27,10 +27,11 @@ the current proof slice aligned with the documented packaging assumptions.
 
 ## Current Proof Slice Allowance
 
-The current metaverse proof assets are still shipped as embedded `.gltf`
-documents. That is allowed only for the existing proof slice while conversion
-helpers are not yet in repo. Do not widen that exception into new asset
-families.
+Most current metaverse proof render assets are still shipped as embedded
+`.gltf` documents. That legacy allowance remains limited to the existing proof
+slice while conversion helpers are not yet in repo. New authored character
+animation-pack work should ship as `.glb` and move refreshed assets toward the
+locked path below instead of widening the old `.gltf` exception.
 
 Proof-slice allowance rules:
 

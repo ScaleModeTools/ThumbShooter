@@ -4,7 +4,10 @@ import {
 import { socketIds } from "../types/asset-socket";
 import { defineCharacterAssetManifest } from "../types/character-asset-manifest";
 import {
+  metaverseMannequinAimAnimationClipId,
   metaverseMannequinIdleAnimationClipId,
+  metaverseMannequinInteractAnimationClipId,
+  metaverseMannequinSeatedAnimationClipId,
   metaverseMannequinWalkAnimationClipId
 } from "./animation-clip-manifest";
 
@@ -15,6 +18,9 @@ export const metaverseMannequinCharacterAssetId = createCharacterAssetId(
 export const metaverseMannequinArmsCharacterAssetId = createCharacterAssetId(
   "metaverse-mannequin-arms-v1"
 );
+
+export const metaverseActiveFullBodyCharacterAssetId =
+  metaverseMannequinCharacterAssetId;
 
 const metaverseMannequinRenderModel = Object.freeze({
   defaultTier: "high",
@@ -32,7 +38,10 @@ const metaverseMannequinCollisionPath =
 
 const metaverseMannequinAnimationClipIds = [
   metaverseMannequinIdleAnimationClipId,
-  metaverseMannequinWalkAnimationClipId
+  metaverseMannequinWalkAnimationClipId,
+  metaverseMannequinAimAnimationClipId,
+  metaverseMannequinInteractAnimationClipId,
+  metaverseMannequinSeatedAnimationClipId
 ] as const;
 
 export const characterModelManifest = defineCharacterAssetManifest([

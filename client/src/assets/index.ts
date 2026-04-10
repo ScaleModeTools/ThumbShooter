@@ -1,6 +1,10 @@
 export {
   animationClipManifest,
+  metaverseMannequinAimAnimationClipId,
+  metaverseMannequinCanonicalAnimationPackSourcePath,
   metaverseMannequinIdleAnimationClipId,
+  metaverseMannequinInteractAnimationClipId,
+  metaverseMannequinSeatedAnimationClipId,
   metaverseMannequinWalkAnimationClipId
 } from "./config/animation-clip-manifest";
 export {

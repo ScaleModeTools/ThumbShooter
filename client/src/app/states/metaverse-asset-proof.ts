@@ -1,11 +1,15 @@
 import { animationClipManifest } from "@/assets/config/animation-clip-manifest";
 import {
+  animationVocabularyIds,
+  canonicalAnimationClipNamesByVocabulary
+} from "@/assets/types/animation-clip-manifest";
+import {
   attachmentModelManifest,
   metaverseServicePistolAttachmentAssetId
 } from "@/assets/config/attachment-model-manifest";
 import {
   characterModelManifest,
-  metaverseMannequinCharacterAssetId
+  metaverseActiveFullBodyCharacterAssetId
 } from "@/assets/config/character-model-manifest";
 import {
   environmentPropManifest,
@@ -45,35 +49,92 @@ function resolveLodModelPath(renderModel: AssetLodGroup): string {
 
 function resolveMetaverseCharacterProofConfig(): MetaverseCharacterProofConfig {
   const characterDescriptor = characterModelManifest.characters.find(
-    (character) => character.id === metaverseMannequinCharacterAssetId
+    (character) => character.id === metaverseActiveFullBodyCharacterAssetId
   );
 
   if (characterDescriptor === undefined) {
     throw new Error(
-      `Metaverse character manifest is missing ${metaverseMannequinCharacterAssetId}.`
+      `Metaverse character manifest is missing ${metaverseActiveFullBodyCharacterAssetId}.`
     );
   }
 
-  if (characterDescriptor.animationClipIds[0] === undefined) {
-    throw new Error(`Metaverse character ${characterDescriptor.label} has no animation clip ids.`);
+  if (characterDescriptor.skeleton !== "humanoid_v1") {
+    throw new Error(
+      `Metaverse full-body proof character ${characterDescriptor.label} must stay on humanoid_v1.`
+    );
+  }
+
+  if (!characterDescriptor.presentationModes.some((mode) => mode === "full-body")) {
+    throw new Error(
+      `Metaverse full-body proof character ${characterDescriptor.label} must expose full-body presentation mode.`
+    );
+  }
+
+  const animationClipsByVocabulary = new Map<
+    MetaverseCharacterProofConfig["animationClips"][number]["vocabulary"],
+    MetaverseCharacterProofConfig["animationClips"][number]
+  >();
+
+  for (const clipId of characterDescriptor.animationClipIds) {
+    const clipDescriptor = animationClipManifest.clips.find((clip) => clip.id === clipId);
+
+    if (clipDescriptor === undefined) {
+      throw new Error(`Metaverse animation manifest is missing clip ${clipId}.`);
+    }
+
+    if (clipDescriptor.targetSkeleton !== characterDescriptor.skeleton) {
+      throw new Error(
+        `Metaverse clip ${clipDescriptor.label} targets ${clipDescriptor.targetSkeleton}, not ${characterDescriptor.skeleton}.`
+      );
+    }
+
+    if (
+      clipDescriptor.clipName !==
+      canonicalAnimationClipNamesByVocabulary[clipDescriptor.vocabulary]
+    ) {
+      throw new Error(
+        `Metaverse clip ${clipDescriptor.label} must preserve canonical clip name ${canonicalAnimationClipNamesByVocabulary[clipDescriptor.vocabulary]}.`
+      );
+    }
+
+    if (animationClipsByVocabulary.has(clipDescriptor.vocabulary)) {
+      throw new Error(
+        `Metaverse character ${characterDescriptor.label} has duplicate animation vocabulary ${clipDescriptor.vocabulary}.`
+      );
+    }
+
+    animationClipsByVocabulary.set(
+      clipDescriptor.vocabulary,
+      Object.freeze({
+        clipName: clipDescriptor.clipName,
+        sourcePath: clipDescriptor.sourcePath,
+        vocabulary: clipDescriptor.vocabulary
+      })
+    );
+  }
+
+  const missingVocabularies = animationVocabularyIds.filter(
+    (vocabulary) => !animationClipsByVocabulary.has(vocabulary)
+  );
+
+  if (missingVocabularies[0] !== undefined) {
+    throw new Error(
+      `Metaverse full-body proof character ${characterDescriptor.label} must resolve canonical animation vocabularies: ${missingVocabularies.join(", ")}.`
+    );
   }
 
   return Object.freeze({
     animationClips: Object.freeze(
-      characterDescriptor.animationClipIds.map((clipId) => {
-        const clipDescriptor = animationClipManifest.clips.find(
-          (clip) => clip.id === clipId
-        );
+      animationVocabularyIds.map((vocabulary) => {
+        const animationClip = animationClipsByVocabulary.get(vocabulary);
 
-        if (clipDescriptor === undefined) {
-          throw new Error(`Metaverse animation manifest is missing clip ${clipId}.`);
+        if (animationClip === undefined) {
+          throw new Error(
+            `Metaverse full-body proof character ${characterDescriptor.label} is missing animation vocabulary ${vocabulary}.`
+          );
         }
 
-        return Object.freeze({
-          clipName: clipDescriptor.clipName,
-          sourcePath: clipDescriptor.sourcePath,
-          vocabulary: clipDescriptor.vocabulary
-        });
+        return animationClip;
       })
     ),
     characterId: characterDescriptor.id,

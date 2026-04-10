@@ -73,7 +73,8 @@ once the implementation landed.
 3. Step 3 complete: first local manifests and root exports landed under
    `client/src/assets/config` and `client/src/assets/index.ts`.
 4. Step 4 complete: the metaverse runtime loads one character proof slice
-   through `GLTFLoader` and drives idle playback through `AnimationMixer`.
+   through `GLTFLoader` and drives manifest-resolved animation playback
+   through `AnimationMixer`.
 5. Step 5 complete: attachment proof wiring mounts a manifest-driven asset
    through `hand_r_socket`.
 6. Step 6 complete: canonical rig, socket semantics, and first animation
@@ -93,13 +94,16 @@ once the implementation landed.
 - current proof assets validate against manifest, naming, socket, scale, and
   delivery-path rules
 - the metaverse runtime now proves:
-  - character loading and animation
+  - character loading and canonical animation vocabulary resolution
   - socketed attachments
   - static, instanced, and dynamic environment assets
   - mount and dismount via `seat_socket`
   - local dynamic pushable environment assets driven by physics-owned pose sync
   - distance-based LOD switching
   - startup and stable-scene performance hardening
+- the active full-body proof character now resolves authored `idle`, `walk`,
+  `aim`, `interact`, and `seated` clips from a shipped local `.glb`
+  animation pack, and the old generated walk fallback is gone
 - current gate coverage lives in:
   - `tests/runtime/client/metaverse-asset-pipeline.test.mjs`
   - `tests/runtime/client/metaverse-runtime.test.mjs`

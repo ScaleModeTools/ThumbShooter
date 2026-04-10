@@ -1327,6 +1327,56 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
   );
 });
 
+test("metaverse asset proof resolves the active full-body humanoid character from manifests", async () => {
+  const [
+    {
+      characterModelManifest,
+      metaverseActiveFullBodyCharacterAssetId
+    },
+    {
+      animationClipManifest,
+      metaverseMannequinCanonicalAnimationPackSourcePath
+    },
+    { animationVocabularyIds },
+    { metaverseCharacterProofConfig }
+  ] = await Promise.all([
+    clientLoader.load("/src/assets/config/character-model-manifest.ts"),
+    clientLoader.load("/src/assets/config/animation-clip-manifest.ts"),
+    clientLoader.load("/src/assets/types/animation-clip-manifest.ts"),
+    clientLoader.load("/src/app/states/metaverse-asset-proof.ts")
+  ]);
+
+  const activeCharacter =
+    characterModelManifest.byId[metaverseActiveFullBodyCharacterAssetId];
+
+  assert.ok(activeCharacter);
+  assert.equal(activeCharacter.skeleton, "humanoid_v1");
+  assert.ok(activeCharacter.presentationModes.includes("full-body"));
+  assert.equal(
+    metaverseCharacterProofConfig.characterId,
+    metaverseActiveFullBodyCharacterAssetId
+  );
+  assert.equal(
+    metaverseCharacterProofConfig.modelPath,
+    activeCharacter.renderModel.lods[0]?.modelPath
+  );
+  assert.deepEqual(
+    metaverseCharacterProofConfig.animationClips.map((clip) => clip.vocabulary),
+    [...animationVocabularyIds]
+  );
+  assert.deepEqual(
+    new Set(metaverseCharacterProofConfig.animationClips.map((clip) => clip.sourcePath)),
+    new Set([metaverseMannequinCanonicalAnimationPackSourcePath])
+  );
+
+  for (const clipId of activeCharacter.animationClipIds) {
+    const clipDescriptor = animationClipManifest.byId[clipId];
+
+    assert.ok(clipDescriptor);
+    assert.equal(clipDescriptor.targetSkeleton, activeCharacter.skeleton);
+  }
+});
+
 test("metaverse asset proof resolves static, instanced, and dynamic environment config from manifests", async () => {
   const { metaverseEnvironmentProofConfig } = await clientLoader.load(
     "/src/app/states/metaverse-asset-proof.ts"
@@ -1502,7 +1552,10 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
     clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
   ]);
 
+  const authoredAnimationPackPath =
+    "/models/metaverse/characters/metaverse-mannequin-canonical-animations.glb";
   const loadPaths = [];
+  const warnings = [];
   const bodyGeometry = new BoxGeometry(0.4, 1.8, 0.3);
   const vertexCount = bodyGeometry.attributes.position.count;
   const skinIndices = new Uint16Array(vertexCount * 4);
@@ -1585,6 +1638,11 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       ...new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.3).toArray()
     ])
   ]);
+  const walkClip = new AnimationClip("walk", -1, []);
+  const aimClip = new AnimationClip("aim", -1, []);
+  const interactClip = new AnimationClip("interact", -1, []);
+  const seatedClip = new AnimationClip("seated", -1, []);
+  const animationPackScene = new Group();
   const attachmentScene = new Group();
   const attachmentMesh = new Mesh(
     new BoxGeometry(0.28, 0.08, 0.08),
@@ -1606,13 +1664,28 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       animationClips: [
         {
           clipName: "idle",
-          sourcePath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+          sourcePath: authoredAnimationPackPath,
           vocabulary: "idle"
         },
         {
           clipName: "walk",
-          sourcePath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+          sourcePath: authoredAnimationPackPath,
           vocabulary: "walk"
+        },
+        {
+          clipName: "aim",
+          sourcePath: authoredAnimationPackPath,
+          vocabulary: "aim"
+        },
+        {
+          clipName: "interact",
+          sourcePath: authoredAnimationPackPath,
+          vocabulary: "interact"
+        },
+        {
+          clipName: "seated",
+          sourcePath: authoredAnimationPackPath,
+          vocabulary: "seated"
         }
       ],
       characterId: "metaverse-mannequin-v1",
@@ -1631,13 +1704,22 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
           };
         }
 
+        if (path === authoredAnimationPackPath) {
+          return {
+            animations: [idleClip, walkClip, aimClip, interactClip, seatedClip],
+            scene: animationPackScene
+          };
+        }
+
         return {
-          animations: [idleClip],
+          animations: [],
           scene: characterScene
         };
       }
     }),
-    warn() {}
+    warn(message) {
+      warnings.push(message);
+    }
   });
 
   await sceneRuntime.boot();
@@ -1648,8 +1730,13 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
 
   assert.deepEqual(loadPaths, [
     "/models/metaverse/characters/metaverse-mannequin.gltf",
+    authoredAnimationPackPath,
     "/models/metaverse/attachments/metaverse-service-pistol.gltf"
   ]);
+  assert.equal(
+    warnings.some((message) => message.includes("missing authored walk animation")),
+    false
+  );
   assert.ok(characterRoot);
   assert.ok(sceneRuntime.scene.getObjectByName("socket_debug/hand_r_socket"));
   assert.ok(sceneRuntime.scene.getObjectByName("socket_debug/head_socket"));
@@ -1813,6 +1900,134 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       "metaverse_character/metaverse-mannequin-v1/remote-pilot-2"
     ),
     undefined
+  );
+});
+
+test("createMetaverseScene requires an authored walk clip when walk vocabulary is requested", async () => {
+  const [
+    { AnimationClip, Bone, BoxGeometry, Float32BufferAttribute, Group, MeshStandardMaterial, Skeleton, SkinnedMesh, Uint16BufferAttribute },
+    { createMetaverseScene },
+    { metaverseRuntimeConfig }
+  ] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load("/src/metaverse/render/webgpu-metaverse-scene.ts"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
+  ]);
+
+  const bodyGeometry = new BoxGeometry(0.4, 1.8, 0.3);
+  const vertexCount = bodyGeometry.attributes.position.count;
+  const skinIndices = new Uint16Array(vertexCount * 4);
+  const skinWeights = new Float32Array(vertexCount * 4);
+
+  for (let index = 0; index < vertexCount; index += 1) {
+    skinIndices[index * 4] = 0;
+    skinWeights[index * 4] = 1;
+  }
+
+  bodyGeometry.setAttribute("skinIndex", new Uint16BufferAttribute(skinIndices, 4));
+  bodyGeometry.setAttribute("skinWeight", new Float32BufferAttribute(skinWeights, 4));
+
+  const rootBone = new Bone();
+  rootBone.name = "humanoid_root";
+  const hipsBone = new Bone();
+  hipsBone.name = "hips";
+  hipsBone.position.y = 0.45;
+  rootBone.add(hipsBone);
+  const spineBone = new Bone();
+  spineBone.name = "spine";
+  spineBone.position.y = 0.45;
+  hipsBone.add(spineBone);
+  const chestBone = new Bone();
+  chestBone.name = "chest";
+  chestBone.position.y = 0.45;
+  spineBone.add(chestBone);
+  const neckBone = new Bone();
+  neckBone.name = "neck";
+  neckBone.position.y = 0.25;
+  chestBone.add(neckBone);
+  const socketNames = [
+    "head_socket",
+    "hand_l_socket",
+    "hand_r_socket",
+    "hip_socket",
+    "seat_socket"
+  ];
+  const socketBones = socketNames.map((socketName) => {
+    const socketBone = new Bone();
+    socketBone.name = socketName;
+    return socketBone;
+  });
+
+  neckBone.add(socketBones[0]);
+  chestBone.add(socketBones[1], socketBones[2]);
+  hipsBone.add(socketBones[3], socketBones[4]);
+
+  const skinnedMesh = new SkinnedMesh(
+    bodyGeometry,
+    new MeshStandardMaterial({ color: 0xa8b8d1 })
+  );
+  const characterScene = new Group();
+  const skeleton = new Skeleton([
+    rootBone,
+    hipsBone,
+    spineBone,
+    chestBone,
+    neckBone,
+    ...socketBones
+  ]);
+
+  skinnedMesh.add(rootBone);
+  skinnedMesh.bind(skeleton);
+  characterScene.add(skinnedMesh);
+
+  const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
+    characterProofConfig: {
+      animationClips: [
+        {
+          clipName: "idle",
+          sourcePath: "/models/metaverse/characters/metaverse-mannequin-canonical-animations.glb",
+          vocabulary: "idle"
+        },
+        {
+          clipName: "walk",
+          sourcePath: "/models/metaverse/characters/metaverse-mannequin-canonical-animations.glb",
+          vocabulary: "walk"
+        }
+      ],
+      characterId: "metaverse-mannequin-v1",
+      label: "Metaverse mannequin",
+      modelPath: "/models/metaverse/characters/metaverse-mannequin.gltf",
+      socketNames
+    },
+    createSceneAssetLoader: () => ({
+      async loadAsync(path) {
+        if (path === "/models/metaverse/characters/metaverse-mannequin.gltf") {
+          return {
+            animations: [],
+            scene: characterScene
+          };
+        }
+
+        return {
+          animations: [new AnimationClip("idle", -1, [])],
+          scene: new Group()
+        };
+      }
+    }),
+    warn(message) {
+      warnings.push(message);
+    }
+  });
+
+  const warnings = [];
+
+  await assert.rejects(
+    sceneRuntime.boot(),
+    /Metaverse character metaverse-mannequin-v1 is missing animation walk\./
+  );
+  assert.equal(
+    warnings.some((message) => message.includes("missing authored walk animation")),
+    false
   );
 });
 
@@ -2204,6 +2419,7 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
   characterScene.add(skinnedMesh);
 
   const idleClip = new AnimationClip("idle", -1, []);
+  const walkClip = new AnimationClip("walk", -1, []);
   const skiffScene = new Group();
   const skiffHull = new Mesh(
     new BoxGeometry(4.2, 0.6, 1.8),
@@ -2246,7 +2462,7 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
         }
 
         return {
-          animations: [idleClip],
+          animations: [idleClip, walkClip],
           scene: characterScene
         };
       }

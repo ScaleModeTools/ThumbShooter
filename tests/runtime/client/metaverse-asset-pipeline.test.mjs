@@ -9,10 +9,33 @@ let clientLoader;
 const metaverseDeliveryPathPattern =
   /^\/models\/metaverse\/(?:attachments|characters|environment)\/[a-z0-9]+(?:-[a-z0-9]+)*(?:-(?:high|medium|low|collision))?\.(?:glb|gltf)$/;
 
-async function loadMetaverseGltfDocument(assetPath) {
+async function loadMetaverseAssetBuffer(assetPath) {
+  return readFile(new URL(`../../../client/public${assetPath}`, import.meta.url));
+}
+
+function parseMetaverseGlbDocument(assetBuffer) {
+  const magic = assetBuffer.subarray(0, 4).toString("utf8");
+
+  assert.equal(magic, "glTF");
+
+  const jsonChunkLength = assetBuffer.readUInt32LE(12);
+  const jsonChunkType = assetBuffer.readUInt32LE(16);
+
+  assert.equal(jsonChunkType, 0x4e4f534a);
+
   return JSON.parse(
-    await readFile(new URL(`../../../client/public${assetPath}`, import.meta.url), "utf8")
+    assetBuffer.subarray(20, 20 + jsonChunkLength).toString("utf8").trim()
   );
+}
+
+async function loadMetaverseAssetDocument(assetPath) {
+  const assetBuffer = await loadMetaverseAssetBuffer(assetPath);
+
+  if (assetPath.endsWith(".glb")) {
+    return parseMetaverseGlbDocument(assetBuffer);
+  }
+
+  return JSON.parse(assetBuffer.toString("utf8"));
 }
 
 function collectMetaverseDeliveryPaths({
@@ -101,12 +124,16 @@ test("canonical humanoid rig keeps stable bone and socket parentage", async () =
 test("character manifests expose two humanoid-compatible assets on the same vocabulary", async () => {
   const [
     {
+      metaverseActiveFullBodyCharacterAssetId,
       metaverseMannequinArmsCharacterAssetId,
       metaverseMannequinCharacterAssetId,
       characterModelManifest
     },
-    { animationClipManifest },
-    { canonicalAnimationClipNamesByVocabulary },
+    {
+      animationClipManifest,
+      metaverseMannequinCanonicalAnimationPackSourcePath
+    },
+    { animationVocabularyIds, canonicalAnimationClipNamesByVocabulary },
     { socketIds }
   ] = await Promise.all([
     clientLoader.load("/src/assets/config/character-model-manifest.ts"),
@@ -119,6 +146,14 @@ test("character manifests expose two humanoid-compatible assets on the same voca
 
   assert.ok(characterIds.includes(metaverseMannequinCharacterAssetId));
   assert.ok(characterIds.includes(metaverseMannequinArmsCharacterAssetId));
+  assert.ok(characterIds.includes(metaverseActiveFullBodyCharacterAssetId));
+
+  const activeFullBodyCharacter =
+    characterModelManifest.byId[metaverseActiveFullBodyCharacterAssetId];
+
+  assert.ok(activeFullBodyCharacter);
+  assert.equal(activeFullBodyCharacter.skeleton, "humanoid_v1");
+  assert.ok(activeFullBodyCharacter.presentationModes.includes("full-body"));
 
   const humanoidCharacters = characterModelManifest.characters.filter(
     (character) => character.skeleton === "humanoid_v1"
@@ -137,18 +172,32 @@ test("character manifests expose two humanoid-compatible assets on the same voca
       return clipDescriptor.vocabulary;
     });
 
-    assert.ok(clipVocabularies.includes("idle"));
-    assert.ok(clipVocabularies.includes("walk"));
+    assert.deepEqual(
+      [...clipVocabularies].sort(),
+      [...animationVocabularyIds].sort()
+    );
 
     for (const clipId of character.animationClipIds) {
       const clipDescriptor = animationClipManifest.byId[clipId];
 
+      assert.equal(clipDescriptor.targetSkeleton, character.skeleton);
       assert.equal(
         clipDescriptor.clipName,
         canonicalAnimationClipNamesByVocabulary[clipDescriptor.vocabulary]
       );
     }
   }
+
+  const activeClipSourcePaths = new Set(
+    activeFullBodyCharacter.animationClipIds.map(
+      (clipId) => animationClipManifest.byId[clipId].sourcePath
+    )
+  );
+
+  assert.deepEqual(
+    [...activeClipSourcePaths],
+    [metaverseMannequinCanonicalAnimationPackSourcePath]
+  );
 });
 
 test("metaverse asset manifests keep stable shipped delivery paths and LOD naming", async () => {
@@ -177,6 +226,14 @@ test("metaverse asset manifests keep stable shipped delivery paths and LOD namin
   for (const assetPath of deliveryPaths) {
     assert.match(assetPath, metaverseDeliveryPathPattern);
     assert.equal(/-v\d+\.(?:glb|gltf)$/.test(assetPath), false);
+
+    const assetBuffer = await loadMetaverseAssetBuffer(assetPath);
+
+    assert.ok(assetBuffer.byteLength > 0);
+
+    if (assetPath.endsWith(".glb")) {
+      assert.equal(assetBuffer.subarray(0, 4).toString("utf8"), "glTF");
+    }
   }
 
   for (const environmentAsset of environmentPropManifest.environmentAssets) {
@@ -212,7 +269,7 @@ test("current proof-slice gltf assets keep embedded payloads and normalized node
   }).filter((assetPath) => assetPath.endsWith(".gltf"));
 
   const proofDocuments = await Promise.all(
-    proofGltfPaths.map(async (assetPath) => [assetPath, await loadMetaverseGltfDocument(assetPath)])
+    proofGltfPaths.map(async (assetPath) => [assetPath, await loadMetaverseAssetDocument(assetPath)])
   );
 
   for (const [assetPath, document] of proofDocuments) {
@@ -246,26 +303,47 @@ test("current proof-slice gltf assets keep embedded payloads and normalized node
   }
 });
 
-test("proof delivery assets keep canonical character sockets and mount seat sockets", async () => {
+test("proof delivery assets keep canonical character sockets, animation vocabulary clips, and mount seat sockets", async () => {
   const [
     { humanoidV1BoneNames, socketIds },
     { characterModelManifest, metaverseMannequinCharacterAssetId },
+    {
+      metaverseMannequinCanonicalAnimationPackSourcePath
+    },
+    { animationVocabularyIds },
     { environmentPropManifest, metaverseHubSkiffEnvironmentAssetId }
   ] = await Promise.all([
     clientLoader.load("/src/assets/types/asset-socket.ts"),
     clientLoader.load("/src/assets/config/character-model-manifest.ts"),
+    clientLoader.load("/src/assets/config/animation-clip-manifest.ts"),
+    clientLoader.load("/src/assets/types/animation-clip-manifest.ts"),
     clientLoader.load("/src/assets/config/environment-prop-manifest.ts")
   ]);
 
   const mannequinAsset = characterModelManifest.byId[metaverseMannequinCharacterAssetId];
   const skiffAsset = environmentPropManifest.byId[metaverseHubSkiffEnvironmentAssetId];
-  const mannequinDocument = await loadMetaverseGltfDocument(
+  const mannequinDocument = await loadMetaverseAssetDocument(
     mannequinAsset.renderModel.lods[0].modelPath
   );
-  const skiffDocument = await loadMetaverseGltfDocument(skiffAsset.renderModel.lods[0].modelPath);
+  const animationPackDocument = await loadMetaverseAssetDocument(
+    metaverseMannequinCanonicalAnimationPackSourcePath
+  );
+  const skiffDocument = await loadMetaverseAssetDocument(
+    skiffAsset.renderModel.lods[0].modelPath
+  );
   const mannequinNodeNames = new Set(
     (mannequinDocument.nodes ?? [])
       .map((node) => node.name)
+      .filter((name) => typeof name === "string")
+  );
+  const animationPackNodeNames = new Set(
+    (animationPackDocument.nodes ?? [])
+      .map((node) => node.name)
+      .filter((name) => typeof name === "string")
+  );
+  const animationPackClipNames = new Set(
+    (animationPackDocument.animations ?? [])
+      .map((animation) => animation.name)
       .filter((name) => typeof name === "string")
   );
   const skiffNodeNames = new Set(
@@ -276,11 +354,14 @@ test("proof delivery assets keep canonical character sockets and mount seat sock
 
   for (const boneName of humanoidV1BoneNames) {
     assert.ok(mannequinNodeNames.has(boneName));
+    assert.ok(animationPackNodeNames.has(boneName));
   }
 
   for (const socketId of socketIds) {
     assert.ok(mannequinNodeNames.has(socketId));
+    assert.ok(animationPackNodeNames.has(socketId));
   }
 
+  assert.deepEqual([...animationPackClipNames].sort(), [...animationVocabularyIds].sort());
   assert.ok(skiffNodeNames.has("seat_socket"));
 });

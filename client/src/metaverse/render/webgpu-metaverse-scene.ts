@@ -20,12 +20,10 @@ import {
   type Object3D,
   PerspectiveCamera,
   Quaternion,
-  QuaternionKeyframeTrack,
   PlaneGeometry,
   Scene,
   SphereGeometry,
   TorusGeometry,
-  VectorKeyframeTrack,
   Vector3
 } from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -1057,86 +1055,6 @@ function validateCharacterScale(
   }
 }
 
-function createQuaternionTrackValues(
-  node: Object3D,
-  axis: Vector3,
-  anglesRadians: readonly number[]
-): readonly number[] {
-  const baseQuaternion = node.quaternion.clone();
-  const offsetQuaternion = new Quaternion();
-  const values: number[] = [];
-
-  for (const angleRadians of anglesRadians) {
-    const trackQuaternion = baseQuaternion
-      .clone()
-      .multiply(offsetQuaternion.setFromAxisAngle(axis, angleRadians));
-
-    values.push(
-      trackQuaternion.x,
-      trackQuaternion.y,
-      trackQuaternion.z,
-      trackQuaternion.w
-    );
-  }
-
-  return values;
-}
-
-function createGeneratedWalkClip(characterScene: Group): AnimationClip {
-  const hipsNode = findNamedNode(characterScene, "hips", "Metaverse character walk proof");
-  const leftHandSocketNode = findSocketNode(characterScene, "hand_l_socket");
-  const rightHandSocketNode = findSocketNode(characterScene, "hand_r_socket");
-  const chestNode = findNamedNode(characterScene, "chest", "Metaverse character walk proof");
-  const keyframeTimes = [0, 0.25, 0.5, 0.75, 1] as const;
-  const armSwingAnglesRadians = [0.38, 0, -0.38, 0, 0.38] as const;
-  const chestSwayAnglesRadians = [0.06, 0, -0.06, 0, 0.06] as const;
-  const bobOffsetsMeters = [0, 0.035, 0, 0.035, 0] as const;
-  const hipsPositionValues: number[] = [];
-
-  for (const bobOffsetMeters of bobOffsetsMeters) {
-    hipsPositionValues.push(
-      hipsNode.position.x,
-      hipsNode.position.y + bobOffsetMeters,
-      hipsNode.position.z
-    );
-  }
-
-  return new AnimationClip("walk", 1, [
-    new QuaternionKeyframeTrack(
-      `${leftHandSocketNode.name}.quaternion`,
-      keyframeTimes,
-      createQuaternionTrackValues(
-        leftHandSocketNode,
-        new Vector3(1, 0, 0),
-        armSwingAnglesRadians
-      )
-    ),
-    new QuaternionKeyframeTrack(
-      `${rightHandSocketNode.name}.quaternion`,
-      keyframeTimes,
-      createQuaternionTrackValues(
-        rightHandSocketNode,
-        new Vector3(1, 0, 0),
-        armSwingAnglesRadians.map((angleRadians) => -angleRadians)
-      )
-    ),
-    new QuaternionKeyframeTrack(
-      `${chestNode.name}.quaternion`,
-      keyframeTimes,
-      createQuaternionTrackValues(
-        chestNode,
-        new Vector3(0, 0, 1),
-        chestSwayAnglesRadians
-      )
-    ),
-    new VectorKeyframeTrack(
-      `${hipsNode.name}.position`,
-      keyframeTimes,
-      hipsPositionValues
-    )
-  ]);
-}
-
 async function loadMetaverseCharacterProofRuntime(
   characterProofConfig: MetaverseCharacterProofConfig,
   createSceneAssetLoader: () => SceneAssetLoader,
@@ -1171,16 +1089,9 @@ async function loadMetaverseCharacterProofRuntime(
       animationAssetsByPath.set(animationClipConfig.sourcePath, animationAsset);
     }
 
-    let clip = animationAsset.animations.find(
+    const clip = animationAsset.animations.find(
       (animation) => animation.name === animationClipConfig.clipName
     );
-
-    if (clip === undefined && animationClipConfig.vocabulary === "walk") {
-      clip = createGeneratedWalkClip(characterAsset.scene);
-      warn(
-        `Metaverse character ${characterProofConfig.characterId} is missing authored walk animation; using a generated local proof clip.`
-      );
-    }
 
     if (clip === undefined) {
       throw new Error(
