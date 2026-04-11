@@ -465,6 +465,62 @@ test("MetaverseTraversalRuntime keeps the grounded first-person camera ahead of 
   }
 });
 
+test("MetaverseTraversalRuntime steers grounded and swim character yaw from look input", async () => {
+  const groundedHarness = await createTraversalHarness({
+    surfaceColliderSnapshots: [
+      Object.freeze({
+        halfExtents: freezeVector3(4, 0.2, 4),
+        rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+        translation: freezeVector3(0, -0.1, 24)
+      })
+    ]
+  });
+  const swimHarness = await createTraversalHarness();
+  const lookRightInput = Object.freeze({
+    boost: false,
+    jump: false,
+    moveAxis: 0,
+    pitchAxis: 0,
+    primaryAction: false,
+    secondaryAction: false,
+    strafeAxis: 0,
+    yawAxis: 1
+  });
+
+  try {
+    groundedHarness.traversalRuntime.boot();
+    assert.equal(groundedHarness.traversalRuntime.locomotionMode, "grounded");
+
+    const groundedStartYaw =
+      groundedHarness.traversalRuntime.cameraSnapshot.yawRadians;
+    groundedHarness.traversalRuntime.advance(lookRightInput, 1 / 60);
+
+    assert.ok(
+      groundedHarness.traversalRuntime.cameraSnapshot.yawRadians >
+        groundedStartYaw
+    );
+    assert.equal(
+      groundedHarness.traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      groundedHarness.traversalRuntime.cameraSnapshot.yawRadians
+    );
+
+    swimHarness.traversalRuntime.boot();
+    assert.equal(swimHarness.traversalRuntime.locomotionMode, "swim");
+
+    const swimStartYaw = swimHarness.traversalRuntime.cameraSnapshot.yawRadians;
+    swimHarness.traversalRuntime.advance(lookRightInput, 1 / 60);
+
+    assert.ok(swimHarness.traversalRuntime.cameraSnapshot.yawRadians > swimStartYaw);
+    assert.equal(
+      swimHarness.traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      swimHarness.traversalRuntime.cameraSnapshot.yawRadians
+    );
+  } finally {
+    groundedHarness.groundedBodyRuntime.dispose();
+    swimHarness.groundedBodyRuntime.dispose();
+  }
+});
+
 test("MetaverseTraversalRuntime routes skiff mounting through the traversal owner and restores swim on dismount", async () => {
   const { config, dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
     await createTraversalHarness({
@@ -509,6 +565,53 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
     traversalRuntime.syncMountedEnvironment(null);
 
     assert.equal(traversalRuntime.locomotionMode, "swim");
+    assert.equal(
+      traversalRuntime.cameraSnapshot.position.y,
+      config.ocean.height +
+        config.swim.cameraEyeHeightMeters +
+        config.bodyPresentation.swimThirdPersonHeightOffsetMeters
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime keeps swim character presentation partially submerged for idle and moving swim", async () => {
+  const { config, groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "swim-idle"
+    );
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.position.y,
+      config.ocean.height - config.bodyPresentation.swimBodySubmersionDepthMeters
+    );
+    assert.equal(
+      traversalRuntime.cameraSnapshot.position.y,
+      config.ocean.height +
+        config.swim.cameraEyeHeightMeters +
+        config.bodyPresentation.swimThirdPersonHeightOffsetMeters
+    );
+
+    for (let frame = 0; frame < 20; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+    }
+
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "swim"
+    );
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.position.y,
+      config.ocean.height - config.bodyPresentation.swimBodySubmersionDepthMeters
+    );
     assert.equal(
       traversalRuntime.cameraSnapshot.position.y,
       config.ocean.height +

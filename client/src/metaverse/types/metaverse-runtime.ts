@@ -189,6 +189,7 @@ export interface MetaverseRuntimeConfig {
   };
   readonly bodyPresentation: {
     readonly groundedFirstPersonForwardOffsetMeters: number;
+    readonly swimBodySubmersionDepthMeters: number;
     readonly swimThirdPersonFollowDistanceMeters: number;
     readonly swimThirdPersonHeightOffsetMeters: number;
   };

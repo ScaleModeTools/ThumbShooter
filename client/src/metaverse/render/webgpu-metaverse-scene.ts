@@ -268,7 +268,7 @@ function wrapRadians(rawValue: number): number {
 }
 
 function resolveCharacterRenderYawRadians(yawRadians: number): number {
-  return wrapRadians(yawRadians + metaverseCharacterRenderYawOffsetRadians);
+  return wrapRadians(metaverseCharacterRenderYawOffsetRadians - yawRadians);
 }
 
 function toThreeColor(rgb: readonly [number, number, number]): Color {

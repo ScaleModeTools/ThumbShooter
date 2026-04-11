@@ -37,6 +37,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/metaverse/classes/metaverse-flight-input-runtime.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-flight-input-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/metaverse/classes/metaverse-traversal-runtime.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-traversal-runtime.test.mjs"

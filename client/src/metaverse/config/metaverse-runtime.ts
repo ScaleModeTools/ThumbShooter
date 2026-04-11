@@ -15,6 +15,7 @@ export const metaverseRuntimeConfig = {
   },
   bodyPresentation: {
     groundedFirstPersonForwardOffsetMeters: 0.24,
+    swimBodySubmersionDepthMeters: 0.72,
     swimThirdPersonFollowDistanceMeters: 1.2,
     swimThirdPersonHeightOffsetMeters: 0.52
   },

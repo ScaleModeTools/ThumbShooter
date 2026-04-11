@@ -44,10 +44,7 @@ import {
   createMetaverseCameraSnapshot,
   resolveFocusedPortalSnapshot
 } from "../states/metaverse-flight";
-import type {
-  MetaverseControlModeId,
-  MetaverseFlightInputSnapshot
-} from "../types/metaverse-control-mode";
+import type { MetaverseControlModeId } from "../types/metaverse-control-mode";
 import type {
   FocusedExperiencePortalSnapshot,
   FocusedMountableSnapshot,
@@ -60,6 +57,7 @@ import type {
   MetaverseRuntimeConfig,
   MountedEnvironmentSnapshot
 } from "../types/metaverse-runtime";
+import { MetaverseFlightInputRuntime } from "./metaverse-flight-input-runtime";
 
 interface MetaverseRendererHost {
   compileAsync?(scene: Scene, camera: Camera): Promise<void>;
@@ -113,35 +111,16 @@ interface MetaversePresenceClientRuntime {
   dispose(): void;
 }
 
-interface KeyboardFlightInputState {
-  boost: boolean;
-  jump: boolean;
-  moveBackward: boolean;
-  moveForward: boolean;
-  strafeLeft: boolean;
-  strafeRight: boolean;
-}
-
-interface MouseFlightInputState {
-  lookDeltaX: number;
-  lookDeltaY: number;
-  primaryAction: boolean;
-  secondaryAction: boolean;
-}
-
 type MetaversePhysicsDebugObject = Object3D & {
   dispose?(): void;
   update?(): void;
 };
-
-type MouseFlightButtonInputKey = "primaryAction" | "secondaryAction";
 
 const metaverseUiUpdateIntervalMs = 120;
 const metaversePushableBodyAdditionalMass = 12;
 const metaversePushableBodyAngularDamping = 10;
 const metaversePushableBodyGravityScale = 1;
 const metaversePushableBodyLinearDamping = 4.5;
-const metaverseMouseLookPixelsPerAxisUnit = 240;
 
 function freezePresenceHudSnapshot(
   state: MetaverseHudSnapshot["presence"]["state"],
@@ -201,14 +180,6 @@ function toFiniteNumber(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
-  return Math.min(max, Math.max(min, value));
-}
-
 function freezeVector3(
   x: number,
   y: number,
@@ -219,26 +190,6 @@ function freezeVector3(
     y: toFiniteNumber(y),
     z: toFiniteNumber(z)
   });
-}
-
-function createKeyboardFlightInputState(): KeyboardFlightInputState {
-  return {
-    boost: false,
-    jump: false,
-    moveBackward: false,
-    moveForward: false,
-    strafeLeft: false,
-    strafeRight: false
-  };
-}
-
-function createMouseFlightInputState(): MouseFlightInputState {
-  return {
-    lookDeltaX: 0,
-    lookDeltaY: 0,
-    primaryAction: false,
-    secondaryAction: false
-  };
 }
 
 function freezeHudSnapshot(
@@ -265,34 +216,6 @@ function freezeHudSnapshot(
   });
 }
 
-function isEditableEventTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.tagName === "SELECT")
-  );
-}
-
-function isPointerLockActive(canvas: HTMLCanvasElement): boolean {
-  const pointerLockElement = globalThis.document?.pointerLockElement;
-
-  return pointerLockElement === undefined || pointerLockElement === canvas;
-}
-
-function requestPointerLockIfAvailable(canvas: HTMLCanvasElement): void {
-  const requestPointerLock = canvas.requestPointerLock;
-
-  if (typeof requestPointerLock !== "function") {
-    return;
-  }
-
-  void Promise.resolve(requestPointerLock.call(canvas)).catch(() => {
-    // Pointer lock can be denied when the browser requires a stricter user gesture.
-  });
-}
-
 function resolveRuntimeFailureReason(error: unknown): string {
   if (
     error instanceof Error &&
@@ -312,10 +235,9 @@ export class WebGpuMetaverseRuntime {
   readonly #createSceneAssetLoader: () => SceneAssetLoader;
   readonly #devicePixelRatio: number;
   readonly #environmentProofConfig: MetaverseEnvironmentProofConfig | null;
+  readonly #flightInputRuntime = new MetaverseFlightInputRuntime();
   readonly #groundedBodyRuntime: MetaverseGroundedBodyRuntime;
-  readonly #keyboardInput = createKeyboardFlightInputState();
   readonly #localPlayerIdentity: MetaverseLocalPlayerIdentity | null;
-  readonly #mouseInput = createMouseFlightInputState();
   readonly #physicsRuntime: RapierPhysicsRuntime;
   readonly #sceneRuntime: ReturnType<typeof createMetaverseScene>;
   readonly #showPhysicsDebug: boolean;
@@ -331,7 +253,6 @@ export class WebGpuMetaverseRuntime {
   #focusedPortal: FocusedExperiencePortalSnapshot | null = null;
   #groundCollider: RapierColliderHandle | null = null;
   #hudSnapshot: MetaverseHudSnapshot;
-  #inputCleanup: (() => void) | null = null;
   #lastFrameAtMs: number | null = null;
   #lastPresencePose:
     | {
@@ -450,7 +371,7 @@ export class WebGpuMetaverseRuntime {
     }
 
     this.#controlMode = controlMode;
-    this.#resetTransientInputState();
+    this.#flightInputRuntime.reset();
     this.#syncOrPublishRuntimeState(true);
   }
 
@@ -518,7 +439,7 @@ export class WebGpuMetaverseRuntime {
     this.#remoteCharacterPresentations = Object.freeze([]);
     this.#teardownPresenceRuntime();
     this.#setHudSnapshot("booting", null, true);
-    this.#installInputListeners(canvas);
+    this.#flightInputRuntime.install(canvas);
     const renderer = this.#createRenderer(canvas);
 
     this.#renderer = renderer;
@@ -539,7 +460,7 @@ export class WebGpuMetaverseRuntime {
       }
 
       renderer.dispose();
-      this.#removeInputListeners();
+      this.#flightInputRuntime.dispose();
       this.#disposeGroundedRuntime();
       if (this.#canvas === canvas) {
         this.#canvas = null;
@@ -570,7 +491,7 @@ export class WebGpuMetaverseRuntime {
         this.#canvas = null;
       }
 
-      this.#removeInputListeners();
+      this.#flightInputRuntime.dispose();
       this.#disposeGroundedRuntime();
       renderer.dispose();
 
@@ -593,7 +514,7 @@ export class WebGpuMetaverseRuntime {
       this.#animationFrameHandle = 0;
     }
 
-    this.#removeInputListeners();
+    this.#flightInputRuntime.dispose();
     this.#renderer?.dispose();
     this.#renderer = null;
     this.#canvas = null;
@@ -602,7 +523,6 @@ export class WebGpuMetaverseRuntime {
     this.#focusedMountable = null;
     this.#focusedPortal = null;
     this.#mountedEnvironment = null;
-    this.#resetTransientInputState();
     this.#disposeGroundedRuntime();
     this.#teardownPresenceRuntime();
     this.#lastPresencePose = null;
@@ -614,150 +534,6 @@ export class WebGpuMetaverseRuntime {
     if (this.#hudSnapshot.lifecycle !== "failed") {
       this.#setHudSnapshot("idle", null, true);
     }
-  }
-
-  #installInputListeners(canvas: HTMLCanvasElement): void {
-    const keyBindings: Record<string, keyof KeyboardFlightInputState> = {
-      KeyA: "strafeLeft",
-      KeyD: "strafeRight",
-      KeyS: "moveBackward",
-      KeyW: "moveForward",
-      Space: "jump",
-      ShiftLeft: "boost",
-      ShiftRight: "boost"
-    };
-    const mouseButtonBindings: Record<number, MouseFlightButtonInputKey> = {
-      0: "primaryAction",
-      2: "secondaryAction"
-    };
-    const handleCanvasMouseMove = (event: MouseEvent) => {
-      if (!isPointerLockActive(canvas)) {
-        return;
-      }
-
-      this.#mouseInput.lookDeltaX += toFiniteNumber(event.movementX, 0);
-      this.#mouseInput.lookDeltaY += toFiniteNumber(event.movementY, 0);
-    };
-    const handleCanvasMouseDown = (event: MouseEvent) => {
-      requestPointerLockIfAvailable(canvas);
-      const inputKey = mouseButtonBindings[event.button];
-
-      if (inputKey === undefined) {
-        return;
-      }
-
-      event.preventDefault();
-      this.#mouseInput[inputKey] = true;
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableEventTarget(event.target)) {
-        return;
-      }
-
-      const inputKey = keyBindings[event.code];
-
-      if (inputKey === undefined) {
-        return;
-      }
-
-      event.preventDefault();
-      this.#keyboardInput[inputKey] = true;
-    };
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (isEditableEventTarget(event.target)) {
-        return;
-      }
-
-      const inputKey = keyBindings[event.code];
-
-      if (inputKey === undefined) {
-        return;
-      }
-
-      event.preventDefault();
-      this.#keyboardInput[inputKey] = false;
-    };
-    const handleWindowMouseUp = (event: MouseEvent) => {
-      const inputKey = mouseButtonBindings[event.button];
-
-      if (inputKey === undefined) {
-        return;
-      }
-
-      this.#mouseInput[inputKey] = false;
-    };
-    const handleCanvasContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
-    const handleWindowBlur = () => {
-      this.#resetTransientInputState();
-    };
-
-    canvas.addEventListener("mousedown", handleCanvasMouseDown);
-    canvas.addEventListener("contextmenu", handleCanvasContextMenu);
-    canvas.addEventListener("auxclick", handleCanvasContextMenu);
-    globalThis.window?.addEventListener("mousemove", handleCanvasMouseMove);
-    globalThis.window?.addEventListener("keydown", handleKeyDown);
-    globalThis.window?.addEventListener("keyup", handleKeyUp);
-    globalThis.window?.addEventListener("mouseup", handleWindowMouseUp);
-    globalThis.window?.addEventListener("blur", handleWindowBlur);
-    this.#inputCleanup = () => {
-      canvas.removeEventListener("mousedown", handleCanvasMouseDown);
-      canvas.removeEventListener("contextmenu", handleCanvasContextMenu);
-      canvas.removeEventListener("auxclick", handleCanvasContextMenu);
-      globalThis.window?.removeEventListener("mousemove", handleCanvasMouseMove);
-      globalThis.window?.removeEventListener("keydown", handleKeyDown);
-      globalThis.window?.removeEventListener("keyup", handleKeyUp);
-      globalThis.window?.removeEventListener("mouseup", handleWindowMouseUp);
-      globalThis.window?.removeEventListener("blur", handleWindowBlur);
-    };
-  }
-
-  #removeInputListeners(): void {
-    this.#inputCleanup?.();
-    this.#inputCleanup = null;
-    if (
-      this.#canvas !== null &&
-      globalThis.document?.pointerLockElement === this.#canvas &&
-      typeof globalThis.document.exitPointerLock === "function"
-    ) {
-      globalThis.document.exitPointerLock();
-    }
-  }
-
-  #resetTransientInputState(): void {
-    Object.assign(this.#keyboardInput, createKeyboardFlightInputState());
-    Object.assign(this.#mouseInput, createMouseFlightInputState());
-  }
-
-  #readFlightInputSnapshot(): MetaverseFlightInputSnapshot {
-    const pitchAxis = clamp(
-      -this.#mouseInput.lookDeltaY / metaverseMouseLookPixelsPerAxisUnit,
-      -1,
-      1
-    );
-    const yawAxis = clamp(
-      this.#mouseInput.lookDeltaX / metaverseMouseLookPixelsPerAxisUnit,
-      -1,
-      1
-    );
-    this.#mouseInput.lookDeltaX = 0;
-    this.#mouseInput.lookDeltaY = 0;
-
-    return Object.freeze({
-      boost: this.#keyboardInput.boost,
-      jump: this.#keyboardInput.jump,
-      moveAxis:
-        (this.#keyboardInput.moveForward ? 1 : 0) -
-        (this.#keyboardInput.moveBackward ? 1 : 0),
-      primaryAction: this.#mouseInput.primaryAction,
-      pitchAxis,
-      secondaryAction: this.#mouseInput.secondaryAction,
-      strafeAxis:
-        (this.#keyboardInput.strafeRight ? 1 : 0) -
-        (this.#keyboardInput.strafeLeft ? 1 : 0),
-      yawAxis
-    });
   }
 
   #queueNextFrame(): void {
@@ -1175,7 +951,7 @@ export class WebGpuMetaverseRuntime {
         : Math.min(0.1, Math.max(0, (nowMs - this.#lastFrameAtMs) / 1000));
 
     this.#lastFrameAtMs = nowMs;
-    const movementInput = this.#readFlightInputSnapshot();
+    const movementInput = this.#flightInputRuntime.readSnapshot();
     const cameraSnapshot = this.#traversalRuntime.advance(
       movementInput,
       deltaSeconds

@@ -1,0 +1,213 @@
+import assert from "node:assert/strict";
+import test, { after, before } from "node:test";
+
+import { createClientModuleLoader } from "./load-client-module.mjs";
+
+let clientLoader;
+
+before(async () => {
+  clientLoader = await createClientModuleLoader();
+});
+
+after(async () => {
+  await clientLoader?.close();
+});
+
+class FakeHTMLElement {
+  constructor(tagName) {
+    this.isContentEditable = false;
+    this.tagName = tagName;
+  }
+}
+
+class FakeEventTarget {
+  #listenersByType = new Map();
+
+  addEventListener(type, listener) {
+    const listeners = this.#listenersByType.get(type) ?? [];
+
+    listeners.push(listener);
+    this.#listenersByType.set(type, listeners);
+  }
+
+  removeEventListener(type, listener) {
+    const listeners = this.#listenersByType.get(type) ?? [];
+    const nextListeners = listeners.filter((candidate) => candidate !== listener);
+
+    this.#listenersByType.set(type, nextListeners);
+  }
+
+  dispatch(type, event = {}) {
+    for (const listener of this.#listenersByType.get(type) ?? []) {
+      listener({
+        preventDefault() {},
+        target: null,
+        ...event
+      });
+    }
+  }
+}
+
+class FakeCanvas extends FakeEventTarget {
+  constructor(documentObject) {
+    super();
+    this.pointerLockRequests = 0;
+    this.#documentObject = documentObject;
+  }
+
+  #documentObject;
+
+  requestPointerLock() {
+    this.pointerLockRequests += 1;
+    this.#documentObject.pointerLockElement = this;
+
+    return Promise.resolve();
+  }
+}
+
+function normalizeSignedZero(value) {
+  return Object.is(value, -0) ? 0 : value;
+}
+
+function normalizeSnapshotSignedZeros(snapshot) {
+  return {
+    ...snapshot,
+    pitchAxis: normalizeSignedZero(snapshot.pitchAxis),
+    yawAxis: normalizeSignedZero(snapshot.yawAxis)
+  };
+}
+
+test("MetaverseFlightInputRuntime owns browser flight input listeners and transient snapshots", async () => {
+  const { MetaverseFlightInputRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-flight-input-runtime.ts"
+  );
+  const originalDocument = globalThis.document;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const originalWindow = globalThis.window;
+  const documentObject = {
+    exitPointerLockCalls: 0,
+    pointerLockElement: null,
+    exitPointerLock() {
+      this.exitPointerLockCalls += 1;
+      this.pointerLockElement = null;
+    }
+  };
+  const fakeCanvas = new FakeCanvas(documentObject);
+  const fakeWindow = new FakeEventTarget();
+  const flightInputRuntime = new MetaverseFlightInputRuntime();
+
+  globalThis.document = documentObject;
+  globalThis.HTMLElement = FakeHTMLElement;
+  globalThis.window = fakeWindow;
+
+  try {
+    flightInputRuntime.install(fakeCanvas);
+
+    fakeWindow.dispatch("keydown", {
+      code: "KeyW"
+    });
+    fakeWindow.dispatch("keydown", {
+      code: "KeyD"
+    });
+    fakeCanvas.dispatch("mousedown", {
+      button: 0
+    });
+    fakeWindow.dispatch("mousemove", {
+      movementX: 480,
+      movementY: -120
+    });
+
+    assert.equal(fakeCanvas.pointerLockRequests, 1);
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 1,
+      pitchAxis: 0.5,
+      primaryAction: true,
+      secondaryAction: false,
+      strafeAxis: 1,
+      yawAxis: 1
+    });
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 1,
+      pitchAxis: 0,
+      primaryAction: true,
+      secondaryAction: false,
+      strafeAxis: 1,
+      yawAxis: 0
+    });
+
+    fakeWindow.dispatch("keyup", {
+      code: "KeyW"
+    });
+    fakeWindow.dispatch("mouseup", {
+      button: 0
+    });
+
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 0,
+      pitchAxis: 0,
+      primaryAction: false,
+      secondaryAction: false,
+      strafeAxis: 1,
+      yawAxis: 0
+    });
+
+    fakeWindow.dispatch("keydown", {
+      code: "KeyW",
+      target: new FakeHTMLElement("INPUT")
+    });
+
+    assert.equal(flightInputRuntime.readSnapshot().moveAxis, 0);
+
+    fakeWindow.dispatch("keydown", {
+      code: "KeyW"
+    });
+    fakeCanvas.dispatch("mousedown", {
+      button: 2
+    });
+    fakeWindow.dispatch("blur");
+
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 0,
+      pitchAxis: 0,
+      primaryAction: false,
+      secondaryAction: false,
+      strafeAxis: 0,
+      yawAxis: 0
+    });
+
+    documentObject.pointerLockElement = fakeCanvas;
+    flightInputRuntime.dispose();
+
+    assert.equal(documentObject.exitPointerLockCalls, 1);
+
+    fakeWindow.dispatch("keydown", {
+      code: "KeyW"
+    });
+    fakeCanvas.dispatch("mousedown", {
+      button: 0
+    });
+
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 0,
+      pitchAxis: 0,
+      primaryAction: false,
+      secondaryAction: false,
+      strafeAxis: 0,
+      yawAxis: 0
+    });
+  } finally {
+    globalThis.document = originalDocument;
+    globalThis.HTMLElement = originalHTMLElement;
+    globalThis.window = originalWindow;
+  }
+});

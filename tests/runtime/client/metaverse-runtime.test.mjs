@@ -564,7 +564,12 @@ function wrapRadians(rawValue) {
 }
 
 function resolveCharacterRenderYawRadians(yawRadians) {
-  return wrapRadians(yawRadians + Math.PI);
+  return wrapRadians(Math.PI - yawRadians);
+}
+
+function assertCharacterRenderYawFacesMetaverseYaw(rotationY, yawRadians) {
+  assert.ok(Math.abs(Math.sin(rotationY) - Math.sin(yawRadians)) < 0.000001);
+  assert.ok(Math.abs(Math.cos(rotationY) + Math.cos(yawRadians)) < 0.000001);
 }
 
 async function createSkiffMountProofSlice() {
@@ -1141,12 +1146,23 @@ test("WebGpuMetaverseRuntime starts in swim locomotion over open water and advan
     assert.equal(runtime.hudSnapshot.locomotionMode, "swim");
     assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.9) < 0.001);
 
+    const startingYaw = runtime.hudSnapshot.camera.yawRadians;
+
+    windowHarness.dispatch("mousemove", {
+      movementX: 240,
+      movementY: 0
+    });
+    nowMs = 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
+    assert.ok(runtime.hudSnapshot.camera.yawRadians > startingYaw);
+
     const startingZ = runtime.hudSnapshot.camera.position.z;
 
     windowHarness.dispatch("keydown", {
       code: "KeyW"
     });
-    nowMs = 1000 / 60;
+    nowMs = 2000 / 60;
     windowHarness.advanceFrame(nowMs);
 
     assert.ok(runtime.hudSnapshot.camera.position.z < startingZ);
@@ -1806,6 +1822,7 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       wrapRadians(characterRoot.rotation.y - resolveCharacterRenderYawRadians(0.7))
     ) < 0.000001
   );
+  assertCharacterRenderYawFacesMetaverseYaw(characterRoot.rotation.y, 0.7);
 
   const attachmentRoot = sceneRuntime.scene.getObjectByName(
     "metaverse_attachment/metaverse-service-pistol-v1"
@@ -1827,6 +1844,7 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
       wrapRadians(remoteCharacterRoot.rotation.y - resolveCharacterRenderYawRadians(-0.4))
     ) < 0.000001
   );
+  assertCharacterRenderYawFacesMetaverseYaw(remoteCharacterRoot.rotation.y, -0.4);
 
   sceneRuntime.syncPresentation(
     {

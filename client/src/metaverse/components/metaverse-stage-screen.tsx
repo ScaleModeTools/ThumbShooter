@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore
@@ -78,7 +79,7 @@ export function MetaverseStageScreen({
   username
 }: MetaverseStageScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [metaverseRuntime] = useState(
+  const metaverseRuntime = useMemo(
     () => {
       const localPlayerIdentity = createMetaverseLocalPlayerIdentity(
         username,
@@ -92,7 +93,13 @@ export function MetaverseStageScreen({
         environmentProofConfig,
         localPlayerIdentity
       });
-    }
+    },
+    [
+      attachmentProofConfig,
+      characterProofConfig,
+      environmentProofConfig,
+      username
+    ]
   );
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const subscribeUiUpdates = useCallback(
@@ -119,6 +126,7 @@ export function MetaverseStageScreen({
     }
 
     let cancelled = false;
+    setRuntimeError(null);
 
     void metaverseRuntime.start(canvasRef.current).catch((error) => {
       if (cancelled) {
