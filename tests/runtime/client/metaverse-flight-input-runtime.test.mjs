@@ -122,7 +122,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       boost: false,
       jump: false,
       moveAxis: 1,
-      pitchAxis: 0.5,
+      pitchAxis: 1,
       primaryAction: true,
       secondaryAction: false,
       strafeAxis: 1,

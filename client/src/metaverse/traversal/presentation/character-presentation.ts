@@ -92,11 +92,17 @@ function createSwimCharacterPresentationSnapshot(
   swimSnapshot: SurfaceLocomotionSnapshot,
   config: MetaverseRuntimeConfig
 ): MetaverseCharacterPresentationSnapshot {
+  const moving =
+    swimSnapshot.planarSpeedUnitsPerSecond >=
+    metaverseWalkAnimationSpeedThresholdUnitsPerSecond;
+
   return createCharacterPresentationSnapshot(
     freezeVector3(
       swimSnapshot.position.x,
       swimSnapshot.position.y -
-        config.bodyPresentation.swimBodySubmersionDepthMeters,
+        (moving
+          ? config.bodyPresentation.swimMovingBodySubmersionDepthMeters
+          : config.bodyPresentation.swimIdleBodySubmersionDepthMeters),
       swimSnapshot.position.z
     ),
     swimSnapshot.yawRadians,

@@ -15,8 +15,9 @@ export const metaverseRuntimeConfig = {
   },
   bodyPresentation: {
     groundedFirstPersonForwardOffsetMeters: 0.24,
-    swimBodySubmersionDepthMeters: 0.72,
-    swimThirdPersonFollowDistanceMeters: 1.2,
+    swimIdleBodySubmersionDepthMeters: 1.02,
+    swimMovingBodySubmersionDepthMeters: 0.94,
+    swimThirdPersonFollowDistanceMeters: 2.8,
     swimThirdPersonHeightOffsetMeters: 0.52
   },
   environment: {
@@ -56,7 +57,7 @@ export const metaverseRuntimeConfig = {
     jumpImpulseUnitsPerSecond: 6.8,
     maxSlopeClimbAngleRadians: Math.PI * 0.26,
     minSlopeSlideAngleRadians: Math.PI * 0.34,
-    maxTurnSpeedRadiansPerSecond: 1.9,
+    maxTurnSpeedRadiansPerSecond: 3.6,
     snapToGroundDistanceMeters: 0.22,
     stepHeightMeters: 0.28,
     stepWidthMeters: 0.24,
@@ -68,7 +69,7 @@ export const metaverseRuntimeConfig = {
   },
   orientation: {
     maxPitchRadians: 0.6,
-    maxTurnSpeedRadiansPerSecond: 1.9,
+    maxTurnSpeedRadiansPerSecond: 3.6,
     minPitchRadians: -0.6,
     mouseEdgeTurn: {
       deadZoneViewportFraction: 0.2,
@@ -107,7 +108,7 @@ export const metaverseRuntimeConfig = {
     cameraEyeHeightMeters: 1.74,
     decelerationUnitsPerSecondSquared: 14,
     dragCurveExponent: 1.3,
-    maxTurnSpeedRadiansPerSecond: 1.45,
+    maxTurnSpeedRadiansPerSecond: 0.95,
     waterContactProbeRadiusMeters: 1.75,
     waterlineHeightMeters: 0.12
   },
@@ -120,7 +121,7 @@ export const metaverseRuntimeConfig = {
     cameraEyeHeightMeters: 1.38,
     decelerationUnitsPerSecondSquared: 12,
     dragCurveExponent: 1.35,
-    maxTurnSpeedRadiansPerSecond: 1.75
+    maxTurnSpeedRadiansPerSecond: 3.2
   },
   portals: [
     {

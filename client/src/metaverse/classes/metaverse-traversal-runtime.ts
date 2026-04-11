@@ -485,7 +485,6 @@ export class MetaverseTraversalRuntime {
         this.#config,
         deltaSeconds
       );
-
     const skiffMovementInput = mountedSkiffState.waterborne
       ? movementInput
       : Object.freeze({
@@ -498,13 +497,21 @@ export class MetaverseTraversalRuntime {
           strafeAxis: 0,
           yawAxis: 0
         } satisfies MetaverseFlightInputSnapshot);
+    const skiffLocomotionInput = mountedSkiffState.waterborne
+      ? Object.freeze({
+          boost: skiffMovementInput.boost,
+          moveAxis: skiffMovementInput.moveAxis,
+          strafeAxis: skiffMovementInput.strafeAxis,
+          yawAxis: skiffMovementInput.yawAxis
+        })
+      : skiffMovementInput;
     const nextSkiffState = advanceSurfaceLocomotionSnapshot(
       mountedSkiffState,
       {
         forwardSpeedUnitsPerSecond: this.#mountedSkiffForwardSpeedUnitsPerSecond,
         strafeSpeedUnitsPerSecond: this.#mountedSkiffStrafeSpeedUnitsPerSecond
       },
-      skiffMovementInput,
+      skiffLocomotionInput,
       this.#config.skiff,
       deltaSeconds,
       this.#config.movement.worldRadius,

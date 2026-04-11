@@ -725,7 +725,11 @@ async function createSkiffMountProofSlice() {
               tier: "high"
             }
           ],
+          orientation: {
+            bowModelYawRadians: Math.PI * 0.25
+          },
           mount: {
+            riderFacingDirection: "bow",
             seatSocketName: "seat_socket"
           },
           placement: "dynamic",
@@ -1601,6 +1605,8 @@ test("metaverse asset proof resolves static, instanced, and dynamic environment 
   assert.equal(skiffAsset.placements.length, 1);
   assert.equal(skiffAsset.physicsColliders, null);
   assert.equal(skiffAsset.mount?.seatSocketName, "seat_socket");
+  assert.equal(skiffAsset.mount?.riderFacingDirection, "bow");
+  assert.equal(skiffAsset.orientation?.bowModelYawRadians, Math.PI * 0.25);
   assert.equal(skiffAsset.collider?.shape, "box");
 });
 
@@ -2536,11 +2542,13 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
       Vector3
     },
     { createMetaverseScene },
-    { metaverseRuntimeConfig }
+    { metaverseRuntimeConfig },
+    { resolveEnvironmentRuntimeYawFromRenderYaw }
   ] = await Promise.all([
     import("three/webgpu"),
     clientLoader.load("/src/metaverse/render/webgpu-metaverse-scene.ts"),
-    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/traversal/presentation/mount-presentation.ts")
   ]);
 
   const bodyGeometry = new BoxGeometry(0.4, 1.8, 0.3);
@@ -2681,7 +2689,11 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
               tier: "high"
             }
           ],
+          orientation: {
+            bowModelYawRadians: Math.PI * 0.25
+          },
           mount: {
+            riderFacingDirection: "bow",
             seatSocketName: "seat_socket"
           },
           placement: "dynamic",
@@ -2737,9 +2749,13 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
   sceneRuntime.scene.updateMatrixWorld(true);
   const mountedEnvironmentSeatSocket = characterRoot.parent;
   const mountedCharacterSeatSocket = characterRoot.getObjectByName("seat_socket");
+  const mountedSkiffRoot = sceneRuntime.scene.getObjectByName(
+    "metaverse_environment_asset/metaverse-hub-skiff-v1"
+  );
 
   assert.ok(mountedEnvironmentSeatSocket);
   assert.ok(mountedCharacterSeatSocket);
+  assert.ok(mountedSkiffRoot);
   assert.ok(
     mountedEnvironmentSeatSocket
       .getWorldPosition(new Vector3())
@@ -2747,8 +2763,30 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
         mountedCharacterSeatSocket.getWorldPosition(new Vector3())
       ) < 0.001
   );
+  const mountedCharacterForward = new Vector3(0, 0, 1)
+    .applyQuaternion(characterRoot.getWorldQuaternion(new Quaternion()))
+    .normalize();
+  const mountedSkiffRuntimeYawRadians = resolveEnvironmentRuntimeYawFromRenderYaw(
+    {
+      orientation: {
+        bowModelYawRadians: Math.PI * 0.25
+      }
+    },
+    mountedSkiffRoot.rotation.y
+  );
+  const mountedSkiffForward = new Vector3(
+    Math.sin(mountedSkiffRuntimeYawRadians),
+    0,
+    -Math.cos(mountedSkiffRuntimeYawRadians)
+  ).normalize();
 
-  sceneRuntime.syncPresentation(cameraSnapshot, null, 1200, 0.016);
+  assert.ok(mountedCharacterForward.angleTo(mountedSkiffForward) < 0.001);
+
+  sceneRuntime.setDynamicEnvironmentPose("metaverse-hub-skiff-v1", {
+    position: { x: 11.5, y: 0.1, z: -14.2 },
+    yawRadians: 0.55
+  });
+  sceneRuntime.syncPresentation(cameraSnapshot, null, 0, 0.016);
   sceneRuntime.scene.updateMatrixWorld(true);
 
   assert.ok(
@@ -2758,6 +2796,24 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
         mountedCharacterSeatSocket.getWorldPosition(new Vector3())
       ) < 0.001
   );
+  const turnedCharacterForward = new Vector3(0, 0, 1)
+    .applyQuaternion(characterRoot.getWorldQuaternion(new Quaternion()))
+    .normalize();
+  const turnedSkiffRuntimeYawRadians = resolveEnvironmentRuntimeYawFromRenderYaw(
+    {
+      orientation: {
+        bowModelYawRadians: Math.PI * 0.25
+      }
+    },
+    mountedSkiffRoot.rotation.y
+  );
+  const turnedSkiffForward = new Vector3(
+    Math.sin(turnedSkiffRuntimeYawRadians),
+    0,
+    -Math.cos(turnedSkiffRuntimeYawRadians)
+  ).normalize();
+
+  assert.ok(turnedCharacterForward.angleTo(turnedSkiffForward) < 0.001);
 
   const dismountedInteractionSnapshot = sceneRuntime.toggleMount(cameraSnapshot);
 
@@ -2774,4 +2830,49 @@ test("createMetaverseScene mounts and dismounts a dynamic environment asset thro
     characterRoot.getWorldQuaternion(new Quaternion()).angleTo(originalWorldQuaternion) <
       0.001
   );
+});
+
+test("createMetaverseScene maps skiff runtime yaw onto its bow-authored render yaw", async () => {
+  const [
+    { createMetaverseScene },
+    { metaverseRuntimeConfig },
+    { Quaternion, Vector3 }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/render/webgpu-metaverse-scene.ts"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    import("three/webgpu")
+  ]);
+  const { createSceneAssetLoader, environmentProofConfig } =
+    await createSkiffMountProofSlice();
+  const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
+    createSceneAssetLoader,
+    environmentProofConfig,
+    warn() {}
+  });
+
+  await sceneRuntime.boot();
+
+  sceneRuntime.setDynamicEnvironmentPose("metaverse-hub-skiff-v1", {
+    position: { x: 0, y: 0.12, z: 24 },
+    yawRadians: 0.4
+  });
+  sceneRuntime.syncPresentation(
+    {
+      lookDirection: { x: 0, y: 0, z: -1 },
+      pitchRadians: 0,
+      position: { x: 0, y: 1.62, z: 28 },
+      yawRadians: 0
+    },
+    null,
+    0,
+    0
+  );
+  sceneRuntime.scene.updateMatrixWorld(true);
+
+  const skiffRoot = sceneRuntime.scene.getObjectByName(
+    "metaverse_environment_asset/metaverse-hub-skiff-v1"
+  );
+
+  assert.ok(skiffRoot);
+  assert.ok(Math.abs(skiffRoot.rotation.y - (0.4 - Math.PI * 0.25)) < 0.0001);
 });

@@ -1,4 +1,8 @@
 import type { RegistryById } from "@webgpu-metaverse/shared";
+import type {
+  VehicleOrientationDescriptor,
+  VehicleRelativeDirectionId
+} from "@webgpu-metaverse/shared";
 
 import type { EnvironmentAssetId } from "./asset-id";
 import type { AssetLodGroup } from "./asset-lod";
@@ -36,6 +40,7 @@ export interface EnvironmentBoxColliderDescriptor {
 }
 
 export interface EnvironmentMountDescriptor {
+  readonly riderFacingDirection: VehicleRelativeDirectionId;
   readonly seatSocketId: SocketId;
 }
 
@@ -47,6 +52,7 @@ export interface EnvironmentAssetDescriptor<
   readonly placement: EnvironmentAssetPlacement;
   readonly physicsColliders: readonly EnvironmentBoxColliderDescriptor[] | null;
   readonly renderModel: AssetLodGroup;
+  readonly orientation: VehicleOrientationDescriptor | null;
   readonly collider: EnvironmentBoxColliderDescriptor | null;
   readonly collisionPath: string | null;
   readonly mount: EnvironmentMountDescriptor | null;

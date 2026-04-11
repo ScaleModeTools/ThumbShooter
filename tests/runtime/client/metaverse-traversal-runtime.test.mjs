@@ -527,7 +527,7 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
       dynamicEnvironmentPoses: {
         "metaverse-hub-skiff-v1": Object.freeze({
           position: freezeVector3(0, 0.12, 24),
-          yawRadians: Math.PI
+          yawRadians: 0
         })
       }
     });
@@ -549,16 +549,31 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
     traversalRuntime.advance(
       Object.freeze({
         boost: false,
+        jump: false,
         moveAxis: 1,
         pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: 0,
         yawAxis: 1
       }),
       1 / 60
     );
 
+    const mountedSkiffPoseAfterMouseLook =
+      dynamicPoseWrites.at(-1)?.poseSnapshot;
+
+    assert.ok(mountedSkiffPoseAfterMouseLook?.yawRadians > 0);
+    assert.equal(
+      traversalRuntime.cameraSnapshot.yawRadians,
+      mountedSkiffPoseAfterMouseLook?.yawRadians
+    );
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      mountedSkiffPoseAfterMouseLook?.yawRadians
+    );
     assert.ok(
-      Math.abs(traversalRuntime.cameraSnapshot.yawRadians - mountedCamera.yawRadians) >
-        0.01
+      traversalRuntime.cameraSnapshot.yawRadians > mountedCamera.yawRadians
     );
     assert.ok(dynamicPoseWrites.length >= 2);
 
@@ -590,7 +605,8 @@ test("MetaverseTraversalRuntime keeps swim character presentation partially subm
     );
     assert.equal(
       traversalRuntime.characterPresentationSnapshot?.position.y,
-      config.ocean.height - config.bodyPresentation.swimBodySubmersionDepthMeters
+      config.ocean.height -
+        config.bodyPresentation.swimIdleBodySubmersionDepthMeters
     );
     assert.equal(
       traversalRuntime.cameraSnapshot.position.y,
@@ -610,7 +626,8 @@ test("MetaverseTraversalRuntime keeps swim character presentation partially subm
     );
     assert.equal(
       traversalRuntime.characterPresentationSnapshot?.position.y,
-      config.ocean.height - config.bodyPresentation.swimBodySubmersionDepthMeters
+      config.ocean.height -
+        config.bodyPresentation.swimMovingBodySubmersionDepthMeters
     );
     assert.equal(
       traversalRuntime.cameraSnapshot.position.y,

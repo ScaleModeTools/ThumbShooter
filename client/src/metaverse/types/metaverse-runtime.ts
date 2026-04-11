@@ -1,4 +1,7 @@
 import type { ExperienceId } from "@webgpu-metaverse/shared";
+import type {
+  VehicleRelativeDirectionId
+} from "@webgpu-metaverse/shared";
 
 import type {
   MetaverseControlModeId,
@@ -106,7 +109,12 @@ export interface MetaverseEnvironmentColliderProofConfig {
 }
 
 export interface MetaverseEnvironmentMountProofConfig {
+  readonly riderFacingDirection: VehicleRelativeDirectionId;
   readonly seatSocketName: string;
+}
+
+export interface MetaverseEnvironmentOrientationProofConfig {
+  readonly bowModelYawRadians: number;
 }
 
 export interface MetaverseEnvironmentPlacementProofConfig {
@@ -134,6 +142,7 @@ export interface MetaverseEnvironmentAssetProofConfig {
   readonly label: string;
   readonly lods: readonly MetaverseEnvironmentLodProofConfig[];
   readonly mount: MetaverseEnvironmentMountProofConfig | null;
+  readonly orientation: MetaverseEnvironmentOrientationProofConfig | null;
   readonly placement: "dynamic" | "instanced" | "static";
   readonly placements: readonly MetaverseEnvironmentPlacementProofConfig[];
   readonly physicsColliders: readonly MetaverseEnvironmentColliderProofConfig[] | null;
@@ -189,7 +198,8 @@ export interface MetaverseRuntimeConfig {
   };
   readonly bodyPresentation: {
     readonly groundedFirstPersonForwardOffsetMeters: number;
-    readonly swimBodySubmersionDepthMeters: number;
+    readonly swimIdleBodySubmersionDepthMeters: number;
+    readonly swimMovingBodySubmersionDepthMeters: number;
     readonly swimThirdPersonFollowDistanceMeters: number;
     readonly swimThirdPersonHeightOffsetMeters: number;
   };

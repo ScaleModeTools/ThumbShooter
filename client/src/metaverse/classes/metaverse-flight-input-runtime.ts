@@ -18,7 +18,7 @@ interface MouseFlightInputState {
 
 type MouseFlightButtonInputKey = "primaryAction" | "secondaryAction";
 
-const metaverseMouseLookPixelsPerAxisUnit = 240;
+const metaverseMouseLookPixelsPerAxisUnit = 120;
 
 function toFiniteNumber(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;

@@ -53,6 +53,7 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
         }
       ]
     },
+    orientation: null,
     collider: null,
     collisionPath: null,
     mount: null
@@ -92,6 +93,7 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
         }
       ]
     },
+    orientation: null,
     collider: null,
     collisionPath: null,
     mount: null
@@ -112,6 +114,7 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
         }
       ]
     },
+    orientation: null,
     collider: {
       center: {
         x: 0,
@@ -144,6 +147,9 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
         }
       ]
     },
+    orientation: {
+      bowModelYawRadians: Math.PI * 0.25
+    },
     collider: {
       center: {
         x: 0,
@@ -159,6 +165,7 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     },
     collisionPath: "/models/metaverse/environment/metaverse-hub-skiff-collision.gltf",
     mount: {
+      riderFacingDirection: "bow",
       seatSocketId: "seat_socket"
     }
   }

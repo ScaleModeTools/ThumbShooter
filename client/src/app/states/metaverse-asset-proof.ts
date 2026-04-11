@@ -25,6 +25,9 @@ import type {
   EnvironmentBoxColliderDescriptor,
   EnvironmentMountDescriptor
 } from "@/assets/types/environment-asset-manifest";
+import {
+  normalizePlanarYawRadians
+} from "@webgpu-metaverse/shared";
 import type {
   MetaverseAttachmentProofConfig,
   MetaverseCharacterProofConfig,
@@ -325,7 +328,24 @@ function resolveEnvironmentMount(
   }
 
   return Object.freeze({
+    riderFacingDirection: mount.riderFacingDirection,
     seatSocketName: mount.seatSocketId
+  });
+}
+
+function resolveEnvironmentOrientation(
+  orientation: EnvironmentAssetDescriptor["orientation"]
+): MetaverseEnvironmentAssetProofConfig["orientation"] {
+  if (orientation === null) {
+    return null;
+  }
+
+  if (!Number.isFinite(orientation.bowModelYawRadians)) {
+    throw new Error("Metaverse vehicle orientation metadata requires a finite bow yaw.");
+  }
+
+  return Object.freeze({
+    bowModelYawRadians: normalizePlanarYawRadians(orientation.bowModelYawRadians)
   });
 }
 
@@ -381,6 +401,12 @@ function resolveMetaverseEnvironmentAssetProofConfig(
         );
       }
 
+      if (environmentDescriptor.orientation === null) {
+        throw new Error(
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires vehicle orientation metadata.`
+        );
+      }
+
       if (environmentDescriptor.mount.seatSocketId !== "seat_socket") {
         throw new Error(
           `Metaverse dynamic environment asset ${environmentDescriptor.label} must mount through seat_socket.`
@@ -412,6 +438,7 @@ function resolveMetaverseEnvironmentAssetProofConfig(
     label: environmentDescriptor.label,
     lods: resolveEnvironmentLods(environmentDescriptor.renderModel),
     mount: resolveEnvironmentMount(environmentDescriptor.mount),
+    orientation: resolveEnvironmentOrientation(environmentDescriptor.orientation),
     placement: environmentDescriptor.placement,
     placements,
     physicsColliders: resolveEnvironmentPhysicsColliders(

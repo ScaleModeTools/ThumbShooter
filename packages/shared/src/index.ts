@@ -102,6 +102,15 @@ export type {
   ExperienceId
 } from "./metaverse/experience-catalog.js";
 export {
+  vehicleRelativeDirectionIds,
+  normalizePlanarYawRadians,
+  resolveVehicleRelativeYawOffsetRadians
+} from "./metaverse/vehicle-orientation.js";
+export type {
+  VehicleOrientationDescriptor,
+  VehicleRelativeDirectionId
+} from "./metaverse/vehicle-orientation.js";
+export {
   createMetaverseSessionSnapshot
 } from "./metaverse/metaverse-session-contract.js";
 export type {
