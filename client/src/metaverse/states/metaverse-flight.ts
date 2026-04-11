@@ -27,6 +27,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function toFiniteNumber(value: number, fallback = 0): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function wrapRadians(rawValue: number): number {
   if (!Number.isFinite(rawValue)) {
     return 0;
@@ -105,7 +109,7 @@ export function advanceMetaversePitchRadians(
 
   return clamp(
     pitchRadians +
-      clamp(pitchAxis, -1, 1) *
+      clamp(toFiniteNumber(pitchAxis, 0), -1, 1) *
         config.maxTurnSpeedRadiansPerSecond *
         deltaSeconds,
     config.minPitchRadians,
@@ -125,7 +129,7 @@ export function advanceMetaverseYawRadians(
 
   return wrapRadians(
     yawRadians +
-      clamp(yawAxis, -1, 1) *
+      clamp(toFiniteNumber(yawAxis, 0), -1, 1) *
         config.maxTurnSpeedRadiansPerSecond *
         deltaSeconds
   );
@@ -233,11 +237,14 @@ export function advanceMetaverseCameraSnapshot(
   );
   const forwardX = Math.sin(rotatedCameraSnapshot.yawRadians);
   const forwardZ = -Math.cos(rotatedCameraSnapshot.yawRadians);
-  const moveAxis = clamp(inputSnapshot.moveAxis, -1, 1);
+  const rightX = Math.cos(rotatedCameraSnapshot.yawRadians);
+  const rightZ = Math.sin(rotatedCameraSnapshot.yawRadians);
+  const moveAxis = clamp(toFiniteNumber(inputSnapshot.moveAxis, 0), -1, 1);
+  const strafeAxis = clamp(toFiniteNumber(inputSnapshot.strafeAxis, 0), -1, 1);
   const normalizedIntent = normalizeVector3(
-    forwardX * moveAxis,
+    forwardX * moveAxis + rightX * strafeAxis,
     0,
-    forwardZ * moveAxis,
+    forwardZ * moveAxis + rightZ * strafeAxis,
     freezeVector3(0, 0, 0)
   );
   const speed =

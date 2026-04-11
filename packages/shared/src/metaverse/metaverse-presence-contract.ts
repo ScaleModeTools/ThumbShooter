@@ -9,6 +9,11 @@ import {
 export const metaversePresenceAnimationVocabularyIds = [
   "idle",
   "walk",
+  "swim-idle",
+  "swim",
+  "jump-up",
+  "jump-mid",
+  "jump-down",
   "aim",
   "interact",
   "seated"

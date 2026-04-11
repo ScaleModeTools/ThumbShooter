@@ -42,6 +42,8 @@ truth, not third-party naming as public law.
 - canonical animation vocabulary stays:
   - `idle`
   - `walk`
+  - `swim-idle`
+  - `swim`
   - `aim`
   - `interact`
   - `seated`

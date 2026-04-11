@@ -8,35 +8,44 @@ export const defaultMetaverseControlMode: MetaverseControlModeId = "keyboard";
 export const metaverseControlModes = [
   {
     id: "keyboard",
-    label: "Keyboard",
+    label: "Keyboard + Mouse",
     description:
-      "Drive the hub with digital keyboard controls. W/S move, A/D pan, Q/E tilt, and Shift boosts.",
+      "Standard FPS hub controls with pointer-lock mouse look. W/S move forward and backward, A/D strafe, Space jumps, Shift boosts, left click is primary action, and right click is secondary action.",
     controlsSummary: [
-      "W forward, S backward",
-      "A pan left, D pan right",
-      "Q tilt down, E tilt up",
-      "Hold Shift to boost"
-    ]
-  },
-  {
-    id: "mouse",
-    label: "Mouse",
-    description:
-      "Use edge-based mouse steering instead of pointer lock. Left and right click move, viewport edges pan and tilt, and Mouse Button 4 boosts.",
-    controlsSummary: [
-      "Left click forward, right click backward",
-      "Move toward left and right edges to pan",
-      "Move toward top and bottom edges to tilt",
-      "Hold Mouse Button 4 to boost"
+      "W/S forward and backward",
+      "A/D strafe left and right",
+      "Move mouse to look",
+      "Space jumps, Shift boosts",
+      "Left click primary action, right click secondary action"
     ]
   }
 ] as const satisfies readonly MetaverseControlModeDefinition[];
+
+const legacyMouseControlMode = Object.freeze({
+  id: "mouse",
+  label: "Keyboard + Mouse",
+  description:
+    "Legacy control-mode id retained for compatibility. Hub input now uses standard FPS keyboard and mouse semantics.",
+  controlsSummary: [
+    "W/S forward and backward",
+    "A/D strafe left and right",
+    "Move mouse to look",
+    "Space jumps, Shift boosts",
+    "Left click primary action, right click secondary action"
+  ]
+} as const satisfies MetaverseControlModeDefinition);
+
+export const metaverseControlModesWithLegacy = [
+  ...metaverseControlModes,
+  legacyMouseControlMode
+] as const;
 
 export function resolveMetaverseControlMode(
   controlMode: MetaverseControlModeId
 ): MetaverseControlModeDefinition {
   return (
-    metaverseControlModes.find((candidate) => candidate.id === controlMode) ??
-    metaverseControlModes[0]
+    metaverseControlModesWithLegacy.find(
+      (candidate) => candidate.id === controlMode
+    ) ?? metaverseControlModesWithLegacy[0]
   );
 }

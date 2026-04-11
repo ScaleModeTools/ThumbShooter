@@ -545,6 +545,28 @@ function createInteractiveWindowHarness() {
   };
 }
 
+function wrapRadians(rawValue) {
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+
+  let nextValue = rawValue;
+
+  while (nextValue > Math.PI) {
+    nextValue -= Math.PI * 2;
+  }
+
+  while (nextValue <= -Math.PI) {
+    nextValue += Math.PI * 2;
+  }
+
+  return nextValue;
+}
+
+function resolveCharacterRenderYawRadians(yawRadians) {
+  return wrapRadians(yawRadians + Math.PI);
+}
+
 async function createSkiffMountProofSlice() {
   const {
     AnimationClip,
@@ -936,7 +958,7 @@ test("WebGpuMetaverseRuntime prewarms the booted scene before the first render w
     assert.deepEqual(renderer.sizes.at(0), [1280, 720]);
     assert.equal(renderer.compileAsyncCalls[0]?.scene?.isScene, true);
     assert.equal(renderer.compileAsyncCalls[0]?.camera?.isPerspectiveCamera, true);
-    assert.equal(startSnapshot.camera.position.y, 1.38);
+    assert.equal(startSnapshot.camera.position.y, 1.9);
     assert.equal(typeof scheduledFrame, "function");
 
     runtime.dispose();
@@ -1070,8 +1092,12 @@ test("WebGpuMetaverseRuntime resolves grounded surface travel automatically when
 
     assert.equal(startSnapshot.locomotionMode, "grounded");
     assert.ok(runtime.hudSnapshot.camera.position.y > 1.62);
-    assert.equal(runtime.hudSnapshot.camera.position.x, 0);
-    assert.equal(runtime.hudSnapshot.camera.position.z, 24);
+    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.x) < 0.000001);
+    assert.equal(
+      runtime.hudSnapshot.camera.position.z,
+      24 -
+        metaverseRuntimeConfig.bodyPresentation.groundedFirstPersonForwardOffsetMeters
+    );
 
     runtime.dispose();
   } finally {
@@ -1113,7 +1139,7 @@ test("WebGpuMetaverseRuntime starts in swim locomotion over open water and advan
     });
 
     assert.equal(runtime.hudSnapshot.locomotionMode, "swim");
-    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.38) < 0.001);
+    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.9) < 0.001);
 
     const startingZ = runtime.hudSnapshot.camera.position.z;
 
@@ -1123,8 +1149,8 @@ test("WebGpuMetaverseRuntime starts in swim locomotion over open water and advan
     nowMs = 1000 / 60;
     windowHarness.advanceFrame(nowMs);
 
-    assert.ok(runtime.hudSnapshot.camera.position.z > startingZ);
-    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.38) < 0.001);
+    assert.ok(runtime.hudSnapshot.camera.position.z < startingZ);
+    assert.ok(Math.abs(runtime.hudSnapshot.camera.position.y - 1.9) < 0.001);
 
     runtime.dispose();
   } finally {
@@ -1213,8 +1239,8 @@ test("WebGpuMetaverseRuntime routes mounted hub input through skiff locomotion a
 
     const mountedCamera = runtime.hudSnapshot.camera;
 
-    windowHarness.dispatch("keydown", {
-      code: "KeyD"
+    windowHarness.dispatch("mousemove", {
+      movementX: 120
     });
     windowHarness.dispatch("keydown", {
       code: "KeyW"
@@ -1775,7 +1801,11 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
   assert.equal(characterRoot.position.x, 3.2);
   assert.equal(characterRoot.position.y, 0);
   assert.equal(characterRoot.position.z, -5.4);
-  assert.equal(characterRoot.rotation.y, 0.7);
+  assert.ok(
+    Math.abs(
+      wrapRadians(characterRoot.rotation.y - resolveCharacterRenderYawRadians(0.7))
+    ) < 0.000001
+  );
 
   const attachmentRoot = sceneRuntime.scene.getObjectByName(
     "metaverse_attachment/metaverse-service-pistol-v1"
@@ -1792,7 +1822,11 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
   assert.ok(remoteCharacterRoot);
   assert.equal(remoteCharacterRoot.position.x, -1.5);
   assert.equal(remoteCharacterRoot.position.z, -6.2);
-  assert.equal(remoteCharacterRoot.rotation.y, -0.4);
+  assert.ok(
+    Math.abs(
+      wrapRadians(remoteCharacterRoot.rotation.y - resolveCharacterRenderYawRadians(-0.4))
+    ) < 0.000001
+  );
 
   sceneRuntime.syncPresentation(
     {
@@ -1826,8 +1860,19 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
   assert.ok(remoteCharacterRoot.position.x < 1.2);
   assert.ok(remoteCharacterRoot.position.z > -6.2);
   assert.ok(remoteCharacterRoot.position.z < -4.8);
-  assert.ok(remoteCharacterRoot.rotation.y > -0.4);
-  assert.ok(remoteCharacterRoot.rotation.y < 0.3);
+  assert.ok(
+    Math.abs(
+      wrapRadians(
+        remoteCharacterRoot.rotation.y - resolveCharacterRenderYawRadians(0.3)
+      )
+    ) <
+      Math.abs(
+        wrapRadians(
+          resolveCharacterRenderYawRadians(-0.4) -
+            resolveCharacterRenderYawRadians(0.3)
+        )
+      )
+  );
 
   for (let frame = 0; frame < 45; frame += 1) {
     sceneRuntime.syncPresentation(
@@ -1861,7 +1906,11 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
 
   assert.ok(Math.abs(remoteCharacterRoot.position.x - 1.2) < 0.05);
   assert.ok(Math.abs(remoteCharacterRoot.position.z - -4.8) < 0.05);
-  assert.ok(Math.abs(remoteCharacterRoot.rotation.y - 0.3) < 0.05);
+  assert.ok(
+    Math.abs(
+      wrapRadians(remoteCharacterRoot.rotation.y - resolveCharacterRenderYawRadians(0.3))
+    ) < 0.05
+  );
 
   sceneRuntime.scene.updateMatrixWorld(true);
 

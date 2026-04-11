@@ -227,6 +227,8 @@ const metaverseCharacterScaleBoundsMeters = Object.freeze({
   min: 1.2
 });
 
+const metaverseCharacterRenderYawOffsetRadians = Math.PI;
+
 const environmentLodSwitchHysteresisMeters = 1.25;
 const remoteCharacterInterpolationRatePerSecond = 12;
 const remoteCharacterTeleportSnapDistanceMeters = 3.5;
@@ -263,6 +265,10 @@ function wrapRadians(rawValue: number): number {
   }
 
   return nextValue;
+}
+
+function resolveCharacterRenderYawRadians(yawRadians: number): number {
+  return wrapRadians(yawRadians + metaverseCharacterRenderYawOffsetRadians);
 }
 
 function toThreeColor(rgb: readonly [number, number, number]): Color {
@@ -739,7 +745,7 @@ function syncCharacterPresentation(
   );
   characterProofRuntime.anchorGroup.rotation.set(
     0,
-    characterPresentation.yawRadians,
+    resolveCharacterRenderYawRadians(characterPresentation.yawRadians),
     0
   );
   characterProofRuntime.anchorGroup.updateMatrixWorld(true);
@@ -749,9 +755,27 @@ function syncCharacterAnimation(
   characterProofRuntime: MetaverseCharacterProofRuntime,
   targetVocabulary: MetaverseCharacterAnimationVocabularyId
 ): void {
-  const nextVocabulary = characterProofRuntime.actionsByVocabulary.has(targetVocabulary)
-    ? targetVocabulary
-    : "idle";
+  const resolveNextVocabulary = (): MetaverseCharacterAnimationVocabularyId => {
+    const fallbackCandidates: readonly MetaverseCharacterAnimationVocabularyId[] =
+      targetVocabulary === "swim-idle"
+        ? ["swim-idle", "idle"]
+        : targetVocabulary === "swim"
+          ? ["swim", "walk", "idle"]
+          : targetVocabulary === "jump-up" ||
+              targetVocabulary === "jump-mid" ||
+              targetVocabulary === "jump-down"
+            ? [targetVocabulary, "walk", "idle"]
+            : [targetVocabulary, "idle"];
+
+    for (const vocabulary of fallbackCandidates) {
+      if (characterProofRuntime.actionsByVocabulary.has(vocabulary)) {
+        return vocabulary;
+      }
+    }
+
+    return "idle";
+  };
+  const nextVocabulary = resolveNextVocabulary();
 
   if (nextVocabulary === characterProofRuntime.activeAnimationVocabulary) {
     return;
@@ -778,10 +802,16 @@ function syncCharacterAnimation(
   if (previousAction !== undefined && previousAction !== nextAction) {
     previousAction.zeroSlopeAtEnd = nextVocabulary === "idle";
 
-    if (previousVocabulary === "idle" && nextVocabulary === "walk") {
+    if (
+      previousVocabulary === "idle" &&
+      (nextVocabulary === "walk" || nextVocabulary === "swim")
+    ) {
       nextAction.setEffectiveTimeScale(1.08);
       nextAction.crossFadeFrom(previousAction, 0.24, true);
-    } else if (previousVocabulary === "walk" && nextVocabulary === "idle") {
+    } else if (
+      (previousVocabulary === "walk" || previousVocabulary === "swim") &&
+      nextVocabulary === "idle"
+    ) {
       previousAction.setEffectiveTimeScale(0.92);
       nextAction.crossFadeFrom(previousAction, 0.32, false);
     } else {
@@ -890,7 +920,11 @@ function syncInterpolatedRemoteCharacterPresentation(
       targetPresentation.position.y,
       targetPresentation.position.z
     );
-    anchorGroup.rotation.set(0, targetPresentation.yawRadians, 0);
+    anchorGroup.rotation.set(
+      0,
+      resolveCharacterRenderYawRadians(targetPresentation.yawRadians),
+      0
+    );
     anchorGroup.updateMatrixWorld(true);
     return;
   }
@@ -903,7 +937,8 @@ function syncInterpolatedRemoteCharacterPresentation(
   }
 
   const yawDifference = wrapRadians(
-    targetPresentation.yawRadians - anchorGroup.rotation.y
+    resolveCharacterRenderYawRadians(targetPresentation.yawRadians) -
+      anchorGroup.rotation.y
   );
 
   anchorGroup.position.set(

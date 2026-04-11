@@ -8,11 +8,15 @@ import {
   mesh2motionHumanoidIdleAnimationClipId,
   mesh2motionHumanoidInteractAnimationClipId,
   mesh2motionHumanoidSeatedAnimationClipId,
+  mesh2motionHumanoidSwimAnimationClipId,
+  mesh2motionHumanoidSwimIdleAnimationClipId,
   mesh2motionHumanoidWalkAnimationClipId,
   metaverseMannequinAimAnimationClipId,
   metaverseMannequinIdleAnimationClipId,
   metaverseMannequinInteractAnimationClipId,
   metaverseMannequinSeatedAnimationClipId,
+  metaverseMannequinSwimAnimationClipId,
+  metaverseMannequinSwimIdleAnimationClipId,
   metaverseMannequinWalkAnimationClipId
 } from "./animation-clip-manifest";
 
@@ -62,6 +66,8 @@ const mesh2motionHumanoidCollisionPath =
 const metaverseMannequinAnimationClipIds = [
   metaverseMannequinIdleAnimationClipId,
   metaverseMannequinWalkAnimationClipId,
+  metaverseMannequinSwimIdleAnimationClipId,
+  metaverseMannequinSwimAnimationClipId,
   metaverseMannequinAimAnimationClipId,
   metaverseMannequinInteractAnimationClipId,
   metaverseMannequinSeatedAnimationClipId
@@ -70,6 +76,8 @@ const metaverseMannequinAnimationClipIds = [
 const mesh2motionHumanoidAnimationClipIds = [
   mesh2motionHumanoidIdleAnimationClipId,
   mesh2motionHumanoidWalkAnimationClipId,
+  mesh2motionHumanoidSwimIdleAnimationClipId,
+  mesh2motionHumanoidSwimAnimationClipId,
   mesh2motionHumanoidAimAnimationClipId,
   mesh2motionHumanoidInteractAnimationClipId,
   mesh2motionHumanoidSeatedAnimationClipId

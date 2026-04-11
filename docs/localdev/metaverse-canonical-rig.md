@@ -87,6 +87,8 @@ The first canonical vocabulary ids are:
 
 - `idle`
 - `walk`
+- `swim-idle`
+- `swim`
 - `aim`
 - `interact`
 - `seated`

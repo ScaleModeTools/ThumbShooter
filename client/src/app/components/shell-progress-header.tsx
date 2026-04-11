@@ -46,10 +46,10 @@ export function ShellProgressHeader({
                 path, and the ocean hub launches named experiences.
               </h1>
               <p className="type-lead max-w-3xl">
-                Hub controls stay keyboard-or-mouse without pointer lock.
-                Duck Hunt still chooses between direct mouse aim and
-                thumb-trigger tracking, and camera setup stays explicit only
-                when you opt into that experience-local input path.
+                Hub traversal uses standard keyboard + mouse FPS controls with
+                pointer-lock look. Duck Hunt still chooses between direct mouse
+                aim and thumb-trigger tracking, and camera setup stays explicit
+                only when you opt into that experience-local input path.
               </p>
             </div>
 

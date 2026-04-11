@@ -30,6 +30,11 @@ export type MetaversePresenceHudState =
 export const metaverseCharacterAnimationVocabularyIds = [
   "idle",
   "walk",
+  "swim-idle",
+  "swim",
+  "jump-up",
+  "jump-mid",
+  "jump-down",
   "aim",
   "interact",
   "seated"
@@ -182,6 +187,11 @@ export interface MetaverseRuntimeConfig {
     readonly near: number;
     readonly spawnPosition: MetaverseVector3Snapshot;
   };
+  readonly bodyPresentation: {
+    readonly groundedFirstPersonForwardOffsetMeters: number;
+    readonly swimThirdPersonFollowDistanceMeters: number;
+    readonly swimThirdPersonHeightOffsetMeters: number;
+  };
   readonly environment: {
     readonly domeRadius: number;
     readonly fogColor: readonly [number, number, number];
@@ -212,6 +222,7 @@ export interface MetaverseRuntimeConfig {
     readonly dragCurveExponent: number;
     readonly eyeHeightMeters: number;
     readonly gravityUnitsPerSecond: number;
+    readonly jumpImpulseUnitsPerSecond: number;
     readonly maxSlopeClimbAngleRadians: number;
     readonly minSlopeSlideAngleRadians: number;
     readonly maxTurnSpeedRadiansPerSecond: number;
@@ -256,6 +267,8 @@ export interface MetaverseRuntimeConfig {
     readonly baseSpeedUnitsPerSecond: number;
     readonly boostCurveExponent: number;
     readonly boostMultiplier: number;
+    readonly cameraFollowDistanceMeters: number;
+    readonly cameraHeightOffsetMeters: number;
     readonly cameraEyeHeightMeters: number;
     readonly decelerationUnitsPerSecondSquared: number;
     readonly dragCurveExponent: number;

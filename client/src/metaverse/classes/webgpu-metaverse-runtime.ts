@@ -42,8 +42,7 @@ import {
 } from "../states/metaverse-environment-collision";
 import {
   createMetaverseCameraSnapshot,
-  resolveFocusedPortalSnapshot,
-  resolveMetaverseMouseLookAxes
+  resolveFocusedPortalSnapshot
 } from "../states/metaverse-flight";
 import type {
   MetaverseControlModeId,
@@ -116,20 +115,18 @@ interface MetaversePresenceClientRuntime {
 
 interface KeyboardFlightInputState {
   boost: boolean;
+  jump: boolean;
   moveBackward: boolean;
   moveForward: boolean;
-  pitchDown: boolean;
-  pitchUp: boolean;
-  yawLeft: boolean;
-  yawRight: boolean;
+  strafeLeft: boolean;
+  strafeRight: boolean;
 }
 
 interface MouseFlightInputState {
-  boost: boolean;
-  moveBackward: boolean;
-  moveForward: boolean;
-  pointerX: number | null;
-  pointerY: number | null;
+  lookDeltaX: number;
+  lookDeltaY: number;
+  primaryAction: boolean;
+  secondaryAction: boolean;
 }
 
 type MetaversePhysicsDebugObject = Object3D & {
@@ -137,13 +134,14 @@ type MetaversePhysicsDebugObject = Object3D & {
   update?(): void;
 };
 
-type MouseFlightButtonInputKey = "boost" | "moveBackward" | "moveForward";
+type MouseFlightButtonInputKey = "primaryAction" | "secondaryAction";
 
 const metaverseUiUpdateIntervalMs = 120;
 const metaversePushableBodyAdditionalMass = 12;
 const metaversePushableBodyAngularDamping = 10;
 const metaversePushableBodyGravityScale = 1;
 const metaversePushableBodyLinearDamping = 4.5;
+const metaverseMouseLookPixelsPerAxisUnit = 240;
 
 function freezePresenceHudSnapshot(
   state: MetaverseHudSnapshot["presence"]["state"],
@@ -203,6 +201,14 @@ function toFiniteNumber(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, value));
+}
+
 function freezeVector3(
   x: number,
   y: number,
@@ -218,22 +224,20 @@ function freezeVector3(
 function createKeyboardFlightInputState(): KeyboardFlightInputState {
   return {
     boost: false,
+    jump: false,
     moveBackward: false,
     moveForward: false,
-    pitchDown: false,
-    pitchUp: false,
-    yawLeft: false,
-    yawRight: false
+    strafeLeft: false,
+    strafeRight: false
   };
 }
 
 function createMouseFlightInputState(): MouseFlightInputState {
   return {
-    boost: false,
-    moveBackward: false,
-    moveForward: false,
-    pointerX: null,
-    pointerY: null
+    lookDeltaX: 0,
+    lookDeltaY: 0,
+    primaryAction: false,
+    secondaryAction: false
   };
 }
 
@@ -271,32 +275,22 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
   );
 }
 
-function normalizeViewportPointer(
-  event: MouseEvent,
-  canvas: HTMLCanvasElement
-): Pick<MouseFlightInputState, "pointerX" | "pointerY"> {
-  const bounds = canvas.getBoundingClientRect();
+function isPointerLockActive(canvas: HTMLCanvasElement): boolean {
+  const pointerLockElement = globalThis.document?.pointerLockElement;
 
-  if (bounds.width <= 0 || bounds.height <= 0) {
-    return {
-      pointerX: null,
-      pointerY: null
-    };
+  return pointerLockElement === undefined || pointerLockElement === canvas;
+}
+
+function requestPointerLockIfAvailable(canvas: HTMLCanvasElement): void {
+  const requestPointerLock = canvas.requestPointerLock;
+
+  if (typeof requestPointerLock !== "function") {
+    return;
   }
 
-  const pointerX = Math.min(
-    1,
-    Math.max(0, (event.clientX - bounds.left) / bounds.width)
-  );
-  const pointerY = Math.min(
-    1,
-    Math.max(0, (event.clientY - bounds.top) / bounds.height)
-  );
-
-  return {
-    pointerX,
-    pointerY
-  };
+  void Promise.resolve(requestPointerLock.call(canvas)).catch(() => {
+    // Pointer lock can be denied when the browser requires a stricter user gesture.
+  });
 }
 
 function resolveRuntimeFailureReason(error: unknown): string {
@@ -624,28 +618,28 @@ export class WebGpuMetaverseRuntime {
 
   #installInputListeners(canvas: HTMLCanvasElement): void {
     const keyBindings: Record<string, keyof KeyboardFlightInputState> = {
-      KeyA: "yawLeft",
-      KeyD: "yawRight",
-      KeyE: "pitchUp",
-      KeyQ: "pitchDown",
+      KeyA: "strafeLeft",
+      KeyD: "strafeRight",
       KeyS: "moveBackward",
       KeyW: "moveForward",
+      Space: "jump",
       ShiftLeft: "boost",
       ShiftRight: "boost"
     };
     const mouseButtonBindings: Record<number, MouseFlightButtonInputKey> = {
-      0: "moveForward",
-      2: "moveBackward",
-      3: "boost"
+      0: "primaryAction",
+      2: "secondaryAction"
     };
     const handleCanvasMouseMove = (event: MouseEvent) => {
-      Object.assign(this.#mouseInput, normalizeViewportPointer(event, canvas));
-    };
-    const handleCanvasMouseLeave = () => {
-      this.#mouseInput.pointerX = null;
-      this.#mouseInput.pointerY = null;
+      if (!isPointerLockActive(canvas)) {
+        return;
+      }
+
+      this.#mouseInput.lookDeltaX += toFiniteNumber(event.movementX, 0);
+      this.#mouseInput.lookDeltaY += toFiniteNumber(event.movementY, 0);
     };
     const handleCanvasMouseDown = (event: MouseEvent) => {
+      requestPointerLockIfAvailable(canvas);
       const inputKey = mouseButtonBindings[event.button];
 
       if (inputKey === undefined) {
@@ -699,21 +693,19 @@ export class WebGpuMetaverseRuntime {
       this.#resetTransientInputState();
     };
 
-    canvas.addEventListener("mousemove", handleCanvasMouseMove);
-    canvas.addEventListener("mouseleave", handleCanvasMouseLeave);
     canvas.addEventListener("mousedown", handleCanvasMouseDown);
     canvas.addEventListener("contextmenu", handleCanvasContextMenu);
     canvas.addEventListener("auxclick", handleCanvasContextMenu);
+    globalThis.window?.addEventListener("mousemove", handleCanvasMouseMove);
     globalThis.window?.addEventListener("keydown", handleKeyDown);
     globalThis.window?.addEventListener("keyup", handleKeyUp);
     globalThis.window?.addEventListener("mouseup", handleWindowMouseUp);
     globalThis.window?.addEventListener("blur", handleWindowBlur);
     this.#inputCleanup = () => {
-      canvas.removeEventListener("mousemove", handleCanvasMouseMove);
-      canvas.removeEventListener("mouseleave", handleCanvasMouseLeave);
       canvas.removeEventListener("mousedown", handleCanvasMouseDown);
       canvas.removeEventListener("contextmenu", handleCanvasContextMenu);
       canvas.removeEventListener("auxclick", handleCanvasContextMenu);
+      globalThis.window?.removeEventListener("mousemove", handleCanvasMouseMove);
       globalThis.window?.removeEventListener("keydown", handleKeyDown);
       globalThis.window?.removeEventListener("keyup", handleKeyUp);
       globalThis.window?.removeEventListener("mouseup", handleWindowMouseUp);
@@ -724,6 +716,13 @@ export class WebGpuMetaverseRuntime {
   #removeInputListeners(): void {
     this.#inputCleanup?.();
     this.#inputCleanup = null;
+    if (
+      this.#canvas !== null &&
+      globalThis.document?.pointerLockElement === this.#canvas &&
+      typeof globalThis.document.exitPointerLock === "function"
+    ) {
+      globalThis.document.exitPointerLock();
+    }
   }
 
   #resetTransientInputState(): void {
@@ -732,43 +731,32 @@ export class WebGpuMetaverseRuntime {
   }
 
   #readFlightInputSnapshot(): MetaverseFlightInputSnapshot {
-    if (this.#controlMode === "mouse") {
-      const canvas = this.#canvas;
-      const mouseLookAxes =
-        canvas === null
-          ? {
-              pitchAxis: 0,
-              yawAxis: 0
-            }
-          : resolveMetaverseMouseLookAxes(
-              this.#mouseInput.pointerX,
-              this.#mouseInput.pointerY,
-              canvas.clientWidth,
-              canvas.clientHeight,
-              this.#config.orientation.mouseEdgeTurn
-            );
-
-      return Object.freeze({
-        boost: this.#mouseInput.boost,
-        moveAxis:
-          (this.#mouseInput.moveForward ? 1 : 0) -
-          (this.#mouseInput.moveBackward ? 1 : 0),
-        pitchAxis: mouseLookAxes.pitchAxis,
-        yawAxis: mouseLookAxes.yawAxis
-      });
-    }
+    const pitchAxis = clamp(
+      -this.#mouseInput.lookDeltaY / metaverseMouseLookPixelsPerAxisUnit,
+      -1,
+      1
+    );
+    const yawAxis = clamp(
+      this.#mouseInput.lookDeltaX / metaverseMouseLookPixelsPerAxisUnit,
+      -1,
+      1
+    );
+    this.#mouseInput.lookDeltaX = 0;
+    this.#mouseInput.lookDeltaY = 0;
 
     return Object.freeze({
       boost: this.#keyboardInput.boost,
+      jump: this.#keyboardInput.jump,
       moveAxis:
         (this.#keyboardInput.moveForward ? 1 : 0) -
         (this.#keyboardInput.moveBackward ? 1 : 0),
-      pitchAxis:
-        (this.#keyboardInput.pitchUp ? 1 : 0) -
-        (this.#keyboardInput.pitchDown ? 1 : 0),
-      yawAxis:
-        (this.#keyboardInput.yawRight ? 1 : 0) -
-        (this.#keyboardInput.yawLeft ? 1 : 0)
+      primaryAction: this.#mouseInput.primaryAction,
+      pitchAxis,
+      secondaryAction: this.#mouseInput.secondaryAction,
+      strafeAxis:
+        (this.#keyboardInput.strafeRight ? 1 : 0) -
+        (this.#keyboardInput.strafeLeft ? 1 : 0),
+      yawAxis
     });
   }
 

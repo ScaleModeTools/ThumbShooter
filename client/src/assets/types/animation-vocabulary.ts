@@ -1,6 +1,8 @@
 export const animationVocabularyIds = [
   "idle",
   "walk",
+  "swim-idle",
+  "swim",
   "aim",
   "interact",
   "seated"
@@ -11,6 +13,8 @@ export type AnimationVocabularyId = (typeof animationVocabularyIds)[number];
 export const canonicalAnimationClipNamesByVocabulary = Object.freeze({
   idle: "idle",
   walk: "walk",
+  "swim-idle": "swim-idle",
+  swim: "swim",
   aim: "aim",
   interact: "interact",
   seated: "seated"

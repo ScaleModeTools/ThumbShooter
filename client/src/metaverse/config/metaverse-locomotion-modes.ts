@@ -13,19 +13,20 @@ export const metaverseLocomotionModes = [
     description:
       "Use a capsule-backed grounded body on solid support. Camera height derives from the body, and the mannequin follows the same runtime truth.",
     controlsSummary: [
-      "Move forward and backward along the current facing",
-      "Turn and pitch the camera with the current hub control mode",
-      "Boost keeps the grounded body faster without re-enabling fly drift"
+      "W/S forward and backward, A/D strafe",
+      "Move mouse to turn and look",
+      "Space jumps through up, mid-air, and down phases",
+      "Shift boosts grounded speed"
     ]
   },
   {
     id: "swim",
     label: "Swim",
     description:
-      "Stay waterborne at the ocean surface. Swim keeps character-facing camera sync and water locomotion active without switching back to fly.",
+      "Stay waterborne at the ocean surface with a third-person follow camera. Swim keeps character-facing movement active without switching back to fly.",
     controlsSummary: [
-      "Move forward and backward along the current facing",
-      "Turn and pitch the camera with the current hub control mode",
+      "W/S forward and backward, A/D strafe",
+      "Move mouse to turn and look",
       "Boost adds a stronger swim stroke instead of flight drift"
     ]
   },
@@ -46,8 +47,8 @@ export const metaverseLocomotionModes = [
     description:
       "Mounted locomotion is runtime-owned. The current hub mount drives yaw, camera, and propulsion until you dismount.",
     controlsSummary: [
-      "Movement inputs route into the current mount",
-      "Yaw stays owned by the mounted locomotion handler",
+      "W/S forward and backward, A/D strafe",
+      "Move mouse to steer mount yaw and camera pitch",
       "Dismount returns control to the current surface state"
     ]
   }

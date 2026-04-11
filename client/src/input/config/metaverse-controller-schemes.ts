@@ -19,14 +19,14 @@ export const metaverseControllerSchemes = [
     id: "keyboard",
     family: "mouse-keyboard",
     status: "stable",
-    label: "Keyboard",
+    label: "Keyboard + Mouse",
     description:
-      "Digital fly-cam controls. W and S move, A and D pan, Q and E tilt, and Shift boosts.",
+      "Standard FPS hub controls. W/S move, A/D strafe, mouse controls look, Space jumps, and Shift boosts.",
     controlsSummary: [
-      "W forward, S backward",
-      "A pan left, D pan right",
-      "Q tilt down, E tilt up",
-      "Hold Shift to boost"
+      "W/S forward and backward",
+      "A/D strafe left and right",
+      "Move mouse to look",
+      "Space jumps, Shift boosts"
     ],
     digitalActionByButtonRoleId: {},
     analogActionByInputId: {
@@ -39,14 +39,14 @@ export const metaverseControllerSchemes = [
     id: "mouse",
     family: "mouse-keyboard",
     status: "stable",
-    label: "Mouse",
+    label: "Legacy Mouse",
     description:
-      "Edge-based hub steering without pointer lock. Global primary and secondary buttons drive forward and backward, while edge look handles pan and tilt.",
+      "Legacy id retained for compatibility. Hub runtime now uses the same FPS keyboard+mouse mapping as the default keyboard scheme.",
     controlsSummary: [
-      "Primary button forward, secondary button backward",
-      "Move toward left and right edges to pan",
-      "Move toward top and bottom edges to tilt",
-      "Utility button 1 boosts"
+      "W/S forward and backward",
+      "A/D strafe left and right",
+      "Move mouse to look",
+      "Space jumps, Shift boosts"
     ],
     digitalActionByButtonRoleId: {
       primary: "move-forward",

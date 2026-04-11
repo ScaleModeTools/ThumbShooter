@@ -20,6 +20,14 @@ export const metaverseMannequinWalkAnimationClipId = createAnimationClipId(
   "metaverse-mannequin-walk-v1"
 );
 
+export const metaverseMannequinSwimIdleAnimationClipId = createAnimationClipId(
+  "metaverse-mannequin-swim-idle-v1"
+);
+
+export const metaverseMannequinSwimAnimationClipId = createAnimationClipId(
+  "metaverse-mannequin-swim-v1"
+);
+
 export const metaverseMannequinAimAnimationClipId = createAnimationClipId(
   "metaverse-mannequin-aim-v1"
 );
@@ -40,6 +48,14 @@ export const mesh2motionHumanoidWalkAnimationClipId = createAnimationClipId(
   "mesh2motion-humanoid-walk-v1"
 );
 
+export const mesh2motionHumanoidSwimIdleAnimationClipId = createAnimationClipId(
+  "mesh2motion-humanoid-swim-idle-v1"
+);
+
+export const mesh2motionHumanoidSwimAnimationClipId = createAnimationClipId(
+  "mesh2motion-humanoid-swim-v1"
+);
+
 export const mesh2motionHumanoidAimAnimationClipId = createAnimationClipId(
   "mesh2motion-humanoid-aim-v1"
 );
@@ -55,6 +71,8 @@ export const mesh2motionHumanoidSeatedAnimationClipId = createAnimationClipId(
 const metaverseMannequinAnimationClipIdByVocabulary = Object.freeze({
   idle: metaverseMannequinIdleAnimationClipId,
   walk: metaverseMannequinWalkAnimationClipId,
+  "swim-idle": metaverseMannequinSwimIdleAnimationClipId,
+  swim: metaverseMannequinSwimAnimationClipId,
   aim: metaverseMannequinAimAnimationClipId,
   interact: metaverseMannequinInteractAnimationClipId,
   seated: metaverseMannequinSeatedAnimationClipId
@@ -63,6 +81,8 @@ const metaverseMannequinAnimationClipIdByVocabulary = Object.freeze({
 const mesh2motionHumanoidAnimationClipIdByVocabulary = Object.freeze({
   idle: mesh2motionHumanoidIdleAnimationClipId,
   walk: mesh2motionHumanoidWalkAnimationClipId,
+  "swim-idle": mesh2motionHumanoidSwimIdleAnimationClipId,
+  swim: mesh2motionHumanoidSwimAnimationClipId,
   aim: mesh2motionHumanoidAimAnimationClipId,
   interact: mesh2motionHumanoidInteractAnimationClipId,
   seated: mesh2motionHumanoidSeatedAnimationClipId
@@ -71,6 +91,8 @@ const mesh2motionHumanoidAnimationClipIdByVocabulary = Object.freeze({
 const metaverseMannequinLoopModeByVocabulary = Object.freeze({
   idle: "repeat",
   walk: "repeat",
+  "swim-idle": "repeat",
+  swim: "repeat",
   aim: "repeat",
   interact: "once",
   seated: "repeat"

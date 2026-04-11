@@ -37,6 +37,11 @@ interface SurfaceLocomotionSnapshot {
   readonly yawRadians: number;
 }
 
+interface SurfaceLocomotionSpeedSnapshot {
+  readonly forwardSpeedUnitsPerSecond: number;
+  readonly strafeSpeedUnitsPerSecond: number;
+}
+
 interface MountedSkiffRuntimeState extends SurfaceLocomotionSnapshot {
   readonly environmentAssetId: string;
   readonly label: string;
@@ -63,6 +68,8 @@ interface MetaverseTraversalRuntimeDependencies {
 type AutomaticSurfaceLocomotionModeId = "grounded" | "swim";
 
 const metaverseWalkAnimationSpeedThresholdUnitsPerSecond = 0.75;
+const metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond = 0.35;
+const metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond = -0.35;
 const automaticSurfaceWaterlineThresholdMeters = 0.05;
 const automaticSurfaceExitSupportProbeCount = 3;
 const automaticSurfaceGroundedHoldProbeCount = 2;
@@ -216,14 +223,15 @@ function createCharacterPresentationSnapshot(
   position: PhysicsVector3Snapshot,
   yawRadians: number,
   planarSpeedUnitsPerSecond: number,
-  movingVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"] = "walk"
+  movingVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"] = "walk",
+  idleVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"] = "idle"
 ): MetaverseCharacterPresentationSnapshot {
   return Object.freeze({
     animationVocabulary:
       planarSpeedUnitsPerSecond >=
       metaverseWalkAnimationSpeedThresholdUnitsPerSecond
         ? movingVocabulary
-        : "idle",
+        : idleVocabulary,
     position: Object.freeze({
       x: position.x,
       y: position.y,
@@ -252,10 +260,24 @@ function createFixedCharacterPresentationSnapshot(
 function createGroundedCharacterPresentationSnapshot(
   bodySnapshot: MetaverseGroundedBodySnapshot
 ): MetaverseCharacterPresentationSnapshot {
+  if (!bodySnapshot.grounded) {
+    return createFixedCharacterPresentationSnapshot(
+      bodySnapshot.position,
+      bodySnapshot.yawRadians,
+      bodySnapshot.verticalSpeedUnitsPerSecond >
+        metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond
+        ? "jump-up"
+        : bodySnapshot.verticalSpeedUnitsPerSecond <
+            metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond
+          ? "jump-down"
+          : "jump-mid"
+    );
+  }
+
   return createCharacterPresentationSnapshot(
     bodySnapshot.position,
     bodySnapshot.yawRadians,
-    bodySnapshot.grounded ? bodySnapshot.planarSpeedUnitsPerSecond : 0
+    bodySnapshot.planarSpeedUnitsPerSecond
   );
 }
 
@@ -263,17 +285,20 @@ function createSurfaceCameraSnapshot(
   position: PhysicsVector3Snapshot,
   eyeHeightMeters: number,
   yawRadians: number,
-  pitchRadians: number
+  pitchRadians: number,
+  forwardOffsetMeters = 0
 ): MetaverseCameraSnapshot {
   const lookDirection = directionFromYawPitch(yawRadians, pitchRadians);
+  const forwardX = Math.sin(yawRadians);
+  const forwardZ = -Math.cos(yawRadians);
 
   return Object.freeze({
     lookDirection,
     pitchRadians,
     position: Object.freeze({
-      x: position.x,
+      x: position.x + forwardX * forwardOffsetMeters,
       y: position.y + eyeHeightMeters,
-      z: position.z
+      z: position.z + forwardZ * forwardOffsetMeters
     }),
     yawRadians: wrapRadians(yawRadians)
   });
@@ -281,79 +306,130 @@ function createSurfaceCameraSnapshot(
 
 function createGroundedCameraSnapshot(
   bodySnapshot: MetaverseGroundedBodySnapshot,
-  pitchRadians: number
+  pitchRadians: number,
+  forwardOffsetMeters: number
 ): MetaverseCameraSnapshot {
   return createSurfaceCameraSnapshot(
     bodySnapshot.position,
     bodySnapshot.eyeHeightMeters,
     bodySnapshot.yawRadians,
-    pitchRadians
+    pitchRadians,
+    forwardOffsetMeters
+  );
+}
+
+function createSwimThirdPersonCameraSnapshot(
+  swimSnapshot: SurfaceLocomotionSnapshot,
+  pitchRadians: number,
+  config: MetaverseRuntimeConfig
+): MetaverseCameraSnapshot {
+  return createSurfaceCameraSnapshot(
+    swimSnapshot.position,
+    config.swim.cameraEyeHeightMeters +
+      config.bodyPresentation.swimThirdPersonHeightOffsetMeters,
+    swimSnapshot.yawRadians,
+    pitchRadians,
+    -config.bodyPresentation.swimThirdPersonFollowDistanceMeters
+  );
+}
+
+function createSkiffThirdPersonCameraSnapshot(
+  skiffSnapshot: SurfaceLocomotionSnapshot,
+  pitchRadians: number,
+  config: MetaverseRuntimeConfig
+): MetaverseCameraSnapshot {
+  return createSurfaceCameraSnapshot(
+    skiffSnapshot.position,
+    config.skiff.cameraEyeHeightMeters + config.skiff.cameraHeightOffsetMeters,
+    skiffSnapshot.yawRadians,
+    pitchRadians,
+    -config.skiff.cameraFollowDistanceMeters
   );
 }
 
 function createIdleGroundedBodyIntentSnapshot() {
   return Object.freeze({
     boost: false,
+    jump: false,
     moveAxis: 0,
+    strafeAxis: 0,
     turnAxis: 0
   });
 }
 
 function advanceSurfaceLocomotionSnapshot(
   snapshot: SurfaceLocomotionSnapshot,
-  forwardSpeedUnitsPerSecond: number,
-  movementInput: Pick<MetaverseFlightInputSnapshot, "boost" | "moveAxis" | "yawAxis">,
+  speedSnapshot: SurfaceLocomotionSpeedSnapshot,
+  movementInput: Pick<
+    MetaverseFlightInputSnapshot,
+    "boost" | "moveAxis" | "strafeAxis" | "yawAxis"
+  >,
   config: SurfaceLocomotionConfig,
   deltaSeconds: number,
   worldRadius: number,
   fixedHeightMeters: number,
   movementEnabled = true
 ): {
-  readonly forwardSpeedUnitsPerSecond: number;
+  readonly speedSnapshot: SurfaceLocomotionSpeedSnapshot;
   readonly snapshot: SurfaceLocomotionSnapshot;
 } {
   if (deltaSeconds <= 0) {
     return Object.freeze({
-      forwardSpeedUnitsPerSecond,
+      speedSnapshot,
       snapshot
     });
   }
 
   const yawRadians = wrapRadians(
     snapshot.yawRadians +
-      clamp(movementInput.yawAxis, -1, 1) *
+      clamp(toFiniteNumber(movementInput.yawAxis, 0), -1, 1) *
         config.maxTurnSpeedRadiansPerSecond *
         deltaSeconds
   );
-  const moveAxis = movementEnabled ? clamp(movementInput.moveAxis, -1, 1) : 0;
+  const moveAxis = movementEnabled
+    ? clamp(toFiniteNumber(movementInput.moveAxis, 0), -1, 1)
+    : 0;
+  const strafeAxis = movementEnabled
+    ? clamp(toFiniteNumber(movementInput.strafeAxis, 0), -1, 1)
+    : 0;
+  const movementMagnitude = clamp01(Math.hypot(moveAxis, strafeAxis));
+  const boostScale = resolveBoostMultiplier(
+    movementInput.boost,
+    movementMagnitude,
+    config.boostMultiplier,
+    config.boostCurveExponent
+  );
   const targetSpeedUnitsPerSecond =
     config.baseSpeedUnitsPerSecond *
     shapeSignedAxis(moveAxis, config.accelerationCurveExponent) *
-    resolveBoostMultiplier(
-      movementInput.boost,
-      moveAxis,
-      config.boostMultiplier,
-      config.boostCurveExponent
-    );
-  const nextForwardSpeedUnitsPerSecond =
-    moveAxis === 0
+    boostScale;
+  const targetStrafeSpeedUnitsPerSecond =
+    config.baseSpeedUnitsPerSecond *
+    shapeSignedAxis(strafeAxis, config.accelerationCurveExponent) *
+    boostScale;
+  const resolveAxisSpeedUnitsPerSecond = (
+    currentSpeedUnitsPerSecond: number,
+    targetAxisSpeedUnitsPerSecond: number,
+    axisInput: number
+  ): number =>
+    axisInput === 0
       ? (() => {
           const speedDelta =
             config.decelerationUnitsPerSecondSquared *
             resolveShapedDragScale(
-              forwardSpeedUnitsPerSecond,
+              currentSpeedUnitsPerSecond,
               config.baseSpeedUnitsPerSecond,
               config.dragCurveExponent
             ) *
             deltaSeconds;
 
-          if (Math.abs(targetSpeedUnitsPerSecond - forwardSpeedUnitsPerSecond) <= speedDelta) {
+          if (Math.abs(targetAxisSpeedUnitsPerSecond - currentSpeedUnitsPerSecond) <= speedDelta) {
             return 0;
           }
 
           return (
-            forwardSpeedUnitsPerSecond -
-            Math.sign(forwardSpeedUnitsPerSecond) * speedDelta
+            currentSpeedUnitsPerSecond -
+            Math.sign(currentSpeedUnitsPerSecond) * speedDelta
           );
         })()
       : (() => {
@@ -362,30 +438,50 @@ function advanceSurfaceLocomotionSnapshot(
             Math.max(
               0.2,
               Math.abs(
-                shapeSignedAxis(moveAxis, config.accelerationCurveExponent)
+                shapeSignedAxis(axisInput, config.accelerationCurveExponent)
               )
             ) *
             deltaSeconds;
 
           if (
-            Math.abs(targetSpeedUnitsPerSecond - forwardSpeedUnitsPerSecond) <=
+            Math.abs(targetAxisSpeedUnitsPerSecond - currentSpeedUnitsPerSecond) <=
             speedDelta
           ) {
-            return targetSpeedUnitsPerSecond;
+            return targetAxisSpeedUnitsPerSecond;
           }
 
           return (
-            forwardSpeedUnitsPerSecond +
-            Math.sign(targetSpeedUnitsPerSecond - forwardSpeedUnitsPerSecond) *
+            currentSpeedUnitsPerSecond +
+            Math.sign(
+              targetAxisSpeedUnitsPerSecond - currentSpeedUnitsPerSecond
+            ) *
               speedDelta
           );
         })();
+  const nextForwardSpeedUnitsPerSecond = resolveAxisSpeedUnitsPerSecond(
+    speedSnapshot.forwardSpeedUnitsPerSecond,
+    targetSpeedUnitsPerSecond,
+    moveAxis
+  );
+  const nextStrafeSpeedUnitsPerSecond = resolveAxisSpeedUnitsPerSecond(
+    speedSnapshot.strafeSpeedUnitsPerSecond,
+    targetStrafeSpeedUnitsPerSecond,
+    strafeAxis
+  );
   const forwardX = Math.sin(yawRadians);
   const forwardZ = -Math.cos(yawRadians);
+  const rightX = Math.cos(yawRadians);
+  const rightZ = Math.sin(yawRadians);
   const unclampedPosition = freezeVector3(
-    snapshot.position.x + forwardX * nextForwardSpeedUnitsPerSecond * deltaSeconds,
+    snapshot.position.x +
+      (forwardX * nextForwardSpeedUnitsPerSecond +
+        rightX * nextStrafeSpeedUnitsPerSecond) *
+        deltaSeconds,
     fixedHeightMeters,
-    snapshot.position.z + forwardZ * nextForwardSpeedUnitsPerSecond * deltaSeconds
+    snapshot.position.z +
+      (forwardZ * nextForwardSpeedUnitsPerSecond +
+        rightZ * nextStrafeSpeedUnitsPerSecond) *
+        deltaSeconds
   );
   const radialDistance = Math.hypot(
     unclampedPosition.x,
@@ -402,10 +498,16 @@ function advanceSurfaceLocomotionSnapshot(
   const deltaZ = position.z - snapshot.position.z;
 
   return Object.freeze({
-    forwardSpeedUnitsPerSecond:
-      deltaSeconds <= 0
-        ? nextForwardSpeedUnitsPerSecond
-        : (deltaX * forwardX + deltaZ * forwardZ) / deltaSeconds,
+    speedSnapshot: Object.freeze({
+      forwardSpeedUnitsPerSecond:
+        deltaSeconds <= 0
+          ? nextForwardSpeedUnitsPerSecond
+          : (deltaX * forwardX + deltaZ * forwardZ) / deltaSeconds,
+      strafeSpeedUnitsPerSecond:
+        deltaSeconds <= 0
+          ? nextStrafeSpeedUnitsPerSecond
+          : (deltaX * rightX + deltaZ * rightZ) / deltaSeconds
+    }),
     snapshot: Object.freeze({
       planarSpeedUnitsPerSecond: Math.hypot(deltaX, deltaZ) / deltaSeconds,
       position,
@@ -447,8 +549,10 @@ export class MetaverseTraversalRuntime {
   #groundedPitchRadians: number;
   #locomotionMode = defaultMetaverseLocomotionMode;
   #mountedSkiffForwardSpeedUnitsPerSecond = 0;
+  #mountedSkiffStrafeSpeedUnitsPerSecond = 0;
   #mountedSkiffState: MountedSkiffRuntimeState | null = null;
   #swimForwardSpeedUnitsPerSecond = 0;
+  #swimStrafeSpeedUnitsPerSecond = 0;
   #swimSnapshot: SurfaceLocomotionSnapshot;
 
   constructor(
@@ -493,8 +597,10 @@ export class MetaverseTraversalRuntime {
     this.#groundedPitchRadians = this.#config.camera.initialPitchRadians;
     this.#locomotionMode = defaultMetaverseLocomotionMode;
     this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
+    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
     this.#mountedSkiffState = null;
     this.#swimForwardSpeedUnitsPerSecond = 0;
+    this.#swimStrafeSpeedUnitsPerSecond = 0;
     this.#swimSnapshot = this.#createSurfaceLocomotionSnapshot(
       freezeVector3(
         this.#config.camera.spawnPosition.x,
@@ -613,7 +719,8 @@ export class MetaverseTraversalRuntime {
     this.#setLocomotionMode("grounded");
     this.#cameraSnapshot = createGroundedCameraSnapshot(
       this.#groundedBodyRuntime.snapshot,
-      this.#groundedPitchRadians
+      this.#groundedPitchRadians,
+      this.#config.bodyPresentation.groundedFirstPersonForwardOffsetMeters
     );
   }
 
@@ -623,16 +730,16 @@ export class MetaverseTraversalRuntime {
   ): void {
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#swimForwardSpeedUnitsPerSecond = 0;
+    this.#swimStrafeSpeedUnitsPerSecond = 0;
     this.#swimSnapshot = this.#createSurfaceLocomotionSnapshot(
       freezeVector3(position.x, this.#config.ocean.height, position.z),
       yawRadians
     );
     this.#setLocomotionMode("swim");
-    this.#cameraSnapshot = createSurfaceCameraSnapshot(
-      this.#swimSnapshot.position,
-      this.#config.swim.cameraEyeHeightMeters,
-      this.#swimSnapshot.yawRadians,
-      this.#groundedPitchRadians
+    this.#cameraSnapshot = createSwimThirdPersonCameraSnapshot(
+      this.#swimSnapshot,
+      this.#groundedPitchRadians,
+      this.#config
     );
   }
 
@@ -718,6 +825,7 @@ export class MetaverseTraversalRuntime {
     if (mountedEnvironment.environmentAssetId !== "metaverse-hub-skiff-v1") {
       this.#mountedSkiffState = null;
       this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
+      this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
       return;
     }
 
@@ -728,6 +836,7 @@ export class MetaverseTraversalRuntime {
     if (dynamicEnvironmentPose === null) {
       this.#mountedSkiffState = null;
       this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
+      this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
       return;
     }
 
@@ -743,7 +852,8 @@ export class MetaverseTraversalRuntime {
 
     this.#groundedPitchRadians = this.#cameraSnapshot.pitchRadians;
     this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-    this.#mountedSkiffState = Object.freeze({
+    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
+    const mountedSkiffState = Object.freeze({
       environmentAssetId: mountedEnvironment.environmentAssetId,
       label: mountedEnvironment.label,
       planarSpeedUnitsPerSecond: 0,
@@ -754,6 +864,7 @@ export class MetaverseTraversalRuntime {
       ),
       yawRadians
     });
+    this.#mountedSkiffState = mountedSkiffState;
     this.#setDynamicEnvironmentPose(
       mountedEnvironment.environmentAssetId,
       Object.freeze({
@@ -761,17 +872,17 @@ export class MetaverseTraversalRuntime {
         yawRadians
       })
     );
-    this.#cameraSnapshot = createSurfaceCameraSnapshot(
-      position,
-      this.#config.skiff.cameraEyeHeightMeters,
-      yawRadians,
-      this.#groundedPitchRadians
+    this.#cameraSnapshot = createSkiffThirdPersonCameraSnapshot(
+      mountedSkiffState,
+      this.#groundedPitchRadians,
+      this.#config
     );
   }
 
   #dismountSkiff(previousMountedSkiffState: MountedSkiffRuntimeState): void {
     this.#mountedSkiffState = null;
     this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
+    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
     this.#syncAutomaticSurfaceLocomotion(
       previousMountedSkiffState.position,
       previousMountedSkiffState.yawRadians
@@ -828,37 +939,53 @@ export class MetaverseTraversalRuntime {
   #shouldEnableGroundedAutostep(
     position: PhysicsVector3Snapshot,
     yawRadians: number,
-    moveAxis: number
+    moveAxis: number,
+    strafeAxis: number
   ): boolean {
-    const movementDirection = Math.sign(clamp(moveAxis, -1, 1));
+    const clampedMoveAxis = clamp(toFiniteNumber(moveAxis, 0), -1, 1);
+    const clampedStrafeAxis = clamp(toFiniteNumber(strafeAxis, 0), -1, 1);
+    const inputMagnitude = Math.hypot(clampedMoveAxis, clampedStrafeAxis);
 
-    if (movementDirection === 0) {
+    if (inputMagnitude <= 0.0001) {
       return false;
     }
 
+    const normalizedMoveAxis = clampedMoveAxis / inputMagnitude;
+    const normalizedStrafeAxis = clampedStrafeAxis / inputMagnitude;
+    const forwardX = Math.sin(yawRadians);
+    const forwardZ = -Math.cos(yawRadians);
+    const rightX = Math.cos(yawRadians);
+    const rightZ = Math.sin(yawRadians);
+    const movementDirectionX =
+      forwardX * normalizedMoveAxis + rightX * normalizedStrafeAxis;
+    const movementDirectionZ =
+      forwardZ * normalizedMoveAxis + rightZ * normalizedStrafeAxis;
+    const movementYawRadians = Math.atan2(
+      movementDirectionX,
+      -movementDirectionZ
+    );
     const currentSupportHeightMeters = position.y;
     const maxEligibleStepRiseMeters =
       this.#config.groundedBody.stepHeightMeters +
       automaticSurfaceStepHeightLeewayMeters;
     const probeForwardDistanceMeters =
       this.#config.groundedBody.capsuleRadiusMeters *
-      automaticSurfaceProbeForwardDistanceFactor *
-      movementDirection;
+      automaticSurfaceProbeForwardDistanceFactor;
     const probeLateralDistanceMeters =
       this.#config.groundedBody.capsuleRadiusMeters *
       automaticSurfaceProbeLateralDistanceFactor;
 
     for (const probeOffset of [
-      resolvePlanarProbeOffset(probeForwardDistanceMeters, 0, yawRadians),
+      resolvePlanarProbeOffset(probeForwardDistanceMeters, 0, movementYawRadians),
       resolvePlanarProbeOffset(
         probeForwardDistanceMeters * 0.72,
         -probeLateralDistanceMeters,
-        yawRadians
+        movementYawRadians
       ),
       resolvePlanarProbeOffset(
         probeForwardDistanceMeters * 0.72,
         probeLateralDistanceMeters,
-        yawRadians
+        movementYawRadians
       )
     ]) {
       const supportHeightMeters = this.#resolveSurfaceSupportHeightMeters(
@@ -1062,7 +1189,7 @@ export class MetaverseTraversalRuntime {
     const currentBodySnapshot = this.#groundedBodyRuntime.snapshot;
     const nextGroundedYawRadians = wrapRadians(
       currentBodySnapshot.yawRadians +
-        clamp(movementInput.yawAxis, -1, 1) *
+        clamp(toFiniteNumber(movementInput.yawAxis, 0), -1, 1) *
           this.#config.groundedBody.maxTurnSpeedRadiansPerSecond *
           deltaSeconds
     );
@@ -1071,12 +1198,13 @@ export class MetaverseTraversalRuntime {
       this.#shouldEnableGroundedAutostep(
         currentBodySnapshot.position,
         nextGroundedYawRadians,
-        movementInput.moveAxis
+        movementInput.moveAxis,
+        movementInput.strafeAxis
       )
     );
     this.#groundedPitchRadians = advanceMetaversePitchRadians(
       this.#groundedPitchRadians,
-      movementInput.pitchAxis,
+      toFiniteNumber(movementInput.pitchAxis, 0),
       this.#config.orientation,
       deltaSeconds
     );
@@ -1084,8 +1212,10 @@ export class MetaverseTraversalRuntime {
     const bodySnapshot = this.#groundedBodyRuntime.advance(
       Object.freeze({
         boost: movementInput.boost,
+        jump: movementInput.jump,
         moveAxis: movementInput.moveAxis,
-        turnAxis: movementInput.yawAxis
+        strafeAxis: movementInput.strafeAxis,
+        turnAxis: toFiniteNumber(movementInput.yawAxis, 0)
       }),
       deltaSeconds
     );
@@ -1102,7 +1232,11 @@ export class MetaverseTraversalRuntime {
       return this.#cameraSnapshot;
     }
 
-    return createGroundedCameraSnapshot(bodySnapshot, this.#groundedPitchRadians);
+    return createGroundedCameraSnapshot(
+      bodySnapshot,
+      this.#groundedPitchRadians,
+      this.#config.bodyPresentation.groundedFirstPersonForwardOffsetMeters
+    );
   }
 
   #resolveSwimCameraSnapshot(
@@ -1111,14 +1245,17 @@ export class MetaverseTraversalRuntime {
   ): MetaverseCameraSnapshot {
     this.#groundedPitchRadians = advanceMetaversePitchRadians(
       this.#groundedPitchRadians,
-      movementInput.pitchAxis,
+      toFiniteNumber(movementInput.pitchAxis, 0),
       this.#config.orientation,
       deltaSeconds
     );
 
     const nextSwimState = advanceSurfaceLocomotionSnapshot(
       this.#swimSnapshot,
-      this.#swimForwardSpeedUnitsPerSecond,
+      {
+        forwardSpeedUnitsPerSecond: this.#swimForwardSpeedUnitsPerSecond,
+        strafeSpeedUnitsPerSecond: this.#swimStrafeSpeedUnitsPerSecond
+      },
       movementInput,
       this.#config.swim,
       deltaSeconds,
@@ -1127,7 +1264,9 @@ export class MetaverseTraversalRuntime {
     );
 
     this.#swimForwardSpeedUnitsPerSecond =
-      nextSwimState.forwardSpeedUnitsPerSecond;
+      nextSwimState.speedSnapshot.forwardSpeedUnitsPerSecond;
+    this.#swimStrafeSpeedUnitsPerSecond =
+      nextSwimState.speedSnapshot.strafeSpeedUnitsPerSecond;
     this.#swimSnapshot = nextSwimState.snapshot;
 
     const locomotionDecision = this.#resolveAutomaticSurfaceLocomotionMode(
@@ -1146,11 +1285,10 @@ export class MetaverseTraversalRuntime {
       return this.#cameraSnapshot;
     }
 
-    return createSurfaceCameraSnapshot(
-      this.#swimSnapshot.position,
-      this.#config.swim.cameraEyeHeightMeters,
-      this.#swimSnapshot.yawRadians,
-      this.#groundedPitchRadians
+    return createSwimThirdPersonCameraSnapshot(
+      this.#swimSnapshot,
+      this.#groundedPitchRadians,
+      this.#config
     );
   }
 
@@ -1166,7 +1304,7 @@ export class MetaverseTraversalRuntime {
 
     this.#groundedPitchRadians = advanceMetaversePitchRadians(
       this.#groundedPitchRadians,
-      movementInput.pitchAxis,
+      toFiniteNumber(movementInput.pitchAxis, 0),
       this.#config.orientation,
       deltaSeconds
     );
@@ -1175,13 +1313,20 @@ export class MetaverseTraversalRuntime {
       ? movementInput
       : Object.freeze({
           boost: false,
+          jump: false,
           moveAxis: 0,
+          primaryAction: movementInput.primaryAction,
           pitchAxis: movementInput.pitchAxis,
+          secondaryAction: movementInput.secondaryAction,
+          strafeAxis: 0,
           yawAxis: 0
         } satisfies MetaverseFlightInputSnapshot);
     const nextSkiffState = advanceSurfaceLocomotionSnapshot(
       mountedSkiffState,
-      this.#mountedSkiffForwardSpeedUnitsPerSecond,
+      {
+        forwardSpeedUnitsPerSecond: this.#mountedSkiffForwardSpeedUnitsPerSecond,
+        strafeSpeedUnitsPerSecond: this.#mountedSkiffStrafeSpeedUnitsPerSecond
+      },
       skiffMovementInput,
       this.#config.skiff,
       deltaSeconds,
@@ -1199,7 +1344,10 @@ export class MetaverseTraversalRuntime {
     } satisfies MountedSkiffRuntimeState);
 
     this.#mountedSkiffForwardSpeedUnitsPerSecond = skiffSnapshot.waterborne
-      ? nextSkiffState.forwardSpeedUnitsPerSecond
+      ? nextSkiffState.speedSnapshot.forwardSpeedUnitsPerSecond
+      : 0;
+    this.#mountedSkiffStrafeSpeedUnitsPerSecond = skiffSnapshot.waterborne
+      ? nextSkiffState.speedSnapshot.strafeSpeedUnitsPerSecond
       : 0;
     this.#mountedSkiffState = skiffSnapshot;
     this.#setDynamicEnvironmentPose(skiffSnapshot.environmentAssetId, {
@@ -1207,11 +1355,10 @@ export class MetaverseTraversalRuntime {
       yawRadians: skiffSnapshot.yawRadians
     });
 
-    return createSurfaceCameraSnapshot(
-      skiffSnapshot.position,
-      this.#config.skiff.cameraEyeHeightMeters,
-      skiffSnapshot.yawRadians,
-      this.#groundedPitchRadians
+    return createSkiffThirdPersonCameraSnapshot(
+      skiffSnapshot,
+      this.#groundedPitchRadians,
+      this.#config
     );
   }
 
@@ -1238,7 +1385,9 @@ export class MetaverseTraversalRuntime {
       this.#characterPresentationSnapshot = createCharacterPresentationSnapshot(
         this.#swimSnapshot.position,
         this.#swimSnapshot.yawRadians,
-        this.#swimSnapshot.planarSpeedUnitsPerSecond
+        this.#swimSnapshot.planarSpeedUnitsPerSecond,
+        "swim",
+        "swim-idle"
       );
       return;
     }

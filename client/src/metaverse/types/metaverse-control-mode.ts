@@ -11,7 +11,11 @@ export interface MetaverseControlModeDefinition {
 
 export interface MetaverseFlightInputSnapshot {
   readonly boost: boolean;
+  readonly jump: boolean;
   readonly moveAxis: number;
+  readonly primaryAction: boolean;
   readonly pitchAxis: number;
+  readonly secondaryAction: boolean;
+  readonly strafeAxis: number;
   readonly yawAxis: number;
 }

@@ -13,7 +13,9 @@ export interface PhysicsQuaternionSnapshot {
 
 export interface MetaverseGroundedBodyIntentSnapshot {
   readonly boost: boolean;
+  readonly jump: boolean;
   readonly moveAxis: number;
+  readonly strafeAxis: number;
   readonly turnAxis: number;
 }
 
@@ -25,6 +27,7 @@ export interface MetaverseGroundedBodySnapshot {
   readonly jumpReady: boolean;
   readonly planarSpeedUnitsPerSecond: number;
   readonly position: PhysicsVector3Snapshot;
+  readonly verticalSpeedUnitsPerSecond: number;
   readonly yawRadians: number;
 }
 
@@ -42,6 +45,7 @@ export interface MetaverseGroundedBodyConfig {
   readonly dragCurveExponent: number;
   readonly eyeHeightMeters: number;
   readonly gravityUnitsPerSecond: number;
+  readonly jumpImpulseUnitsPerSecond: number;
   readonly maxSlopeClimbAngleRadians: number;
   readonly minSlopeSlideAngleRadians: number;
   readonly maxTurnSpeedRadiansPerSecond: number;

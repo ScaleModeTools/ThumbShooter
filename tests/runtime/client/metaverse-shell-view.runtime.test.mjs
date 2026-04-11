@@ -52,7 +52,7 @@ test("buildMetaverseShellView derives stable shell labels from typed state", asy
   assert.equal(shellView.calibrationQualityLabel, "not required in mouse mode");
   assert.equal(shellView.capabilityReasonLabel, "Gameplay WebGPU adapter ready.");
   assert.equal(shellView.gameplayInputModeLabel, "Mouse");
-  assert.equal(shellView.metaverseControlModeLabel, "Keyboard");
+  assert.equal(shellView.metaverseControlModeLabel, "Keyboard + Mouse");
   assert.equal(shellView.musicVolumeLabel, "30%");
   assert.equal(shellView.sfxVolumeLabel, "65%");
   assert.deepEqual(shellView.musicVolumeSliderValue, [30]);

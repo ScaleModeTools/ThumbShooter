@@ -104,7 +104,8 @@ export function MainMenuStageScreen({
             <CardDescription>
               Hub controls now stay separate from Duck Hunt launch input. Mouse
               aim or camera thumb-trigger belong to the experience; keyboard or
-              mouse flight belong to the hub.
+              gamepad schemes can evolve independently while hub traversal keeps
+              standard keyboard+mouse FPS semantics by default.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">

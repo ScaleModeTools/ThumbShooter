@@ -109,7 +109,10 @@ class FakeCharacterController {
         }
       }
 
-      if (desiredFootY <= supportingSurfaceY + this.snapDistance) {
+      if (
+        desiredTranslationDelta.y <= 0 &&
+        desiredFootY <= supportingSurfaceY + this.snapDistance
+      ) {
         nextFootY = supportingSurfaceY;
       }
     }
@@ -410,6 +413,58 @@ test("MetaverseTraversalRuntime resolves grounded support from local surface col
   }
 });
 
+test("MetaverseTraversalRuntime keeps the grounded first-person camera ahead of the body root", async () => {
+  const [
+    { metaverseRuntimeConfig }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
+  ]);
+  const { config, groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness({
+      config: {
+        camera: {
+          ...metaverseRuntimeConfig.camera,
+          initialYawRadians: 0
+        }
+      },
+      surfaceColliderSnapshots: [
+        Object.freeze({
+          halfExtents: freezeVector3(4, 0.2, 4),
+          rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+          translation: freezeVector3(0, -0.1, 24)
+        })
+      ]
+    });
+
+  try {
+    traversalRuntime.boot();
+    traversalRuntime.advance(forwardTravelInput, 1 / 60);
+
+    assert.ok(
+      Math.abs(
+        traversalRuntime.cameraSnapshot.position.x -
+          groundedBodyRuntime.snapshot.position.x
+      ) < 0.000001
+    );
+    assert.ok(
+      Math.abs(
+        traversalRuntime.cameraSnapshot.position.y -
+          (groundedBodyRuntime.snapshot.position.y +
+            groundedBodyRuntime.snapshot.eyeHeightMeters)
+      ) < 0.000001
+    );
+    assert.ok(
+      Math.abs(
+        traversalRuntime.cameraSnapshot.position.z -
+          (groundedBodyRuntime.snapshot.position.z -
+            config.bodyPresentation.groundedFirstPersonForwardOffsetMeters)
+      ) < 0.000001
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
 test("MetaverseTraversalRuntime routes skiff mounting through the traversal owner and restores swim on dismount", async () => {
   const { config, dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
     await createTraversalHarness({
@@ -456,7 +511,65 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
     assert.equal(traversalRuntime.locomotionMode, "swim");
     assert.equal(
       traversalRuntime.cameraSnapshot.position.y,
-      config.ocean.height + config.swim.cameraEyeHeightMeters
+      config.ocean.height +
+        config.swim.cameraEyeHeightMeters +
+        config.bodyPresentation.swimThirdPersonHeightOffsetMeters
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime routes spacebar jump intent through up, mid, and down animation phases", async () => {
+  const { groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness({
+      surfaceColliderSnapshots: [
+        Object.freeze({
+          halfExtents: freezeVector3(4, 0.2, 4),
+          rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+          translation: freezeVector3(0, -0.1, 24)
+        })
+      ]
+    });
+
+  try {
+    traversalRuntime.boot();
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+
+    const observedVocabularies = new Set();
+
+    for (let frame = 0; frame < 180; frame += 1) {
+      traversalRuntime.advance(
+        Object.freeze({
+          boost: false,
+          jump: frame === 0,
+          moveAxis: 0,
+          pitchAxis: 0,
+          primaryAction: false,
+          secondaryAction: false,
+          strafeAxis: 0,
+          yawAxis: 0
+        }),
+        1 / 60
+      );
+
+      const animationVocabulary =
+        traversalRuntime.characterPresentationSnapshot?.animationVocabulary;
+
+      if (animationVocabulary !== undefined) {
+        observedVocabularies.add(animationVocabulary);
+      }
+    }
+
+    assert.ok(observedVocabularies.has("jump-up"));
+    assert.ok(
+      observedVocabularies.has("jump-mid") ||
+        observedVocabularies.has("jump-down")
+    );
+    assert.equal(groundedBodyRuntime.snapshot.grounded, true);
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "idle"
     );
   } finally {
     groundedBodyRuntime.dispose();
@@ -470,7 +583,7 @@ test("MetaverseTraversalRuntime exits swim onto low step-eligible support and ho
         Object.freeze({
           halfExtents: freezeVector3(4, 0.17, 4),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, -0.02, 30)
+          translation: freezeVector3(0, -0.02, 18)
         })
       ]
     });
@@ -547,7 +660,7 @@ test("MetaverseTraversalRuntime keeps low authored support walkable while ground
         Object.freeze({
           halfExtents: freezeVector3(3, 0.17, 2),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, 0.08, 28)
+          translation: freezeVector3(0, 0.08, 20)
         })
       ]
     });
@@ -564,7 +677,7 @@ test("MetaverseTraversalRuntime keeps low authored support walkable while ground
     assert.equal(traversalRuntime.locomotionMode, "grounded");
     assert.ok(groundedBodyRuntime.snapshot.grounded);
     assert.ok(groundedBodyRuntime.snapshot.position.y > 0.2);
-    assert.ok(groundedBodyRuntime.snapshot.position.z > 26.1);
+    assert.ok(groundedBodyRuntime.snapshot.position.z < 21.9);
   } finally {
     groundedBodyRuntime.dispose();
   }
@@ -582,7 +695,7 @@ test("MetaverseTraversalRuntime keeps tall support blocked while grounded until 
         Object.freeze({
           halfExtents: freezeVector3(3, 0.46, 2),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, 0, 28)
+          translation: freezeVector3(0, 0, 20)
         })
       ]
     });
@@ -599,7 +712,7 @@ test("MetaverseTraversalRuntime keeps tall support blocked while grounded until 
     assert.equal(traversalRuntime.locomotionMode, "grounded");
     assert.ok(groundedBodyRuntime.snapshot.grounded);
     assert.ok(groundedBodyRuntime.snapshot.position.y < 0.12);
-    assert.ok(groundedBodyRuntime.snapshot.position.z < 26);
+    assert.ok(groundedBodyRuntime.snapshot.position.z > 22);
   } finally {
     groundedBodyRuntime.dispose();
   }
@@ -612,13 +725,13 @@ test("MetaverseTraversalRuntime ignores a side blocker while exiting swim onto d
         Object.freeze({
           halfExtents: freezeVector3(4, 0.17, 4),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, -0.02, 30)
+          translation: freezeVector3(0, -0.02, 18)
         }),
         Object.freeze({
           traversalAffordance: "blocker",
           halfExtents: freezeVector3(0.46, 0.46, 0.46),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0.68, 0, 30)
+          translation: freezeVector3(0.68, 0, 18)
         })
       ]
     });
@@ -657,7 +770,7 @@ test("MetaverseTraversalRuntime ignores blocker-affordance shoreline overlap whi
         Object.freeze({
           halfExtents: freezeVector3(4, 0.17, 4),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, -0.02, 30)
+          translation: freezeVector3(0, -0.02, 18)
         })
       ]
     });
@@ -667,13 +780,13 @@ test("MetaverseTraversalRuntime ignores blocker-affordance shoreline overlap whi
         Object.freeze({
           halfExtents: freezeVector3(4, 0.17, 4),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, -0.02, 30)
+          translation: freezeVector3(0, -0.02, 18)
         }),
         Object.freeze({
           traversalAffordance: "blocker",
           halfExtents: freezeVector3(0.46, 0.46, 0.46),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, 0, 26.3)
+          translation: freezeVector3(0, 0, 21.7)
         })
       ]
     });
@@ -708,7 +821,7 @@ test("MetaverseTraversalRuntime keeps swim mode over low blocker-affordance wate
           traversalAffordance: "blocker",
           halfExtents: freezeVector3(0.45, 0.12, 0.45),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, 0.02, 30)
+          translation: freezeVector3(0, 0.02, 18)
         })
       ]
     });
@@ -731,7 +844,7 @@ test("MetaverseTraversalRuntime keeps tall waterborne support in swim mode when 
         Object.freeze({
           halfExtents: freezeVector3(0.46, 0.46, 0.46),
           rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
-          translation: freezeVector3(0, 0, 30)
+          translation: freezeVector3(0, 0, 18)
         })
       ]
     });
