@@ -9,11 +9,16 @@ single-player and server-authoritative co-op.
 
 - metaverse shell flow is live: profile setup -> metaverse hub -> experience
   launch -> return to hub without a full reload
+- metaverse hub vehicle-seat foundation is live: manifest-driven seats and
+  boarding entries, seat-role camera and control policy, solid dynamic skiff
+  collision, and explicit attachment grip alignment
 - Duck Hunt is the first fully integrated experience under
   `src/experiences/duck-hunt`
 - WebGPU stays behind an explicit capability gate
 - hand tracking stays worker-first and optional; mouse-first flows remain
   available where camera setup is unnecessary
+- shared and server metaverse presence now replicate mounted occupancy so
+  remote avatars can occupy the correct vehicle seat or boarding state
 - shared browser services such as `audio`, `network`, `tracking`, and `ui`
   stay top-level reusable domains
 
@@ -21,6 +26,14 @@ single-player and server-authoritative co-op.
 
 - profile, audio, calibration, and input-mode persistence
 - metaverse hub runtime with typed keyboard and mouse control modes
+- manifest-driven mountable vehicle runtime with authored seats and boarding
+  entries
+- driver and passenger seat-role policies for camera, input routing, and
+  occupant animation
+- dynamic skiff hull, deck, and seat-support collision in local physics
+- remote metaverse presence that keeps mounted occupants attached to the
+  correct vehicle seat
+- explicit forward/up grip alignment for handheld socket attachments
 - Duck Hunt launch flow from the shell into gameplay and back out again
 - Duck Hunt mouse input and camera thumb-trigger input
 - nine-point affine aim calibration for tracked input
@@ -50,7 +63,7 @@ single-player and server-authoritative co-op.
 ```text
 client/src
   app/                      # shell composition only
-  metaverse/                # hub runtime, state, components, render
+  metaverse/                # hub runtime, traversal, render, vehicles, HUD
   experiences/duck-hunt/    # Duck Hunt-owned client code
   tracking/                 # shared hand/cursor tracking owners
   audio/                    # shared browser audio services
@@ -59,12 +72,12 @@ client/src
   ui/                       # shared UI primitives and overlays
 
 server/src
-  metaverse/                # hub authority and session runtime
+  metaverse/                # hub authority, presence, and session runtime
   experiences/duck-hunt/    # Duck Hunt authority, rooms, ticks
   index.ts                  # gateway composition root
 
 packages/shared/src
-  metaverse/                # experience ids, launch/session contracts
+  metaverse/                # presence, launch/session, and shared hub contracts
   experiences/duck-hunt/    # Duck Hunt snapshots, commands, events
 
 tests
@@ -76,6 +89,10 @@ For new work, metaverse-wide shell code belongs in `metaverse` domains and
 experience-local code belongs in `experiences/<experienceId>`. Top-level
 service domains such as `audio`, `network`, `tracking`, and `ui` are for
 cross-experience reuse, not Duck Hunt-specific policy.
+
+Within the metaverse client domain, reusable vehicle and seat ownership now
+lives under `client/src/metaverse/vehicles` instead of being smeared across
+scene and traversal hotspots.
 
 ## Workspace Packages
 
@@ -136,6 +153,8 @@ Default local ports:
   `localhost` does.
 - The client proxies `/metaverse/*` and `/experiences/*` requests to the local
   server during development.
+- Metaverse presence traffic lives under `/metaverse/presence` and now carries
+  mounted occupancy as well as pose.
 - Duck Hunt co-op traffic lives under `/experiences/duck-hunt/coop/rooms`.
 - If needed, the client can target a different server origin through
   `VITE_SERVER_ORIGIN`.

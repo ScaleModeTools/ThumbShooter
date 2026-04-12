@@ -61,10 +61,12 @@ Proof-slice allowance rules:
 7. Characters targeting `humanoid_v2` preserve `root`, `pelvis`, the required
    spine, neck, head, arm, and leg chains, and every canonical socket id from
    `metaverse-canonical-rig.md`.
-8. Mountable dynamic environment assets export `seat_socket`.
-9. Collision proxies ship as separate files and stay simpler than the render
+8. Attachment manifests keep explicit grip forward and up metadata when a
+   shipped attachment mounts to a character socket.
+9. Mountable dynamic environment assets export `seat_socket`.
+10. Collision proxies ship as separate files and stay simpler than the render
    mesh.
-10. Multi-tier assets keep one file per tier and use `-high`, `-medium`, or
+11. Multi-tier assets keep one file per tier and use `-high`, `-medium`, or
    `-low` suffixes that match the manifest `tier`.
 
 ## KTX2 Conversion Checklist
@@ -95,6 +97,8 @@ Proof-slice allowance rules:
   `scale` transforms
 - characters keep canonical socket names exactly; runtime does not alias socket
   names
+- socketed attachments keep manifest-owned grip forward and up metadata instead
+  of relying on guessed socket orientation
 - dynamic mountables keep `seat_socket`
 - filenames stay lowercase kebab-case and unversioned
 - runtime consumers may choose LOD tiers, but they do not rewrite asset naming

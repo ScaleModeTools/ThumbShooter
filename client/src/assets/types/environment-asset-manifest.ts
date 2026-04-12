@@ -1,12 +1,15 @@
 import type { RegistryById } from "@webgpu-metaverse/shared";
-import type {
-  VehicleOrientationDescriptor,
-  VehicleRelativeDirectionId
-} from "@webgpu-metaverse/shared";
+import type { VehicleOrientationDescriptor } from "@webgpu-metaverse/shared";
 
 import type { EnvironmentAssetId } from "./asset-id";
 import type { AssetLodGroup } from "./asset-lod";
-import type { SocketId } from "./asset-socket";
+import type {
+  MountedVehicleCameraPolicyId,
+  MountedVehicleControlRoutingPolicyId,
+  MountedVehicleLookLimitPolicyId,
+  MountedVehicleOccupancyAnimationId,
+  MountedVehicleSeatRoleId
+} from "./environment-seat";
 
 export const environmentAssetPlacements = [
   "instanced",
@@ -27,21 +30,56 @@ export const environmentTraversalAffordanceIds = [
 export type EnvironmentTraversalAffordanceId =
   (typeof environmentTraversalAffordanceIds)[number];
 
-export interface EnvironmentColliderVector3 {
+export const environmentPhysicsColliderTraversalAffordanceIds = [
+  "support",
+  "blocker"
+] as const;
+
+export type EnvironmentPhysicsColliderTraversalAffordanceId =
+  (typeof environmentPhysicsColliderTraversalAffordanceIds)[number];
+
+export interface EnvironmentVector3Descriptor {
   readonly x: number;
   readonly y: number;
   readonly z: number;
 }
 
+export type EnvironmentColliderVector3 = EnvironmentVector3Descriptor;
+
 export interface EnvironmentBoxColliderDescriptor {
-  readonly center: EnvironmentColliderVector3;
+  readonly center: EnvironmentVector3Descriptor;
   readonly shape: "box";
-  readonly size: EnvironmentColliderVector3;
+  readonly size: EnvironmentVector3Descriptor;
 }
 
-export interface EnvironmentMountDescriptor {
-  readonly riderFacingDirection: VehicleRelativeDirectionId;
-  readonly seatSocketId: SocketId;
+export interface EnvironmentPhysicsBoxColliderDescriptor
+  extends EnvironmentBoxColliderDescriptor {
+  readonly traversalAffordance: EnvironmentPhysicsColliderTraversalAffordanceId;
+}
+
+export interface EnvironmentSeatDescriptor {
+  readonly cameraPolicyId: MountedVehicleCameraPolicyId;
+  readonly controlRoutingPolicyId: MountedVehicleControlRoutingPolicyId;
+  readonly directEntryEnabled: boolean;
+  readonly dismountOffset: EnvironmentVector3Descriptor;
+  readonly label: string;
+  readonly lookLimitPolicyId: MountedVehicleLookLimitPolicyId;
+  readonly occupancyAnimationId: MountedVehicleOccupancyAnimationId;
+  readonly seatId: string;
+  readonly seatNodeName: string;
+  readonly seatRole: MountedVehicleSeatRoleId;
+}
+
+export interface EnvironmentEntryDescriptor {
+  readonly cameraPolicyId: MountedVehicleCameraPolicyId;
+  readonly controlRoutingPolicyId: MountedVehicleControlRoutingPolicyId;
+  readonly dismountOffset: EnvironmentVector3Descriptor;
+  readonly entryId: string;
+  readonly entryNodeName: string;
+  readonly label: string;
+  readonly lookLimitPolicyId: MountedVehicleLookLimitPolicyId;
+  readonly occupancyAnimationId: MountedVehicleOccupancyAnimationId;
+  readonly occupantRole: MountedVehicleSeatRoleId;
 }
 
 export interface EnvironmentAssetDescriptor<
@@ -50,12 +88,15 @@ export interface EnvironmentAssetDescriptor<
   readonly id: TId;
   readonly label: string;
   readonly placement: EnvironmentAssetPlacement;
-  readonly physicsColliders: readonly EnvironmentBoxColliderDescriptor[] | null;
+  readonly physicsColliders:
+    | readonly EnvironmentPhysicsBoxColliderDescriptor[]
+    | null;
   readonly renderModel: AssetLodGroup;
   readonly orientation: VehicleOrientationDescriptor | null;
   readonly collider: EnvironmentBoxColliderDescriptor | null;
   readonly collisionPath: string | null;
-  readonly mount: EnvironmentMountDescriptor | null;
+  readonly entries: readonly EnvironmentEntryDescriptor[] | null;
+  readonly seats: readonly EnvironmentSeatDescriptor[] | null;
   readonly traversalAffordance: EnvironmentTraversalAffordanceId;
 }
 

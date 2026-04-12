@@ -12,6 +12,25 @@ export const attachmentCategoryIds = [
 
 export type AttachmentCategoryId = (typeof attachmentCategoryIds)[number];
 
+export interface AttachmentVector3Descriptor {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface AttachmentGripAlignmentDescriptor {
+  readonly attachmentForwardAxis: AttachmentVector3Descriptor;
+  readonly attachmentUpAxis: AttachmentVector3Descriptor;
+  readonly socketForwardAxis: AttachmentVector3Descriptor;
+  readonly socketOffset: AttachmentVector3Descriptor;
+  readonly socketUpAxis: AttachmentVector3Descriptor;
+}
+
+export interface AttachmentSupportPointDescriptor {
+  readonly localPosition: AttachmentVector3Descriptor;
+  readonly supportPointId: string;
+}
+
 export interface AttachmentAssetDescriptor<
   TId extends AttachmentAssetId = AttachmentAssetId
 > {
@@ -22,6 +41,8 @@ export interface AttachmentAssetDescriptor<
   readonly defaultSocketId: SocketId;
   readonly allowedSocketIds: readonly SocketId[];
   readonly compatibleSkeletons: readonly SkeletonId[];
+  readonly gripAlignment: AttachmentGripAlignmentDescriptor;
+  readonly supportPoints: readonly AttachmentSupportPointDescriptor[] | null;
 }
 
 export interface AttachmentAssetManifest<

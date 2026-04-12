@@ -42,7 +42,6 @@ test("resolvePlacedCuboidColliders applies placement translation rotation and sc
     environmentAssetId: "metaverse-hub-dock-v1",
     label: "Metaverse hub dock",
     lods: [],
-    mount: null,
     placement: "static",
     placements: [
       {
@@ -51,17 +50,21 @@ test("resolvePlacedCuboidColliders applies placement translation rotation and sc
         scale: 2
       }
     ],
+    entries: null,
+    seats: null,
     traversalAffordance: "support",
     physicsColliders: [
       {
         center: { x: 1, y: 0.5, z: -2 },
         shape: "box",
-        size: { x: 2, y: 1, z: 4 }
+        size: { x: 2, y: 1, z: 4 },
+        traversalAffordance: "support"
       }
     ]
   });
 
   assert.equal(colliders.length, 1);
+  assert.equal(colliders[0]?.ownerEnvironmentAssetId, "metaverse-hub-dock-v1");
   assert.equal(colliders[0]?.traversalAffordance, "support");
   assert.deepEqual(colliders[0]?.halfExtents, {
     x: 2,
@@ -72,6 +75,62 @@ test("resolvePlacedCuboidColliders applies placement translation rotation and sc
     x: 6,
     y: 1,
     z: 18
+  });
+  assert.ok(Math.abs(colliders[0]?.rotation.y - Math.SQRT1_2) < 0.00001);
+  assert.ok(Math.abs(colliders[0]?.rotation.w - Math.SQRT1_2) < 0.00001);
+});
+
+test("resolveDynamicEnvironmentCuboidColliders applies runtime pose while preserving collider affordance", async () => {
+  const { resolveDynamicEnvironmentCuboidColliders } = await clientLoader.load(
+    "/src/metaverse/states/metaverse-environment-collision.ts"
+  );
+
+  const colliders = resolveDynamicEnvironmentCuboidColliders(
+    {
+      environmentAssetId: "metaverse-hub-skiff-v1",
+      physicsColliders: [
+        {
+          center: { x: 1, y: 0.5, z: -2 },
+          shape: "box",
+          size: { x: 2, y: 1, z: 4 },
+          traversalAffordance: "support"
+        },
+        {
+          center: { x: -0.5, y: 0.2, z: 0.25 },
+          shape: "box",
+          size: { x: 1, y: 0.5, z: 0.75 },
+          traversalAffordance: "blocker"
+        }
+      ],
+      placement: "dynamic",
+      placements: [
+        {
+          position: { x: 0, y: 0.12, z: 24 },
+          rotationYRadians: Math.PI,
+          scale: 2
+        }
+      ]
+    },
+    {
+      position: { x: 12, y: 0.25, z: -4 },
+      yawRadians: Math.PI * 0.5
+    }
+  );
+
+  assert.equal(colliders.length, 2);
+  assert.equal(colliders[0]?.ownerEnvironmentAssetId, "metaverse-hub-skiff-v1");
+  assert.equal(colliders[1]?.ownerEnvironmentAssetId, "metaverse-hub-skiff-v1");
+  assert.equal(colliders[0]?.traversalAffordance, "support");
+  assert.equal(colliders[1]?.traversalAffordance, "blocker");
+  assert.deepEqual(colliders[0]?.halfExtents, {
+    x: 2,
+    y: 1,
+    z: 4
+  });
+  assert.deepEqual(colliders[0]?.translation, {
+    x: 8,
+    y: 1.25,
+    z: -6
   });
   assert.ok(Math.abs(colliders[0]?.rotation.y - Math.SQRT1_2) < 0.00001);
   assert.ok(Math.abs(colliders[0]?.rotation.w - Math.SQRT1_2) < 0.00001);
@@ -99,7 +158,6 @@ test("resolvePlacedCollisionTriMeshes bakes placement transforms into world-spac
       environmentAssetId: "metaverse-hub-dock-v1",
       label: "Metaverse hub dock",
       lods: [],
-      mount: null,
       placement: "static",
       placements: [
         {
@@ -108,6 +166,8 @@ test("resolvePlacedCollisionTriMeshes bakes placement transforms into world-spac
           scale: 2
         }
       ],
+      entries: null,
+      seats: null,
       traversalAffordance: "blocker",
       physicsColliders: null
     },

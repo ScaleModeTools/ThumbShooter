@@ -4,7 +4,7 @@ Role: plan. Durable review-driven plan for turning the current skiff mount
 proof into a reusable vehicle, seat, camera, collision, and attachment
 foundation.
 
-Status: proposed.
+Status: completed.
 
 ## Goal
 
@@ -124,10 +124,10 @@ The current proof slice and its coupling points were reviewed in these files:
     implemented"
   - traversal runtime special-cases `metaverse-hub-skiff-v1`
   - mounted state is literally named `MountedSkiffRuntimeState`
-- The current bow-orientation metadata is suspect.
+- The current vehicle-forward orientation metadata is suspect.
   Evidence:
   - `client/src/assets/config/environment-prop-manifest.ts` sets
-    `bowModelYawRadians: Math.PI * 0.25`
+    `forwardModelYawRadians: Math.PI * 0.25`
   - the skiff mesh spans about `4.35m` on local X and `1.8m` on local Z, so
     the authored long axis is lateral relative to the repo's usual `-Z`
     scene-forward expectation
@@ -151,10 +151,10 @@ The current proof slice and its coupling points were reviewed in these files:
   down.
 - Socket debug markers are always spawned in the main scene.
   That is why the colored spheres are visible.
-- Shared and server presence contracts only know pose, locomotion mode, and
-  yaw.
-  They do not know vehicle id, seat id, occupant role, or parent-relative seat
-  state.
+- Shared and server presence contracts now carry pose plus mounted occupancy
+  reference state for vehicle id, entry or seat id, and occupant role.
+  They do not yet carry replicated seat-local look or parent-relative seat
+  pose beyond that occupancy reference.
 
 ## Target Runtime Model
 
@@ -486,7 +486,7 @@ The durable model should be:
 
 ## Step 1 — Freeze Orientation Truth
 
-Status: pending.
+Status: completed.
 
 Fix the orientation problem first, because every later seat or camera decision
 depends on it.
@@ -499,13 +499,13 @@ Work:
   - the pistol attachment
 - decide whether the correct fix is authored asset rotation, manifest metadata
   correction, or both
-- stop treating `bowModelYawRadians` as an eyeballed constant
+- stop treating `forwardModelYawRadians` as an eyeballed constant
 - separate authority yaw from decorative render sway so camera, seat transform,
   and vehicle control all agree on one forward axis
 - add explicit runtime tests for:
-  - runtime yaw to render yaw conversion
-  - render yaw to runtime yaw conversion
-  - mounted seat facing versus vehicle bow
+  - simulation yaw to render yaw conversion
+  - render yaw to simulation yaw conversion
+  - mounted seat facing versus vehicle forward
   - forward, backward, left, and right mapping for driver input
 
 Likely owners:
@@ -520,14 +520,14 @@ Likely owners:
 
 Exit check:
 
-- the skiff bow is visually and numerically correct
+- the skiff forward axis is visually and numerically correct
 - seated forward agrees with vehicle forward
 - driver camera yaw, vehicle yaw, and seated character yaw all agree on the
   same facing truth
 
 ## Step 2 — Split Seat Occupancy From Skiff Proof Logic
 
-Status: pending.
+Status: completed.
 
 Convert the current mounted path from "special skiff mode" into generic
 occupied-seat ownership.
@@ -558,7 +558,7 @@ Exit check:
 
 ## Step 3 — Replace The Single `seat_socket` Vehicle Contract With Seat Definitions
 
-Status: pending.
+Status: completed.
 
 The current environment mount descriptor is too small for durable vehicles.
 
@@ -602,7 +602,7 @@ Exit check:
 
 ## Step 4 — Separate Boarding, Entry, And Seat Selection
 
-Status: pending.
+Status: completed.
 
 A vehicle should support more than one way to enter it.
 
@@ -636,7 +636,7 @@ Exit check:
 
 ## Step 5 — Move Camera Policy Under Seat Role Ownership
 
-Status: pending.
+Status: completed.
 
 Camera behavior must come from seat role, not from the bare fact that the
 player is mounted.
@@ -670,7 +670,7 @@ Exit check:
 
 ## Step 6 — Make Dynamic Vehicles First-Class Solid World Owners
 
-Status: pending.
+Status: completed.
 
 The current skiff is mountable but not physically solid in the way a durable
 metaverse vehicle needs.
@@ -707,7 +707,7 @@ Exit check:
 
 ## Step 7 — Add Attachment Grip And Orientation Contracts
 
-Status: pending.
+Status: completed.
 
 The current attachment system is intentionally minimal, but it is too small
 for reliable held tools and weapons.
@@ -739,7 +739,7 @@ Exit check:
 
 ## Step 8 — Extend Shared Contracts And Authority Only After Local Proof
 
-Status: pending.
+Status: completed.
 
 This step should happen only after the local client-side model proves the right
 shape.
@@ -772,14 +772,14 @@ Exit check:
 
 ## Step 9 — Tighten Tests, Validation, And Documentation
 
-Status: pending.
+Status: completed.
 
 This plan is not complete without durable validation.
 
 Work:
 
 - add runtime tests for:
-  - bow and seat orientation truth
+  - vehicle-forward and seat orientation truth
   - seat-local facing for driver, passenger, and side-bench seats
   - direct seat entry versus hull boarding
   - seated camera yaw and pitch clamps
@@ -819,7 +819,7 @@ here, it should not start implementation yet.
 ## Recommended Rollout Order
 
 1. Step 1 first. Do not add more seat or vehicle behavior on top of ambiguous
-   bow and seat axes.
+   vehicle-forward and seat axes.
 2. Step 2 and Step 3 next. That is the minimum contract work needed to stop
    hardcoding the skiff and single `seat_socket` path.
 3. Step 5 can land with the first driver and passenger seat pass.

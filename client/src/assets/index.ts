@@ -112,9 +112,30 @@ export type {
   EnvironmentAssetManifest,
   EnvironmentBoxColliderDescriptor,
   EnvironmentColliderVector3,
-  EnvironmentMountDescriptor,
+  EnvironmentSeatDescriptor,
+  EnvironmentVector3Descriptor,
   EnvironmentAssetPlacement
 } from "./types/environment-asset-manifest";
+export {
+  defaultMountedVehicleCameraPolicyId,
+  defaultMountedVehicleControlRoutingPolicyId,
+  defaultMountedVehicleLookLimitPolicyId,
+  defaultMountedVehicleOccupancyAnimationId,
+  defaultMountedVehicleSeatId,
+  defaultMountedVehicleSeatRole,
+  mountedVehicleCameraPolicyIds,
+  mountedVehicleControlRoutingPolicyIds,
+  mountedVehicleLookLimitPolicyIds,
+  mountedVehicleOccupancyAnimationIds,
+  mountedVehicleSeatRoleIds
+} from "./types/environment-seat";
+export type {
+  MountedVehicleCameraPolicyId,
+  MountedVehicleControlRoutingPolicyId,
+  MountedVehicleLookLimitPolicyId,
+  MountedVehicleOccupancyAnimationId,
+  MountedVehicleSeatRoleId
+} from "./types/environment-seat";
 export type {
   ReticleDescriptor,
   ReticleManifest

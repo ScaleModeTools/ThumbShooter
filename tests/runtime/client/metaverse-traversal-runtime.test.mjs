@@ -5,6 +5,28 @@ import { createClientModuleLoader } from "./load-client-module.mjs";
 
 let clientLoader;
 
+function createMountedEnvironmentSnapshot(
+  environmentAssetId,
+  label = "Mounted vehicle",
+  overrides = {}
+) {
+  return Object.freeze({
+    cameraPolicyId: "vehicle-follow",
+    controlRoutingPolicyId: "vehicle-surface-drive",
+    directSeatTargets: Object.freeze([]),
+    entryId: null,
+    environmentAssetId,
+    label,
+    lookLimitPolicyId: "driver-forward",
+    occupancyAnimationId: "seated",
+    occupancyKind: "seat",
+    occupantLabel: "Take helm",
+    occupantRole: "driver",
+    seatId: "driver-seat",
+    ...overrides
+  });
+}
+
 class FakeRapierVector3 {
   constructor(x, y, z) {
     this.x = x;
@@ -264,6 +286,14 @@ function freezeVector3(x, y, z) {
   return Object.freeze({ x, y, z });
 }
 
+function createMountedAnchorKey(
+  environmentAssetId,
+  seatId = null,
+  entryId = null
+) {
+  return `${environmentAssetId}:${seatId ?? "entry"}:${entryId ?? "seat"}`;
+}
+
 const forwardTravelInput = Object.freeze({
   boost: false,
   moveAxis: 1,
@@ -338,10 +368,77 @@ async function createTraversalHarness(options = {}) {
   const dynamicPoseMap = new Map(
     Object.entries(options.dynamicEnvironmentPoses ?? {})
   );
+  const mountedEnvironmentAnchorSnapshotsByKey = new Map(
+    Object.entries(options.mountedEnvironmentAnchorSnapshots ?? {})
+  );
+  const mountableEnvironmentConfigById = new Map(
+    Object.keys(options.dynamicEnvironmentPoses ?? {}).map((environmentAssetId) => [
+      environmentAssetId,
+      Object.freeze({
+        entries: null,
+        environmentAssetId,
+        label: "Mounted vehicle",
+        seats: Object.freeze([
+          Object.freeze({
+            cameraPolicyId: "vehicle-follow",
+            controlRoutingPolicyId: "vehicle-surface-drive",
+            directEntryEnabled: true,
+            dismountOffset: freezeVector3(0, 0, 1),
+            label: "Take helm",
+            lookLimitPolicyId: "driver-forward",
+            occupancyAnimationId: "seated",
+            seatId: "driver-seat",
+            seatNodeName: "driver_seat",
+            seatRole: "driver"
+          })
+        ])
+      })
+    ])
+  );
+
+  for (const [environmentAssetId, seatConfig] of Object.entries(
+    options.mountableEnvironmentConfigs ?? {}
+  )) {
+    mountableEnvironmentConfigById.set(
+      environmentAssetId,
+      Object.freeze({
+        entries: Object.freeze(seatConfig.entries ?? []),
+        environmentAssetId,
+        label: seatConfig.label ?? "Mounted vehicle",
+        seats: Object.freeze(seatConfig.seats)
+      })
+    );
+  }
   const traversalRuntime = new MetaverseTraversalRuntime(config, {
     groundedBodyRuntime,
     readDynamicEnvironmentPose(environmentAssetId) {
       return dynamicPoseMap.get(environmentAssetId) ?? null;
+    },
+    readMountedEnvironmentAnchorSnapshot(mountedEnvironment) {
+      const anchorSnapshot =
+        mountedEnvironmentAnchorSnapshotsByKey.get(
+          createMountedAnchorKey(
+            mountedEnvironment.environmentAssetId,
+            mountedEnvironment.seatId,
+            mountedEnvironment.entryId
+          )
+        ) ?? null;
+
+      if (anchorSnapshot !== null) {
+        return anchorSnapshot;
+      }
+
+      const dynamicPose = dynamicPoseMap.get(mountedEnvironment.environmentAssetId);
+
+      return dynamicPose === undefined
+        ? null
+        : Object.freeze({
+            position: dynamicPose.position,
+            yawRadians: dynamicPose.yawRadians
+          });
+    },
+    readMountableEnvironmentConfig(environmentAssetId) {
+      return mountableEnvironmentConfigById.get(environmentAssetId) ?? null;
     },
     setDynamicEnvironmentPose(environmentAssetId, poseSnapshot) {
       dynamicPoseWrites.push({
@@ -363,6 +460,7 @@ async function createTraversalHarness(options = {}) {
     config,
     dynamicPoseWrites,
     groundedBodyRuntime,
+    mountableEnvironmentConfigById,
     traversalRuntime
   };
 }
@@ -521,11 +619,12 @@ test("MetaverseTraversalRuntime steers grounded and swim character yaw from look
   }
 });
 
-test("MetaverseTraversalRuntime routes skiff mounting through the traversal owner and restores swim on dismount", async () => {
+test("MetaverseTraversalRuntime routes mounted vehicle occupancy through the traversal owner and restores swim on dismount", async () => {
+  const vehicleAssetId = "metaverse-test-canoe-v1";
   const { config, dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
     await createTraversalHarness({
       dynamicEnvironmentPoses: {
-        "metaverse-hub-skiff-v1": Object.freeze({
+        [vehicleAssetId]: Object.freeze({
           position: freezeVector3(0, 0.12, 24),
           yawRadians: 0
         })
@@ -537,13 +636,15 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
 
     assert.equal(traversalRuntime.locomotionMode, "swim");
 
-    traversalRuntime.syncMountedEnvironment({
-      environmentAssetId: "metaverse-hub-skiff-v1",
-      label: "Metaverse hub skiff"
-    });
+    traversalRuntime.syncMountedEnvironment(
+      createMountedEnvironmentSnapshot(
+        vehicleAssetId,
+        "Metaverse test canoe"
+      )
+    );
 
     assert.equal(traversalRuntime.locomotionMode, "mounted");
-    assert.equal(dynamicPoseWrites.at(-1)?.environmentAssetId, "metaverse-hub-skiff-v1");
+    assert.equal(dynamicPoseWrites.at(-1)?.environmentAssetId, vehicleAssetId);
     const mountedCamera = traversalRuntime.cameraSnapshot;
 
     traversalRuntime.advance(
@@ -560,17 +661,17 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
       1 / 60
     );
 
-    const mountedSkiffPoseAfterMouseLook =
+    const mountedVehiclePoseAfterMouseLook =
       dynamicPoseWrites.at(-1)?.poseSnapshot;
 
-    assert.ok(mountedSkiffPoseAfterMouseLook?.yawRadians > 0);
+    assert.ok(mountedVehiclePoseAfterMouseLook?.yawRadians > 0);
     assert.equal(
       traversalRuntime.cameraSnapshot.yawRadians,
-      mountedSkiffPoseAfterMouseLook?.yawRadians
+      mountedVehiclePoseAfterMouseLook?.yawRadians
     );
     assert.equal(
       traversalRuntime.characterPresentationSnapshot?.yawRadians,
-      mountedSkiffPoseAfterMouseLook?.yawRadians
+      mountedVehiclePoseAfterMouseLook?.yawRadians
     );
     assert.ok(
       traversalRuntime.cameraSnapshot.yawRadians > mountedCamera.yawRadians
@@ -586,6 +687,289 @@ test("MetaverseTraversalRuntime routes skiff mounting through the traversal owne
         config.swim.cameraEyeHeightMeters +
         config.bodyPresentation.swimThirdPersonHeightOffsetMeters
     );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime maps mounted driver input onto vehicle-local travel axes", async () => {
+  const initialPosition = freezeVector3(0, 0.12, 24);
+  const cases = [
+    {
+      input: Object.freeze({
+        boost: false,
+        jump: false,
+        moveAxis: 1,
+        pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: 0,
+        yawAxis: 0
+      }),
+      label: "forward",
+      validate(poseSnapshot) {
+        assert.ok(poseSnapshot.position.z < initialPosition.z);
+      }
+    },
+    {
+      input: Object.freeze({
+        boost: false,
+        jump: false,
+        moveAxis: -1,
+        pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: 0,
+        yawAxis: 0
+      }),
+      label: "backward",
+      validate(poseSnapshot) {
+        assert.ok(poseSnapshot.position.z > initialPosition.z);
+      }
+    },
+    {
+      input: Object.freeze({
+        boost: false,
+        jump: false,
+        moveAxis: 0,
+        pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: -1,
+        yawAxis: 0
+      }),
+      label: "left",
+      validate(poseSnapshot) {
+        assert.ok(poseSnapshot.position.x < initialPosition.x);
+      }
+    },
+    {
+      input: Object.freeze({
+        boost: false,
+        jump: false,
+        moveAxis: 0,
+        pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: 1,
+        yawAxis: 0
+      }),
+      label: "right",
+      validate(poseSnapshot) {
+        assert.ok(poseSnapshot.position.x > initialPosition.x);
+      }
+    }
+  ];
+
+  for (const inputCase of cases) {
+    const { dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
+      await createTraversalHarness({
+        dynamicEnvironmentPoses: {
+          "metaverse-hub-skiff-v1": Object.freeze({
+            position: initialPosition,
+            yawRadians: 0
+          })
+        }
+      });
+
+    try {
+      traversalRuntime.boot();
+      traversalRuntime.syncMountedEnvironment(
+        createMountedEnvironmentSnapshot(
+          "metaverse-hub-skiff-v1",
+          "Metaverse hub skiff"
+        )
+      );
+      traversalRuntime.advance(inputCase.input, 0.25);
+
+      const poseSnapshot = dynamicPoseWrites.at(-1)?.poseSnapshot;
+
+      assert.ok(poseSnapshot, `Missing mounted driver pose for ${inputCase.label}.`);
+      inputCase.validate(poseSnapshot);
+      assert.equal(poseSnapshot.yawRadians, 0);
+    } finally {
+      groundedBodyRuntime.dispose();
+    }
+  }
+});
+
+test("MetaverseTraversalRuntime suppresses vehicle steering for passenger control policy", async () => {
+  const vehicleAssetId = "metaverse-test-shuttle-v1";
+  const initialPosition = freezeVector3(0, 0.12, 24);
+  const { dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness({
+      dynamicEnvironmentPoses: {
+        [vehicleAssetId]: Object.freeze({
+          position: initialPosition,
+          yawRadians: 0
+        })
+      },
+      mountableEnvironmentConfigs: {
+        [vehicleAssetId]: {
+          label: "Metaverse test shuttle",
+          seats: [
+            Object.freeze({
+              cameraPolicyId: "seat-follow",
+              controlRoutingPolicyId: "look-only",
+              directEntryEnabled: true,
+              dismountOffset: freezeVector3(0, 0, 1),
+              label: "Passenger seat",
+              lookLimitPolicyId: "passenger-bench",
+              occupancyAnimationId: "seated",
+              seatId: "passenger-seat",
+              seatNodeName: "passenger_seat",
+              seatRole: "passenger"
+            })
+          ]
+        }
+      }
+    });
+
+  try {
+    traversalRuntime.boot();
+    traversalRuntime.syncMountedEnvironment(
+      createMountedEnvironmentSnapshot(
+        vehicleAssetId,
+        "Metaverse test shuttle",
+        {
+          controlRoutingPolicyId: "look-only",
+          occupantLabel: "Passenger seat",
+          occupantRole: "passenger",
+          seatId: "passenger-seat",
+          occupancyKind: "seat"
+        }
+      )
+    );
+    traversalRuntime.advance(
+      Object.freeze({
+        boost: true,
+        jump: false,
+        moveAxis: 1,
+        pitchAxis: 0,
+        primaryAction: false,
+        secondaryAction: false,
+        strafeAxis: 1,
+        yawAxis: 1
+      }),
+      0.25
+    );
+
+    const poseSnapshot = dynamicPoseWrites.at(-1)?.poseSnapshot;
+
+    assert.ok(poseSnapshot);
+    assert.equal(poseSnapshot.position.x, initialPosition.x);
+    assert.equal(poseSnapshot.position.y, initialPosition.y);
+    assert.equal(poseSnapshot.position.z, initialPosition.z);
+    assert.equal(poseSnapshot.yawRadians, 0);
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime keeps passenger camera look seat-local while mounted truth stays vehicle-owned", async () => {
+  const vehicleAssetId = "metaverse-test-shuttle-v1";
+  const initialPosition = freezeVector3(0, 0.12, 24);
+  const passengerSeatYawRadians = 0.35;
+  const {
+    dynamicPoseWrites,
+    groundedBodyRuntime,
+    traversalRuntime
+  } = await createTraversalHarness({
+    dynamicEnvironmentPoses: {
+      [vehicleAssetId]: Object.freeze({
+        position: initialPosition,
+        yawRadians: 0
+      })
+    },
+    mountedEnvironmentAnchorSnapshots: {
+      [createMountedAnchorKey(vehicleAssetId, "passenger-seat", null)]:
+        Object.freeze({
+          position: freezeVector3(-0.25, 1.02, 23.52),
+          yawRadians: passengerSeatYawRadians
+        })
+    },
+    mountableEnvironmentConfigs: {
+      [vehicleAssetId]: {
+        label: "Metaverse test shuttle",
+        seats: [
+          Object.freeze({
+            cameraPolicyId: "seat-follow",
+            controlRoutingPolicyId: "look-only",
+            directEntryEnabled: true,
+            dismountOffset: freezeVector3(0, 0, 1),
+            label: "Passenger seat",
+            lookLimitPolicyId: "passenger-bench",
+            occupancyAnimationId: "seated",
+            seatId: "passenger-seat",
+            seatNodeName: "passenger_seat",
+            seatRole: "passenger"
+          })
+        ]
+      }
+    }
+  });
+
+  try {
+    traversalRuntime.boot();
+    traversalRuntime.syncMountedEnvironment(
+      createMountedEnvironmentSnapshot(
+        vehicleAssetId,
+        "Metaverse test shuttle",
+        {
+          cameraPolicyId: "seat-follow",
+          controlRoutingPolicyId: "look-only",
+          occupantLabel: "Passenger seat",
+          occupantRole: "passenger",
+          lookLimitPolicyId: "passenger-bench",
+          seatId: "passenger-seat",
+          occupancyKind: "seat"
+        }
+      )
+    );
+
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      0
+    );
+    assert.equal(
+      traversalRuntime.cameraSnapshot.yawRadians,
+      passengerSeatYawRadians
+    );
+
+    for (let frame = 0; frame < 90; frame += 1) {
+      traversalRuntime.advance(
+        Object.freeze({
+          boost: false,
+          jump: false,
+          moveAxis: 0,
+          pitchAxis: 1,
+          primaryAction: false,
+          secondaryAction: false,
+          strafeAxis: 0,
+          yawAxis: 1
+        }),
+        1 / 60
+      );
+    }
+
+    const poseSnapshot = dynamicPoseWrites.at(-1)?.poseSnapshot;
+
+    assert.ok(poseSnapshot);
+    assert.equal(poseSnapshot.position.x, initialPosition.x);
+    assert.equal(poseSnapshot.position.z, initialPosition.z);
+    assert.equal(poseSnapshot.yawRadians, 0);
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      0
+    );
+    assert.ok(
+      traversalRuntime.cameraSnapshot.yawRadians > passengerSeatYawRadians
+    );
+    assert.ok(
+      traversalRuntime.cameraSnapshot.yawRadians <
+        passengerSeatYawRadians + Math.PI * 0.46
+    );
+    assert.ok(traversalRuntime.cameraSnapshot.pitchRadians <= 0.42);
   } finally {
     groundedBodyRuntime.dispose();
   }

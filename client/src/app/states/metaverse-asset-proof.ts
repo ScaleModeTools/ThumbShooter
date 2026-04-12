@@ -23,8 +23,14 @@ import type { SkeletonId } from "@/assets/types/asset-socket";
 import type {
   EnvironmentAssetDescriptor,
   EnvironmentBoxColliderDescriptor,
-  EnvironmentMountDescriptor
+  EnvironmentPhysicsBoxColliderDescriptor,
+  EnvironmentEntryDescriptor,
+  EnvironmentSeatDescriptor
 } from "@/assets/types/environment-asset-manifest";
+import type {
+  AttachmentGripAlignmentDescriptor,
+  AttachmentSupportPointDescriptor
+} from "@/assets/types/attachment-asset-manifest";
 import {
   normalizePlanarYawRadians
 } from "@webgpu-metaverse/shared";
@@ -33,8 +39,10 @@ import type {
   MetaverseCharacterProofConfig,
   MetaverseEnvironmentAssetProofConfig,
   MetaverseEnvironmentColliderProofConfig,
+  MetaverseEnvironmentEntryProofConfig,
+  MetaverseEnvironmentPhysicsColliderProofConfig,
   MetaverseEnvironmentLodProofConfig,
-  MetaverseEnvironmentMountProofConfig,
+  MetaverseEnvironmentSeatProofConfig,
   MetaverseEnvironmentPlacementProofConfig,
   MetaverseEnvironmentProofConfig
 } from "@/metaverse/types/metaverse-runtime";
@@ -199,11 +207,145 @@ function resolveMetaverseAttachmentProofConfig(
     );
   }
 
+  const resolveAttachmentVector3 = (
+    vector: { readonly x: number; readonly y: number; readonly z: number },
+    label: string
+  ) => {
+    if (
+      !Number.isFinite(vector.x) ||
+      !Number.isFinite(vector.y) ||
+      !Number.isFinite(vector.z)
+    ) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} requires finite ${label} metadata.`
+      );
+    }
+
+    return Object.freeze({
+      x: vector.x,
+      y: vector.y,
+      z: vector.z
+    });
+  };
+  const resolveNormalizedAttachmentAxis = (
+    vector: { readonly x: number; readonly y: number; readonly z: number },
+    label: string
+  ) => {
+    const resolvedVector = resolveAttachmentVector3(vector, label);
+    const magnitude = Math.hypot(
+      resolvedVector.x,
+      resolvedVector.y,
+      resolvedVector.z
+    );
+
+    if (magnitude <= 0.000001) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} requires non-zero ${label}.`
+      );
+    }
+
+    return Object.freeze({
+      x: resolvedVector.x / magnitude,
+      y: resolvedVector.y / magnitude,
+      z: resolvedVector.z / magnitude
+    });
+  };
+  const resolveAttachmentGripAlignment = (
+    gripAlignment: AttachmentGripAlignmentDescriptor
+  ) => {
+    const attachmentForwardAxis = resolveNormalizedAttachmentAxis(
+      gripAlignment.attachmentForwardAxis,
+      "attachment forward axis"
+    );
+    const attachmentUpAxis = resolveNormalizedAttachmentAxis(
+      gripAlignment.attachmentUpAxis,
+      "attachment up axis"
+    );
+    const socketForwardAxis = resolveNormalizedAttachmentAxis(
+      gripAlignment.socketForwardAxis,
+      "socket forward axis"
+    );
+    const socketUpAxis = resolveNormalizedAttachmentAxis(
+      gripAlignment.socketUpAxis,
+      "socket up axis"
+    );
+
+    if (
+      Math.abs(
+        attachmentForwardAxis.x * attachmentUpAxis.x +
+          attachmentForwardAxis.y * attachmentUpAxis.y +
+          attachmentForwardAxis.z * attachmentUpAxis.z
+      ) > 0.999
+    ) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} requires attachment forward and up axes to stay non-collinear.`
+      );
+    }
+
+    if (
+      Math.abs(
+        socketForwardAxis.x * socketUpAxis.x +
+          socketForwardAxis.y * socketUpAxis.y +
+          socketForwardAxis.z * socketUpAxis.z
+      ) > 0.999
+    ) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} requires socket forward and up axes to stay non-collinear.`
+      );
+    }
+
+    return Object.freeze({
+      attachmentForwardAxis,
+      attachmentUpAxis,
+      socketForwardAxis,
+      socketOffset: resolveAttachmentVector3(
+        gripAlignment.socketOffset,
+        "socket offset"
+      ),
+      socketUpAxis
+    });
+  };
+  const resolveAttachmentSupportPoints = (
+    supportPoints: readonly AttachmentSupportPointDescriptor[] | null
+  ) => {
+    if (supportPoints === null) {
+      return null;
+    }
+
+    const supportPointIds = new Set<string>();
+
+    return Object.freeze(
+      supportPoints.map((supportPoint) => {
+        if (supportPointIds.has(supportPoint.supportPointId)) {
+          throw new Error(
+            `Metaverse attachment ${attachmentDescriptor.label} has duplicate support point ${supportPoint.supportPointId}.`
+          );
+        }
+
+        supportPointIds.add(supportPoint.supportPointId);
+
+        return Object.freeze({
+          localPosition: resolveAttachmentVector3(
+            supportPoint.localPosition,
+            `support point ${supportPoint.supportPointId} local position`
+          ),
+          supportPointId: supportPoint.supportPointId
+        });
+      })
+    );
+  };
+
   return Object.freeze({
     attachmentId: attachmentDescriptor.id,
+    gripAlignment: resolveAttachmentGripAlignment(
+      attachmentDescriptor.gripAlignment
+    ),
     label: attachmentDescriptor.label,
     modelPath: resolveLodModelPath(attachmentDescriptor.renderModel),
-    socketName: attachmentDescriptor.defaultSocketId
+    socketName: attachmentDescriptor.defaultSocketId,
+    supportPoints: resolveAttachmentSupportPoints(
+      attachmentDescriptor.supportPoints
+    )
   });
 }
 
@@ -295,8 +437,8 @@ function resolveEnvironmentCollider(
 }
 
 function resolveEnvironmentPhysicsColliders(
-  colliders: readonly EnvironmentBoxColliderDescriptor[] | null
-): readonly MetaverseEnvironmentColliderProofConfig[] | null {
+  colliders: readonly EnvironmentPhysicsBoxColliderDescriptor[] | null
+): readonly MetaverseEnvironmentPhysicsColliderProofConfig[] | null {
   if (colliders === null) {
     return null;
   }
@@ -314,23 +456,68 @@ function resolveEnvironmentPhysicsColliders(
           x: collider.size.x,
           y: collider.size.y,
           z: collider.size.z
-        })
+        }),
+        traversalAffordance: collider.traversalAffordance
       })
     )
   );
 }
 
-function resolveEnvironmentMount(
-  mount: EnvironmentMountDescriptor | null
-): MetaverseEnvironmentMountProofConfig | null {
-  if (mount === null) {
+function resolveEnvironmentSeats(
+  seats: readonly EnvironmentSeatDescriptor[] | null
+): readonly MetaverseEnvironmentSeatProofConfig[] | null {
+  if (seats === null) {
     return null;
   }
 
-  return Object.freeze({
-    riderFacingDirection: mount.riderFacingDirection,
-    seatSocketName: mount.seatSocketId
-  });
+  return Object.freeze(
+    seats.map((seat) =>
+      Object.freeze({
+        cameraPolicyId: seat.cameraPolicyId,
+        controlRoutingPolicyId: seat.controlRoutingPolicyId,
+        directEntryEnabled: seat.directEntryEnabled,
+        dismountOffset: Object.freeze({
+          x: seat.dismountOffset.x,
+          y: seat.dismountOffset.y,
+          z: seat.dismountOffset.z
+        }),
+        label: seat.label,
+        lookLimitPolicyId: seat.lookLimitPolicyId,
+        occupancyAnimationId: seat.occupancyAnimationId,
+        seatId: seat.seatId,
+        seatNodeName: seat.seatNodeName,
+        seatRole: seat.seatRole
+      })
+    )
+  );
+}
+
+function resolveEnvironmentEntries(
+  entries: readonly EnvironmentEntryDescriptor[] | null
+): readonly MetaverseEnvironmentEntryProofConfig[] | null {
+  if (entries === null) {
+    return null;
+  }
+
+  return Object.freeze(
+    entries.map((entry) =>
+      Object.freeze({
+        cameraPolicyId: entry.cameraPolicyId,
+        controlRoutingPolicyId: entry.controlRoutingPolicyId,
+        dismountOffset: Object.freeze({
+          x: entry.dismountOffset.x,
+          y: entry.dismountOffset.y,
+          z: entry.dismountOffset.z
+        }),
+        entryId: entry.entryId,
+        entryNodeName: entry.entryNodeName,
+        label: entry.label,
+        lookLimitPolicyId: entry.lookLimitPolicyId,
+        occupancyAnimationId: entry.occupancyAnimationId,
+        occupantRole: entry.occupantRole
+      })
+    )
+  );
 }
 
 function resolveEnvironmentOrientation(
@@ -340,12 +527,16 @@ function resolveEnvironmentOrientation(
     return null;
   }
 
-  if (!Number.isFinite(orientation.bowModelYawRadians)) {
-    throw new Error("Metaverse vehicle orientation metadata requires a finite bow yaw.");
+  if (!Number.isFinite(orientation.forwardModelYawRadians)) {
+    throw new Error(
+      "Metaverse vehicle orientation metadata requires a finite forward model yaw."
+    );
   }
 
   return Object.freeze({
-    bowModelYawRadians: normalizePlanarYawRadians(orientation.bowModelYawRadians)
+    forwardModelYawRadians: normalizePlanarYawRadians(
+      orientation.forwardModelYawRadians
+    )
   });
 }
 
@@ -366,7 +557,10 @@ function resolveMetaverseEnvironmentAssetProofConfig(
         `Metaverse environment asset ${environmentDescriptor.label} may only use mount affordance on dynamic placement.`
       );
     }
-  } else if (environmentDescriptor.mount !== null) {
+  } else if (
+    environmentDescriptor.seats !== null ||
+    environmentDescriptor.entries !== null
+  ) {
     throw new Error(
       `Metaverse environment asset ${environmentDescriptor.label} cannot expose mount metadata without mount affordance.`
     );
@@ -395,9 +589,28 @@ function resolveMetaverseEnvironmentAssetProofConfig(
         );
       }
 
-      if (environmentDescriptor.mount === null) {
+      if (
+        environmentDescriptor.physicsColliders === null ||
+        environmentDescriptor.physicsColliders.length === 0
+      ) {
         throw new Error(
-          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires mount metadata.`
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires physics colliders for hull and deck collision.`
+        );
+      }
+
+      if (
+        !environmentDescriptor.physicsColliders.some(
+          (collider) => collider.traversalAffordance === "support"
+        )
+      ) {
+        throw new Error(
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires at least one support collider for boarding surfaces.`
+        );
+      }
+
+      if (environmentDescriptor.seats === null || environmentDescriptor.seats.length === 0) {
+        throw new Error(
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires seat metadata.`
         );
       }
 
@@ -407,18 +620,53 @@ function resolveMetaverseEnvironmentAssetProofConfig(
         );
       }
 
-      if (environmentDescriptor.mount.seatSocketId !== "seat_socket") {
+      const seatIds = new Set<string>();
+      const entryIds = new Set<string>();
+      let directEntrySeatCount = 0;
+
+      for (const seat of environmentDescriptor.seats) {
+        if (seatIds.has(seat.seatId)) {
+          throw new Error(
+            `Metaverse dynamic environment asset ${environmentDescriptor.label} has duplicate seat id ${seat.seatId}.`
+          );
+        }
+
+        seatIds.add(seat.seatId);
+
+        if (seat.directEntryEnabled) {
+          directEntrySeatCount += 1;
+        }
+      }
+
+      for (const entry of environmentDescriptor.entries ?? []) {
+        if (entryIds.has(entry.entryId)) {
+          throw new Error(
+            `Metaverse dynamic environment asset ${environmentDescriptor.label} has duplicate entry id ${entry.entryId}.`
+          );
+        }
+
+        entryIds.add(entry.entryId);
+      }
+
+      if (
+        directEntrySeatCount === 0 &&
+        (environmentDescriptor.entries === null ||
+          environmentDescriptor.entries.length === 0)
+      ) {
         throw new Error(
-          `Metaverse dynamic environment asset ${environmentDescriptor.label} must mount through seat_socket.`
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires a direct seat or boarding entry.`
         );
       }
 
-      if (!characterProofConfig.socketNames.includes(environmentDescriptor.mount.seatSocketId)) {
+      if (!characterProofConfig.socketNames.includes("seat_socket")) {
         throw new Error(
-          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires character socket ${environmentDescriptor.mount.seatSocketId}.`
+          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires character socket seat_socket.`
         );
       }
-    } else if (environmentDescriptor.mount !== null) {
+    } else if (
+      environmentDescriptor.seats !== null ||
+      environmentDescriptor.entries !== null
+    ) {
       throw new Error(
         `Metaverse pushable environment asset ${environmentDescriptor.label} cannot expose mount metadata.`
       );
@@ -434,16 +682,17 @@ function resolveMetaverseEnvironmentAssetProofConfig(
   return Object.freeze({
     collisionPath: environmentDescriptor.collisionPath,
     collider: resolveEnvironmentCollider(environmentDescriptor.collider),
+    entries: resolveEnvironmentEntries(environmentDescriptor.entries),
     environmentAssetId: environmentDescriptor.id,
     label: environmentDescriptor.label,
     lods: resolveEnvironmentLods(environmentDescriptor.renderModel),
-    mount: resolveEnvironmentMount(environmentDescriptor.mount),
     orientation: resolveEnvironmentOrientation(environmentDescriptor.orientation),
     placement: environmentDescriptor.placement,
     placements,
     physicsColliders: resolveEnvironmentPhysicsColliders(
       environmentDescriptor.physicsColliders
     ),
+    seats: resolveEnvironmentSeats(environmentDescriptor.seats),
     traversalAffordance: environmentDescriptor.traversalAffordance
   });
 }

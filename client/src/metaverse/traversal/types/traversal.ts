@@ -3,7 +3,12 @@ import {
   type PhysicsVector3Snapshot
 } from "@/physics";
 
+import type {
+  MetaverseEnvironmentAssetProofConfig,
+  MountedEnvironmentSnapshot
+} from "../../types/metaverse-runtime";
 import type { MetaversePlacedCuboidColliderSnapshot } from "../../states/metaverse-environment-collision";
+import type { MountedVehicleRuntimeSnapshot } from "../../vehicles";
 
 export interface SurfaceLocomotionConfig {
   readonly accelerationCurveExponent: number;
@@ -27,13 +32,12 @@ export interface SurfaceLocomotionSpeedSnapshot {
   readonly strafeSpeedUnitsPerSecond: number;
 }
 
-export interface MountedSkiffRuntimeState extends SurfaceLocomotionSnapshot {
-  readonly environmentAssetId: string;
-  readonly label: string;
-  readonly waterborne: boolean;
+export interface DynamicEnvironmentPoseSnapshot {
+  readonly position: PhysicsVector3Snapshot;
+  readonly yawRadians: number;
 }
 
-export interface DynamicEnvironmentPoseSnapshot {
+export interface MountedEnvironmentAnchorSnapshot {
   readonly position: PhysicsVector3Snapshot;
   readonly yawRadians: number;
 }
@@ -43,6 +47,15 @@ export interface MetaverseTraversalRuntimeDependencies {
   readonly readDynamicEnvironmentPose: (
     environmentAssetId: string
   ) => DynamicEnvironmentPoseSnapshot | null;
+  readonly readMountedEnvironmentAnchorSnapshot: (
+    mountedEnvironment: MountedEnvironmentSnapshot
+  ) => MountedEnvironmentAnchorSnapshot | null;
+  readonly readMountableEnvironmentConfig: (
+    environmentAssetId: string
+  ) => Pick<
+    MetaverseEnvironmentAssetProofConfig,
+    "entries" | "environmentAssetId" | "label" | "seats"
+  > | null;
   readonly setDynamicEnvironmentPose: (
     environmentAssetId: string,
     poseSnapshot: DynamicEnvironmentPoseSnapshot | null
@@ -56,3 +69,5 @@ export interface AutomaticSurfaceLocomotionDecision {
   readonly locomotionMode: AutomaticSurfaceLocomotionModeId;
   readonly supportHeightMeters: number | null;
 }
+
+export type TraversalMountedVehicleSnapshot = MountedVehicleRuntimeSnapshot;

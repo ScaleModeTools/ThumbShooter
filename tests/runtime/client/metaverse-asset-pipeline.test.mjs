@@ -85,6 +85,36 @@ function resolveNamedChildNodeNames(document, childIndices) {
     .filter((name) => typeof name === "string");
 }
 
+function collectReachableNamedNodeNames(document) {
+  const reachableNodeNames = new Set();
+  const visitedNodeIndices = new Set();
+  const pendingNodeIndices = [...(document.scenes?.[document.scene ?? 0]?.nodes ?? [])];
+
+  while (pendingNodeIndices.length > 0) {
+    const nodeIndex = pendingNodeIndices.pop();
+
+    if (typeof nodeIndex !== "number" || visitedNodeIndices.has(nodeIndex)) {
+      continue;
+    }
+
+    visitedNodeIndices.add(nodeIndex);
+
+    const node = document.nodes?.[nodeIndex];
+
+    if (node === undefined) {
+      continue;
+    }
+
+    if (typeof node.name === "string") {
+      reachableNodeNames.add(node.name);
+    }
+
+    pendingNodeIndices.push(...(node.children ?? []));
+  }
+
+  return reachableNodeNames;
+}
+
 function assertNumberArraysClose(actual, expected, tolerance, message) {
   assert.equal(actual.length, expected.length, `${message} length mismatch.`);
 
@@ -417,6 +447,27 @@ test("metaverse asset manifests keep stable shipped delivery paths and LOD namin
   }
 });
 
+test("attachment manifests keep explicit grip alignment metadata for socketed tools", async () => {
+  const {
+    attachmentModelManifest,
+    metaverseServicePistolAttachmentAssetId
+  } = await clientLoader.load("/src/assets/config/attachment-model-manifest.ts");
+
+  const pistolAttachment =
+    attachmentModelManifest.byId[metaverseServicePistolAttachmentAssetId];
+
+  assert.ok(pistolAttachment);
+  assert.equal(pistolAttachment.defaultSocketId, "hand_r_socket");
+  assert.deepEqual(pistolAttachment.gripAlignment, {
+    attachmentForwardAxis: { x: 1, y: 0, z: 0 },
+    attachmentUpAxis: { x: 0, y: 1, z: 0 },
+    socketForwardAxis: { x: 1, y: 0, z: 0 },
+    socketOffset: { x: 0, y: 0, z: 0 },
+    socketUpAxis: { x: 0, y: -1, z: 0 }
+  });
+  assert.equal(pistolAttachment.supportPoints, null);
+});
+
 test("current proof-slice gltf assets keep embedded payloads and normalized node scale", async () => {
   const manifests = await Promise.all([
     clientLoader.load("/src/assets/config/animation-clip-manifest.ts"),
@@ -511,7 +562,7 @@ test("shipped metaverse glb assets keep normalized node scale", async () => {
   }
 });
 
-test("proof delivery assets keep canonical character sockets, animation vocabulary clips, and mount seat sockets", async () => {
+test("proof delivery assets keep canonical character sockets, animation vocabulary clips, and authored vehicle seat nodes", async () => {
   const [
     { skeletonBoneNamesById, socketIds },
     { characterModelManifest },
@@ -535,6 +586,7 @@ test("proof delivery assets keep canonical character sockets, animation vocabula
       .map((node) => node.name)
       .filter((name) => typeof name === "string")
   );
+  const skiffReachableNodeNames = collectReachableNamedNodeNames(skiffDocument);
 
   for (const character of characterModelManifest.characters) {
     const characterDocument = await loadMetaverseAssetDocument(
@@ -608,7 +660,12 @@ test("proof delivery assets keep canonical character sockets, animation vocabula
     }
   }
 
-  assert.ok(skiffNodeNames.has("seat_socket"));
+  assert.ok(skiffNodeNames.has("driver_seat"));
+  assert.ok(skiffNodeNames.has("port_bench_seat"));
+  assert.ok(skiffNodeNames.has("deck_entry"));
+  assert.ok(skiffReachableNodeNames.has("driver_seat"));
+  assert.ok(skiffReachableNodeNames.has("port_bench_seat"));
+  assert.ok(skiffReachableNodeNames.has("deck_entry"));
 });
 
 test("active full-body character render asset stays compatible with the canonical animation pack rig", async () => {

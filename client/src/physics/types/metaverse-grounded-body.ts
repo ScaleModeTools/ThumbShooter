@@ -104,6 +104,7 @@ export interface RapierColliderDescFactory {
 }
 
 export interface RapierColliderHandle {
+  setRotation(rotation: PhysicsQuaternionSnapshot): void;
   setTranslation(translation: RapierVectorLike): void;
   translation(): RapierVectorLike;
 }

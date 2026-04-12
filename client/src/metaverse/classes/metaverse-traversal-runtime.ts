@@ -12,13 +12,16 @@ import type { MetaverseLocomotionModeId } from "../types/metaverse-locomotion-mo
 import type {
   MetaverseCameraSnapshot,
   MetaverseCharacterPresentationSnapshot,
+  MetaverseEnvironmentAssetProofConfig,
   MetaverseRuntimeConfig,
   MountedEnvironmentSnapshot
 } from "../types/metaverse-runtime";
 import {
   advanceTraversalCameraPresentationPitchRadians,
+  advanceTraversalMountedOccupancyLookYawRadians,
+  clampTraversalMountedOccupancyPitchRadians,
   createTraversalGroundedCameraPresentationSnapshot,
-  createTraversalSkiffCameraPresentationSnapshot,
+  createTraversalMountedVehicleCameraPresentationSnapshot,
   createTraversalSwimCameraPresentationSnapshot
 } from "../traversal/presentation/camera-presentation";
 import { createTraversalCharacterPresentationSnapshot } from "../traversal/presentation/character-presentation";
@@ -38,9 +41,13 @@ import {
 } from "../traversal/policies/surface-routing";
 import type {
   MetaverseTraversalRuntimeDependencies,
-  MountedSkiffRuntimeState,
-  SurfaceLocomotionSnapshot
+  SurfaceLocomotionSnapshot,
+  TraversalMountedVehicleSnapshot
 } from "../traversal/types/traversal";
+import {
+  MetaverseVehicleRuntime,
+  type MountedVehicleControlIntent
+} from "../vehicles";
 
 function createIdleGroundedBodyIntentSnapshot() {
   return Object.freeze({
@@ -52,10 +59,28 @@ function createIdleGroundedBodyIntentSnapshot() {
   });
 }
 
+function resolveMountedEnvironmentDirectSeatTargets(
+  mountableEnvironmentConfig: Pick<MetaverseEnvironmentAssetProofConfig, "seats">
+): MountedEnvironmentSnapshot["directSeatTargets"] {
+  return Object.freeze(
+    (mountableEnvironmentConfig.seats ?? [])
+      .filter((seat) => seat.directEntryEnabled)
+      .map((seat) =>
+        Object.freeze({
+          label: seat.label,
+          seatId: seat.seatId,
+          seatRole: seat.seatRole
+        })
+      )
+  );
+}
+
 export class MetaverseTraversalRuntime {
   readonly #config: MetaverseRuntimeConfig;
   readonly #groundedBodyRuntime: MetaverseGroundedBodyRuntime;
   readonly #readDynamicEnvironmentPose: MetaverseTraversalRuntimeDependencies["readDynamicEnvironmentPose"];
+  readonly #readMountedEnvironmentAnchorSnapshot: MetaverseTraversalRuntimeDependencies["readMountedEnvironmentAnchorSnapshot"];
+  readonly #readMountableEnvironmentConfig: MetaverseTraversalRuntimeDependencies["readMountableEnvironmentConfig"];
   readonly #setDynamicEnvironmentPose: MetaverseTraversalRuntimeDependencies["setDynamicEnvironmentPose"];
   readonly #surfaceColliderSnapshots: MetaverseTraversalRuntimeDependencies["surfaceColliderSnapshots"];
 
@@ -63,9 +88,12 @@ export class MetaverseTraversalRuntime {
   #characterPresentationSnapshot: MetaverseCharacterPresentationSnapshot | null =
     null;
   #locomotionMode = defaultMetaverseLocomotionMode;
-  #mountedSkiffForwardSpeedUnitsPerSecond = 0;
-  #mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-  #mountedSkiffState: MountedSkiffRuntimeState | null = null;
+  #mountedEnvironmentConfig: Pick<
+    MetaverseEnvironmentAssetProofConfig,
+    "entries" | "environmentAssetId" | "label" | "seats"
+  > | null = null;
+  #mountedOccupancyLookYawRadians = 0;
+  #mountedVehicleRuntime: MetaverseVehicleRuntime | null = null;
   #swimForwardSpeedUnitsPerSecond = 0;
   #swimStrafeSpeedUnitsPerSecond = 0;
   #swimSnapshot: SurfaceLocomotionSnapshot;
@@ -78,6 +106,10 @@ export class MetaverseTraversalRuntime {
     this.#config = config;
     this.#groundedBodyRuntime = dependencies.groundedBodyRuntime;
     this.#readDynamicEnvironmentPose = dependencies.readDynamicEnvironmentPose;
+    this.#readMountedEnvironmentAnchorSnapshot =
+      dependencies.readMountedEnvironmentAnchorSnapshot;
+    this.#readMountableEnvironmentConfig =
+      dependencies.readMountableEnvironmentConfig;
     this.#setDynamicEnvironmentPose = dependencies.setDynamicEnvironmentPose;
     this.#surfaceColliderSnapshots = dependencies.surfaceColliderSnapshots;
     this.#cameraSnapshot = createMetaverseCameraSnapshot(config.camera);
@@ -106,14 +138,46 @@ export class MetaverseTraversalRuntime {
     return this.#locomotionMode;
   }
 
+  get mountedEnvironmentSnapshot(): MountedEnvironmentSnapshot | null {
+    if (
+      this.#mountedVehicleRuntime === null ||
+      this.#mountedEnvironmentConfig === null
+    ) {
+      return null;
+    }
+
+    const mountedVehicleSnapshot = this.#mountedVehicleRuntime.snapshot;
+    const occupancy = mountedVehicleSnapshot.occupancy;
+
+    if (occupancy === null) {
+      return null;
+    }
+
+    return Object.freeze({
+      cameraPolicyId: occupancy.cameraPolicyId,
+      controlRoutingPolicyId: occupancy.controlRoutingPolicyId,
+      directSeatTargets: resolveMountedEnvironmentDirectSeatTargets(
+        this.#mountedEnvironmentConfig
+      ),
+      entryId: occupancy.entryId,
+      environmentAssetId: mountedVehicleSnapshot.environmentAssetId,
+      label: mountedVehicleSnapshot.label,
+      lookLimitPolicyId: occupancy.lookLimitPolicyId,
+      occupancyAnimationId: occupancy.occupancyAnimationId,
+      occupancyKind: occupancy.occupancyKind,
+      occupantLabel: occupancy.occupantLabel,
+      occupantRole: occupancy.occupantRole,
+      seatId: occupancy.seatId
+    });
+  }
+
   reset(): void {
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#cameraSnapshot = createMetaverseCameraSnapshot(this.#config.camera);
     this.#characterPresentationSnapshot = null;
     this.#locomotionMode = defaultMetaverseLocomotionMode;
-    this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-    this.#mountedSkiffState = null;
+    this.#clearMountedVehicleState();
+    this.#mountedOccupancyLookYawRadians = 0;
     this.#swimForwardSpeedUnitsPerSecond = 0;
     this.#swimStrafeSpeedUnitsPerSecond = 0;
     this.#swimSnapshot = createSurfaceLocomotionSnapshot(
@@ -147,13 +211,102 @@ export class MetaverseTraversalRuntime {
     mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void {
     if (mountedEnvironment !== null) {
-      this.#mountEnvironment(mountedEnvironment);
+      if (
+        mountedEnvironment.occupancyKind === "seat" &&
+        mountedEnvironment.seatId !== null
+      ) {
+        this.occupySeat(
+          mountedEnvironment.environmentAssetId,
+          mountedEnvironment.seatId
+        );
+      } else if (
+        mountedEnvironment.occupancyKind === "entry" &&
+        mountedEnvironment.entryId !== null
+      ) {
+        this.boardEnvironment(
+          mountedEnvironment.environmentAssetId,
+          mountedEnvironment.entryId
+        );
+      }
       this.#syncCharacterPresentationSnapshot();
       return;
     }
 
-    if (this.#mountedSkiffState !== null) {
-      this.#dismountSkiff(this.#mountedSkiffState);
+    this.leaveMountedEnvironment();
+  }
+
+  boardEnvironment(
+    environmentAssetId: string,
+    requestedEntryId: string | null = null
+  ): MountedEnvironmentSnapshot | null {
+    const mountedVehicleRuntimeContext =
+      this.#ensureMountedVehicleRuntime(environmentAssetId);
+
+    if (mountedVehicleRuntimeContext === null) {
+      return this.mountedEnvironmentSnapshot;
+    }
+
+    const { mountableEnvironmentConfig, mountedVehicleRuntime } =
+      mountedVehicleRuntimeContext;
+    const occupiedRuntime =
+      requestedEntryId !== null
+        ? mountedVehicleRuntime.occupyEntry(requestedEntryId)
+        : mountableEnvironmentConfig.entries?.[0] !== undefined
+          ? mountedVehicleRuntime.occupyEntry(
+              mountableEnvironmentConfig.entries[0].entryId
+            )
+          : (() => {
+              const directSeat =
+                mountableEnvironmentConfig.seats?.find(
+                  (seat) => seat.directEntryEnabled
+                ) ?? null;
+
+              return directSeat === null
+                ? null
+                : mountedVehicleRuntime.occupySeat(directSeat.seatId);
+            })();
+
+    if (occupiedRuntime === null) {
+      this.#syncCharacterPresentationSnapshot();
+      return this.mountedEnvironmentSnapshot;
+    }
+
+    this.#resetMountedOccupancyLookState();
+    this.#syncMountedVehiclePresentation();
+    this.#syncCharacterPresentationSnapshot();
+
+    return this.mountedEnvironmentSnapshot;
+  }
+
+  occupySeat(
+    environmentAssetId: string,
+    seatId: string
+  ): MountedEnvironmentSnapshot | null {
+    const mountedVehicleRuntimeContext =
+      this.#ensureMountedVehicleRuntime(environmentAssetId);
+
+    if (mountedVehicleRuntimeContext === null) {
+      return this.mountedEnvironmentSnapshot;
+    }
+
+    const occupiedSeatRuntime =
+      mountedVehicleRuntimeContext.mountedVehicleRuntime.occupySeat(seatId);
+
+    if (occupiedSeatRuntime === null) {
+      this.#syncCharacterPresentationSnapshot();
+      return this.mountedEnvironmentSnapshot;
+    }
+
+    this.#resetMountedOccupancyLookState();
+    this.#syncMountedVehiclePresentation();
+    this.#syncCharacterPresentationSnapshot();
+
+    return this.mountedEnvironmentSnapshot;
+  }
+
+  leaveMountedEnvironment(): void {
+    if (this.#mountedVehicleRuntime !== null) {
+      this.#dismountVehicle(this.#mountedVehicleRuntime.snapshot);
       this.#syncCharacterPresentationSnapshot();
       return;
     }
@@ -177,8 +330,8 @@ export class MetaverseTraversalRuntime {
     deltaSeconds: number
   ): MetaverseCameraSnapshot {
     this.#cameraSnapshot =
-      this.#mountedSkiffState !== null
-        ? this.#advanceMountedSkiffLocomotion(movementInput, deltaSeconds)
+      this.#mountedVehicleRuntime !== null
+        ? this.#advanceMountedVehicleLocomotion(movementInput, deltaSeconds)
         : this.#locomotionMode === "grounded"
           ? this.#advanceGroundedLocomotion(movementInput, deltaSeconds)
           : this.#locomotionMode === "swim"
@@ -277,76 +430,108 @@ export class MetaverseTraversalRuntime {
     this.#enterSwimLocomotion(position, yawRadians);
   }
 
-  #mountEnvironment(mountedEnvironment: MountedEnvironmentSnapshot): void {
+  #ensureMountedVehicleRuntime(
+    environmentAssetId: string
+  ): {
+    readonly mountableEnvironmentConfig: Pick<
+      MetaverseEnvironmentAssetProofConfig,
+      "entries" | "environmentAssetId" | "label" | "seats"
+    >;
+    readonly mountedVehicleRuntime: MetaverseVehicleRuntime;
+  } | null {
+    if (
+      this.#mountedVehicleRuntime !== null &&
+      this.#mountedEnvironmentConfig !== null &&
+      this.#mountedEnvironmentConfig.environmentAssetId === environmentAssetId
+    ) {
+      return {
+        mountableEnvironmentConfig: this.#mountedEnvironmentConfig,
+        mountedVehicleRuntime: this.#mountedVehicleRuntime
+      };
+    }
+
+    const mountableEnvironmentConfig = this.#readMountableEnvironmentConfig(
+      environmentAssetId
+    );
+    const dynamicEnvironmentPose =
+      this.#readDynamicEnvironmentPose(environmentAssetId);
+
+    if (
+      dynamicEnvironmentPose === null ||
+      mountableEnvironmentConfig === null ||
+      mountableEnvironmentConfig.seats === null
+    ) {
+      return null;
+    }
+
+    this.#clearMountedVehicleState();
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#setLocomotionMode("mounted");
-
-    if (mountedEnvironment.environmentAssetId !== "metaverse-hub-skiff-v1") {
-      this.#mountedSkiffState = null;
-      this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-      this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-      return;
-    }
-
-    const dynamicEnvironmentPose = this.#readDynamicEnvironmentPose(
-      mountedEnvironment.environmentAssetId
-    );
-
-    if (dynamicEnvironmentPose === null) {
-      this.#mountedSkiffState = null;
-      this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-      this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-      return;
-    }
-
-    const position = freezeVector3(
-      dynamicEnvironmentPose.position.x,
-      toFiniteNumber(
-        dynamicEnvironmentPose.position.y,
-        this.#config.skiff.waterlineHeightMeters
-      ),
-      dynamicEnvironmentPose.position.z
-    );
-    const yawRadians = wrapRadians(dynamicEnvironmentPose.yawRadians);
-
     this.#traversalCameraPitchRadians = this.#cameraSnapshot.pitchRadians;
-    this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-    const mountedSkiffState = Object.freeze({
-      environmentAssetId: mountedEnvironment.environmentAssetId,
-      label: mountedEnvironment.label,
-      planarSpeedUnitsPerSecond: 0,
-      position,
-      waterborne: isWaterbornePosition(
-        this.#config,
-        this.#surfaceColliderSnapshots,
-        position,
-        this.#config.skiff.waterContactProbeRadiusMeters
-      ),
-      yawRadians
+    this.#mountedVehicleRuntime = new MetaverseVehicleRuntime({
+      entries: mountableEnvironmentConfig.entries,
+      environmentAssetId: mountableEnvironmentConfig.environmentAssetId,
+      label: mountableEnvironmentConfig.label,
+      oceanHeightMeters: this.#config.ocean.height,
+      poseSnapshot: dynamicEnvironmentPose,
+      seats: mountableEnvironmentConfig.seats,
+      surfaceColliderSnapshots: this.#surfaceColliderSnapshots,
+      waterContactProbeRadiusMeters:
+        this.#config.skiff.waterContactProbeRadiusMeters,
+      waterlineHeightMeters: this.#config.skiff.waterlineHeightMeters
     });
-    this.#mountedSkiffState = mountedSkiffState;
-    this.#setDynamicEnvironmentPose(
-      mountedEnvironment.environmentAssetId,
-      Object.freeze({
-        position,
-        yawRadians
-      })
-    );
-    this.#cameraSnapshot = createTraversalSkiffCameraPresentationSnapshot(
-      mountedSkiffState,
-      this.#traversalCameraPitchRadians,
-      this.#config
+    this.#mountedEnvironmentConfig = mountableEnvironmentConfig;
+
+    return {
+      mountableEnvironmentConfig,
+      mountedVehicleRuntime: this.#mountedVehicleRuntime
+    };
+  }
+
+  #dismountVehicle(
+    previousMountedVehicleState: TraversalMountedVehicleSnapshot
+  ): void {
+    this.#clearMountedVehicleState();
+    this.#syncAutomaticSurfaceLocomotion(
+      previousMountedVehicleState.position,
+      previousMountedVehicleState.yawRadians
     );
   }
 
-  #dismountSkiff(previousMountedSkiffState: MountedSkiffRuntimeState): void {
-    this.#mountedSkiffState = null;
-    this.#mountedSkiffForwardSpeedUnitsPerSecond = 0;
-    this.#mountedSkiffStrafeSpeedUnitsPerSecond = 0;
-    this.#syncAutomaticSurfaceLocomotion(
-      previousMountedSkiffState.position,
-      previousMountedSkiffState.yawRadians
+  #clearMountedVehicleState(): void {
+    this.#mountedVehicleRuntime?.clearOccupancy();
+    this.#mountedEnvironmentConfig = null;
+    this.#mountedOccupancyLookYawRadians = 0;
+    this.#mountedVehicleRuntime = null;
+  }
+
+  #resetMountedOccupancyLookState(): void {
+    this.#mountedOccupancyLookYawRadians = 0;
+  }
+
+  #syncMountedVehiclePresentation(): void {
+    const mountedVehicleSnapshot = this.#mountedVehicleRuntime?.snapshot;
+
+    if (mountedVehicleSnapshot === undefined) {
+      return;
+    }
+
+    this.#setDynamicEnvironmentPose(mountedVehicleSnapshot.environmentAssetId, {
+      position: mountedVehicleSnapshot.position,
+      yawRadians: mountedVehicleSnapshot.yawRadians
+    });
+    const mountedEnvironment = this.mountedEnvironmentSnapshot;
+    const mountedEnvironmentAnchorSnapshot =
+      mountedEnvironment === null
+        ? null
+        : this.#readMountedEnvironmentAnchorSnapshot(mountedEnvironment);
+
+    this.#cameraSnapshot = createTraversalMountedVehicleCameraPresentationSnapshot(
+      mountedVehicleSnapshot,
+      this.#traversalCameraPitchRadians,
+      this.#config,
+      mountedEnvironmentAnchorSnapshot,
+      this.#mountedOccupancyLookYawRadians
     );
   }
 
@@ -468,84 +653,92 @@ export class MetaverseTraversalRuntime {
     );
   }
 
-  #advanceMountedSkiffLocomotion(
+  #advanceMountedVehicleLocomotion(
     movementInput: MetaverseFlightInputSnapshot,
     deltaSeconds: number
   ): MetaverseCameraSnapshot {
-    const mountedSkiffState = this.#mountedSkiffState;
+    const mountedVehicleRuntime = this.#mountedVehicleRuntime;
 
-    if (mountedSkiffState === null) {
+    if (mountedVehicleRuntime === null) {
       return this.#cameraSnapshot;
     }
 
+    const mountedVehicleState = mountedVehicleRuntime.snapshot;
     this.#traversalCameraPitchRadians =
-      advanceTraversalCameraPresentationPitchRadians(
-        this.#traversalCameraPitchRadians,
+      clampTraversalMountedOccupancyPitchRadians(
+        advanceTraversalCameraPresentationPitchRadians(
+          this.#traversalCameraPitchRadians,
+          movementInput,
+          this.#config,
+          deltaSeconds
+        ),
+        mountedVehicleState,
+        this.#config
+      );
+    this.#mountedOccupancyLookYawRadians =
+      advanceTraversalMountedOccupancyLookYawRadians(
+        this.#mountedOccupancyLookYawRadians,
         movementInput,
+        mountedVehicleState,
         this.#config,
         deltaSeconds
       );
-    const skiffMovementInput = mountedSkiffState.waterborne
-      ? movementInput
-      : Object.freeze({
-          boost: false,
-          jump: false,
-          moveAxis: 0,
-          primaryAction: movementInput.primaryAction,
-          pitchAxis: movementInput.pitchAxis,
-          secondaryAction: movementInput.secondaryAction,
-          strafeAxis: 0,
-          yawAxis: 0
-        } satisfies MetaverseFlightInputSnapshot);
-    const skiffLocomotionInput = mountedSkiffState.waterborne
-      ? Object.freeze({
-          boost: skiffMovementInput.boost,
-          moveAxis: skiffMovementInput.moveAxis,
-          strafeAxis: skiffMovementInput.strafeAxis,
-          yawAxis: skiffMovementInput.yawAxis
-        })
-      : skiffMovementInput;
-    const nextSkiffState = advanceSurfaceLocomotionSnapshot(
-      mountedSkiffState,
-      {
-        forwardSpeedUnitsPerSecond: this.#mountedSkiffForwardSpeedUnitsPerSecond,
-        strafeSpeedUnitsPerSecond: this.#mountedSkiffStrafeSpeedUnitsPerSecond
-      },
-      skiffLocomotionInput,
+    const mountedVehicleLocomotionInput = this.#resolveMountedVehicleLocomotionInput(
+      mountedVehicleState,
+      movementInput
+    );
+
+    const mountedVehicleSnapshot = mountedVehicleRuntime.advance(
+      mountedVehicleLocomotionInput,
       this.#config.skiff,
       deltaSeconds,
-      this.#config.movement.worldRadius,
-      mountedSkiffState.position.y
+      this.#config.movement.worldRadius
     );
-    const skiffSnapshot = Object.freeze({
-      ...nextSkiffState.snapshot,
-      environmentAssetId: mountedSkiffState.environmentAssetId,
-      label: mountedSkiffState.label,
-      waterborne: isWaterbornePosition(
-        this.#config,
-        this.#surfaceColliderSnapshots,
-        nextSkiffState.snapshot.position,
-        this.#config.skiff.waterContactProbeRadiusMeters
-      )
-    } satisfies MountedSkiffRuntimeState);
-
-    this.#mountedSkiffForwardSpeedUnitsPerSecond = skiffSnapshot.waterborne
-      ? nextSkiffState.speedSnapshot.forwardSpeedUnitsPerSecond
-      : 0;
-    this.#mountedSkiffStrafeSpeedUnitsPerSecond = skiffSnapshot.waterborne
-      ? nextSkiffState.speedSnapshot.strafeSpeedUnitsPerSecond
-      : 0;
-    this.#mountedSkiffState = skiffSnapshot;
-    this.#setDynamicEnvironmentPose(skiffSnapshot.environmentAssetId, {
-      position: skiffSnapshot.position,
-      yawRadians: skiffSnapshot.yawRadians
+    this.#setDynamicEnvironmentPose(mountedVehicleSnapshot.environmentAssetId, {
+      position: mountedVehicleSnapshot.position,
+      yawRadians: mountedVehicleSnapshot.yawRadians
     });
+    const mountedEnvironment = this.mountedEnvironmentSnapshot;
+    const mountedEnvironmentAnchorSnapshot =
+      mountedEnvironment === null
+        ? null
+        : this.#readMountedEnvironmentAnchorSnapshot(mountedEnvironment);
 
-    return createTraversalSkiffCameraPresentationSnapshot(
-      skiffSnapshot,
+    return createTraversalMountedVehicleCameraPresentationSnapshot(
+      mountedVehicleSnapshot,
       this.#traversalCameraPitchRadians,
-      this.#config
+      this.#config,
+      mountedEnvironmentAnchorSnapshot,
+      this.#mountedOccupancyLookYawRadians
     );
+  }
+
+  #resolveMountedVehicleLocomotionInput(
+    mountedVehicleState: TraversalMountedVehicleSnapshot,
+    movementInput: MetaverseFlightInputSnapshot
+  ): MountedVehicleControlIntent {
+    const occupancy = mountedVehicleState.occupancy;
+
+    if (
+      occupancy === null ||
+      occupancy.controlRoutingPolicyId !== "vehicle-surface-drive" ||
+      occupancy.occupantRole !== "driver" ||
+      !mountedVehicleState.waterborne
+    ) {
+      return Object.freeze({
+        boost: false,
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 0
+      });
+    }
+
+    return Object.freeze({
+      boost: movementInput.boost,
+      moveAxis: movementInput.moveAxis,
+      strafeAxis: movementInput.strafeAxis,
+      yawAxis: movementInput.yawAxis
+    });
   }
 
   #syncCharacterPresentationSnapshot(): void {
@@ -555,7 +748,8 @@ export class MetaverseTraversalRuntime {
         ? this.#groundedBodyRuntime.snapshot
         : null,
       locomotionMode: this.#locomotionMode,
-      mountedSkiffState: this.#mountedSkiffState,
+      mountedVehicleSnapshot:
+        this.#mountedVehicleRuntime?.snapshot ?? null,
       swimSnapshot: this.#swimSnapshot
     });
   }

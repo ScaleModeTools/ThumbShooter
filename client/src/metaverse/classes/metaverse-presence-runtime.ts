@@ -2,6 +2,8 @@ import type {
   MetaversePlayerId,
   MetaversePresenceAnimationVocabularyId,
   MetaversePresenceLocomotionModeId,
+  MetaversePresenceMountedOccupancySnapshotInput,
+  MetaversePresenceMountedOccupancySnapshot,
   MetaversePresencePoseSnapshotInput,
   MetaversePresenceRosterSnapshot,
   Username
@@ -14,7 +16,8 @@ import type {
 import type {
   MetaverseCharacterPresentationSnapshot,
   MetaverseHudSnapshot,
-  MetaverseRemoteCharacterPresentationSnapshot
+  MetaverseRemoteCharacterPresentationSnapshot,
+  MountedEnvironmentSnapshot
 } from "../types/metaverse-runtime";
 
 export interface MetaverseLocalPlayerIdentity {
@@ -47,16 +50,26 @@ interface MetaversePresenceRuntimeDependencies {
 interface MetaversePresencePoseChangeKey {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancyChangeKey | null;
   readonly x: number;
   readonly y: number;
   readonly yawRadians: number;
   readonly z: number;
 }
 
+interface MetaversePresenceMountedOccupancyChangeKey {
+  readonly environmentAssetId: string;
+  readonly entryId: string | null;
+  readonly occupancyKind: "entry" | "seat";
+  readonly occupantRole: "driver" | "passenger" | "turret";
+  readonly seatId: string | null;
+}
+
 interface MetaversePresenceRosterPlayerChangeKey {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly characterId: string;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancyChangeKey | null;
   readonly playerId: MetaversePlayerId;
   readonly stateSequence: number;
   readonly username: Username;
@@ -86,13 +99,67 @@ function freezePresenceHudSnapshot(
   });
 }
 
+function createMountedOccupancyInput(
+  mountedEnvironment: MountedEnvironmentSnapshot | null
+): MetaversePresenceMountedOccupancySnapshotInput | null {
+  if (mountedEnvironment === null) {
+    return null;
+  }
+
+  return {
+    environmentAssetId: mountedEnvironment.environmentAssetId,
+    entryId: mountedEnvironment.entryId,
+    occupancyKind: mountedEnvironment.occupancyKind,
+    occupantRole: mountedEnvironment.occupantRole,
+    seatId: mountedEnvironment.seatId
+  };
+}
+
+function createMountedOccupancyChangeKey(
+  mountedOccupancy:
+    | MetaversePresenceMountedOccupancySnapshot
+    | MetaversePresenceMountedOccupancySnapshotInput
+    | null
+    | undefined
+): MetaversePresenceMountedOccupancyChangeKey | null {
+  if (mountedOccupancy === null || mountedOccupancy === undefined) {
+    return null;
+  }
+
+  return {
+    environmentAssetId: mountedOccupancy.environmentAssetId,
+    entryId: mountedOccupancy.entryId,
+    occupancyKind: mountedOccupancy.occupancyKind,
+    occupantRole: mountedOccupancy.occupantRole,
+    seatId: mountedOccupancy.seatId
+  };
+}
+
+function hasMatchingMountedOccupancyChangeKey(
+  current: MetaversePresenceMountedOccupancyChangeKey | null,
+  next: MetaversePresenceMountedOccupancyChangeKey | null
+): boolean {
+  return (
+    current === next ||
+    (current !== null &&
+      next !== null &&
+      current.environmentAssetId === next.environmentAssetId &&
+      current.entryId === next.entryId &&
+      current.occupancyKind === next.occupancyKind &&
+      current.occupantRole === next.occupantRole &&
+      current.seatId === next.seatId)
+  );
+}
+
 function createPresencePoseInput(
   characterPresentation: MetaverseCharacterPresentationSnapshot,
-  locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+  locomotionMode: MetaverseHudSnapshot["locomotionMode"],
+  mountedEnvironment: MountedEnvironmentSnapshot | null
 ): Omit<MetaversePresencePoseSnapshotInput, "stateSequence"> {
   return {
     animationVocabulary: characterPresentation.animationVocabulary,
     locomotionMode,
+    mountedOccupancy: createMountedOccupancyInput(mountedEnvironment),
     position: characterPresentation.position,
     yawRadians: characterPresentation.yawRadians
   };
@@ -100,11 +167,15 @@ function createPresencePoseInput(
 
 function createPresencePoseChangeKey(
   characterPresentation: MetaverseCharacterPresentationSnapshot,
-  locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+  locomotionMode: MetaverseHudSnapshot["locomotionMode"],
+  mountedEnvironment: MountedEnvironmentSnapshot | null
 ): MetaversePresencePoseChangeKey {
   return {
     animationVocabulary: characterPresentation.animationVocabulary,
     locomotionMode,
+    mountedOccupancy: createMountedOccupancyChangeKey(
+      createMountedOccupancyInput(mountedEnvironment)
+    ),
     x: characterPresentation.position.x,
     y: characterPresentation.position.y,
     yawRadians: characterPresentation.yawRadians,
@@ -120,6 +191,10 @@ function hasMatchingPresencePoseChangeKey(
     current !== null &&
     current.animationVocabulary === next.animationVocabulary &&
     current.locomotionMode === next.locomotionMode &&
+    hasMatchingMountedOccupancyChangeKey(
+      current.mountedOccupancy,
+      next.mountedOccupancy
+    ) &&
     current.x === next.x &&
     current.y === next.y &&
     current.z === next.z &&
@@ -151,6 +226,10 @@ function hasMatchingRosterChangeKey(
       playerChangeKey.animationVocabulary !==
         playerSnapshot.pose.animationVocabulary ||
       playerChangeKey.locomotionMode !== playerSnapshot.pose.locomotionMode ||
+      !hasMatchingMountedOccupancyChangeKey(
+        playerChangeKey.mountedOccupancy,
+        createMountedOccupancyChangeKey(playerSnapshot.pose.mountedOccupancy)
+      ) ||
       playerChangeKey.stateSequence !== playerSnapshot.pose.stateSequence ||
       playerChangeKey.x !== playerSnapshot.pose.position.x ||
       playerChangeKey.y !== playerSnapshot.pose.position.y ||
@@ -174,6 +253,9 @@ function createRosterChangeKey(
           animationVocabulary: playerSnapshot.pose.animationVocabulary,
           characterId: playerSnapshot.characterId,
           locomotionMode: playerSnapshot.pose.locomotionMode,
+          mountedOccupancy: createMountedOccupancyChangeKey(
+            playerSnapshot.pose.mountedOccupancy
+          ),
           playerId: playerSnapshot.playerId,
           stateSequence: playerSnapshot.pose.stateSequence,
           username: playerSnapshot.username,
@@ -219,7 +301,8 @@ export class MetaversePresenceRuntime {
 
   boot(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
-    locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+    locomotionMode: MetaverseHudSnapshot["locomotionMode"],
+    mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void {
     this.dispose();
 
@@ -247,7 +330,8 @@ export class MetaversePresenceRuntime {
 
     const joinRequest = this.#createJoinRequest(
       characterPresentation,
-      locomotionMode
+      locomotionMode,
+      mountedEnvironment
     );
 
     if (joinRequest === null) {
@@ -275,7 +359,8 @@ export class MetaversePresenceRuntime {
 
   syncPresencePose(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
-    locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+    locomotionMode: MetaverseHudSnapshot["locomotionMode"],
+    mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void {
     const metaversePresenceClient = this.#metaversePresenceClient;
 
@@ -290,7 +375,8 @@ export class MetaversePresenceRuntime {
 
     const nextPresencePose = createPresencePoseChangeKey(
       characterPresentation,
-      locomotionMode
+      locomotionMode,
+      mountedEnvironment
     );
 
     if (
@@ -304,7 +390,11 @@ export class MetaversePresenceRuntime {
 
     this.#lastPresencePose = nextPresencePose;
     metaversePresenceClient.syncPresence(
-      createPresencePoseInput(characterPresentation, locomotionMode)
+      createPresencePoseInput(
+        characterPresentation,
+        locomotionMode,
+        mountedEnvironment
+      )
     );
   }
 
@@ -373,7 +463,8 @@ export class MetaversePresenceRuntime {
 
   #createJoinRequest(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
-    locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+    locomotionMode: MetaverseHudSnapshot["locomotionMode"],
+    mountedEnvironment: MountedEnvironmentSnapshot | null
   ): MetaversePresenceJoinRequest | null {
     if (
       this.#localPlayerIdentity === null ||
@@ -385,7 +476,11 @@ export class MetaversePresenceRuntime {
     return {
       characterId: this.#localPlayerIdentity.characterId,
       playerId: this.#localPlayerIdentity.playerId,
-      pose: createPresencePoseInput(characterPresentation, locomotionMode),
+      pose: createPresencePoseInput(
+        characterPresentation,
+        locomotionMode,
+        mountedEnvironment
+      ),
       username: this.#localPlayerIdentity.username
     };
   }
@@ -408,6 +503,7 @@ export class MetaversePresenceRuntime {
       remoteCharacterPresentations.push(
         Object.freeze({
           characterId: playerSnapshot.characterId,
+          mountedOccupancy: playerSnapshot.pose.mountedOccupancy,
           playerId: playerSnapshot.playerId,
           presentation: Object.freeze({
             animationVocabulary: playerSnapshot.pose.animationVocabulary,

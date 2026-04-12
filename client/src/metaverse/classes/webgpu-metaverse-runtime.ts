@@ -74,6 +74,7 @@ interface MetaverseRuntimeDependencies {
   readonly readNowMs?: () => number;
   readonly requestAnimationFrame?: typeof globalThis.requestAnimationFrame;
   readonly showPhysicsDebug?: boolean;
+  readonly showSocketDebug?: boolean;
 }
 
 const metaverseUiUpdateIntervalMs = 120;
@@ -216,7 +217,8 @@ export class WebGpuMetaverseRuntime {
       attachmentProofConfig: dependencies.attachmentProofConfig ?? null,
       characterProofConfig: dependencies.characterProofConfig ?? null,
       createSceneAssetLoader: this.#createSceneAssetLoader,
-      environmentProofConfig: this.#environmentProofConfig
+      environmentProofConfig: this.#environmentProofConfig,
+      showSocketDebug: dependencies.showSocketDebug ?? false
     });
     this.#environmentPhysicsRuntime = new MetaverseEnvironmentPhysicsRuntime(
       config,
@@ -233,7 +235,22 @@ export class WebGpuMetaverseRuntime {
       groundedBodyRuntime: this.#groundedBodyRuntime,
       readDynamicEnvironmentPose: (environmentAssetId) =>
         this.#sceneRuntime.readDynamicEnvironmentPose(environmentAssetId),
+      readMountedEnvironmentAnchorSnapshot: (mountedEnvironment) =>
+        this.#sceneRuntime.readMountedEnvironmentAnchorSnapshot(
+          mountedEnvironment
+        ),
+      readMountableEnvironmentConfig: (environmentAssetId) =>
+        this.#environmentProofConfig?.assets.find(
+          (environmentAsset) =>
+            environmentAsset.environmentAssetId === environmentAssetId &&
+            environmentAsset.traversalAffordance === "mount" &&
+            environmentAsset.seats !== null
+        ) ?? null,
       setDynamicEnvironmentPose: (environmentAssetId, poseSnapshot) => {
+        this.#environmentPhysicsRuntime.setDynamicEnvironmentPose(
+          environmentAssetId,
+          poseSnapshot
+        );
         this.#sceneRuntime.setDynamicEnvironmentPose(
           environmentAssetId,
           poseSnapshot
@@ -285,18 +302,44 @@ export class WebGpuMetaverseRuntime {
     this.#syncOrPublishRuntimeState(true);
   }
 
-  toggleMount(): void {
-    const sceneInteractionSnapshot = this.#sceneRuntime.toggleMount(
-      this.#traversalRuntime.cameraSnapshot
-    );
+  boardMountable(entryId: string | null = null): void {
+    if (this.#focusedMountable === null) {
+      return;
+    }
 
-    this.#focusedMountable = sceneInteractionSnapshot.focusedMountable;
-    this.#mountedEnvironment = sceneInteractionSnapshot.mountedEnvironment;
-    this.#traversalRuntime.syncMountedEnvironment(
-      sceneInteractionSnapshot.mountedEnvironment
+    this.#traversalRuntime.boardEnvironment(
+      this.#focusedMountable.environmentAssetId,
+      entryId
     );
-
     this.#syncOrPublishRuntimeState(true);
+  }
+
+  occupySeat(seatId: string): void {
+    const environmentAssetId =
+      this.#mountedEnvironment?.environmentAssetId ??
+      this.#focusedMountable?.environmentAssetId ??
+      null;
+
+    if (environmentAssetId === null) {
+      return;
+    }
+
+    this.#traversalRuntime.occupySeat(environmentAssetId, seatId);
+    this.#syncOrPublishRuntimeState(true);
+  }
+
+  leaveMountedEnvironment(): void {
+    this.#traversalRuntime.leaveMountedEnvironment();
+    this.#syncOrPublishRuntimeState(true);
+  }
+
+  toggleMount(): void {
+    if (this.#mountedEnvironment === null) {
+      this.boardMountable();
+      return;
+    }
+
+    this.leaveMountedEnvironment();
   }
 
   async start(
@@ -408,7 +451,8 @@ export class WebGpuMetaverseRuntime {
     this.#lastFrameAtMs = this.#readNowMs();
     this.#presenceRuntime.boot(
       this.#readCharacterPresentationSnapshot(),
-      this.#traversalRuntime.locomotionMode
+      this.#traversalRuntime.locomotionMode,
+      this.#traversalRuntime.mountedEnvironmentSnapshot
     );
     this.#syncFrame(this.#lastFrameAtMs, true);
     this.#queueNextFrame();
@@ -480,10 +524,12 @@ export class WebGpuMetaverseRuntime {
       movementInput,
       deltaSeconds
     );
+    this.#mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
     this.#environmentPhysicsRuntime.syncPushableBodyPresentations();
     this.#presenceRuntime.syncPresencePose(
       this.#readCharacterPresentationSnapshot(),
-      this.#traversalRuntime.locomotionMode
+      this.#traversalRuntime.locomotionMode,
+      this.#mountedEnvironment
     );
     this.#presenceRuntime.syncRemoteCharacterPresentations();
 
@@ -502,12 +548,13 @@ export class WebGpuMetaverseRuntime {
       nowMs,
       deltaSeconds,
       this.#traversalRuntime.characterPresentationSnapshot,
-      this.#presenceRuntime.remoteCharacterPresentations
+      this.#presenceRuntime.remoteCharacterPresentations,
+      this.#mountedEnvironment
     );
 
     this.#environmentPhysicsRuntime.syncDebugPresentation();
     this.#focusedMountable = sceneInteractionSnapshot.focusedMountable;
-    this.#mountedEnvironment = sceneInteractionSnapshot.mountedEnvironment;
+    this.#mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
     this.#renderer.render(this.#sceneRuntime.scene, this.#sceneRuntime.camera);
     this.#setHudSnapshot("running", null, forceUiUpdate);
   }
@@ -528,7 +575,6 @@ export class WebGpuMetaverseRuntime {
       forceUiUpdate
     );
   }
-
   #setHudSnapshot(
     lifecycle: MetaverseHudSnapshot["lifecycle"],
     failureReason: string | null,

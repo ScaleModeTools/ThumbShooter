@@ -59,12 +59,13 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   const joinRequest = createRequest("POST", createMetaverseJoinPresenceCommand({
     characterId: "metaverse-mannequin-v1",
     playerId,
-    pose: {
-      animationVocabulary: "idle",
-      locomotionMode: "grounded",
-      position: {
-        x: 0,
-        y: 1.62,
+      pose: {
+        animationVocabulary: "idle",
+        locomotionMode: "grounded",
+        mountedOccupancy: null,
+        position: {
+          x: 0,
+          y: 1.62,
         z: 24
       },
       yawRadians: 0
@@ -96,7 +97,14 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
       playerId,
       pose: {
         animationVocabulary: "walk",
-        locomotionMode: "grounded",
+        locomotionMode: "mounted",
+        mountedOccupancy: {
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "driver",
+          seatId: "driver-seat"
+        },
         position: {
           x: 2.5,
           y: 1.62,
@@ -123,6 +131,11 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(syncResponse.statusCode, 200);
   assert.equal(syncResponse.json.roster.players[0]?.pose.position.x, 2.5);
   assert.equal(syncResponse.json.roster.players[0]?.pose.stateSequence, 1);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.locomotionMode, "mounted");
+  assert.equal(
+    syncResponse.json.roster.players[0]?.pose.mountedOccupancy?.seatId,
+    "driver-seat"
+  );
 
   const pollResponse = createResponseCapture();
   const pollHandled = await adapter.handleRequest(
@@ -137,6 +150,10 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(pollResponse.json.type, "presence-roster");
   assert.equal(pollResponse.json.roster.players.length, 1);
   assert.equal(pollResponse.json.roster.players[0]?.pose.position.x, 2.5);
+  assert.equal(
+    pollResponse.json.roster.players[0]?.pose.mountedOccupancy?.environmentAssetId,
+    "metaverse-hub-skiff-v1"
+  );
 });
 
 test("MetaversePresenceHttpAdapter returns conflict for unknown observers", async () => {

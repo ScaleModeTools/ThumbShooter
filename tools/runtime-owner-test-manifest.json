@@ -61,6 +61,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/metaverse/vehicles/classes/metaverse-vehicle-runtime.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-traversal-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/physics/classes/metaverse-grounded-body-runtime.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-grounded-body-runtime.test.mjs"

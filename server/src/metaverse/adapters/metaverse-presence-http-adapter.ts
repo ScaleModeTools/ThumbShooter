@@ -12,7 +12,11 @@ import {
   createUsername,
   metaversePresenceAnimationVocabularyIds,
   metaversePresenceLocomotionModeIds,
+  metaversePresenceMountedOccupancyKinds,
+  metaversePresenceMountedOccupantRoleIds,
   type MetaversePresenceAnimationVocabularyId,
+  type MetaversePresenceMountedOccupancyKind,
+  type MetaversePresenceMountedOccupantRoleId,
   type MetaversePresenceCommand
 } from "@webgpu-metaverse/shared";
 
@@ -131,6 +135,43 @@ function parsePresencePose(poseBody: Record<string, unknown>) {
     throw new Error(`Unsupported locomotionMode: ${locomotionMode}`);
   }
 
+  const mountedOccupancy =
+    poseBody.mountedOccupancy === undefined
+      ? undefined
+      : poseBody.mountedOccupancy === null
+        ? null
+        : readRecordField(poseBody.mountedOccupancy, "mountedOccupancy");
+
+  if (
+    mountedOccupancy !== undefined &&
+    mountedOccupancy !== null &&
+    !metaversePresenceMountedOccupancyKinds.includes(
+      readStringField(
+        mountedOccupancy.occupancyKind,
+        "mountedOccupancy.occupancyKind"
+      ) as MetaversePresenceMountedOccupancyKind
+    )
+  ) {
+    throw new Error(
+      `Unsupported mountedOccupancy.occupancyKind: ${mountedOccupancy.occupancyKind}`
+    );
+  }
+
+  if (
+    mountedOccupancy !== undefined &&
+    mountedOccupancy !== null &&
+    !metaversePresenceMountedOccupantRoleIds.includes(
+      readStringField(
+        mountedOccupancy.occupantRole,
+        "mountedOccupancy.occupantRole"
+      ) as MetaversePresenceMountedOccupantRoleId
+    )
+  ) {
+    throw new Error(
+      `Unsupported mountedOccupancy.occupantRole: ${mountedOccupancy.occupantRole}`
+    );
+  }
+
   return {
     ...(animationVocabulary === undefined
       ? {}
@@ -143,6 +184,38 @@ function parsePresencePose(poseBody: Record<string, unknown>) {
       : {
           locomotionMode:
             locomotionMode as typeof metaversePresenceLocomotionModeIds[number]
+        }),
+    ...(mountedOccupancy === undefined
+      ? {}
+      : mountedOccupancy === null
+        ? {
+            mountedOccupancy: null
+          }
+        : {
+          mountedOccupancy: {
+            environmentAssetId: readStringField(
+              mountedOccupancy.environmentAssetId,
+              "mountedOccupancy.environmentAssetId"
+            ),
+            entryId:
+              mountedOccupancy.entryId === null
+                ? null
+                : readStringField(
+                    mountedOccupancy.entryId,
+                    "mountedOccupancy.entryId"
+                  ),
+            occupancyKind:
+              mountedOccupancy.occupancyKind as MetaversePresenceMountedOccupancyKind,
+            occupantRole:
+              mountedOccupancy.occupantRole as MetaversePresenceMountedOccupantRoleId,
+            seatId:
+              mountedOccupancy.seatId === null
+                ? null
+                : readStringField(
+                    mountedOccupancy.seatId,
+                    "mountedOccupancy.seatId"
+                  )
+          }
         }),
     position: poseBody.position,
     ...(poseBody.stateSequence === undefined

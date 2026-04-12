@@ -56,8 +56,8 @@ proof slice, and shared-contract promotion is intentionally deferred.
 - the active full-body proof character is `mesh2motion-humanoid-v1` on
   `humanoid_v2`
 - retained mannequin proof assets remain on `humanoid_v1`
-- character loading, canonical animation vocabulary, socketed attachments, and
-  seat mounting resolve through manifests
+- character loading, canonical animation vocabulary, socketed attachments with
+  manifest-owned grip alignment, and seat mounting resolve through manifests
 - static, instanced, dynamic mountable, and dynamic pushable environment assets
   all resolve through local manifest truth
 - collision proxies are separate shipped assets; render meshes are not the

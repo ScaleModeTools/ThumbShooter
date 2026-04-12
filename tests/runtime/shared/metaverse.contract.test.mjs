@@ -74,6 +74,13 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
       pose: {
         animationVocabulary: "walk",
         locomotionMode: "swim",
+        mountedOccupancy: {
+          environmentAssetId: " metaverse-hub-skiff-v1 ",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "passenger",
+          seatId: " port-bench-seat "
+        },
         position: {
           x: 2,
           y: 0.5,
@@ -99,6 +106,13 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
         y: 0.5,
         z: -4
       },
+      mountedOccupancy: {
+        environmentAssetId: " metaverse-hub-skiff-v1 ",
+        entryId: null,
+        occupancyKind: "seat",
+        occupantRole: "passenger",
+        seatId: " port-bench-seat "
+      },
       yawRadians: Math.PI * 3
     },
     username
@@ -110,10 +124,20 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
   assert.equal(rosterSnapshot.players[0]?.characterId, "metaverse-mannequin-v1");
   assert.equal(rosterSnapshot.players[0]?.pose.stateSequence, 3);
   assert.equal(rosterSnapshot.players[0]?.pose.yawRadians, Math.PI * 3);
+  assert.equal(
+    rosterSnapshot.players[0]?.pose.mountedOccupancy?.environmentAssetId,
+    "metaverse-hub-skiff-v1"
+  );
+  assert.equal(
+    rosterSnapshot.players[0]?.pose.mountedOccupancy?.seatId,
+    "port-bench-seat"
+  );
   assert.equal(rosterSnapshot.snapshotSequence, 5);
   assert.ok(Object.isFrozen(rosterSnapshot.players));
   assert.ok(Object.isFrozen(rosterSnapshot.players[0]));
+  assert.ok(Object.isFrozen(rosterSnapshot.players[0]?.pose.mountedOccupancy));
   assert.equal(joinCommand.playerId, "harbor-pilot-1");
   assert.equal(joinCommand.pose.animationVocabulary, "idle");
   assert.equal(joinCommand.pose.locomotionMode, "grounded");
+  assert.equal(joinCommand.pose.mountedOccupancy?.occupancyKind, "seat");
 });

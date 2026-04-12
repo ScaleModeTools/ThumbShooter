@@ -13,11 +13,14 @@ import type {
 import type {
   MetaverseEnvironmentAssetProofConfig,
   MetaverseEnvironmentColliderProofConfig,
+  MetaverseEnvironmentPhysicsColliderProofConfig,
   MetaverseEnvironmentPlacementProofConfig
 } from "../types/metaverse-runtime";
 
 export interface MetaversePlacedCuboidColliderSnapshot {
-  readonly traversalAffordance: MetaverseEnvironmentAssetProofConfig["traversalAffordance"];
+  readonly ownerEnvironmentAssetId: string | null;
+  readonly traversalAffordance:
+    MetaverseEnvironmentPhysicsColliderProofConfig["traversalAffordance"];
   readonly halfExtents: PhysicsVector3Snapshot;
   readonly rotation: PhysicsQuaternionSnapshot;
   readonly translation: PhysicsVector3Snapshot;
@@ -92,6 +95,36 @@ function applyPlacementToLocalCenter(
   );
 }
 
+function createDynamicPosePlacement(
+  environmentAsset: Pick<
+    MetaverseEnvironmentAssetProofConfig,
+    "placement" | "placements"
+  >,
+  poseSnapshot: {
+    readonly position: PhysicsVector3Snapshot;
+    readonly yawRadians: number;
+  }
+): MetaverseEnvironmentPlacementProofConfig | null {
+  if (
+    environmentAsset.placement !== "dynamic" ||
+    environmentAsset.placements.length !== 1
+  ) {
+    return null;
+  }
+
+  const authoredPlacement = environmentAsset.placements[0]!;
+
+  return Object.freeze({
+    position: freezeVector3(
+      poseSnapshot.position.x,
+      poseSnapshot.position.y,
+      poseSnapshot.position.z
+    ),
+    rotationYRadians: poseSnapshot.yawRadians,
+    scale: authoredPlacement.scale
+  });
+}
+
 export function resolvePlacedCuboidColliders(
   environmentAsset: MetaverseEnvironmentAssetProofConfig
 ): readonly MetaversePlacedCuboidColliderSnapshot[] {
@@ -108,20 +141,63 @@ export function resolvePlacedCuboidColliders(
     for (const collider of environmentAsset.physicsColliders) {
       colliders.push(
         Object.freeze({
-          traversalAffordance: environmentAsset.traversalAffordance,
           halfExtents: freezeVector3(
             Math.abs(collider.size.x * placement.scale) * 0.5,
             Math.abs(collider.size.y * placement.scale) * 0.5,
             Math.abs(collider.size.z * placement.scale) * 0.5
           ),
+          ownerEnvironmentAssetId: environmentAsset.environmentAssetId,
           rotation: createPlacementQuaternion(placement.rotationYRadians),
-          translation: applyPlacementToLocalCenter(collider.center, placement)
+          translation: applyPlacementToLocalCenter(collider.center, placement),
+          traversalAffordance: collider.traversalAffordance
         })
       );
     }
   }
 
   return Object.freeze(colliders);
+}
+
+export function resolveDynamicEnvironmentCuboidColliders(
+  environmentAsset: Pick<
+    MetaverseEnvironmentAssetProofConfig,
+    "environmentAssetId" | "physicsColliders" | "placement" | "placements"
+  >,
+  poseSnapshot: {
+    readonly position: PhysicsVector3Snapshot;
+    readonly yawRadians: number;
+  }
+): readonly MetaversePlacedCuboidColliderSnapshot[] {
+  const dynamicPlacement = createDynamicPosePlacement(
+    environmentAsset,
+    poseSnapshot
+  );
+
+  if (
+    dynamicPlacement === null ||
+    environmentAsset.physicsColliders === null
+  ) {
+    return Object.freeze([]);
+  }
+
+  return Object.freeze(
+    environmentAsset.physicsColliders.map((collider) =>
+      Object.freeze({
+        halfExtents: freezeVector3(
+          Math.abs(collider.size.x * dynamicPlacement.scale) * 0.5,
+          Math.abs(collider.size.y * dynamicPlacement.scale) * 0.5,
+          Math.abs(collider.size.z * dynamicPlacement.scale) * 0.5
+        ),
+        ownerEnvironmentAssetId: environmentAsset.environmentAssetId,
+        rotation: createPlacementQuaternion(dynamicPlacement.rotationYRadians),
+        translation: applyPlacementToLocalCenter(
+          collider.center,
+          dynamicPlacement
+        ),
+        traversalAffordance: collider.traversalAffordance
+      })
+    )
+  );
 }
 
 function appendMeshTriangles(

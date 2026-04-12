@@ -24,6 +24,10 @@ import type {
   GameplaySessionMode,
   GameplayTickOwner,
   Milliseconds,
+  MetaversePresenceMountedOccupancyKind,
+  MetaversePresenceMountedOccupancySnapshot,
+  MetaversePresenceMountedOccupantRoleId,
+  MetaversePresencePoseSnapshot,
   MetaverseSessionSnapshot,
   NormalizedViewportScalar,
   NormalizedViewportPointInput,
@@ -34,6 +38,7 @@ import type {
   ReticleId,
   SoundEffectEngine,
   CoopVector3Snapshot,
+  VehicleOrientationDescriptor,
   Username
 } from "@webgpu-metaverse/shared";
 import {
@@ -78,6 +83,11 @@ type ExpectedCoopRoomPhase =
   | "failed";
 type ExpectedCoopBirdBehaviorState = "glide" | "scatter" | "downed";
 type ExpectedCoopPlayerShotOutcomeState = "miss" | "scatter" | "hit";
+type ExpectedMetaversePresenceMountedOccupancyKind = "entry" | "seat";
+type ExpectedMetaversePresenceMountedOccupantRoleId =
+  | "driver"
+  | "passenger"
+  | "turret";
 type ExpectedCoopRoomClientCommandType =
   | "join-room"
   | "set-player-ready"
@@ -116,6 +126,30 @@ type PortalLaunchSelectionUsesExperienceId = AssertTrue<
 >;
 type PortalLaunchSelectionUsesTickOwner = AssertTrue<
   IsEqual<PortalLaunchSelectionSnapshot["tickOwner"], GameplayTickOwner>
+>;
+type VehicleOrientationUsesForwardModelYaw = AssertTrue<
+  IsEqual<VehicleOrientationDescriptor["forwardModelYawRadians"], number>
+>;
+type MetaversePresencePoseMountedOccupancyMatches = AssertTrue<
+  IsEqual<
+    MetaversePresencePoseSnapshot["mountedOccupancy"],
+    MetaversePresenceMountedOccupancySnapshot | null
+  >
+>;
+type MetaversePresenceMountedOccupancyKindMatches = AssertTrue<
+  IsEqual<
+    MetaversePresenceMountedOccupancyKind,
+    ExpectedMetaversePresenceMountedOccupancyKind
+  >
+>;
+type MetaversePresenceMountedOccupantRoleMatches = AssertTrue<
+  IsEqual<
+    MetaversePresenceMountedOccupantRoleId,
+    ExpectedMetaversePresenceMountedOccupantRoleId
+  >
+>;
+type MetaversePresenceMountedEnvironmentAssetIdIsString = AssertTrue<
+  IsEqual<MetaversePresenceMountedOccupancySnapshot["environmentAssetId"], string>
 >;
 type MetaverseSessionUsesExperienceId = AssertTrue<
   IsEqual<MetaverseSessionSnapshot["activeExperienceId"], ExperienceId | null>

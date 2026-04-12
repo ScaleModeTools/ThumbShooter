@@ -26,6 +26,17 @@ export const metaversePresenceLocomotionModeIds = [
   "mounted"
 ] as const;
 
+export const metaversePresenceMountedOccupancyKinds = [
+  "entry",
+  "seat"
+] as const;
+
+export const metaversePresenceMountedOccupantRoleIds = [
+  "driver",
+  "passenger",
+  "turret"
+] as const;
+
 export const metaversePresenceCommandTypes = [
   "join-presence",
   "leave-presence",
@@ -40,6 +51,10 @@ export type MetaversePresenceAnimationVocabularyId =
   (typeof metaversePresenceAnimationVocabularyIds)[number];
 export type MetaversePresenceLocomotionModeId =
   (typeof metaversePresenceLocomotionModeIds)[number];
+export type MetaversePresenceMountedOccupancyKind =
+  (typeof metaversePresenceMountedOccupancyKinds)[number];
+export type MetaversePresenceMountedOccupantRoleId =
+  (typeof metaversePresenceMountedOccupantRoleIds)[number];
 export type MetaversePresenceCommandType =
   (typeof metaversePresenceCommandTypes)[number];
 export type MetaversePresenceServerEventType =
@@ -59,9 +74,26 @@ export interface MetaversePresenceVector3SnapshotInput {
   readonly z: number;
 }
 
+export interface MetaversePresenceMountedOccupancySnapshot {
+  readonly environmentAssetId: string;
+  readonly entryId: string | null;
+  readonly occupancyKind: MetaversePresenceMountedOccupancyKind;
+  readonly occupantRole: MetaversePresenceMountedOccupantRoleId;
+  readonly seatId: string | null;
+}
+
+export interface MetaversePresenceMountedOccupancySnapshotInput {
+  readonly environmentAssetId: string;
+  readonly entryId: string | null;
+  readonly occupancyKind: MetaversePresenceMountedOccupancyKind;
+  readonly occupantRole: MetaversePresenceMountedOccupantRoleId;
+  readonly seatId: string | null;
+}
+
 export interface MetaversePresencePoseSnapshot {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
   readonly position: MetaversePresenceVector3Snapshot;
   readonly stateSequence: number;
   readonly yawRadians: Radians;
@@ -70,6 +102,7 @@ export interface MetaversePresencePoseSnapshot {
 export interface MetaversePresencePoseSnapshotInput {
   readonly animationVocabulary?: MetaversePresenceAnimationVocabularyId;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
+  readonly mountedOccupancy?: MetaversePresenceMountedOccupancySnapshotInput | null;
   readonly position: MetaversePresenceVector3SnapshotInput;
   readonly stateSequence?: number;
   readonly yawRadians: number;
@@ -163,13 +196,33 @@ function normalizeSequence(value: number): number {
 }
 
 function normalizeCharacterId(characterId: string): string {
-  const normalizedCharacterId = characterId.trim();
-
-  if (normalizedCharacterId.length === 0) {
-    throw new Error("Metaverse presence characterId must not be empty.");
-  }
+  const normalizedCharacterId = normalizeRequiredIdentifier(
+    characterId,
+    "Metaverse presence characterId"
+  );
 
   return normalizedCharacterId;
+}
+
+function normalizeRequiredIdentifier(rawValue: string, label: string): string {
+  const normalizedValue = rawValue.trim();
+
+  if (normalizedValue.length === 0) {
+    throw new Error(`${label} must not be empty.`);
+  }
+
+  return normalizedValue;
+}
+
+function normalizeOptionalIdentifier(
+  rawValue: string | null,
+  label: string
+): string | null {
+  if (rawValue === null) {
+    return null;
+  }
+
+  return normalizeRequiredIdentifier(rawValue, label);
 }
 
 function resolveAnimationVocabulary(
@@ -198,6 +251,26 @@ function resolveLocomotionMode(
   return "grounded";
 }
 
+function resolveMountedOccupancyKind(
+  rawValue: MetaversePresenceMountedOccupancySnapshotInput["occupancyKind"]
+): MetaversePresenceMountedOccupancyKind {
+  if (metaversePresenceMountedOccupancyKinds.includes(rawValue)) {
+    return rawValue;
+  }
+
+  throw new Error(`Unsupported metaverse mounted occupancy kind: ${rawValue}`);
+}
+
+function resolveMountedOccupantRole(
+  rawValue: MetaversePresenceMountedOccupancySnapshotInput["occupantRole"]
+): MetaversePresenceMountedOccupantRoleId {
+  if (metaversePresenceMountedOccupantRoleIds.includes(rawValue)) {
+    return rawValue;
+  }
+
+  throw new Error(`Unsupported metaverse mounted occupant role: ${rawValue}`);
+}
+
 export function createMetaversePlayerId(rawValue: string): MetaversePlayerId | null {
   const normalizedValue = rawValue.trim().toLowerCase();
 
@@ -220,9 +293,57 @@ export function createMetaversePresenceVector3Snapshot({
   });
 }
 
+export function createMetaversePresenceMountedOccupancySnapshot({
+  environmentAssetId,
+  entryId,
+  occupancyKind,
+  occupantRole,
+  seatId
+}: MetaversePresenceMountedOccupancySnapshotInput): MetaversePresenceMountedOccupancySnapshot {
+  const normalizedOccupancyKind = resolveMountedOccupancyKind(occupancyKind);
+  const normalizedEntryId = normalizeOptionalIdentifier(
+    entryId,
+    "Metaverse mounted occupancy entryId"
+  );
+  const normalizedSeatId = normalizeOptionalIdentifier(
+    seatId,
+    "Metaverse mounted occupancy seatId"
+  );
+
+  if (
+    normalizedOccupancyKind === "seat" &&
+    (normalizedSeatId === null || normalizedEntryId !== null)
+  ) {
+    throw new Error(
+      "Seat occupancy requires seatId and must not include entryId."
+    );
+  }
+
+  if (
+    normalizedOccupancyKind === "entry" &&
+    (normalizedEntryId === null || normalizedSeatId !== null)
+  ) {
+    throw new Error(
+      "Entry occupancy requires entryId and must not include seatId."
+    );
+  }
+
+  return Object.freeze({
+    environmentAssetId: normalizeRequiredIdentifier(
+      environmentAssetId,
+      "Metaverse mounted occupancy environmentAssetId"
+    ),
+    entryId: normalizedEntryId,
+    occupancyKind: normalizedOccupancyKind,
+    occupantRole: resolveMountedOccupantRole(occupantRole),
+    seatId: normalizedSeatId
+  });
+}
+
 export function createMetaversePresencePoseSnapshot({
   animationVocabulary,
   locomotionMode,
+  mountedOccupancy = null,
   position,
   stateSequence = 0,
   yawRadians
@@ -230,6 +351,10 @@ export function createMetaversePresencePoseSnapshot({
   return Object.freeze({
     animationVocabulary: resolveAnimationVocabulary(animationVocabulary),
     locomotionMode: resolveLocomotionMode(locomotionMode),
+    mountedOccupancy:
+      mountedOccupancy === null
+        ? null
+        : createMetaversePresenceMountedOccupancySnapshot(mountedOccupancy),
     position: createMetaversePresenceVector3Snapshot(position),
     stateSequence: normalizeSequence(stateSequence),
     yawRadians: createRadians(yawRadians)

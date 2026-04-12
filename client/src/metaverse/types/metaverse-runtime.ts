@@ -1,6 +1,6 @@
-import type { ExperienceId } from "@webgpu-metaverse/shared";
 import type {
-  VehicleRelativeDirectionId
+  ExperienceId,
+  MetaversePresenceMountedOccupancySnapshot
 } from "@webgpu-metaverse/shared";
 
 import type {
@@ -8,6 +8,13 @@ import type {
   MetaverseFlightInputSnapshot
 } from "./metaverse-control-mode";
 import type { MetaverseLocomotionModeId } from "./metaverse-locomotion-mode";
+import type {
+  MountedVehicleCameraPolicyId,
+  MountedVehicleControlRoutingPolicyId,
+  MountedVehicleLookLimitPolicyId,
+  MountedVehicleOccupancyAnimationId,
+  MountedVehicleSeatRoleId
+} from "../vehicles";
 
 export const metaverseRuntimeLifecycleStates = [
   "idle",
@@ -67,6 +74,7 @@ export interface MetaverseCharacterPresentationSnapshot {
 
 export interface MetaverseRemoteCharacterPresentationSnapshot {
   readonly characterId: string;
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
   readonly playerId: string;
   readonly presentation: MetaverseCharacterPresentationSnapshot;
 }
@@ -97,9 +105,20 @@ export interface MetaverseCharacterProofConfig {
 
 export interface MetaverseAttachmentProofConfig {
   readonly attachmentId: string;
+  readonly gripAlignment: {
+    readonly attachmentForwardAxis: MetaverseVector3Snapshot;
+    readonly attachmentUpAxis: MetaverseVector3Snapshot;
+    readonly socketForwardAxis: MetaverseVector3Snapshot;
+    readonly socketOffset: MetaverseVector3Snapshot;
+    readonly socketUpAxis: MetaverseVector3Snapshot;
+  };
   readonly label: string;
   readonly modelPath: string;
   readonly socketName: string;
+  readonly supportPoints: readonly {
+    readonly localPosition: MetaverseVector3Snapshot;
+    readonly supportPointId: string;
+  }[] | null;
 }
 
 export interface MetaverseEnvironmentColliderProofConfig {
@@ -108,13 +127,38 @@ export interface MetaverseEnvironmentColliderProofConfig {
   readonly size: MetaverseVector3Snapshot;
 }
 
-export interface MetaverseEnvironmentMountProofConfig {
-  readonly riderFacingDirection: VehicleRelativeDirectionId;
-  readonly seatSocketName: string;
+export interface MetaverseEnvironmentPhysicsColliderProofConfig
+  extends MetaverseEnvironmentColliderProofConfig {
+  readonly traversalAffordance: "blocker" | "support";
+}
+
+export interface MetaverseEnvironmentSeatProofConfig {
+  readonly cameraPolicyId: MountedVehicleCameraPolicyId;
+  readonly controlRoutingPolicyId: MountedVehicleControlRoutingPolicyId;
+  readonly directEntryEnabled: boolean;
+  readonly dismountOffset: MetaverseVector3Snapshot;
+  readonly label: string;
+  readonly lookLimitPolicyId: MountedVehicleLookLimitPolicyId;
+  readonly occupancyAnimationId: MountedVehicleOccupancyAnimationId;
+  readonly seatId: string;
+  readonly seatNodeName: string;
+  readonly seatRole: MountedVehicleSeatRoleId;
+}
+
+export interface MetaverseEnvironmentEntryProofConfig {
+  readonly cameraPolicyId: MountedVehicleCameraPolicyId;
+  readonly controlRoutingPolicyId: MountedVehicleControlRoutingPolicyId;
+  readonly dismountOffset: MetaverseVector3Snapshot;
+  readonly entryId: string;
+  readonly entryNodeName: string;
+  readonly label: string;
+  readonly lookLimitPolicyId: MountedVehicleLookLimitPolicyId;
+  readonly occupancyAnimationId: MountedVehicleOccupancyAnimationId;
+  readonly occupantRole: MountedVehicleSeatRoleId;
 }
 
 export interface MetaverseEnvironmentOrientationProofConfig {
-  readonly bowModelYawRadians: number;
+  readonly forwardModelYawRadians: number;
 }
 
 export interface MetaverseEnvironmentPlacementProofConfig {
@@ -138,14 +182,17 @@ export type MetaverseEnvironmentTraversalAffordanceId =
 export interface MetaverseEnvironmentAssetProofConfig {
   readonly collisionPath: string | null;
   readonly collider: MetaverseEnvironmentColliderProofConfig | null;
+  readonly entries: readonly MetaverseEnvironmentEntryProofConfig[] | null;
   readonly environmentAssetId: string;
   readonly label: string;
   readonly lods: readonly MetaverseEnvironmentLodProofConfig[];
-  readonly mount: MetaverseEnvironmentMountProofConfig | null;
   readonly orientation: MetaverseEnvironmentOrientationProofConfig | null;
   readonly placement: "dynamic" | "instanced" | "static";
   readonly placements: readonly MetaverseEnvironmentPlacementProofConfig[];
-  readonly physicsColliders: readonly MetaverseEnvironmentColliderProofConfig[] | null;
+  readonly physicsColliders:
+    | readonly MetaverseEnvironmentPhysicsColliderProofConfig[]
+    | null;
+  readonly seats: readonly MetaverseEnvironmentSeatProofConfig[] | null;
   readonly traversalAffordance: MetaverseEnvironmentTraversalAffordanceId;
 }
 
@@ -159,15 +206,40 @@ export interface FocusedExperiencePortalSnapshot {
   readonly label: string;
 }
 
+export interface MountableBoardingEntrySnapshot {
+  readonly entryId: string;
+  readonly label: string;
+}
+
+export interface MountableSeatSelectionSnapshot {
+  readonly label: string;
+  readonly seatId: string;
+  readonly seatRole: MountedVehicleSeatRoleId;
+}
+
 export interface FocusedMountableSnapshot {
+  readonly boardingEntries: readonly MountableBoardingEntrySnapshot[];
   readonly distanceFromCamera: number;
+  readonly directSeatTargets: readonly MountableSeatSelectionSnapshot[];
   readonly environmentAssetId: string;
   readonly label: string;
 }
 
+export type MountedEnvironmentOccupancyKind = "entry" | "seat";
+
 export interface MountedEnvironmentSnapshot {
+  readonly cameraPolicyId: MountedVehicleCameraPolicyId;
+  readonly controlRoutingPolicyId: MountedVehicleControlRoutingPolicyId;
+  readonly directSeatTargets: readonly MountableSeatSelectionSnapshot[];
+  readonly entryId: string | null;
   readonly environmentAssetId: string;
   readonly label: string;
+  readonly lookLimitPolicyId: MountedVehicleLookLimitPolicyId;
+  readonly occupancyAnimationId: MountedVehicleOccupancyAnimationId;
+  readonly occupancyKind: MountedEnvironmentOccupancyKind;
+  readonly occupantLabel: string;
+  readonly occupantRole: MountedVehicleSeatRoleId;
+  readonly seatId: string | null;
 }
 
 export interface MetaverseHudSnapshot {

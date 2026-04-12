@@ -9,7 +9,7 @@ export type VehicleRelativeDirectionId =
   (typeof vehicleRelativeDirectionIds)[number];
 
 export interface VehicleOrientationDescriptor {
-  readonly bowModelYawRadians: number;
+  readonly forwardModelYawRadians: number;
 }
 
 export function normalizePlanarYawRadians(rawValue: number): number {

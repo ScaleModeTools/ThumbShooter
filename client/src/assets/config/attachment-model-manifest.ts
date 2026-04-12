@@ -22,6 +22,34 @@ export const attachmentModelManifest = defineAttachmentAssetManifest([
     },
     defaultSocketId: "hand_r_socket",
     allowedSocketIds: ["hand_r_socket", "hand_l_socket", "hip_socket"],
-    compatibleSkeletons: ["humanoid_v1", "humanoid_v2"]
+    compatibleSkeletons: ["humanoid_v1", "humanoid_v2"],
+    gripAlignment: {
+      attachmentForwardAxis: {
+        x: 1,
+        y: 0,
+        z: 0
+      },
+      attachmentUpAxis: {
+        x: 0,
+        y: 1,
+        z: 0
+      },
+      socketForwardAxis: {
+        x: 1,
+        y: 0,
+        z: 0
+      },
+      socketOffset: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      socketUpAxis: {
+        x: 0,
+        y: -1,
+        z: 0
+      }
+    },
+    supportPoints: null
   }
 ] as const);

@@ -24,7 +24,9 @@
         6,
         7,
         8,
-        9
+        9,
+        10,
+        11
       ]
     },
     {
@@ -196,25 +198,34 @@
       "mesh": 7
     },
     {
-      "matrix": [
-        1,
+      "name": "driver_seat",
+      "rotation": [
         0,
+        0.7071067811865475,
         0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
+        0.7071067811865476
+      ],
+      "translation": [
         0.1,
         1.02,
-        0,
-        1
-      ],
-      "name": "seat_socket"
+        0
+      ]
+    },
+    {
+      "name": "port_bench_seat",
+      "translation": [
+        -0.25,
+        1.02,
+        -0.48
+      ]
+    },
+    {
+      "name": "deck_entry",
+      "translation": [
+        0.42,
+        1.02,
+        0.58
+      ]
     }
   ],
   "bufferViews": [

@@ -1,18 +1,13 @@
 import {
-  normalizePlanarYawRadians,
-  resolveVehicleRelativeYawOffsetRadians
+  normalizePlanarYawRadians
 } from "@webgpu-metaverse/shared";
 import {
-  Euler,
   Quaternion,
   type Object3D,
   Vector3
 } from "three/webgpu";
 
-import type {
-  MetaverseEnvironmentAssetProofConfig,
-  MetaverseEnvironmentMountProofConfig
-} from "../../types/metaverse-runtime";
+import type { MetaverseEnvironmentAssetProofConfig } from "../../types/metaverse-runtime";
 import { wrapRadians } from "../policies/surface-locomotion";
 
 export interface MountedCharacterSeatTransformSnapshot {
@@ -22,51 +17,13 @@ export interface MountedCharacterSeatTransformSnapshot {
 
 export interface ResolveMountedCharacterSeatTransformInput {
   readonly characterAnchorGroup: Object3D;
-  readonly characterRenderYawOffsetRadians: number;
   readonly characterSeatSocketNode: Object3D;
-  readonly mount: Pick<MetaverseEnvironmentMountProofConfig, "riderFacingDirection">;
-  readonly seatSocketNode: Object3D;
-  readonly vehicleAnchorGroup: Object3D;
-  readonly vehicleOrientation: Pick<MetaverseEnvironmentAssetProofConfig, "orientation">;
+  readonly seatAnchorNode: Object3D;
 }
 
-const mountedVehicleWorldQuaternionScratch = new Quaternion();
-const mountedVehicleWorldEulerScratch = new Euler(0, 0, 0, "YXZ");
-const mountedDesiredWorldEulerScratch = new Euler(0, 0, 0, "YXZ");
-const mountedDesiredWorldQuaternionScratch = new Quaternion();
-const mountedSeatSocketWorldQuaternionScratch = new Quaternion();
 const mountedCharacterAnchorOriginalPositionScratch = new Vector3();
 const mountedCharacterAnchorOriginalQuaternionScratch = new Quaternion();
 const mountedCharacterSeatSocketWorldPositionScratch = new Vector3();
-
-function resolveMountedCharacterRenderYawRadians(
-  runtimeYawRadians: number,
-  characterRenderYawOffsetRadians: number
-): number {
-  return wrapRadians(characterRenderYawOffsetRadians - runtimeYawRadians);
-}
-
-function resolveMountedSeatFacingYawRadians(
-  vehicleYawRadians: number,
-  mount: Pick<MetaverseEnvironmentMountProofConfig, "riderFacingDirection">
-): number {
-  return wrapRadians(
-    vehicleYawRadians +
-      resolveVehicleRelativeYawOffsetRadians(mount.riderFacingDirection)
-  );
-}
-
-function resolveMountedCharacterLocalQuaternion(
-  seatSocketNode: Object3D,
-  desiredWorldQuaternion: Quaternion,
-  targetQuaternion: Quaternion
-): Quaternion {
-  return targetQuaternion.copy(
-    seatSocketNode.getWorldQuaternion(mountedSeatSocketWorldQuaternionScratch)
-  )
-    .invert()
-    .multiply(desiredWorldQuaternion);
-}
 
 export function createMountedCharacterSeatTransformSnapshot(): MountedCharacterSeatTransformSnapshot {
   return Object.freeze({
@@ -75,7 +32,7 @@ export function createMountedCharacterSeatTransformSnapshot(): MountedCharacterS
   });
 }
 
-export function resolveEnvironmentBowModelYawRadians(
+export function resolveEnvironmentForwardModelYawRadians(
   environmentAsset: Pick<
     MetaverseEnvironmentAssetProofConfig,
     "orientation"
@@ -84,24 +41,41 @@ export function resolveEnvironmentBowModelYawRadians(
   return environmentAsset.orientation === null ||
     environmentAsset.orientation === undefined
     ? 0
-    : normalizePlanarYawRadians(environmentAsset.orientation.bowModelYawRadians);
+    : normalizePlanarYawRadians(
+        environmentAsset.orientation.forwardModelYawRadians
+      );
 }
 
-export function resolveEnvironmentRenderYawFromRuntimeYaw(
+export function resolveEnvironmentRenderYawFromSimulationYaw(
   environmentAsset: Pick<MetaverseEnvironmentAssetProofConfig, "orientation">,
-  yawRadians: number
+  simulationYawRadians: number
 ): number {
+  if (
+    environmentAsset.orientation === null ||
+    environmentAsset.orientation === undefined
+  ) {
+    return wrapRadians(simulationYawRadians);
+  }
+
   return wrapRadians(
-    yawRadians - resolveEnvironmentBowModelYawRadians(environmentAsset)
+    resolveEnvironmentForwardModelYawRadians(environmentAsset) -
+      simulationYawRadians
   );
 }
 
-export function resolveEnvironmentRuntimeYawFromRenderYaw(
+export function resolveEnvironmentSimulationYawFromRenderYaw(
   environmentAsset: Pick<MetaverseEnvironmentAssetProofConfig, "orientation">,
   renderYawRadians: number
 ): number {
+  if (
+    environmentAsset.orientation === null ||
+    environmentAsset.orientation === undefined
+  ) {
+    return wrapRadians(renderYawRadians);
+  }
+
   return wrapRadians(
-    renderYawRadians + resolveEnvironmentBowModelYawRadians(environmentAsset)
+    resolveEnvironmentForwardModelYawRadians(environmentAsset) - renderYawRadians
   );
 }
 
@@ -109,40 +83,11 @@ export function resolveMountedCharacterSeatTransform(
   input: ResolveMountedCharacterSeatTransformInput,
   target: MountedCharacterSeatTransformSnapshot
 ): MountedCharacterSeatTransformSnapshot {
-  const vehicleRuntimeYawRadians = resolveEnvironmentRuntimeYawFromRenderYaw(
-    input.vehicleOrientation,
-    input.vehicleAnchorGroup.rotation.y
-  );
-  const desiredCharacterRenderYawRadians = resolveMountedCharacterRenderYawRadians(
-    resolveMountedSeatFacingYawRadians(vehicleRuntimeYawRadians, input.mount),
-    input.characterRenderYawOffsetRadians
-  );
-  const vehicleWorldEuler = mountedVehicleWorldEulerScratch.setFromQuaternion(
-    input.vehicleAnchorGroup.getWorldQuaternion(
-      mountedVehicleWorldQuaternionScratch
-    ),
-    "YXZ"
-  );
-  const desiredWorldQuaternion = mountedDesiredWorldQuaternionScratch.setFromEuler(
-    mountedDesiredWorldEulerScratch.set(
-      vehicleWorldEuler.x,
-      desiredCharacterRenderYawRadians,
-      vehicleWorldEuler.z,
-      "YXZ"
-    )
-  );
-
-  target.localQuaternion.copy(
-    resolveMountedCharacterLocalQuaternion(
-      input.seatSocketNode,
-      desiredWorldQuaternion,
-      target.localQuaternion
-    )
-  );
+  target.localQuaternion.identity();
   resolveMountedCharacterSeatLocalPosition(
     input.characterAnchorGroup,
     input.characterSeatSocketNode,
-    input.seatSocketNode,
+    input.seatAnchorNode,
     target.localQuaternion,
     target.localPosition
   );

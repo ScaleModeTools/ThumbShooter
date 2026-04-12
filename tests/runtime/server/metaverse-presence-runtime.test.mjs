@@ -35,6 +35,7 @@ test("MetaversePresenceRuntime tracks authoritative hub presence and ignores sta
       pose: {
         animationVocabulary: "idle",
         locomotionMode: "grounded",
+        mountedOccupancy: null,
         position: {
           x: 0,
           y: 1.62,
@@ -53,7 +54,14 @@ test("MetaversePresenceRuntime tracks authoritative hub presence and ignores sta
       playerId,
       pose: {
         animationVocabulary: "walk",
-        locomotionMode: "grounded",
+        locomotionMode: "mounted",
+        mountedOccupancy: {
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "driver",
+          seatId: "driver-seat"
+        },
         position: {
           x: 1.5,
           y: 1.62,
@@ -71,6 +79,7 @@ test("MetaversePresenceRuntime tracks authoritative hub presence and ignores sta
       pose: {
         animationVocabulary: "idle",
         locomotionMode: "grounded",
+        mountedOccupancy: null,
         position: {
           x: 0,
           y: 1.62,
@@ -86,8 +95,17 @@ test("MetaversePresenceRuntime tracks authoritative hub presence and ignores sta
   assert.equal(joinedEvent.type, "presence-roster");
   assert.equal(joinedEvent.roster.players.length, 1);
   assert.equal(staleSyncEvent.roster.players[0]?.pose.animationVocabulary, "walk");
+  assert.equal(staleSyncEvent.roster.players[0]?.pose.locomotionMode, "mounted");
   assert.equal(staleSyncEvent.roster.players[0]?.pose.position.x, 1.5);
   assert.equal(staleSyncEvent.roster.players[0]?.pose.stateSequence, 4);
+  assert.equal(
+    staleSyncEvent.roster.players[0]?.pose.mountedOccupancy?.environmentAssetId,
+    "metaverse-hub-skiff-v1"
+  );
+  assert.equal(
+    staleSyncEvent.roster.players[0]?.pose.mountedOccupancy?.seatId,
+    "driver-seat"
+  );
   assert.equal(staleSyncEvent.roster.tickIntervalMs, 120);
 });
 
@@ -109,6 +127,7 @@ test("MetaversePresenceRuntime prunes inactive players and rejects unknown-playe
       pose: {
         animationVocabulary: "idle",
         locomotionMode: "grounded",
+        mountedOccupancy: null,
         position: {
           x: 0,
           y: 1.62,
@@ -158,6 +177,7 @@ test("MetaversePresenceRuntime treats observer polling as presence activity", ()
       pose: {
         animationVocabulary: "idle",
         locomotionMode: "grounded",
+        mountedOccupancy: null,
         position: {
           x: 0,
           y: 1.62,

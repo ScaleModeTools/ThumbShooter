@@ -70,7 +70,8 @@ root
 Rules:
 
 - socket nodes are authored bones in the exported rig, not runtime-only helpers
-- attachment consumers mount with identity local transforms under the socket
+- attachment consumers mount through explicit attachment grip alignment metadata
+  under the socket
 - socket ids stay stable even when the visible mesh or presentation mode changes
 
 ## Socket Semantics
@@ -109,8 +110,8 @@ when all of these hold:
    parentage.
 3. The resulting asset can resolve at least one canonical vocabulary id through
    manifest data without runtime alias hacks.
-4. Attachments still mount through socket hierarchy with identity local
-   transforms.
+4. Attachments still mount through socket hierarchy with manifest-owned grip
+   alignment that resolves from explicit attachment forward and up axes.
 5. Exported content stays meter-scale and remains compatible with the current
    metaverse character bounds validation.
 6. A full-body render asset and its selected canonical animation pack preserve

@@ -72,12 +72,20 @@ function resolveSurfaceSupportHeightMeters(
   surfaceColliderSnapshots: readonly MetaversePlacedCuboidColliderSnapshot[],
   x: number,
   z: number,
-  paddingMeters = 0
+  paddingMeters = 0,
+  excludedOwnerEnvironmentAssetId: string | null = null
 ): number | null {
   let highestSurfaceY: number | null = null;
 
   for (const collider of surfaceColliderSnapshots) {
     if (collider.traversalAffordance !== "support") {
+      continue;
+    }
+
+    if (
+      excludedOwnerEnvironmentAssetId !== null &&
+      collider.ownerEnvironmentAssetId === excludedOwnerEnvironmentAssetId
+    ) {
       continue;
     }
 
@@ -423,13 +431,15 @@ export function isWaterbornePosition(
   config: MetaverseRuntimeConfig,
   surfaceColliderSnapshots: readonly MetaversePlacedCuboidColliderSnapshot[],
   position: PhysicsVector3Snapshot,
-  paddingMeters = 0
+  paddingMeters = 0,
+  excludedOwnerEnvironmentAssetId: string | null = null
 ): boolean {
   const supportHeight = resolveSurfaceSupportHeightMeters(
     surfaceColliderSnapshots,
     position.x,
     position.z,
-    paddingMeters
+    paddingMeters,
+    excludedOwnerEnvironmentAssetId
   );
 
   return (

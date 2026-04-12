@@ -10,8 +10,8 @@ import type {
 } from "../../types/metaverse-runtime";
 import { freezeVector3, wrapRadians } from "../policies/surface-locomotion";
 import type {
-  MountedSkiffRuntimeState,
-  SurfaceLocomotionSnapshot
+  SurfaceLocomotionSnapshot,
+  TraversalMountedVehicleSnapshot
 } from "../types/traversal";
 
 const metaverseWalkAnimationSpeedThresholdUnitsPerSecond = 0.75;
@@ -22,7 +22,7 @@ interface TraversalCharacterPresentationInput {
   readonly config: MetaverseRuntimeConfig;
   readonly groundedBodySnapshot: MetaverseGroundedBodySnapshot | null;
   readonly locomotionMode: MetaverseLocomotionModeId;
-  readonly mountedSkiffState: MountedSkiffRuntimeState | null;
+  readonly mountedVehicleSnapshot: TraversalMountedVehicleSnapshot | null;
   readonly swimSnapshot: SurfaceLocomotionSnapshot;
 }
 
@@ -116,14 +116,19 @@ export function createTraversalCharacterPresentationSnapshot({
   config,
   groundedBodySnapshot,
   locomotionMode,
-  mountedSkiffState,
+  mountedVehicleSnapshot,
   swimSnapshot
 }: TraversalCharacterPresentationInput): MetaverseCharacterPresentationSnapshot | null {
-  if (mountedSkiffState !== null) {
+  if (mountedVehicleSnapshot !== null) {
+    const mountedAnimationVocabulary =
+      mountedVehicleSnapshot.occupancy?.occupancyAnimationId === "standing"
+        ? "idle"
+        : mountedVehicleSnapshot.occupancy?.occupancyAnimationId ?? "seated";
+
     return createFixedCharacterPresentationSnapshot(
-      mountedSkiffState.position,
-      mountedSkiffState.yawRadians,
-      "seated"
+      mountedVehicleSnapshot.position,
+      mountedVehicleSnapshot.yawRadians,
+      mountedAnimationVocabulary
     );
   }
 

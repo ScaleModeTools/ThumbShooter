@@ -155,6 +155,13 @@ export function MetaverseStageScreen({
     focusedMountable === null
       ? null
       : `${focusedMountable.distanceFromCamera.toFixed(1)}m inside mount collider`;
+  const focusedBoardingEntries = focusedMountable?.boardingEntries ?? [];
+  const selectableSeatTargets =
+    mountedEnvironment === null
+      ? focusedMountable?.directSeatTargets ?? []
+      : mountedEnvironment.directSeatTargets.filter(
+          (seatTarget) => seatTarget.seatId !== mountedEnvironment.seatId
+        );
 
   return (
     <ImmersiveStageFrame className="bg-game-stage">
@@ -279,32 +286,66 @@ export function MetaverseStageScreen({
             {mountedEnvironment !== null || focusedMountable !== null ? (
               <div className="pointer-events-auto max-w-sm rounded-[1.4rem] border border-border/70 bg-card/82 p-4 shadow-[0_20px_60px_rgb(15_23_42_/_0.22)] backdrop-blur-xl">
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-                  Seat Mount
+                  Vehicle Access
                 </p>
                 <p className="mt-2 text-sm text-foreground">
                   {mountedEnvironment !== null
-                    ? `${mountedEnvironment.label} mounted.`
+                    ? mountedEnvironment.occupancyKind === "seat"
+                      ? `${mountedEnvironment.label}: ${mountedEnvironment.occupantLabel}.`
+                      : `${mountedEnvironment.label} boarded via ${mountedEnvironment.occupantLabel.toLowerCase()}.`
                     : `${focusedMountable?.label} is in range.`}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {mountedEnvironment !== null
-                    ? mountedEnvironment.environmentAssetId === "metaverse-hub-skiff-v1"
-                      ? "Hub movement controls now drive the skiff. Propulsion cuts out when the hull is beached on hard ground."
-                      : "Leave the seat to restore the mannequin to its pre-mount anchor."
-                    : mountDistanceLabel}
+                    ? mountedEnvironment.occupancyKind === "entry"
+                      ? "Boarding is separate from seat ownership here. Direct seats stay claimable until you intentionally take one."
+                      : mountedEnvironment.occupantRole === "driver"
+                        ? "Hub movement controls now drive this vehicle. Propulsion cuts out when the hull is beached on hard ground."
+                        : "This seat keeps vehicle steering locked to the active driver."
+                    : focusedBoardingEntries.length > 0 &&
+                        selectableSeatTargets.length > 0
+                      ? "Board the deck first or take a direct seat now."
+                      : mountDistanceLabel}
                 </p>
-                <div className="mt-4">
-                  <Button
-                    onClick={() => {
-                      metaverseRuntime.toggleMount();
-                    }}
-                    type="button"
-                    variant={mountedEnvironment !== null ? "outline" : "default"}
-                  >
-                    {mountedEnvironment !== null
-                      ? `Leave ${mountedEnvironment.label}`
-                      : `Board ${focusedMountable?.label}`}
-                  </Button>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {mountedEnvironment === null
+                    ? focusedBoardingEntries.map((entry) => (
+                        <Button
+                          key={entry.entryId}
+                          onClick={() => {
+                            metaverseRuntime.boardMountable(entry.entryId);
+                          }}
+                          type="button"
+                        >
+                          {entry.label}
+                        </Button>
+                      ))
+                    : null}
+                  {selectableSeatTargets.map((seatTarget) => (
+                    <Button
+                      key={seatTarget.seatId}
+                      onClick={() => {
+                        metaverseRuntime.occupySeat(seatTarget.seatId);
+                      }}
+                      type="button"
+                      variant={mountedEnvironment === null ? "outline" : "default"}
+                    >
+                      {mountedEnvironment === null
+                        ? `Sit ${seatTarget.label}`
+                        : `Move to ${seatTarget.label}`}
+                    </Button>
+                  ))}
+                  {mountedEnvironment !== null ? (
+                    <Button
+                      onClick={() => {
+                        metaverseRuntime.leaveMountedEnvironment();
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      Leave {mountedEnvironment.label}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
