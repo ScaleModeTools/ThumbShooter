@@ -8,8 +8,11 @@ import {
 
 import {
   MetaversePresenceClient,
+  createMetaversePresenceHttpTransport,
+  createMetaversePresenceWebTransportTransport,
   type MetaversePresenceClientConfig
 } from "@/network";
+import { createWebTransportHttpFallbackInvoker } from "@/network/adapters/webtransport-http-fallback";
 
 export interface MetaverseLocalPlayerIdentity {
   readonly characterId: string;
@@ -43,6 +46,27 @@ function resolveMetaverseServerOrigin(): string {
   return browserOrigin;
 }
 
+function resolveMetaverseRealtimeTransportMode():
+  | "http"
+  | "webtransport-preferred" {
+  const configuredMode = import.meta.env?.VITE_METAVERSE_REALTIME_TRANSPORT?.trim();
+
+  return configuredMode === "webtransport-preferred"
+    ? "webtransport-preferred"
+    : "http";
+}
+
+function resolveMetaversePresenceWebTransportUrl(): string | null {
+  const configuredUrl =
+    import.meta.env?.VITE_METAVERSE_PRESENCE_WEBTRANSPORT_URL?.trim();
+
+  if (configuredUrl === undefined || configuredUrl.length === 0) {
+    return null;
+  }
+
+  return configuredUrl;
+}
+
 export const metaversePresencePath = "/metaverse/presence" as const;
 
 export const metaversePresenceClientConfig = {
@@ -52,7 +76,54 @@ export const metaversePresenceClientConfig = {
 } as const satisfies MetaversePresenceClientConfig;
 
 export function createMetaversePresenceClient(): MetaversePresenceClient {
-  return new MetaversePresenceClient(metaversePresenceClientConfig);
+  const preferredTransportMode = resolveMetaverseRealtimeTransportMode();
+  const webTransportUrl = resolveMetaversePresenceWebTransportUrl();
+  const shouldUseWebTransport =
+    preferredTransportMode === "webtransport-preferred" &&
+    webTransportUrl !== null &&
+    typeof (
+      globalThis as typeof globalThis & {
+        readonly WebTransport?: unknown;
+      }
+    ).WebTransport === "function";
+
+  const httpTransport = createMetaversePresenceHttpTransport(
+    metaversePresenceClientConfig
+  );
+
+  return new MetaversePresenceClient(metaversePresenceClientConfig, {
+    transport: shouldUseWebTransport
+      ? (() => {
+          const transportFailover = createWebTransportHttpFallbackInvoker(
+            createMetaversePresenceWebTransportTransport({
+              webTransportUrl
+            }),
+            httpTransport
+          );
+
+          return Object.freeze({
+            dispose() {
+              transportFailover.dispose();
+            },
+            pollRosterSnapshot(
+              playerId: Parameters<typeof httpTransport.pollRosterSnapshot>[0]
+            ) {
+              return transportFailover.invoke((transport) =>
+                transport.pollRosterSnapshot(playerId)
+              );
+            },
+            sendCommand(
+              command: Parameters<typeof httpTransport.sendCommand>[0],
+              options?: Parameters<typeof httpTransport.sendCommand>[1]
+            ) {
+              return transportFailover.invoke((transport) =>
+                transport.sendCommand(command, options)
+              );
+            }
+          });
+        })()
+      : httpTransport
+  });
 }
 
 export function createMetaverseLocalPlayerIdentity(

@@ -118,6 +118,68 @@ export type {
   MetaverseSessionSnapshotInput
 } from "./metaverse/metaverse-session-contract.js";
 export {
+  metaverseRealtimeWorldClientCommandTypes,
+  metaverseRealtimeWorldServerEventTypes,
+  createMetaverseDriverVehicleControlIntentSnapshot,
+  createMetaverseRealtimeMountedOccupancySnapshot,
+  createMetaverseRealtimePlayerSnapshot,
+  createMetaverseRealtimeTickSnapshot,
+  createMetaverseRealtimeVehicleSeatSnapshot,
+  createMetaverseRealtimeVehicleSnapshot,
+  createMetaverseRealtimeWorldEvent,
+  createMetaverseRealtimeWorldSnapshot,
+  createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseVehicleId
+} from "./metaverse/metaverse-realtime-world-contract.js";
+export type {
+  MetaverseDriverVehicleControlIntentSnapshot,
+  MetaverseDriverVehicleControlIntentSnapshotInput,
+  MetaverseRealtimeMountedOccupancySnapshot,
+  MetaverseRealtimeMountedOccupancySnapshotInput,
+  MetaverseRealtimeWorldClientCommand,
+  MetaverseRealtimeWorldClientCommandType,
+  MetaverseRealtimePlayerSnapshot,
+  MetaverseRealtimePlayerSnapshotInput,
+  MetaverseRealtimeTickSnapshot,
+  MetaverseRealtimeTickSnapshotInput,
+  MetaverseRealtimeVector3Snapshot,
+  MetaverseRealtimeVector3SnapshotInput,
+  MetaverseRealtimeVehicleSeatSnapshot,
+  MetaverseRealtimeVehicleSeatSnapshotInput,
+  MetaverseRealtimeVehicleSnapshot,
+  MetaverseRealtimeVehicleSnapshotInput,
+  MetaverseRealtimeWorldEvent,
+  MetaverseRealtimeWorldEventInput,
+  MetaverseRealtimeWorldServerEventType,
+  MetaverseRealtimeWorldSnapshot,
+  MetaverseRealtimeWorldSnapshotInput,
+  MetaverseSyncDriverVehicleControlCommand,
+  MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseVehicleId
+} from "./metaverse/metaverse-realtime-world-contract.js";
+export {
+  createMetaverseRealtimeWorldWebTransportCommandRequest,
+  createMetaverseRealtimeWorldWebTransportErrorMessage,
+  createMetaverseRealtimeWorldWebTransportServerEventMessage,
+  createMetaverseRealtimeWorldWebTransportSnapshotRequest,
+  metaverseRealtimeWorldWebTransportClientMessageTypes,
+  metaverseRealtimeWorldWebTransportServerMessageTypes
+} from "./metaverse/metaverse-realtime-world-webtransport-contract.js";
+export type {
+  MetaverseRealtimeWorldWebTransportClientMessage,
+  MetaverseRealtimeWorldWebTransportClientMessageType,
+  MetaverseRealtimeWorldWebTransportCommandRequest,
+  MetaverseRealtimeWorldWebTransportCommandRequestInput,
+  MetaverseRealtimeWorldWebTransportErrorMessage,
+  MetaverseRealtimeWorldWebTransportErrorMessageInput,
+  MetaverseRealtimeWorldWebTransportServerEventMessage,
+  MetaverseRealtimeWorldWebTransportServerEventMessageInput,
+  MetaverseRealtimeWorldWebTransportServerMessage,
+  MetaverseRealtimeWorldWebTransportServerMessageType,
+  MetaverseRealtimeWorldWebTransportSnapshotRequest,
+  MetaverseRealtimeWorldWebTransportSnapshotRequestInput
+} from "./metaverse/metaverse-realtime-world-webtransport-contract.js";
+export {
   metaversePresenceAnimationVocabularyIds,
   metaversePresenceCommandTypes,
   metaversePresenceLocomotionModeIds,
@@ -164,6 +226,28 @@ export type {
   MetaverseSyncPresenceCommandInput
 } from "./metaverse/metaverse-presence-contract.js";
 export {
+  createMetaversePresenceWebTransportErrorMessage,
+  createMetaversePresenceWebTransportCommandRequest,
+  createMetaversePresenceWebTransportRosterRequest,
+  createMetaversePresenceWebTransportServerEventMessage,
+  metaversePresenceWebTransportClientMessageTypes,
+  metaversePresenceWebTransportServerMessageTypes
+} from "./metaverse/metaverse-presence-webtransport-contract.js";
+export type {
+  MetaversePresenceWebTransportClientMessage,
+  MetaversePresenceWebTransportClientMessageType,
+  MetaversePresenceWebTransportCommandRequest,
+  MetaversePresenceWebTransportCommandRequestInput,
+  MetaversePresenceWebTransportErrorMessage,
+  MetaversePresenceWebTransportErrorMessageInput,
+  MetaversePresenceWebTransportRosterRequest,
+  MetaversePresenceWebTransportRosterRequestInput,
+  MetaversePresenceWebTransportServerEventMessage,
+  MetaversePresenceWebTransportServerEventMessageInput,
+  MetaversePresenceWebTransportServerMessage,
+  MetaversePresenceWebTransportServerMessageType
+} from "./metaverse/metaverse-presence-webtransport-contract.js";
+export {
   createPortalLaunchSelectionSnapshot
 } from "./metaverse/portal-launch-contract.js";
 export type {
@@ -202,6 +286,14 @@ export {
   gameplaySessionModes,
   gameplayTickOwners
 } from "./experiences/duck-hunt/duck-hunt-room-contract.js";
+export {
+  createDuckHuntCoopRoomWebTransportCommandRequest,
+  createDuckHuntCoopRoomWebTransportErrorMessage,
+  createDuckHuntCoopRoomWebTransportServerEventMessage,
+  createDuckHuntCoopRoomWebTransportSnapshotRequest,
+  duckHuntCoopRoomWebTransportClientMessageTypes,
+  duckHuntCoopRoomWebTransportServerMessageTypes
+} from "./experiences/duck-hunt/duck-hunt-room-webtransport-contract.js";
 export type {
   CoopBirdBehaviorState,
   CoopBirdId,
@@ -253,3 +345,17 @@ export type {
   GameplaySessionMode,
   GameplayTickOwner
 } from "./experiences/duck-hunt/duck-hunt-room-contract.js";
+export type {
+  DuckHuntCoopRoomWebTransportClientMessage,
+  DuckHuntCoopRoomWebTransportClientMessageType,
+  DuckHuntCoopRoomWebTransportCommandRequest,
+  DuckHuntCoopRoomWebTransportCommandRequestInput,
+  DuckHuntCoopRoomWebTransportErrorMessage,
+  DuckHuntCoopRoomWebTransportErrorMessageInput,
+  DuckHuntCoopRoomWebTransportServerEventMessage,
+  DuckHuntCoopRoomWebTransportServerEventMessageInput,
+  DuckHuntCoopRoomWebTransportServerMessage,
+  DuckHuntCoopRoomWebTransportServerMessageType,
+  DuckHuntCoopRoomWebTransportSnapshotRequest,
+  DuckHuntCoopRoomWebTransportSnapshotRequestInput
+} from "./experiences/duck-hunt/duck-hunt-room-webtransport-contract.js";

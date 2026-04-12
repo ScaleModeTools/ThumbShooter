@@ -1,4 +1,5 @@
 import type {
+  MetaversePresenceCommand,
   MetaversePlayerId,
   MetaversePresencePoseSnapshotInput,
   MetaversePresenceRosterEvent,
@@ -10,23 +11,20 @@ import {
   createMetaverseSyncPresenceCommand
 } from "@webgpu-metaverse/shared";
 
-import {
-  parseMetaversePresenceErrorMessage,
-  parseMetaversePresenceServerEvent,
-  resolveMetaversePresenceCommandUrl,
-  resolveMetaversePresenceSnapshotUrl,
-  serializeMetaversePresenceCommand
-} from "../codecs/metaverse-presence-client-http";
+import { createMetaversePresenceHttpTransport } from "../adapters/metaverse-presence-http-transport";
 import type {
   MetaversePresenceClientConfig,
   MetaversePresenceClientStatusSnapshot,
   MetaversePresenceJoinRequest
 } from "../types/metaverse-presence-client";
+import type { MetaversePresenceTransport } from "../types/metaverse-presence-transport";
+import type { NetworkCommandTransportOptions } from "../types/transport-command-options";
 
 interface MetaversePresenceClientDependencies {
   readonly clearTimeout?: typeof globalThis.clearTimeout;
   readonly fetch?: typeof globalThis.fetch;
   readonly setTimeout?: typeof globalThis.setTimeout;
+  readonly transport?: MetaversePresenceTransport;
 }
 
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
@@ -75,25 +73,11 @@ function resolveMembershipLossMessage(message: string): string | null {
   return null;
 }
 
-function resolveFetchDependency(
-  fetchDependency: typeof globalThis.fetch | undefined
-): typeof globalThis.fetch {
-  if (fetchDependency !== undefined) {
-    return fetchDependency;
-  }
-
-  if (typeof globalThis.fetch === "function") {
-    return globalThis.fetch.bind(globalThis);
-  }
-
-  throw new Error("Fetch API is unavailable for the metaverse presence client.");
-}
-
 export class MetaversePresenceClient {
   readonly #clearTimeout: typeof globalThis.clearTimeout;
   readonly #config: MetaversePresenceClientConfig;
-  readonly #fetch: typeof globalThis.fetch;
   readonly #setTimeout: typeof globalThis.setTimeout;
+  readonly #transport: MetaversePresenceTransport;
   readonly #updateListeners = new Set<() => void>();
 
   #joinRequest: MetaversePresenceJoinRequest | null = null;
@@ -116,10 +100,19 @@ export class MetaversePresenceClient {
     dependencies: MetaversePresenceClientDependencies = {}
   ) {
     this.#config = config;
-    this.#fetch = resolveFetchDependency(dependencies.fetch);
     this.#setTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.#clearTimeout =
       dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.#transport =
+      dependencies.transport ??
+      createMetaversePresenceHttpTransport(
+        config,
+        dependencies.fetch === undefined
+          ? {}
+          : {
+              fetch: dependencies.fetch
+            }
+      );
     this.#statusSnapshot = freezeStatusSnapshot(null, "idle", false, null, null);
   }
 
@@ -230,7 +223,10 @@ export class MetaversePresenceClient {
 
     if (playerIdToLeave !== null) {
       void this.#postLeaveDuringDispose(playerIdToLeave);
+      return;
     }
+
+    this.#transport.dispose?.();
   }
 
   async #ensureJoinedInternal(
@@ -394,28 +390,9 @@ export class MetaversePresenceClient {
     }
 
     try {
-      const response = await this.#fetch(
-        resolveMetaversePresenceSnapshotUrl(
-          this.#config.serverOrigin,
-          this.#config.presencePath,
-          this.#playerId
-        ),
-        {
-          cache: "no-store"
-        }
+      this.#applyServerEvent(
+        await this.#transport.pollRosterSnapshot(this.#playerId)
       );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          parseMetaversePresenceErrorMessage(
-            payload,
-            "Metaverse presence poll failed."
-          )
-        );
-      }
-
-      this.#applyServerEvent(parseMetaversePresenceServerEvent(payload));
     } catch (error) {
       this.#applyPresenceAccessError(error, "Metaverse presence poll failed.");
     } finally {
@@ -430,38 +407,10 @@ export class MetaversePresenceClient {
   }
 
   async #postCommand(
-    command:
-      | ReturnType<typeof createMetaverseJoinPresenceCommand>
-      | ReturnType<typeof createMetaverseLeavePresenceCommand>
-      | ReturnType<typeof createMetaverseSyncPresenceCommand>,
-    requestInit: RequestInit = {}
+    command: MetaversePresenceCommand,
+    options: NetworkCommandTransportOptions = {}
   ): Promise<MetaversePresenceRosterEvent> {
-    const response = await this.#fetch(
-      resolveMetaversePresenceCommandUrl(
-        this.#config.serverOrigin,
-        this.#config.presencePath
-      ),
-      {
-        body: serializeMetaversePresenceCommand(command),
-        headers: {
-          "content-type": "application/json"
-        },
-        method: "POST",
-        ...requestInit
-      }
-    );
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        parseMetaversePresenceErrorMessage(
-          payload,
-          "Metaverse presence command failed."
-        )
-      );
-    }
-
-    return parseMetaversePresenceServerEvent(payload);
+    return this.#transport.sendCommand(command, options);
   }
 
   async #postLeaveDuringDispose(playerId: MetaversePlayerId): Promise<void> {
@@ -471,11 +420,13 @@ export class MetaversePresenceClient {
           playerId
         }),
         {
-          keepalive: true
+          deliveryHint: "best-effort-disconnect"
         }
       );
     } catch {
       // Best-effort disconnect signaling should never block disposal.
+    } finally {
+      this.#transport.dispose?.();
     }
   }
 

@@ -7,9 +7,12 @@ import {
 import {
   CoopRoomClient,
   CoopRoomDirectoryClient,
+  createCoopRoomHttpTransport,
+  createCoopRoomWebTransportTransport,
   type CoopRoomClientConfig,
   type CoopRoomDirectoryClientConfig
 } from "../../../network";
+import { createWebTransportHttpFallbackInvoker } from "../../../network/adapters/webtransport-http-fallback";
 
 function requireDuckHuntCoopRoomId(rawValue: string): CoopRoomId {
   const roomId = createCoopRoomId(rawValue);
@@ -37,6 +40,27 @@ function resolveDuckHuntServerOrigin(): string {
   return browserOrigin;
 }
 
+function resolveDuckHuntCoopTransportMode():
+  | "http"
+  | "webtransport-preferred" {
+  const configuredMode = import.meta.env?.VITE_DUCK_HUNT_COOP_TRANSPORT?.trim();
+
+  return configuredMode === "webtransport-preferred"
+    ? "webtransport-preferred"
+    : "http";
+}
+
+function resolveDuckHuntCoopWebTransportUrl(): string | null {
+  const configuredUrl =
+    import.meta.env?.VITE_DUCK_HUNT_COOP_WEBTRANSPORT_URL?.trim();
+
+  if (configuredUrl === undefined || configuredUrl.length === 0) {
+    return null;
+  }
+
+  return configuredUrl;
+}
+
 export const duckHuntCoopRoomCollectionPath =
   "/experiences/duck-hunt/coop/rooms" as const;
 export const duckHuntRoomDirectoryRefreshIntervalMs = 3_000;
@@ -58,9 +82,58 @@ export const duckHuntCoopRoomDirectoryClientConfig = {
 export function createDuckHuntCoopRoomClient(
   roomId: CoopRoomId = defaultDuckHuntCoopRoomId
 ): CoopRoomClient {
+  const preferredTransportMode = resolveDuckHuntCoopTransportMode();
+  const webTransportUrl = resolveDuckHuntCoopWebTransportUrl();
+  const shouldUseWebTransport =
+    preferredTransportMode === "webtransport-preferred" &&
+    webTransportUrl !== null &&
+    typeof (
+      globalThis as typeof globalThis & {
+        readonly WebTransport?: unknown;
+      }
+    ).WebTransport === "function";
+
+  const httpTransport = createCoopRoomHttpTransport({
+    ...duckHuntCoopRoomClientConfig,
+    roomId
+  });
+
   return new CoopRoomClient({
     ...duckHuntCoopRoomClientConfig,
     roomId
+  }, {
+    transport: shouldUseWebTransport
+      ? (() => {
+          const transportFailover = createWebTransportHttpFallbackInvoker(
+            createCoopRoomWebTransportTransport({
+              roomId,
+              webTransportUrl
+            }),
+            httpTransport
+          );
+
+          return Object.freeze({
+            dispose() {
+              transportFailover.dispose();
+            },
+            pollRoomSnapshot(
+              playerId: Parameters<typeof httpTransport.pollRoomSnapshot>[0]
+            ) {
+              return transportFailover.invoke((transport) =>
+                transport.pollRoomSnapshot(playerId)
+              );
+            },
+            sendCommand(
+              command: Parameters<typeof httpTransport.sendCommand>[0],
+              options?: Parameters<typeof httpTransport.sendCommand>[1]
+            ) {
+              return transportFailover.invoke((transport) =>
+                transport.sendCommand(command, options)
+              );
+            }
+          });
+        })()
+      : httpTransport
   });
 }
 

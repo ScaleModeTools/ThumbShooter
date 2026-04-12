@@ -1,0 +1,268 @@
+import type {
+  IncomingMessage,
+  ServerResponse
+} from "node:http";
+
+import {
+  createMetaversePlayerId,
+  createMetaverseSyncDriverVehicleControlCommand,
+  type MetaverseRealtimeWorldClientCommand
+} from "@webgpu-metaverse/shared";
+
+import { MetaverseAuthoritativeWorldRuntime } from "../classes/metaverse-authoritative-world-runtime.js";
+
+function writeCorsHeaders(
+  response: ServerResponse<IncomingMessage>
+): void {
+  response.setHeader("access-control-allow-origin", "*");
+  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-max-age", "86400");
+}
+
+function writeJson(
+  response: ServerResponse<IncomingMessage>,
+  statusCode: number,
+  payload: unknown
+): void {
+  writeCorsHeaders(response);
+  response.writeHead(statusCode, {
+    "cache-control": "no-store, max-age=0",
+    "content-type": "application/json"
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function isUnknownPlayerError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    error.message.startsWith("Unknown metaverse player:")
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readStringField(value: unknown, fieldName: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Expected string field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function readNumberField(value: unknown, fieldName: string): number {
+  if (typeof value !== "number") {
+    throw new Error(`Expected numeric field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function readBooleanField(value: unknown, fieldName: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Expected boolean field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function readRecordField(
+  value: unknown,
+  fieldName: string
+): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`Expected object field: ${fieldName}`);
+  }
+
+  return value;
+}
+
+function readJsonBody(
+  request: IncomingMessage
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+
+    request.on("data", (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    request.on("end", () => {
+      if (chunks.length === 0) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function resolveObserverPlayerId(rawPlayerId: string | null) {
+  if (rawPlayerId === null) {
+    return undefined;
+  }
+
+  const playerId = createMetaversePlayerId(rawPlayerId);
+
+  if (playerId === null) {
+    throw new Error("Invalid playerId.");
+  }
+
+  return playerId;
+}
+
+function isMetaverseWorldSnapshotPath(pathname: string): boolean {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+
+  return (
+    segments.length === 2 &&
+    segments[0] === "metaverse" &&
+    segments[1] === "world"
+  );
+}
+
+function isMetaverseWorldCommandPath(pathname: string): boolean {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+
+  return (
+    segments.length === 3 &&
+    segments[0] === "metaverse" &&
+    segments[1] === "world" &&
+    segments[2] === "commands"
+  );
+}
+
+function parseWorldCommand(
+  body: unknown
+): MetaverseRealtimeWorldClientCommand {
+  if (!isRecord(body)) {
+    throw new Error("Expected a JSON object body.");
+  }
+
+  const commandType = readStringField(body.type, "type");
+
+  switch (commandType) {
+    case "sync-driver-vehicle-control": {
+      const controlIntentBody = readRecordField(body.controlIntent, "controlIntent");
+
+      return createMetaverseSyncDriverVehicleControlCommand({
+        controlIntent: {
+          boost: readBooleanField(
+            controlIntentBody.boost,
+            "controlIntent.boost"
+          ),
+          environmentAssetId: readStringField(
+            controlIntentBody.environmentAssetId,
+            "controlIntent.environmentAssetId"
+          ),
+          moveAxis: readNumberField(
+            controlIntentBody.moveAxis,
+            "controlIntent.moveAxis"
+          ),
+          strafeAxis: readNumberField(
+            controlIntentBody.strafeAxis,
+            "controlIntent.strafeAxis"
+          ),
+          yawAxis: readNumberField(
+            controlIntentBody.yawAxis,
+            "controlIntent.yawAxis"
+          )
+        },
+        controlSequence: readNumberField(
+          body.controlSequence,
+          "controlSequence"
+        ),
+        playerId: (() => {
+          const playerId = createMetaversePlayerId(
+            readStringField(body.playerId, "playerId")
+          );
+
+          if (playerId === null) {
+            throw new Error("Invalid playerId.");
+          }
+
+          return playerId;
+        })()
+      });
+    }
+    default:
+      throw new Error(
+        `Unsupported metaverse realtime world command type: ${commandType}`
+      );
+  }
+}
+
+export class MetaverseWorldHttpAdapter {
+  readonly #runtime: MetaverseAuthoritativeWorldRuntime;
+
+  constructor(runtime: MetaverseAuthoritativeWorldRuntime) {
+    this.#runtime = runtime;
+  }
+
+  async handleRequest(
+    request: IncomingMessage,
+    response: ServerResponse<IncomingMessage>,
+    requestUrl: URL,
+    nowMs: number
+  ): Promise<boolean> {
+    if (
+      !isMetaverseWorldSnapshotPath(requestUrl.pathname) &&
+      !isMetaverseWorldCommandPath(requestUrl.pathname)
+    ) {
+      return false;
+    }
+
+    try {
+      if (isMetaverseWorldSnapshotPath(requestUrl.pathname)) {
+        if (request.method !== "GET") {
+          writeJson(response, 405, {
+            error: "Method not allowed."
+          });
+          return true;
+        }
+
+        writeJson(
+          response,
+          200,
+          this.#runtime.readWorldEvent(
+            nowMs,
+            resolveObserverPlayerId(requestUrl.searchParams.get("playerId"))
+          )
+        );
+        return true;
+      }
+
+      if (request.method !== "POST") {
+        writeJson(response, 405, {
+          error: "Method not allowed."
+        });
+        return true;
+      }
+
+      writeJson(
+        response,
+        200,
+        this.#runtime.acceptWorldCommand(
+          parseWorldCommand(await readJsonBody(request)),
+          nowMs
+        )
+      );
+    } catch (error) {
+      writeJson(response, isUnknownPlayerError(error) ? 409 : 400, {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Metaverse world request failed."
+      });
+    }
+
+    return true;
+  }
+}

@@ -12,6 +12,9 @@ import {
   RapierPhysicsRuntime
 } from "@/physics";
 import { defaultMetaverseControlMode } from "../config/metaverse-control-modes";
+import {
+  metaverseRemoteWorldSamplingConfig
+} from "../config/metaverse-world-network";
 import { metaverseRuntimeConfig } from "../config/metaverse-runtime";
 import { MetaverseTraversalRuntime } from "./metaverse-traversal-runtime";
 import { MetaverseEnvironmentPhysicsRuntime } from "./metaverse-environment-physics-runtime";
@@ -42,6 +45,10 @@ import {
   type MetaverseLocalPlayerIdentity,
   type MetaversePresenceClientRuntime
 } from "./metaverse-presence-runtime";
+import {
+  MetaverseRemoteWorldRuntime,
+  type MetaverseWorldClientRuntime
+} from "./metaverse-remote-world-runtime";
 
 interface MetaverseRendererHost {
   compileAsync?(scene: Scene, camera: Camera): Promise<void>;
@@ -63,6 +70,7 @@ interface MetaverseRuntimeDependencies {
   readonly cancelAnimationFrame?: typeof globalThis.cancelAnimationFrame;
   readonly characterProofConfig?: MetaverseCharacterProofConfig | null;
   readonly createMetaversePresenceClient?: (() => MetaversePresenceClientRuntime) | null;
+  readonly createMetaverseWorldClient?: (() => MetaverseWorldClientRuntime) | null;
   readonly createRenderer?: (
     canvas: HTMLCanvasElement
   ) => MetaverseRendererHost;
@@ -72,6 +80,7 @@ interface MetaverseRuntimeDependencies {
   readonly localPlayerIdentity?: MetaverseLocalPlayerIdentity | null;
   readonly physicsRuntime?: RapierPhysicsRuntime;
   readonly readNowMs?: () => number;
+  readonly readWallClockMs?: () => number;
   readonly requestAnimationFrame?: typeof globalThis.requestAnimationFrame;
   readonly showPhysicsDebug?: boolean;
   readonly showSocketDebug?: boolean;
@@ -166,6 +175,7 @@ export class WebGpuMetaverseRuntime {
   readonly #groundedBodyRuntime: MetaverseGroundedBodyRuntime;
   readonly #physicsRuntime: RapierPhysicsRuntime;
   readonly #presenceRuntime: MetaversePresenceRuntime;
+  readonly #remoteWorldRuntime: MetaverseRemoteWorldRuntime;
   readonly #sceneRuntime: ReturnType<typeof createMetaverseScene>;
   readonly #traversalRuntime: MetaverseTraversalRuntime;
   readonly #uiUpdateListeners = new Set<() => void>();
@@ -184,6 +194,7 @@ export class WebGpuMetaverseRuntime {
   #requestAnimationFrame: typeof globalThis.requestAnimationFrame;
   #cancelAnimationFrame: typeof globalThis.cancelAnimationFrame;
   #readNowMs: () => number;
+  #readWallClockMs: () => number;
   #startPromise: Promise<MetaverseHudSnapshot> | null = null;
 
   constructor(
@@ -213,6 +224,7 @@ export class WebGpuMetaverseRuntime {
     this.#cancelAnimationFrame =
       dependencies.cancelAnimationFrame ?? cancelBrowserAnimationFrame;
     this.#readNowMs = dependencies.readNowMs ?? readNowMs;
+    this.#readWallClockMs = dependencies.readWallClockMs ?? Date.now;
     this.#sceneRuntime = createMetaverseScene(config, {
       attachmentProofConfig: dependencies.attachmentProofConfig ?? null,
       characterProofConfig: dependencies.characterProofConfig ?? null,
@@ -266,6 +278,16 @@ export class WebGpuMetaverseRuntime {
       onPresenceUpdate: () => {
         this.#syncOrPublishRuntimeState(true);
       }
+    });
+    this.#remoteWorldRuntime = new MetaverseRemoteWorldRuntime({
+      createMetaverseWorldClient:
+        dependencies.createMetaverseWorldClient ?? null,
+      localPlayerIdentity: dependencies.localPlayerIdentity ?? null,
+      onRemoteWorldUpdate: () => {
+        this.#syncOrPublishRuntimeState(true);
+      },
+      readWallClockMs: this.#readWallClockMs,
+      samplingConfig: metaverseRemoteWorldSamplingConfig
     });
     this.#hudSnapshot = freezeHudSnapshot(
       "idle",
@@ -388,6 +410,7 @@ export class WebGpuMetaverseRuntime {
     this.#focusedPortal = null;
     this.#mountedEnvironment = null;
     this.#presenceRuntime.dispose();
+    this.#remoteWorldRuntime.dispose();
     this.#setHudSnapshot("booting", null, true);
     this.#flightInputRuntime.install(canvas);
     const renderer = this.#createRenderer(canvas);
@@ -454,6 +477,7 @@ export class WebGpuMetaverseRuntime {
       this.#traversalRuntime.locomotionMode,
       this.#traversalRuntime.mountedEnvironmentSnapshot
     );
+    this.#remoteWorldRuntime.boot();
     this.#syncFrame(this.#lastFrameAtMs, true);
     this.#queueNextFrame();
 
@@ -479,6 +503,7 @@ export class WebGpuMetaverseRuntime {
     this.#mountedEnvironment = null;
     this.#environmentPhysicsRuntime.dispose();
     this.#presenceRuntime.dispose();
+    this.#remoteWorldRuntime.dispose();
     this.#traversalRuntime.reset();
     this.#sceneRuntime.resetPresentation();
 
@@ -519,12 +544,27 @@ export class WebGpuMetaverseRuntime {
         : Math.min(0.1, Math.max(0, (nowMs - this.#lastFrameAtMs) / 1000));
 
     this.#lastFrameAtMs = nowMs;
+    this.#remoteWorldRuntime.syncConnection(this.#presenceRuntime.isJoined);
+    this.#remoteWorldRuntime.sampleRemoteWorld();
+    for (const remoteVehiclePresentation of this.#remoteWorldRuntime
+      .remoteVehiclePresentations) {
+      this.#traversalRuntime.syncAuthoritativeVehiclePose(
+        remoteVehiclePresentation.environmentAssetId,
+        {
+          position: remoteVehiclePresentation.position,
+          yawRadians: remoteVehiclePresentation.yawRadians
+        }
+      );
+    }
     const movementInput = this.#flightInputRuntime.readSnapshot();
     const cameraSnapshot = this.#traversalRuntime.advance(
       movementInput,
       deltaSeconds
     );
     this.#mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
+    this.#remoteWorldRuntime.syncLocalDriverVehicleControl(
+      this.#traversalRuntime.routedDriverVehicleControlIntentSnapshot
+    );
     this.#environmentPhysicsRuntime.syncPushableBodyPresentations();
     this.#presenceRuntime.syncPresencePose(
       this.#readCharacterPresentationSnapshot(),
@@ -532,6 +572,10 @@ export class WebGpuMetaverseRuntime {
       this.#mountedEnvironment
     );
     this.#presenceRuntime.syncRemoteCharacterPresentations();
+    const remoteCharacterPresentations =
+      this.#remoteWorldRuntime.hasWorldSnapshot
+        ? this.#remoteWorldRuntime.remoteCharacterPresentations
+        : this.#presenceRuntime.remoteCharacterPresentations;
 
     this.#focusedPortal = resolveFocusedPortalSnapshot(
       cameraSnapshot,
@@ -548,7 +592,7 @@ export class WebGpuMetaverseRuntime {
       nowMs,
       deltaSeconds,
       this.#traversalRuntime.characterPresentationSnapshot,
-      this.#presenceRuntime.remoteCharacterPresentations,
+      remoteCharacterPresentations,
       this.#mountedEnvironment
     );
 

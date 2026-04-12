@@ -108,6 +108,7 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
     },
     tick: {
       currentTick: 19.9,
+      serverTimeMs: 995.6,
       tickIntervalMs: 50.4
     }
   };
@@ -120,6 +121,7 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
   assert.equal(snapshot.capacity, 1);
   assert.equal(snapshot.tick.owner, "server");
   assert.equal(snapshot.tick.currentTick, 19);
+  assert.equal(snapshot.tick.serverTimeMs, 995.6);
   assert.equal(snapshot.tick.tickIntervalMs, 50.4);
   assert.deepEqual(snapshot.birds[0]?.position, {
     x: 1.4,

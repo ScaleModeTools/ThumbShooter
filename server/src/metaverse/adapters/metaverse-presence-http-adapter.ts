@@ -7,7 +7,6 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaverseLeavePresenceCommand,
   createMetaversePlayerId,
-  createMetaversePresenceRosterEvent,
   createMetaverseSyncPresenceCommand,
   createUsername,
   metaversePresenceAnimationVocabularyIds,
@@ -20,7 +19,7 @@ import {
   type MetaversePresenceCommand
 } from "@webgpu-metaverse/shared";
 
-import { MetaversePresenceRuntime } from "../classes/metaverse-presence-runtime.js";
+import { MetaverseAuthoritativeWorldRuntime } from "../classes/metaverse-authoritative-world-runtime.js";
 
 function writeCorsHeaders(
   response: ServerResponse<IncomingMessage>
@@ -321,10 +320,10 @@ function isMetaversePresenceCommandPath(pathname: string): boolean {
 }
 
 export class MetaversePresenceHttpAdapter {
-  readonly #metaversePresenceRuntime: MetaversePresenceRuntime;
+  readonly #metaverseAuthoritativeWorldRuntime: MetaverseAuthoritativeWorldRuntime;
 
-  constructor(metaversePresenceRuntime: MetaversePresenceRuntime) {
-    this.#metaversePresenceRuntime = metaversePresenceRuntime;
+  constructor(metaverseAuthoritativeWorldRuntime: MetaverseAuthoritativeWorldRuntime) {
+    this.#metaverseAuthoritativeWorldRuntime = metaverseAuthoritativeWorldRuntime;
   }
 
   async handleRequest(
@@ -344,11 +343,9 @@ export class MetaversePresenceHttpAdapter {
         writeJson(
           response,
           200,
-          createMetaversePresenceRosterEvent(
-            this.#metaversePresenceRuntime.readRosterSnapshot(
-              nowMs,
-              observerPlayerId
-            )
+          this.#metaverseAuthoritativeWorldRuntime.readPresenceRosterEvent(
+            nowMs,
+            observerPlayerId
           )
         );
       } catch (error) {
@@ -381,7 +378,10 @@ export class MetaversePresenceHttpAdapter {
         writeJson(
           response,
           200,
-          this.#metaversePresenceRuntime.acceptCommand(command, nowMs)
+          this.#metaverseAuthoritativeWorldRuntime.acceptPresenceCommand(
+            command,
+            nowMs
+          )
         );
       } catch (error) {
         if (isUnknownPlayerError(error)) {

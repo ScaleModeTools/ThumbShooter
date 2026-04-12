@@ -72,11 +72,22 @@ export interface MetaverseCharacterPresentationSnapshot {
   readonly yawRadians: number;
 }
 
+export type MetaverseRemoteCharacterPoseSyncMode =
+  | "scene-arrival-smoothed"
+  | "runtime-server-sampled";
+
 export interface MetaverseRemoteCharacterPresentationSnapshot {
   readonly characterId: string;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
   readonly playerId: string;
   readonly presentation: MetaverseCharacterPresentationSnapshot;
+  readonly poseSyncMode: MetaverseRemoteCharacterPoseSyncMode;
+}
+
+export interface MetaverseRemoteVehiclePresentationSnapshot {
+  readonly environmentAssetId: string;
+  readonly position: MetaverseVector3Snapshot;
+  readonly yawRadians: number;
 }
 
 export interface MetaverseCharacterAnimationClipProofConfig {

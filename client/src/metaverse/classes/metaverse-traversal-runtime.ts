@@ -41,6 +41,7 @@ import {
 } from "../traversal/policies/surface-routing";
 import type {
   MetaverseTraversalRuntimeDependencies,
+  RoutedDriverVehicleControlIntentSnapshot,
   SurfaceLocomotionSnapshot,
   TraversalMountedVehicleSnapshot
 } from "../traversal/types/traversal";
@@ -93,6 +94,8 @@ export class MetaverseTraversalRuntime {
     "entries" | "environmentAssetId" | "label" | "seats"
   > | null = null;
   #mountedOccupancyLookYawRadians = 0;
+  #routedDriverVehicleControlIntentSnapshot: RoutedDriverVehicleControlIntentSnapshot | null =
+    null;
   #mountedVehicleRuntime: MetaverseVehicleRuntime | null = null;
   #swimForwardSpeedUnitsPerSecond = 0;
   #swimStrafeSpeedUnitsPerSecond = 0;
@@ -171,6 +174,12 @@ export class MetaverseTraversalRuntime {
     });
   }
 
+  get routedDriverVehicleControlIntentSnapshot():
+    | RoutedDriverVehicleControlIntentSnapshot
+    | null {
+    return this.#routedDriverVehicleControlIntentSnapshot;
+  }
+
   reset(): void {
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#cameraSnapshot = createMetaverseCameraSnapshot(this.#config.camera);
@@ -178,6 +187,7 @@ export class MetaverseTraversalRuntime {
     this.#locomotionMode = defaultMetaverseLocomotionMode;
     this.#clearMountedVehicleState();
     this.#mountedOccupancyLookYawRadians = 0;
+    this.#routedDriverVehicleControlIntentSnapshot = null;
     this.#swimForwardSpeedUnitsPerSecond = 0;
     this.#swimStrafeSpeedUnitsPerSecond = 0;
     this.#swimSnapshot = createSurfaceLocomotionSnapshot(
@@ -347,6 +357,29 @@ export class MetaverseTraversalRuntime {
     return this.#cameraSnapshot;
   }
 
+  syncAuthoritativeVehiclePose(
+    environmentAssetId: string,
+    poseSnapshot: {
+      readonly position: PhysicsVector3Snapshot;
+      readonly yawRadians: number;
+    }
+  ): void {
+    const mountedVehicleRuntime = this.#mountedVehicleRuntime;
+    const mountedEnvironmentConfig = this.#mountedEnvironmentConfig;
+
+    if (
+      mountedVehicleRuntime !== null &&
+      mountedEnvironmentConfig?.environmentAssetId === environmentAssetId
+    ) {
+      mountedVehicleRuntime.syncAuthoritativePose(poseSnapshot);
+      this.#syncMountedVehiclePresentation();
+      this.#syncCharacterPresentationSnapshot();
+      return;
+    }
+
+    this.#setDynamicEnvironmentPose(environmentAssetId, poseSnapshot);
+  }
+
   #setLocomotionMode(locomotionMode: MetaverseLocomotionModeId): void {
     this.#locomotionMode = locomotionMode;
   }
@@ -502,6 +535,7 @@ export class MetaverseTraversalRuntime {
     this.#mountedVehicleRuntime?.clearOccupancy();
     this.#mountedEnvironmentConfig = null;
     this.#mountedOccupancyLookYawRadians = 0;
+    this.#routedDriverVehicleControlIntentSnapshot = null;
     this.#mountedVehicleRuntime = null;
   }
 
@@ -688,6 +722,12 @@ export class MetaverseTraversalRuntime {
       movementInput
     );
 
+    this.#routedDriverVehicleControlIntentSnapshot =
+      this.#resolveRoutedDriverVehicleControlIntentSnapshot(
+        mountedVehicleState,
+        mountedVehicleLocomotionInput
+      );
+
     const mountedVehicleSnapshot = mountedVehicleRuntime.advance(
       mountedVehicleLocomotionInput,
       this.#config.skiff,
@@ -738,6 +778,26 @@ export class MetaverseTraversalRuntime {
       moveAxis: movementInput.moveAxis,
       strafeAxis: movementInput.strafeAxis,
       yawAxis: movementInput.yawAxis
+    });
+  }
+
+  #resolveRoutedDriverVehicleControlIntentSnapshot(
+    mountedVehicleState: TraversalMountedVehicleSnapshot,
+    controlIntent: MountedVehicleControlIntent
+  ): RoutedDriverVehicleControlIntentSnapshot | null {
+    const occupancy = mountedVehicleState.occupancy;
+
+    if (
+      occupancy === null ||
+      occupancy.controlRoutingPolicyId !== "vehicle-surface-drive" ||
+      occupancy.occupantRole !== "driver"
+    ) {
+      return null;
+    }
+
+    return Object.freeze({
+      controlIntent,
+      environmentAssetId: mountedVehicleState.environmentAssetId
     });
   }
 

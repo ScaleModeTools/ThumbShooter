@@ -292,6 +292,24 @@ export class MetaverseVehicleRuntime {
     this.#occupancyRuntime = null;
   }
 
+  syncAuthoritativePose(poseSnapshot: {
+    readonly position: PhysicsVector3Snapshot;
+    readonly yawRadians: number;
+  }): MountedVehicleRuntimeSnapshot {
+    this.#position = freezeVector3(
+      poseSnapshot.position.x,
+      poseSnapshot.position.y,
+      poseSnapshot.position.z
+    );
+    this.#yawRadians = wrapRadians(poseSnapshot.yawRadians);
+    this.#planarSpeedUnitsPerSecond = 0;
+    this.#forwardSpeedUnitsPerSecond = 0;
+    this.#strafeSpeedUnitsPerSecond = 0;
+    this.#syncWaterborneState();
+
+    return this.snapshot;
+  }
+
   advance(
     controlIntent: MountedVehicleControlIntent,
     locomotionConfig: SurfaceLocomotionConfig,

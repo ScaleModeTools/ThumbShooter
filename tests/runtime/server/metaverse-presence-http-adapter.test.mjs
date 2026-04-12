@@ -10,7 +10,7 @@ import {
 } from "@webgpu-metaverse/shared";
 
 import { MetaversePresenceHttpAdapter } from "../../../server/dist/metaverse/adapters/metaverse-presence-http-adapter.js";
-import { MetaversePresenceRuntime } from "../../../server/dist/metaverse/classes/metaverse-presence-runtime.js";
+import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
 
 function createResponseCapture() {
   let body = "";
@@ -49,7 +49,9 @@ function createRequest(method, body = null) {
 }
 
 test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot polling", async () => {
-  const adapter = new MetaversePresenceHttpAdapter(new MetaversePresenceRuntime());
+  const adapter = new MetaversePresenceHttpAdapter(
+    new MetaverseAuthoritativeWorldRuntime()
+  );
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
@@ -157,7 +159,9 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
 });
 
 test("MetaversePresenceHttpAdapter returns conflict for unknown observers", async () => {
-  const adapter = new MetaversePresenceHttpAdapter(new MetaversePresenceRuntime());
+  const adapter = new MetaversePresenceHttpAdapter(
+    new MetaverseAuthoritativeWorldRuntime()
+  );
   const response = createResponseCapture();
   const handled = await adapter.handleRequest(
     { method: "GET" },

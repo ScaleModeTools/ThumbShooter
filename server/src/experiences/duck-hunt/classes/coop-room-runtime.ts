@@ -554,7 +554,7 @@ export class CoopRoomRuntime {
     );
     this.#roundDurationMs = this.#roundPlan.roundDurationMs;
     this.#roundPhaseRemainingMs = this.#roundDurationMs;
-    this.#snapshot = this.#buildSnapshot();
+    this.#snapshot = this.#buildSnapshot(0);
   }
 
   get roomId(): CoopRoomRuntimeConfig["roomId"] {
@@ -576,7 +576,7 @@ export class CoopRoomRuntime {
 
     if (this.#lastAdvancedAtMs === null) {
       this.#lastAdvancedAtMs = safeNowMs;
-      this.#snapshot = this.#buildSnapshot();
+      this.#snapshot = this.#buildSnapshot(safeNowMs);
       return this.#snapshot;
     }
 
@@ -585,7 +585,7 @@ export class CoopRoomRuntime {
       this.#advanceOneTick();
     }
 
-    this.#snapshot = this.#buildSnapshot();
+    this.#snapshot = this.#buildSnapshot(safeNowMs);
 
     return this.#snapshot;
   }
@@ -626,7 +626,7 @@ export class CoopRoomRuntime {
         break;
     }
 
-    this.#snapshot = this.#buildSnapshot();
+    this.#snapshot = this.#buildSnapshot(normalizeNowMs(nowMs));
 
     return createCoopRoomSnapshotEvent(this.#snapshot);
   }
@@ -1142,7 +1142,7 @@ export class CoopRoomRuntime {
     return remainingBirdCount;
   }
 
-  #buildSnapshot(): CoopRoomSnapshot {
+  #buildSnapshot(serverTimeMs: number): CoopRoomSnapshot {
     const birdsRemaining = this.#countRemainingBirds();
     const birdsCleared = this.#roundPlan.passBirdCount - birdsRemaining;
 
@@ -1218,6 +1218,7 @@ export class CoopRoomRuntime {
       },
       tick: {
         currentTick: this.#tick,
+        serverTimeMs,
         tickIntervalMs: this.#config.tickIntervalMs
       }
     });

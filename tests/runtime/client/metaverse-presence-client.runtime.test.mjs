@@ -23,15 +23,6 @@ after(async () => {
   await clientLoader?.close();
 });
 
-function createJsonResponse(ok, payload) {
-  return {
-    ok,
-    async json() {
-      return payload;
-    }
-  };
-}
-
 function flushAsyncWork() {
   return new Promise((resolve) => {
     setImmediate(resolve);
@@ -136,20 +127,33 @@ test("MetaversePresenceClient joins, polls roster snapshots, syncs pose, and lea
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
+      transport: {
+        async pollRosterSnapshot(nextPlayerId) {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            playerId: nextPlayerId,
+            type: "poll"
+          });
+
+          return queuedResponse;
+        },
+        async sendCommand(command, options) {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            command,
+            options: options ?? null,
+            type: "command"
+          });
+
+          return queuedResponse;
+        }
+      },
       clearTimeout(handle) {
         clearedTimers.push(handle);
-      },
-      async fetch(input, init) {
-        const queuedResponse = responseQueue.shift();
-
-        assert.notEqual(queuedResponse, undefined);
-        requests.push({
-          body: init?.body ?? null,
-          method: init?.method ?? "GET",
-          url: String(input)
-        });
-
-        return createJsonResponse(true, queuedResponse);
       },
       setTimeout(callback, delay) {
         scheduledTasks.push({
@@ -180,9 +184,9 @@ test("MetaversePresenceClient joins, polls roster snapshots, syncs pose, and lea
   assert.equal(joinedSnapshot.players.length, 1);
   assert.equal(client.statusSnapshot.joined, true);
   assert.equal(client.statusSnapshot.state, "connected");
-  assert.equal(requests[0]?.method, "POST");
+  assert.equal(requests[0]?.type, "command");
   assert.deepEqual(
-    JSON.parse(String(requests[0]?.body)),
+    requests[0]?.command,
     createMetaverseJoinPresenceCommand({
       characterId: "metaverse-mannequin-v1",
       playerId,
@@ -205,11 +209,8 @@ test("MetaversePresenceClient joins, polls roster snapshots, syncs pose, and lea
   await flushAsyncWork();
 
   assert.equal(client.rosterSnapshot?.players.length, 2);
-  assert.equal(requests[1]?.method, "GET");
-  assert.equal(
-    requests[1]?.url,
-    "http://127.0.0.1:3210/metaverse/presence?playerId=harbor-pilot-1"
-  );
+  assert.equal(requests[1]?.type, "poll");
+  assert.equal(requests[1]?.playerId, playerId);
   assert.equal(scheduledTasks[0]?.delay, 90);
 
   client.syncPresence({
@@ -226,9 +227,9 @@ test("MetaversePresenceClient joins, polls roster snapshots, syncs pose, and lea
   scheduledTasks[1]?.callback();
   await flushAsyncWork();
 
-  assert.equal(requests[2]?.method, "POST");
+  assert.equal(requests[2]?.type, "command");
   assert.deepEqual(
-    JSON.parse(String(requests[2]?.body)),
+    requests[2]?.command,
     createMetaverseSyncPresenceCommand({
       playerId,
       pose: {
@@ -252,13 +253,14 @@ test("MetaversePresenceClient joins, polls roster snapshots, syncs pose, and lea
 
   assert.equal(client.statusSnapshot.state, "disposed");
   assert.ok(clearedTimers.length >= 1);
-  assert.equal(requests[3]?.method, "POST");
+  assert.equal(requests[3]?.type, "command");
   assert.deepEqual(
-    JSON.parse(String(requests[3]?.body)),
+    requests[3]?.command,
     createMetaverseLeavePresenceCommand({
       playerId
     })
   );
+  assert.equal(requests[3]?.options?.deliveryHint, "best-effort-disconnect");
 });
 
 test("MetaversePresenceClient marks membership loss when the local player disappears from the roster", async () => {
@@ -288,11 +290,21 @@ test("MetaversePresenceClient marks membership loss when the local player disapp
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch() {
-        const queuedResponse = responseQueue.shift();
+      transport: {
+        async pollRosterSnapshot() {
+          const queuedResponse = responseQueue.shift();
 
-        assert.notEqual(queuedResponse, undefined);
-        return createJsonResponse(true, queuedResponse);
+          assert.notEqual(queuedResponse, undefined);
+
+          return queuedResponse;
+        },
+        async sendCommand() {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+
+          return queuedResponse;
+        }
       },
       setTimeout(callback, delay) {
         scheduledTasks.push({
@@ -342,23 +354,14 @@ test("MetaversePresenceClient rejoins automatically after an unknown-player poll
   const requests = [];
   const scheduledTasks = [];
   const responseQueue = [
-    createJsonResponse(
-      true,
-      createRosterEvent({
-        localPlayerId: playerId,
-        snapshotSequence: 1
-      })
-    ),
-    createJsonResponse(false, {
-      error: `Unknown metaverse player: ${playerId}`
+    createRosterEvent({
+      localPlayerId: playerId,
+      snapshotSequence: 1
     }),
-    createJsonResponse(
-      true,
-      createRosterEvent({
-        localPlayerId: playerId,
-        snapshotSequence: 2
-      })
-    )
+    createRosterEvent({
+      localPlayerId: playerId,
+      snapshotSequence: 2
+    })
   ];
   const client = new MetaversePresenceClient(
     {
@@ -367,17 +370,25 @@ test("MetaversePresenceClient rejoins automatically after an unknown-player poll
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch(input, init) {
-        const queuedResponse = responseQueue.shift();
+      transport: {
+        async pollRosterSnapshot(nextPlayerId) {
+          requests.push({
+            playerId: nextPlayerId,
+            type: "poll"
+          });
+          throw new Error(`Unknown metaverse player: ${nextPlayerId}`);
+        },
+        async sendCommand(command) {
+          const queuedResponse = responseQueue.shift();
 
-        assert.notEqual(queuedResponse, undefined);
-        requests.push({
-          body: init?.body ?? null,
-          method: init?.method ?? "GET",
-          url: String(input)
-        });
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            command,
+            type: "command"
+          });
 
-        return queuedResponse;
+          return queuedResponse;
+        }
       },
       setTimeout(callback, delay) {
         scheduledTasks.push({
@@ -411,10 +422,10 @@ test("MetaversePresenceClient rejoins automatically after an unknown-player poll
   assert.equal(client.statusSnapshot.state, "connected");
   assert.equal(client.statusSnapshot.joined, true);
   assert.equal(client.statusSnapshot.lastError, null);
-  assert.equal(requests[1]?.method, "GET");
-  assert.equal(requests[2]?.method, "POST");
+  assert.equal(requests[1]?.type, "poll");
+  assert.equal(requests[2]?.type, "command");
   assert.deepEqual(
-    JSON.parse(String(requests[2]?.body)),
+    requests[2]?.command,
     createMetaverseJoinPresenceCommand({
       characterId: "metaverse-mannequin-v1",
       playerId,

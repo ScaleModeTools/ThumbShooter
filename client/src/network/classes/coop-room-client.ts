@@ -1,6 +1,7 @@
 import type {
   CoopPlayerId,
   CoopPlayerPresenceSnapshotInput,
+  CoopRoomClientCommand,
   CoopRoomServerEvent,
   CoopRoomSnapshot,
   CoopVector3SnapshotInput
@@ -15,23 +16,20 @@ import {
   createCoopSyncPlayerPresenceCommand
 } from "@webgpu-metaverse/shared";
 
-import {
-  parseCoopRoomErrorMessage,
-  parseCoopRoomServerEvent,
-  resolveCoopRoomCommandUrl,
-  resolveCoopRoomSnapshotUrl,
-  serializeCoopRoomClientCommand
-} from "../codecs/coop-room-client-http";
+import { createCoopRoomHttpTransport } from "../adapters/coop-room-http-transport";
 import type {
   CoopRoomClientConfig,
   CoopRoomClientStatusSnapshot,
   CoopRoomJoinRequest
 } from "../types/coop-room-client";
+import type { CoopRoomTransport } from "../types/coop-room-transport";
+import type { NetworkCommandTransportOptions } from "../types/transport-command-options";
 
 interface CoopRoomClientDependencies {
   readonly clearTimeout?: typeof globalThis.clearTimeout;
   readonly fetch?: typeof globalThis.fetch;
   readonly setTimeout?: typeof globalThis.setTimeout;
+  readonly transport?: CoopRoomTransport;
 }
 
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
@@ -156,25 +154,11 @@ function isNewerRoomSession(
   return nextSessionOrder.ordinal > currentSessionOrder.ordinal;
 }
 
-function resolveFetchDependency(
-  fetchDependency: typeof globalThis.fetch | undefined
-): typeof globalThis.fetch {
-  if (fetchDependency !== undefined) {
-    return fetchDependency;
-  }
-
-  if (typeof globalThis.fetch === "function") {
-    return globalThis.fetch.bind(globalThis);
-  }
-
-  throw new Error("Fetch API is unavailable for the co-op room client.");
-}
-
 export class CoopRoomClient {
   readonly #clearTimeout: typeof globalThis.clearTimeout;
   readonly #config: CoopRoomClientConfig;
-  readonly #fetch: typeof globalThis.fetch;
   readonly #setTimeout: typeof globalThis.setTimeout;
+  readonly #transport: CoopRoomTransport;
   readonly #updateListeners = new Set<() => void>();
 
   #joinPromise: Promise<CoopRoomSnapshot> | null = null;
@@ -193,10 +177,19 @@ export class CoopRoomClient {
     dependencies: CoopRoomClientDependencies = {}
   ) {
     this.#config = config;
-    this.#fetch = resolveFetchDependency(dependencies.fetch);
     this.#setTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.#clearTimeout =
       dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.#transport =
+      dependencies.transport ??
+      createCoopRoomHttpTransport(
+        config,
+        dependencies.fetch === undefined
+          ? {}
+          : {
+              fetch: dependencies.fetch
+            }
+      );
     this.#statusSnapshot = freezeStatusSnapshot(
       config.roomId,
       null,
@@ -416,7 +409,10 @@ export class CoopRoomClient {
 
     if (playerIdToLeave !== null) {
       void this.#postLeaveRoomDuringDispose(playerIdToLeave);
+      return;
     }
+
+    this.#transport.dispose?.();
   }
 
   async #ensureJoinedInternal(
@@ -600,26 +596,7 @@ export class CoopRoomClient {
     }
 
     try {
-      const response = await this.#fetch(
-        resolveCoopRoomSnapshotUrl(
-          this.#config.serverOrigin,
-          this.#config.roomCollectionPath,
-          this.#config.roomId,
-          this.#playerId
-        ),
-        {
-          cache: "no-store"
-        }
-      );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          parseCoopRoomErrorMessage(payload, "Co-op room snapshot poll failed.")
-        );
-      }
-
-      this.#applyServerEvent(parseCoopRoomServerEvent(payload));
+      this.#applyServerEvent(await this.#transport.pollRoomSnapshot(this.#playerId));
     } catch (error) {
       this.#applyRoomAccessError(error, "Co-op room snapshot poll failed.");
     } finally {
@@ -634,40 +611,10 @@ export class CoopRoomClient {
   }
 
   async #postCommand(
-    command:
-      | ReturnType<typeof createCoopJoinRoomCommand>
-      | ReturnType<typeof createCoopSetPlayerReadyCommand>
-      | ReturnType<typeof createCoopStartSessionCommand>
-      | ReturnType<typeof createCoopKickPlayerCommand>
-      | ReturnType<typeof createCoopLeaveRoomCommand>
-      | ReturnType<typeof createCoopFireShotCommand>
-      | ReturnType<typeof createCoopSyncPlayerPresenceCommand>,
-    requestInit: RequestInit = {}
+    command: CoopRoomClientCommand,
+    options: NetworkCommandTransportOptions = {}
   ): Promise<CoopRoomServerEvent> {
-    const response = await this.#fetch(
-      resolveCoopRoomCommandUrl(
-        this.#config.serverOrigin,
-        this.#config.roomCollectionPath,
-        this.#config.roomId
-      ),
-      {
-        body: serializeCoopRoomClientCommand(command),
-        headers: {
-          "content-type": "application/json"
-        },
-        method: "POST",
-        ...requestInit
-      }
-    );
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        parseCoopRoomErrorMessage(payload, "Co-op room command failed.")
-      );
-    }
-
-    return parseCoopRoomServerEvent(payload);
+    return this.#transport.sendCommand(command, options);
   }
 
   async #postLeaveRoomDuringDispose(playerId: CoopPlayerId): Promise<void> {
@@ -678,11 +625,13 @@ export class CoopRoomClient {
           roomId: this.#config.roomId
         }),
         {
-          keepalive: true
+          deliveryHint: "best-effort-disconnect"
         }
       );
     } catch {
       // Best-effort disconnect signaling should never block disposal.
+    } finally {
+      this.#transport.dispose?.();
     }
   }
 

@@ -8,6 +8,7 @@ import {
   type HandTriggerCalibrationSnapshot,
   type NormalizedViewportPoint
 } from "@webgpu-metaverse/shared";
+import { AuthoritativeServerClock } from "../../../network";
 
 import { duckHuntCoopArenaSimulationConfig } from "../config/duck-hunt-coop-arena-simulation";
 import { duckHuntGameplayRuntimeConfig } from "../config/duck-hunt-gameplay-runtime";
@@ -98,8 +99,13 @@ function readNowMs(): number {
   return globalThis.performance?.now() ?? Date.now();
 }
 
+function readWallClockMs(): number {
+  return Date.now();
+}
+
 interface CoopArenaSimulationDependencies extends CoopArenaLocalIdentity {
   readonly emitGameplaySignal?: (signal: GameplaySignal) => void;
+  readonly readWallClockMs?: () => number;
   readonly triggerCalibration?: HandTriggerCalibrationSnapshot | null;
 }
 
@@ -121,7 +127,7 @@ interface CoopBirdProjectionState {
   radius: number;
   scale: number;
   scalePerSecond: number;
-  snapshotAppliedAtMs: number;
+  snapshotServerTimeMs: number;
   velocityX: number;
   velocityY: number;
   velocityZ: number;
@@ -166,7 +172,7 @@ function createBirdProjectionState(
     radius: 0,
     scale: 1,
     scalePerSecond: 0,
-    snapshotAppliedAtMs: 0,
+    snapshotServerTimeMs: 0,
     velocityX: 0,
     velocityY: 0,
     velocityZ: 0,
@@ -289,9 +295,11 @@ export class DuckHuntCoopArenaSimulation {
   readonly #enemyRenderStates: MutableEnemyRenderState[] = [];
   readonly #emitGameplaySignal: ((signal: GameplaySignal) => void) | null;
   readonly #localPlayerId: CoopArenaLocalIdentity["playerId"];
+  readonly #readWallClockMs: () => number;
   readonly #roomSource: CoopArenaRoomSource;
   readonly #triggerCalibration: HandTriggerCalibrationSnapshot | null;
   readonly #weaponRuntime: DuckHuntWeaponRuntime;
+  readonly #authoritativeServerClock: AuthoritativeServerClock;
 
   #cameraSnapshot: GameplayCameraSnapshot;
   #feedbackEnemyId: string | null = null;
@@ -315,9 +323,13 @@ export class DuckHuntCoopArenaSimulation {
     this.#config = config;
     this.#emitGameplaySignal = dependencies.emitGameplaySignal ?? null;
     this.#localPlayerId = dependencies.playerId;
+    this.#readWallClockMs = dependencies.readWallClockMs ?? readWallClockMs;
     this.#roomSource = roomSource;
     this.#triggerCalibration = dependencies.triggerCalibration ?? null;
     this.#weaponRuntime = new DuckHuntWeaponRuntime(config.weapon);
+    this.#authoritativeServerClock = new AuthoritativeServerClock(
+      config.serverClock
+    );
     this.#cameraSnapshot = createGameplayCameraSnapshot(config.camera);
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
   }
@@ -349,13 +361,15 @@ export class DuckHuntCoopArenaSimulation {
         ? 0
         : Math.max(0, Math.min(48, safeNowMs - this.#lastStepAtMs));
     const roomSnapshot = this.#roomSource.roomSnapshot;
+    const localWallClockMs = this.#readWallClockMs();
+    const projectedServerTimeMs = this.#resolveProjectedServerTimeMs(
+      roomSnapshot,
+      localWallClockMs
+    );
 
     this.#lastStepAtMs = safeNowMs;
-    this.#syncEnemyRenderStates(roomSnapshot, safeNowMs);
-    this.#worldTimeMs =
-      roomSnapshot === null
-        ? 0
-        : roomSnapshot.tick.currentTick * Number(roomSnapshot.tick.tickIntervalMs);
+    this.#syncEnemyRenderStates(roomSnapshot, projectedServerTimeMs);
+    this.#worldTimeMs = projectedServerTimeMs;
 
     const projectedAimPoint =
       trackingSnapshot.trackingState === "tracked"
@@ -472,12 +486,32 @@ export class DuckHuntCoopArenaSimulation {
         : false
     );
     this.#birdProjectionStates.length = 0;
-    this.#syncEnemyRenderStates(roomSnapshot, readNowMs());
-    this.#worldTimeMs =
-      roomSnapshot === null
-        ? 0
-        : roomSnapshot.tick.currentTick * Number(roomSnapshot.tick.tickIntervalMs);
+    const localWallClockMs = this.#readWallClockMs();
+    const projectedServerTimeMs = this.#resolveProjectedServerTimeMs(
+      roomSnapshot,
+      localWallClockMs
+    );
+    this.#syncEnemyRenderStates(roomSnapshot, projectedServerTimeMs);
+    this.#worldTimeMs = projectedServerTimeMs;
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
+  }
+
+  #resolveProjectedServerTimeMs(
+    roomSnapshot: CoopRoomSnapshot | null,
+    localWallClockMs: number
+  ): number {
+    if (roomSnapshot === null) {
+      return 0;
+    }
+
+    this.#authoritativeServerClock.observeServerTime(
+      Number(roomSnapshot.tick.serverTimeMs),
+      localWallClockMs
+    );
+
+    return this.#authoritativeServerClock.readEstimatedServerTimeMs(
+      localWallClockMs
+    );
   }
 
   restartSession(trackingSnapshot?: LatestHandTrackingSnapshot): void {
@@ -570,7 +604,10 @@ export class DuckHuntCoopArenaSimulation {
     }
   }
 
-  #syncEnemyRenderStates(roomSnapshot: CoopRoomSnapshot | null, nowMs: number): void {
+  #syncEnemyRenderStates(
+    roomSnapshot: CoopRoomSnapshot | null,
+    projectedServerTimeMs: number
+  ): void {
     if (roomSnapshot === null) {
       this.#birdProjectionStates.length = 0;
 
@@ -583,6 +620,7 @@ export class DuckHuntCoopArenaSimulation {
 
     const birdSnapshots = roomSnapshot.birds;
     const roomTick = roomSnapshot.tick.currentTick;
+    const roomServerTimeMs = Number(roomSnapshot.tick.serverTimeMs);
     const tickIntervalMs = Math.max(0, Number(roomSnapshot.tick.tickIntervalMs));
 
     for (let index = 0; index < birdSnapshots.length; index += 1) {
@@ -620,13 +658,13 @@ export class DuckHuntCoopArenaSimulation {
         birdProjectionState,
         birdSnapshot,
         roomTick,
-        tickIntervalMs,
-        nowMs
+        roomServerTimeMs,
+        tickIntervalMs
       );
       this.#applyBirdProjectionState(
         birdProjectionState,
         enemyRenderState,
-        nowMs,
+        projectedServerTimeMs,
         tickIntervalMs
       );
     }
@@ -636,8 +674,8 @@ export class DuckHuntCoopArenaSimulation {
     birdProjectionState: CoopBirdProjectionState,
     birdSnapshot: CoopRoomSnapshot["birds"][number],
     roomTick: number,
-    tickIntervalMs: number,
-    nowMs: number
+    roomServerTimeMs: number,
+    tickIntervalMs: number
   ): void {
     const birdChanged = birdProjectionState.birdId !== birdSnapshot.birdId;
     const hasNewSnapshotTick = birdProjectionState.lastSnapshotTick !== roomTick;
@@ -697,7 +735,7 @@ export class DuckHuntCoopArenaSimulation {
     birdProjectionState.positionZ = birdSnapshot.position.z;
     birdProjectionState.radius = birdSnapshot.radius;
     birdProjectionState.scale = birdSnapshot.scale;
-    birdProjectionState.snapshotAppliedAtMs = nowMs;
+    birdProjectionState.snapshotServerTimeMs = roomServerTimeMs;
     birdProjectionState.visible = birdSnapshot.visible;
     birdProjectionState.wingPhase = birdSnapshot.wingPhase;
   }
@@ -705,12 +743,12 @@ export class DuckHuntCoopArenaSimulation {
   #applyBirdProjectionState(
     birdProjectionState: CoopBirdProjectionState,
     enemyRenderState: MutableEnemyRenderState,
-    nowMs: number,
+    projectedServerTimeMs: number,
     tickIntervalMs: number
   ): void {
     const projectionSeconds =
       clampProjectionDeltaMs(
-        nowMs - birdProjectionState.snapshotAppliedAtMs,
+        projectedServerTimeMs - birdProjectionState.snapshotServerTimeMs,
         tickIntervalMs
       ) / 1000;
 

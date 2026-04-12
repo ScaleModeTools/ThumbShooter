@@ -619,6 +619,106 @@ test("MetaverseTraversalRuntime steers grounded and swim character yaw from look
   }
 });
 
+test("MetaverseTraversalRuntime applies authoritative mounted vehicle poses for passenger occupancy", async () => {
+  const { groundedBodyRuntime, traversalRuntime } = await createTraversalHarness({
+    dynamicEnvironmentPoses: {
+      "metaverse-hub-skiff-v1": Object.freeze({
+        position: freezeVector3(0, 0.3, 18),
+        yawRadians: 0
+      })
+    },
+    mountableEnvironmentConfigs: {
+      "metaverse-hub-skiff-v1": {
+        label: "Metaverse hub skiff",
+        seats: [
+          Object.freeze({
+            cameraPolicyId: "vehicle-follow",
+            controlRoutingPolicyId: "vehicle-surface-drive",
+            directEntryEnabled: true,
+            dismountOffset: freezeVector3(0, 0, 1),
+            label: "Take helm",
+            lookLimitPolicyId: "driver-forward",
+            occupancyAnimationId: "seated",
+            seatId: "driver-seat",
+            seatNodeName: "driver_seat",
+            seatRole: "driver"
+          }),
+          Object.freeze({
+            cameraPolicyId: "seat-follow",
+            controlRoutingPolicyId: "look-only",
+            directEntryEnabled: true,
+            dismountOffset: freezeVector3(0, 0, 1),
+            label: "Port bench",
+            lookLimitPolicyId: "passenger-bench",
+            occupancyAnimationId: "seated",
+            seatId: "port-bench-seat",
+            seatNodeName: "port_bench_seat",
+            seatRole: "passenger"
+          })
+        ]
+      }
+    }
+  });
+
+  try {
+    traversalRuntime.boot();
+    traversalRuntime.occupySeat("metaverse-hub-skiff-v1", "port-bench-seat");
+
+    traversalRuntime.syncAuthoritativeVehiclePose("metaverse-hub-skiff-v1", {
+      position: freezeVector3(6, 0.55, 14),
+      yawRadians: 0.8
+    });
+
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "seated"
+    );
+    assert.ok(
+      Math.abs(traversalRuntime.cameraSnapshot.position.x - 6) < 4
+    );
+    assert.ok(
+      Math.abs(traversalRuntime.characterPresentationSnapshot?.position.x - 6) <
+        0.000001
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime applies authoritative mounted vehicle corrections for local driver occupancy", async () => {
+  const { dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness({
+      dynamicEnvironmentPoses: {
+        "metaverse-hub-skiff-v1": Object.freeze({
+          position: freezeVector3(0, 0.3, 18),
+          yawRadians: 0
+        })
+      }
+    });
+
+  try {
+    traversalRuntime.boot();
+    traversalRuntime.occupySeat("metaverse-hub-skiff-v1", "driver-seat");
+
+    const poseWriteCountBeforeSync = dynamicPoseWrites.length;
+
+    traversalRuntime.syncAuthoritativeVehiclePose("metaverse-hub-skiff-v1", {
+      position: freezeVector3(6, 0.55, 14),
+      yawRadians: 0.8
+    });
+
+    assert.equal(dynamicPoseWrites.length, poseWriteCountBeforeSync + 1);
+    assert.ok(
+      Math.abs(
+        (traversalRuntime.characterPresentationSnapshot?.position.x ?? 0) - 6
+      ) <
+        0.000001
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
 test("MetaverseTraversalRuntime routes mounted vehicle occupancy through the traversal owner and restores swim on dismount", async () => {
   const vehicleAssetId = "metaverse-test-canoe-v1";
   const { config, dynamicPoseWrites, groundedBodyRuntime, traversalRuntime } =

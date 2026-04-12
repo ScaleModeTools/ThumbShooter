@@ -134,6 +134,7 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
 
   assert.equal(waitingSnapshot.tick.currentTick, 1);
   assert.equal(waitingSnapshot.tick.owner, "server");
+  assert.equal(waitingSnapshot.tick.serverTimeMs, 50);
   assert.equal(waitingSnapshot.session.phase, "waiting-for-players");
   assert.throws(
     () =>
@@ -159,6 +160,7 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
   const stillWaitingSnapshot = runtime.advanceTo(100);
 
   assert.equal(stillWaitingSnapshot.tick.currentTick, 2);
+  assert.equal(stillWaitingSnapshot.tick.serverTimeMs, 100);
   assert.equal(stillWaitingSnapshot.session.phase, "waiting-for-players");
 
   runtime.acceptCommand(
@@ -172,6 +174,7 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
   const activeSnapshot = runtime.advanceTo(150);
 
   assert.equal(activeSnapshot.tick.currentTick, 3);
+  assert.equal(activeSnapshot.tick.serverTimeMs, 150);
   assert.equal(activeSnapshot.session.phase, "active");
   assert.equal(activeSnapshot.session.roundNumber, 1);
   assert.equal(activeSnapshot.session.roundPhase, "combat");
@@ -248,6 +251,7 @@ test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequ
 
   assert.equal(resolvedSnapshot.session.phase, "active");
   assert.equal(resolvedSnapshot.session.roundPhase, "cooldown");
+  assert.equal(resolvedSnapshot.tick.serverTimeMs, 100);
   assert.equal(resolvedSnapshot.session.roundNumber, 1);
   assert.equal(resolvedSnapshot.session.teamShotsFired, 1);
   assert.equal(resolvedSnapshot.session.teamHitsLanded, 1);

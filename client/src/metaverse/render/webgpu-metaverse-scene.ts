@@ -1504,6 +1504,15 @@ function syncRemoteCharacterPresentations(
       continue;
     }
 
+    if (remoteCharacterPresentation.poseSyncMode === "runtime-server-sampled") {
+      syncCharacterPresentation(
+        remoteCharacterRuntime.characterRuntime,
+        remoteCharacterPresentation.presentation,
+        null
+      );
+      continue;
+    }
+
     if (remoteCharacterRuntimeCreated) {
       syncCharacterPresentation(
         remoteCharacterRuntime.characterRuntime,

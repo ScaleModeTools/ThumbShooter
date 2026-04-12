@@ -27,6 +27,7 @@ function createRoomSnapshot({
   roomId,
   sessionId,
   tick,
+  serverTimeMs = tick * 50,
   phase = "active",
   roundPhase = "combat",
   roundPhaseRemainingMs = 0,
@@ -105,6 +106,7 @@ function createRoomSnapshot({
     },
     tick: {
       currentTick: tick,
+      serverTimeMs,
       tickIntervalMs: 50
     }
   });
@@ -126,6 +128,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
 
   const firedShots = [];
   const emittedSignals = [];
+  let currentWallClockMs = 0;
   const roomSource = {
     roomId,
     roomSnapshot: createRoomSnapshot({
@@ -155,10 +158,14 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
       emitGameplaySignal(signal) {
         emittedSignals.push(signal);
       },
-      playerId
+      playerId,
+      readWallClockMs() {
+        return currentWallClockMs;
+      }
     }
   );
 
+  currentWallClockMs = 0;
   const targetedSnapshot = simulation.advance(
     createTrackedHandSnapshot(1, 0.5, 0.5),
     0
@@ -169,6 +176,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
   assert.equal(targetedSnapshot.targetFeedback.state, "targeted");
   assert.equal(simulation.enemyRenderStates[0]?.behavior, "glide");
 
+  currentWallClockMs = 16;
   const firedSnapshot = simulation.advance(
     createTrackedHandSnapshot(2, 0.5, 0.5, 1),
     16
@@ -195,6 +203,7 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
     birdBehavior: "downed"
   });
 
+  currentWallClockMs = 50;
   const resolvedSnapshot = simulation.advance(
     createTrackedHandSnapshot(3, 0.5, 0.5),
     64
@@ -241,6 +250,7 @@ test("CoopArenaSimulation projects authoritative birds forward between shared ro
     fireShot() {},
     syncPlayerPresence() {}
   };
+  let currentWallClockMs = 0;
   const simulation = new CoopArenaSimulation(
     {
       xCoefficients: [1, 0, 0],
@@ -249,10 +259,14 @@ test("CoopArenaSimulation projects authoritative birds forward between shared ro
     roomSource,
     undefined,
     {
-      playerId
+      playerId,
+      readWallClockMs() {
+        return currentWallClockMs;
+      }
     }
   );
 
+  currentWallClockMs = 0;
   simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 0);
 
   roomSource.roomSnapshot = createRoomSnapshot({
@@ -264,14 +278,17 @@ test("CoopArenaSimulation projects authoritative birds forward between shared ro
     birdWingPhase: 0.3
   });
 
+  currentWallClockMs = 50;
   simulation.advance(createTrackedHandSnapshot(2, 0.5, 0.5), 50);
 
+  currentWallClockMs = 75;
   const projectedSnapshot = simulation.advance(
     createTrackedHandSnapshot(3, 0.5, 0.5),
     75
   );
 
   assert.equal(projectedSnapshot.session.phase, "active");
+  assert.equal(simulation.worldTimeMs, 75);
   assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) > -17);
   assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) < -16.4);
   assert.ok((simulation.enemyRenderStates[0]?.wingPhase ?? 0) > 0.3);

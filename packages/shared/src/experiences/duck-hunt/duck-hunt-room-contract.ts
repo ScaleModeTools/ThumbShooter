@@ -66,11 +66,13 @@ export type CoopBirdId = TypeBrand<string, "CoopBirdId">;
 export interface CoopRoomTickSnapshot {
   readonly currentTick: number;
   readonly owner: "server";
+  readonly serverTimeMs: Milliseconds;
   readonly tickIntervalMs: Milliseconds;
 }
 
 export interface CoopRoomTickSnapshotInput {
   readonly currentTick: number;
+  readonly serverTimeMs?: number;
   readonly tickIntervalMs: number;
 }
 
@@ -559,10 +561,16 @@ export function createCoopBirdId(rawValue: string): CoopBirdId | null {
 export function createCoopRoomTickSnapshot(
   input: CoopRoomTickSnapshotInput
 ): CoopRoomTickSnapshot {
+  const tickIntervalMs = createMilliseconds(input.tickIntervalMs);
+  const currentTick = normalizeFiniteNonNegativeInteger(input.currentTick);
+
   return Object.freeze({
-    currentTick: normalizeFiniteNonNegativeInteger(input.currentTick),
+    currentTick,
     owner: "server",
-    tickIntervalMs: createMilliseconds(input.tickIntervalMs)
+    serverTimeMs: createMilliseconds(
+      input.serverTimeMs ?? currentTick * Number(tickIntervalMs)
+    ),
+    tickIntervalMs
   });
 }
 

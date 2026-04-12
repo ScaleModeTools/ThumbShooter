@@ -8,7 +8,10 @@ import type {
   MountedEnvironmentSnapshot
 } from "../../types/metaverse-runtime";
 import type { MetaversePlacedCuboidColliderSnapshot } from "../../states/metaverse-environment-collision";
-import type { MountedVehicleRuntimeSnapshot } from "../../vehicles";
+import type {
+  MountedVehicleControlIntent,
+  MountedVehicleRuntimeSnapshot
+} from "../../vehicles";
 
 export interface SurfaceLocomotionConfig {
   readonly accelerationCurveExponent: number;
@@ -71,3 +74,8 @@ export interface AutomaticSurfaceLocomotionDecision {
 }
 
 export type TraversalMountedVehicleSnapshot = MountedVehicleRuntimeSnapshot;
+
+export interface RoutedDriverVehicleControlIntentSnapshot {
+  readonly controlIntent: MountedVehicleControlIntent;
+  readonly environmentAssetId: string;
+}

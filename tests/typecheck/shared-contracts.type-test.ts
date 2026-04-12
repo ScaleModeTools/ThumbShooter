@@ -15,6 +15,8 @@ import type {
   CalibrationAnchorId,
   CoopBirdBehaviorState,
   CoopRoomClientCommand,
+  DuckHuntCoopRoomWebTransportClientMessage,
+  DuckHuntCoopRoomWebTransportServerMessage,
   CoopRoomDirectorySnapshot,
   CoopRoomDirectorySnapshotInput,
   CoopRoundPhase,
@@ -24,10 +26,23 @@ import type {
   GameplaySessionMode,
   GameplayTickOwner,
   Milliseconds,
+  MetaversePlayerId,
   MetaversePresenceMountedOccupancyKind,
   MetaversePresenceMountedOccupancySnapshot,
   MetaversePresenceMountedOccupantRoleId,
   MetaversePresencePoseSnapshot,
+  MetaversePresenceWebTransportClientMessage,
+  MetaversePresenceWebTransportServerMessage,
+  MetaverseDriverVehicleControlIntentSnapshot,
+  MetaverseRealtimeMountedOccupancySnapshot,
+  MetaverseRealtimeWorldClientCommand,
+  MetaverseRealtimeWorldWebTransportClientMessage,
+  MetaverseRealtimeWorldWebTransportServerMessage,
+  MetaverseRealtimeVehicleSeatSnapshot,
+  MetaverseRealtimeWorldEvent,
+  MetaverseRealtimeWorldSnapshot,
+  MetaverseRealtimeWorldServerEventType,
+  MetaverseVehicleId,
   MetaverseSessionSnapshot,
   NormalizedViewportScalar,
   NormalizedViewportPointInput,
@@ -151,6 +166,87 @@ type MetaversePresenceMountedOccupantRoleMatches = AssertTrue<
 type MetaversePresenceMountedEnvironmentAssetIdIsString = AssertTrue<
   IsEqual<MetaversePresenceMountedOccupancySnapshot["environmentAssetId"], string>
 >;
+type MetaverseRealtimeWorldEventTypeMatches = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldEvent["type"], "world-snapshot">
+>;
+type MetaverseRealtimeWorldServerEventTypeMatches = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldServerEventType, "world-snapshot">
+>;
+type MetaverseRealtimeWorldUsesMetaversePlayerId = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["players"][number]["playerId"], MetaversePlayerId>
+>;
+type MetaverseRealtimeWorldUsesVehicleId = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["vehicles"][number]["vehicleId"], MetaverseVehicleId>
+>;
+type MetaverseRealtimeMountedOccupancyMatches = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshot["players"][number]["mountedOccupancy"],
+    MetaverseRealtimeMountedOccupancySnapshot | null
+  >
+>;
+type MetaverseRealtimeVehicleSeatRoleMatches = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeVehicleSeatSnapshot["occupantRole"],
+    ExpectedMetaversePresenceMountedOccupantRoleId
+  >
+>;
+type MetaverseRealtimeTickOwnerMatches = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["tick"]["owner"], "server">
+>;
+type MetaverseRealtimeTickIntervalUsesMilliseconds = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["tick"]["tickIntervalMs"], Milliseconds>
+>;
+type MetaversePresenceWebTransportCommandTypeMatches = AssertTrue<
+  IsEqual<
+    Extract<
+      MetaversePresenceWebTransportClientMessage,
+      {
+        readonly type: "presence-command-request";
+      }
+    >["command"]["type"],
+    "join-presence" | "leave-presence" | "sync-presence"
+  >
+>;
+type MetaversePresenceWebTransportServerMessageWrapsRosterEvent = AssertTrue<
+  IsEqual<
+    Extract<
+      MetaversePresenceWebTransportServerMessage,
+      {
+        readonly type: "presence-server-event";
+      }
+    >["event"]["type"],
+    "presence-roster"
+  >
+>;
+type MetaverseRealtimeWorldWebTransportSnapshotRequestTypeMatches = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldWebTransportClientMessage["type"],
+    "world-command-request" | "world-snapshot-request"
+  >
+>;
+type MetaverseRealtimeWorldCommandTypeMatches = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldClientCommand["type"],
+    "sync-driver-vehicle-control"
+  >
+>;
+type MetaverseRealtimeWorldDriverControlIntentUsesStringAssetId = AssertTrue<
+  IsEqual<
+    MetaverseDriverVehicleControlIntentSnapshot["environmentAssetId"],
+    string
+  >
+>;
+type MetaverseRealtimeWorldWebTransportServerMessageWrapsWorldEvent = AssertTrue<
+  IsEqual<
+    Extract<
+      MetaverseRealtimeWorldWebTransportServerMessage,
+      {
+        readonly type: "world-server-event";
+      }
+    >["event"]["type"],
+    "world-snapshot"
+  >
+>;
 type MetaverseSessionUsesExperienceId = AssertTrue<
   IsEqual<MetaverseSessionSnapshot["activeExperienceId"], ExperienceId | null>
 >;
@@ -203,6 +299,28 @@ type CoopRoomClientCommandCatalogMatches = AssertTrue<
   IsEqual<
     (typeof coopRoomClientCommandTypes)[number],
     CoopRoomClientCommand["type"]
+  >
+>;
+type DuckHuntCoopRoomWebTransportCommandTypeMatches = AssertTrue<
+  IsEqual<
+    Extract<
+      DuckHuntCoopRoomWebTransportClientMessage,
+      {
+        readonly type: "coop-room-command-request";
+      }
+    >["command"]["type"],
+    CoopRoomClientCommand["type"]
+  >
+>;
+type DuckHuntCoopRoomWebTransportServerMessageWrapsRoomEvent = AssertTrue<
+  IsEqual<
+    Extract<
+      DuckHuntCoopRoomWebTransportServerMessage,
+      {
+        readonly type: "coop-room-server-event";
+      }
+    >["event"]["type"],
+    "room-snapshot"
   >
 >;
 type CoopRoomDirectoryServiceMatches = AssertTrue<
@@ -274,6 +392,9 @@ type CoopRoomTickOwnerUsesServer = AssertTrue<
 >;
 type CoopRoomTickIntervalUsesMilliseconds = AssertTrue<
   IsEqual<CoopRoomSnapshot["tick"]["tickIntervalMs"], Milliseconds>
+>;
+type CoopRoomServerTimeUsesMilliseconds = AssertTrue<
+  IsEqual<CoopRoomSnapshot["tick"]["serverTimeMs"], Milliseconds>
 >;
 type CoopRoomBirdHeadingUsesRadians = AssertTrue<
   IsEqual<CoopRoomSnapshot["birds"][number]["headingRadians"], Radians>
@@ -347,6 +468,7 @@ export type SharedContractTypeTests =
   | AffineAimTransformFitDiagnosticsQualityUsesFitQuality
   | CoopRoomTickOwnerUsesServer
   | CoopRoomTickIntervalUsesMilliseconds
+  | CoopRoomServerTimeUsesMilliseconds
   | CoopRoomBirdHeadingUsesRadians
   | CoopRoomBirdPositionUsesWorldPoint
   | CoopRoomPlayerUsernameUsesSharedUsername

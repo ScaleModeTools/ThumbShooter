@@ -7,6 +7,7 @@ import type {
   CoopVector3SnapshotInput
 } from "@webgpu-metaverse/shared";
 
+import type { AuthoritativeServerClockConfig } from "../../../network";
 import type { LocalArenaSimulationConfig } from "./duck-hunt-local-arena-simulation";
 import type { WeaponDefinition } from "./duck-hunt-weapon-contract";
 
@@ -15,6 +16,7 @@ export interface CoopArenaSimulationConfig {
   readonly feedback: {
     readonly holdDurationMs: Milliseconds;
   };
+  readonly serverClock: AuthoritativeServerClockConfig;
   readonly targeting: {
     readonly acquireRadius: number;
   };

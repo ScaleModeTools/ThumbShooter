@@ -22,15 +22,6 @@ after(async () => {
   await clientLoader?.close();
 });
 
-function createJsonResponse(ok, payload) {
-  return {
-    ok,
-    async json() {
-      return payload;
-    }
-  };
-}
-
 function flushAsyncWork() {
   return new Promise((resolve) => {
     setImmediate(resolve);
@@ -113,6 +104,7 @@ function createRoomSnapshotEvent({
     },
     tick: {
       currentTick: tick,
+      serverTimeMs: tick * 50,
       tickIntervalMs: 50
     }
   });
@@ -192,20 +184,33 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
+      transport: {
+        async pollRoomSnapshot(nextPlayerId) {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            playerId: nextPlayerId,
+            type: "poll"
+          });
+
+          return queuedResponse;
+        },
+        async sendCommand(command, options) {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            command,
+            options: options ?? null,
+            type: "command"
+          });
+
+          return queuedResponse;
+        }
+      },
       clearTimeout(handle) {
         clearedTimers.push(handle);
-      },
-      async fetch(input, init) {
-        const queuedResponse = responseQueue.shift();
-
-        assert.notEqual(queuedResponse, undefined);
-        requests.push({
-          body: init?.body ?? null,
-          method: init?.method ?? "GET",
-          url: String(input)
-        });
-
-        return createJsonResponse(true, queuedResponse);
       },
       setTimeout(callback, delay) {
         scheduledPolls.push({
@@ -226,32 +231,30 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
   assert.equal(joinedSnapshot.session.phase, "waiting-for-players");
   assert.equal(roomClient.statusSnapshot.joined, true);
   assert.equal(roomClient.statusSnapshot.state, "connected");
-  assert.equal(requests[0]?.method, "POST");
-  assert.match(String(requests[0]?.body), /"type":"join-room"/);
-  assert.match(String(requests[0]?.body), /"ready":false/);
+  assert.equal(requests[0]?.type, "command");
+  assert.equal(requests[0]?.command?.type, "join-room");
+  assert.equal(requests[0]?.command?.ready, false);
   assert.equal(scheduledPolls[0]?.delay, 0);
 
   const readySnapshot = await roomClient.setPlayerReady(true);
 
   assert.equal(readySnapshot.session.phase, "waiting-for-players");
-  assert.equal(requests[1]?.method, "POST");
-  assert.match(String(requests[1]?.body), /"type":"set-player-ready"/);
+  assert.equal(requests[1]?.type, "command");
+  assert.equal(requests[1]?.command?.type, "set-player-ready");
 
   const startedSnapshot = await roomClient.startSession();
 
   assert.equal(startedSnapshot.session.phase, "active");
-  assert.equal(requests[2]?.method, "POST");
-  assert.match(String(requests[2]?.body), /"type":"start-session"/);
+  assert.equal(requests[2]?.type, "command");
+  assert.equal(requests[2]?.command?.type, "start-session");
 
   scheduledPolls.shift()?.callback();
   await flushAsyncWork();
 
   assert.equal(roomClient.roomSnapshot?.tick.currentTick, 1);
-  assert.equal(requests[3]?.method, "GET");
-  assert.equal(
-    requests[3]?.url,
-    "http://127.0.0.1:3210/experiences/duck-hunt/coop/rooms/co-op-harbor?playerId=coop-player-1"
-  );
+  assert.equal(roomClient.roomSnapshot?.tick.serverTimeMs, 50);
+  assert.equal(requests[3]?.type, "poll");
+  assert.equal(requests[3]?.playerId, playerId);
   assert.equal(scheduledPolls[0]?.delay, 50);
 
   roomClient.fireShot(
@@ -260,8 +263,8 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
   );
   await flushAsyncWork();
 
-  assert.equal(requests[4]?.method, "POST");
-  assert.match(String(requests[4]?.body), /"type":"fire-shot"/);
+  assert.equal(requests[4]?.type, "command");
+  assert.equal(requests[4]?.command?.type, "fire-shot");
   assert.equal(
     roomClient.roomSnapshot?.players[0]?.activity.lastAcknowledgedShotSequence,
     1
@@ -273,8 +276,9 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
 
   assert.equal(roomClient.statusSnapshot.state, "disposed");
   assert.ok(clearedTimers.length >= 1);
-  assert.equal(requests[5]?.method, "POST");
-  assert.match(String(requests[5]?.body), /"type":"leave-room"/);
+  assert.equal(requests[5]?.type, "command");
+  assert.equal(requests[5]?.command?.type, "leave-room");
+  assert.equal(requests[5]?.options?.deliveryHint, "best-effort-disconnect");
 });
 
 test("CoopRoomClient posts leader kick-player commands", async () => {
@@ -323,17 +327,21 @@ test("CoopRoomClient posts leader kick-player commands", async () => {
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch(input, init) {
-        const queuedResponse = responseQueue.shift();
+      transport: {
+        async pollRoomSnapshot() {
+          throw new Error("Unexpected co-op room poll.");
+        },
+        async sendCommand(command) {
+          const queuedResponse = responseQueue.shift();
 
-        assert.notEqual(queuedResponse, undefined);
-        requests.push({
-          body: init?.body ?? null,
-          method: init?.method ?? "GET",
-          url: String(input)
-        });
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            command,
+            type: "command"
+          });
 
-        return createJsonResponse(true, queuedResponse);
+          return queuedResponse;
+        }
       },
       setTimeout() {
         return 1;
@@ -351,8 +359,8 @@ test("CoopRoomClient posts leader kick-player commands", async () => {
   roomClient.dispose();
   await flushAsyncWork();
 
-  assert.match(String(requests[1]?.body), /"type":"kick-player"/);
-  assert.match(String(requests[1]?.body), /"targetPlayerId":"player-2"/);
+  assert.equal(requests[1]?.command?.type, "kick-player");
+  assert.equal(requests[1]?.command?.targetPlayerId, targetPlayerId);
 });
 
 test("CoopRoomClient accepts a new room session even when its tick restarts", async () => {
@@ -395,17 +403,29 @@ test("CoopRoomClient accepts a new room session even when its tick restarts", as
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch(input, init) {
-        const queuedResponse = responseQueue.shift();
+      transport: {
+        async pollRoomSnapshot(nextPlayerId) {
+          const queuedResponse = responseQueue.shift();
 
-        assert.notEqual(queuedResponse, undefined);
-        requests.push({
-          cache: init?.cache ?? null,
-          method: init?.method ?? "GET",
-          url: String(input)
-        });
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            playerId: nextPlayerId,
+            type: "poll"
+          });
 
-        return createJsonResponse(true, queuedResponse);
+          return queuedResponse;
+        },
+        async sendCommand(command) {
+          const queuedResponse = responseQueue.shift();
+
+          assert.notEqual(queuedResponse, undefined);
+          requests.push({
+            command,
+            type: "command"
+          });
+
+          return queuedResponse;
+        }
       },
       setTimeout(callback, delay) {
         scheduledPolls.push({
@@ -427,8 +447,8 @@ test("CoopRoomClient accepts a new room session even when its tick restarts", as
   scheduledPolls.shift()?.callback();
   await flushAsyncWork();
 
-  assert.equal(requests[1]?.method, "GET");
-  assert.equal(requests[1]?.cache, "no-store");
+  assert.equal(requests[1]?.type, "poll");
+  assert.equal(requests[1]?.playerId, playerId);
   assert.equal(roomClient.roomSnapshot?.session.sessionId, freshSessionId);
   assert.equal(roomClient.roomSnapshot?.tick.currentTick, 0);
   assert.equal(roomClient.roomSnapshot?.session.phase, "waiting-for-players");
@@ -455,23 +475,19 @@ test("CoopRoomClient stops polling when the server reports local room membership
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch(input, init) {
-        if (init?.method === "POST") {
-          return createJsonResponse(
-            true,
-            createRoomSnapshotEvent({
-              playerId,
-              roomId,
-              sessionId,
-              tick: 0,
-              phase: "waiting-for-players"
-            })
-          );
+      transport: {
+        async pollRoomSnapshot(nextPlayerId) {
+          throw new Error(`Unknown co-op player: ${nextPlayerId}`);
+        },
+        async sendCommand() {
+          return createRoomSnapshotEvent({
+            playerId,
+            roomId,
+            sessionId,
+            tick: 0,
+            phase: "waiting-for-players"
+          });
         }
-
-        return createJsonResponse(false, {
-          error: `Unknown co-op player: ${playerId}`
-        });
       },
       setTimeout(callback, delay) {
         scheduledPolls.push({
@@ -524,29 +540,15 @@ test("CoopRoomClient reports an outdated room snapshot contract instead of accep
       serverOrigin: "http://127.0.0.1:3210"
     },
     {
-      async fetch() {
-        return createJsonResponse(true, {
-          room: {
-            birds: [],
-            capacity: 4,
-            players: [],
-            roomId,
-            session: {
-              birdsCleared: 4,
-              birdsRemaining: 0,
-              phase: "completed",
-              requiredReadyPlayerCount: 2,
-              sessionId,
-              teamHitsLanded: 4,
-              teamShotsFired: 8
-            },
-            tick: {
-              currentTick: 84,
-              tickIntervalMs: 50
-            }
-          },
-          type: "room-snapshot"
-        });
+      transport: {
+        async pollRoomSnapshot() {
+          throw new Error("Unexpected co-op room poll.");
+        },
+        async sendCommand() {
+          throw new Error(
+            "Co-op room response did not include the current room snapshot fields."
+          );
+        }
       },
       setTimeout() {
         return 1;

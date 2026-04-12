@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
 import {
+  createMetaverseRealtimeWorldSnapshot,
   createMetaversePresenceRosterSnapshot,
   createMetaversePlayerId,
+  createMetaverseVehicleId,
   createUsername
 } from "@webgpu-metaverse/shared";
 
@@ -522,6 +524,168 @@ class FakeMetaversePresenceClient {
       lastError: null,
       lastSnapshotSequence: this.statusSnapshot.lastSnapshotSequence,
       playerId: this.localPlayerId,
+      state: "disposed"
+    });
+    this.#notifyUpdates();
+  }
+
+  #notifyUpdates() {
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
+function createRealtimeWorldSnapshot({
+  currentTick,
+  localPlayerId,
+  localUsername,
+  remotePlayerId,
+  remotePlayerX,
+  remoteUsername,
+  serverTimeMs,
+  snapshotSequence,
+  vehicleX,
+  yawRadians = 0
+}) {
+  const vehicleId = createMetaverseVehicleId("metaverse-hub-skiff-v1");
+
+  assert.notEqual(vehicleId, null);
+
+  return createMetaverseRealtimeWorldSnapshot({
+    players: [
+      {
+        characterId: "metaverse-mannequin-v1",
+        linearVelocity: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        locomotionMode: "grounded",
+        playerId: localPlayerId,
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: snapshotSequence,
+        username: localUsername,
+        yawRadians: 0
+      },
+      {
+        animationVocabulary: "seated",
+        characterId: "metaverse-mannequin-v1",
+        linearVelocity: {
+          x: 20,
+          y: 0,
+          z: 0
+        },
+        locomotionMode: "mounted",
+        playerId: remotePlayerId,
+        position: {
+          x: remotePlayerX,
+          y: 0.75,
+          z: 18
+        },
+        stateSequence: snapshotSequence,
+        username: remoteUsername,
+        yawRadians
+      }
+    ],
+    snapshotSequence,
+    tick: {
+      currentTick,
+      serverTimeMs,
+      tickIntervalMs: 150
+    },
+    vehicles: [
+      {
+        angularVelocityRadiansPerSecond: 1.3333333333333333,
+        environmentAssetId: "metaverse-hub-skiff-v1",
+        linearVelocity: {
+          x: 20,
+          y: 0,
+          z: 0
+        },
+        position: {
+          x: vehicleX,
+          y: 0.35,
+          z: 18
+        },
+        seats: [
+          {
+            occupantPlayerId: remotePlayerId,
+            occupantRole: "driver",
+            seatId: "driver-seat"
+          }
+        ],
+        vehicleId,
+        yawRadians
+      }
+    ]
+  });
+}
+
+class FakeMetaverseWorldClient {
+  constructor(worldSnapshotBuffer = []) {
+    this.disposeCalls = 0;
+    this.driverVehicleControlRequests = [];
+    this.ensureConnectedRequests = [];
+    this.listeners = new Set();
+    this.worldSnapshotBuffer = Object.freeze(worldSnapshotBuffer);
+    this.statusSnapshot = Object.freeze({
+      connected: worldSnapshotBuffer.length > 0,
+      lastError: null,
+      lastSnapshotSequence:
+        worldSnapshotBuffer[worldSnapshotBuffer.length - 1]?.snapshotSequence ?? null,
+      lastWorldTick:
+        worldSnapshotBuffer[worldSnapshotBuffer.length - 1]?.tick.currentTick ?? null,
+      playerId: null,
+      state: worldSnapshotBuffer.length > 0 ? "connected" : "idle"
+    });
+  }
+
+  ensureConnected(playerId) {
+    this.ensureConnectedRequests.push(playerId);
+    this.statusSnapshot = Object.freeze({
+      connected: true,
+      lastError: null,
+      lastSnapshotSequence:
+        this.worldSnapshotBuffer[this.worldSnapshotBuffer.length - 1]
+          ?.snapshotSequence ?? null,
+      lastWorldTick:
+        this.worldSnapshotBuffer[this.worldSnapshotBuffer.length - 1]?.tick
+          .currentTick ?? null,
+      playerId,
+      state: "connected"
+    });
+    this.#notifyUpdates();
+
+    return Promise.resolve(
+      this.worldSnapshotBuffer[this.worldSnapshotBuffer.length - 1] ?? null
+    );
+  }
+
+  syncDriverVehicleControl(commandInput) {
+    this.driverVehicleControlRequests.push(commandInput);
+  }
+
+  subscribeUpdates(listener) {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  dispose() {
+    this.disposeCalls += 1;
+    this.statusSnapshot = Object.freeze({
+      connected: false,
+      lastError: null,
+      lastSnapshotSequence: this.statusSnapshot.lastSnapshotSequence,
+      lastWorldTick: this.statusSnapshot.lastWorldTick,
+      playerId: this.statusSnapshot.playerId,
       state: "disposed"
     });
     this.#notifyUpdates();
@@ -1421,6 +1585,180 @@ test("MetaversePresenceRuntime syncs canonical mounted occupancy through the pre
   );
 });
 
+test("MetaverseRemoteWorldRuntime samples buffered authoritative world snapshots against server time", async () => {
+  const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Remote Sailor");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const fakeWorldClient = new FakeMetaverseWorldClient([
+    createRealtimeWorldSnapshot({
+      currentTick: 10,
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remotePlayerX: 8,
+      remoteUsername,
+      serverTimeMs: 1_000,
+      snapshotSequence: 1,
+      vehicleX: 8,
+      yawRadians: 0
+    }),
+    createRealtimeWorldSnapshot({
+      currentTick: 11,
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remotePlayerX: 11,
+      remoteUsername,
+      serverTimeMs: 1_150,
+      snapshotSequence: 2,
+      vehicleX: 11,
+      yawRadians: 0.2
+    })
+  ]);
+  const remoteWorldRuntime = new MetaverseRemoteWorldRuntime({
+    createMetaverseWorldClient: () => fakeWorldClient,
+    localPlayerIdentity: {
+      characterId: "metaverse-mannequin-v1",
+      playerId: localPlayerId,
+      username: localUsername
+    },
+    onRemoteWorldUpdate() {},
+    readWallClockMs: () => 1_100,
+    samplingConfig: {
+      clockOffsetCorrectionAlpha: 1,
+      clockOffsetMaxStepMs: 1_000,
+      interpolationDelayMs: 75,
+      maxExtrapolationMs: 120
+    }
+  });
+
+  remoteWorldRuntime.boot();
+  remoteWorldRuntime.sampleRemoteWorld();
+
+  assert.equal(remoteWorldRuntime.hasWorldSnapshot, true);
+  assert.equal(remoteWorldRuntime.remoteCharacterPresentations.length, 1);
+  assert.equal(
+    remoteWorldRuntime.remoteCharacterPresentations[0]?.poseSyncMode,
+    "runtime-server-sampled"
+  );
+  assert.ok(
+    Math.abs(
+      remoteWorldRuntime.remoteCharacterPresentations[0]?.presentation.position.x -
+        9.5
+    ) < 0.000001
+  );
+  assert.equal(
+    remoteWorldRuntime.remoteCharacterPresentations[0]?.mountedOccupancy?.seatId,
+    "driver-seat"
+  );
+  assert.equal(remoteWorldRuntime.remoteVehiclePresentations.length, 1);
+  assert.ok(
+    Math.abs(remoteWorldRuntime.remoteVehiclePresentations[0]?.position.x - 9.5) <
+      0.000001
+  );
+  assert.ok(
+    Math.abs(remoteWorldRuntime.remoteVehiclePresentations[0]?.yawRadians - 0.1) <
+      0.000001
+  );
+
+  remoteWorldRuntime.dispose();
+
+  assert.equal(fakeWorldClient.disposeCalls, 1);
+});
+
+test("WebGpuMetaverseRuntime starts authoritative world polling after local presence joins", async () => {
+  const [{ WebGpuMetaverseRuntime }, { RapierPhysicsRuntime }] = await Promise.all([
+    clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const username = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Remote Sailor");
+  const renderer = new FakeMetaverseRenderer();
+  const originalWindow = globalThis.window;
+  const fakeCanvas = {
+    addEventListener() {},
+    clientHeight: 720,
+    clientWidth: 1280,
+    removeEventListener() {}
+  };
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(username, null);
+  assert.notEqual(remoteUsername, null);
+
+  globalThis.window = {
+    addEventListener() {},
+    cancelAnimationFrame() {},
+    devicePixelRatio: 1,
+    removeEventListener() {},
+    requestAnimationFrame() {
+      return 1;
+    }
+  };
+
+  try {
+    const fakePresenceClient = new FakeMetaversePresenceClient(
+      localPlayerId,
+      username,
+      remotePlayerId
+    );
+    const fakeWorldClient = new FakeMetaverseWorldClient();
+    fakeWorldClient.worldSnapshotBuffer = Object.freeze([
+      createRealtimeWorldSnapshot({
+        currentTick: 10,
+        localPlayerId,
+        localUsername: username,
+        remotePlayerId,
+        remotePlayerX: 8,
+        remoteUsername,
+        serverTimeMs: Date.now(),
+        snapshotSequence: 1,
+        vehicleX: 8
+      })
+    ]);
+    const runtime = new WebGpuMetaverseRuntime(undefined, {
+      cancelAnimationFrame:
+        globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+      createMetaversePresenceClient: () => fakePresenceClient,
+      createMetaverseWorldClient: () => fakeWorldClient,
+      createRenderer: () => renderer,
+      localPlayerIdentity: {
+        characterId: "metaverse-mannequin-v1",
+        playerId: localPlayerId,
+        username
+      },
+      physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+      requestAnimationFrame:
+        globalThis.window.requestAnimationFrame.bind(globalThis.window)
+    });
+
+    await runtime.start(fakeCanvas, {
+      gpu: {}
+    });
+
+    assert.deepEqual(fakeWorldClient.ensureConnectedRequests, [localPlayerId]);
+
+    runtime.dispose();
+
+    assert.equal(fakeWorldClient.disposeCalls, 1);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
 test("WebGpuMetaverseRuntime resolves grounded surface travel automatically when solid support is present", async () => {
   const [
     { WebGpuMetaverseRuntime },
@@ -1675,6 +2013,100 @@ test("WebGpuMetaverseRuntime routes mounted hub input through skiff locomotion a
 
     assert.equal(runtime.hudSnapshot.mountedEnvironment, null);
     assert.equal(runtime.hudSnapshot.locomotionMode, "swim");
+
+    runtime.dispose();
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.HTMLElement = originalHTMLElement;
+  }
+});
+
+test("WebGpuMetaverseRuntime publishes routed driver vehicle control intent through the authoritative world client seam", async () => {
+  const [
+    { WebGpuMetaverseRuntime },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/classes/webgpu-metaverse-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { characterProofConfig, createSceneAssetLoader, environmentProofConfig } =
+    await createSkiffMountProofSlice();
+  const renderer = new FakeMetaverseRenderer();
+  const originalWindow = globalThis.window;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const windowHarness = createInteractiveWindowHarness();
+  const fakeCanvas = {
+    addEventListener() {},
+    clientHeight: 720,
+    clientWidth: 1280,
+    removeEventListener() {}
+  };
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const username = createUsername("Harbor Pilot");
+  let nowMs = 0;
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(username, null);
+
+  globalThis.window = windowHarness.window;
+  globalThis.HTMLElement = class FakeHTMLElement {};
+
+  try {
+    const fakePresenceClient = new FakeMetaversePresenceClient(
+      localPlayerId,
+      username,
+      remotePlayerId
+    );
+    const fakeWorldClient = new FakeMetaverseWorldClient();
+    const runtime = new WebGpuMetaverseRuntime(undefined, {
+      cancelAnimationFrame:
+        globalThis.window.cancelAnimationFrame.bind(globalThis.window),
+      characterProofConfig,
+      createMetaversePresenceClient: () => fakePresenceClient,
+      createMetaverseWorldClient: () => fakeWorldClient,
+      createRenderer: () => renderer,
+      createSceneAssetLoader,
+      environmentProofConfig,
+      localPlayerIdentity: {
+        characterId: "metaverse-mannequin-v1",
+        playerId: localPlayerId,
+        username
+      },
+      physicsRuntime: createFakePhysicsRuntime(RapierPhysicsRuntime),
+      readNowMs: () => nowMs,
+      requestAnimationFrame:
+        globalThis.window.requestAnimationFrame.bind(globalThis.window)
+    });
+
+    await runtime.start(fakeCanvas, {
+      gpu: {}
+    });
+
+    runtime.boardMountable();
+    runtime.occupySeat("driver-seat");
+
+    windowHarness.dispatch("keydown", {
+      code: "KeyW"
+    });
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
+    assert.equal(fakeWorldClient.driverVehicleControlRequests.length > 0, true);
+    assert.equal(
+      fakeWorldClient.driverVehicleControlRequests.at(-1)?.playerId,
+      localPlayerId
+    );
+    assert.equal(
+      fakeWorldClient.driverVehicleControlRequests.at(-1)?.controlIntent
+        .environmentAssetId,
+      "metaverse-hub-skiff-v1"
+    );
+    assert.equal(
+      fakeWorldClient.driverVehicleControlRequests.at(-1)?.controlIntent.moveAxis,
+      1
+    );
 
     runtime.dispose();
   } finally {

@@ -32,6 +32,7 @@ function isCurrentRoomTickPayload(value: unknown): value is Record<string, unkno
   return (
     isRecord(value) &&
     typeof value.currentTick === "number" &&
+    typeof value.serverTimeMs === "number" &&
     typeof value.tickIntervalMs === "number"
   );
 }

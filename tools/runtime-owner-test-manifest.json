@@ -49,6 +49,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/metaverse/classes/metaverse-remote-world-runtime.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/metaverse/classes/metaverse-flight-input-runtime.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-flight-input-runtime.test.mjs"
@@ -104,15 +110,75 @@
       ]
     },
     {
+      "ownerPath": "client/src/network/classes/authoritative-server-clock.ts",
+      "testPaths": [
+        "tests/runtime/client/authoritative-server-clock.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/network/classes/coop-room-client.ts",
       "testPaths": [
         "tests/runtime/client/coop-room-client.runtime.test.mjs"
       ]
     },
     {
+      "ownerPath": "client/src/network/adapters/coop-room-http-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/coop-room-http-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/coop-room-webtransport-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/coop-room-webtransport-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/webtransport-http-fallback.ts",
+      "testPaths": [
+        "tests/runtime/client/webtransport-http-fallback.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/network/classes/metaverse-presence-client.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-presence-client.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/classes/metaverse-world-client.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-client.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/metaverse-presence-http-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-presence-http-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/metaverse-presence-webtransport-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-presence-webtransport-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/metaverse-world-http-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-http-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/metaverse-world-webtransport-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-webtransport-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/reliable-webtransport-json-request-channel.ts",
+      "testPaths": [
+        "tests/runtime/client/reliable-webtransport-json-request-channel.runtime.test.mjs"
       ]
     },
     {
@@ -140,15 +206,21 @@
       ]
     },
     {
+      "ownerPath": "server/src/experiences/duck-hunt/adapters/duck-hunt-coop-room-webtransport-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/duck-hunt-coop-room-webtransport-adapter.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/metaverse/classes/metaverse-session-runtime.ts",
       "testPaths": [
         "tests/runtime/server/metaverse-session-runtime.test.mjs"
       ]
     },
     {
-      "ownerPath": "server/src/metaverse/classes/metaverse-presence-runtime.ts",
+      "ownerPath": "server/src/metaverse/classes/metaverse-authoritative-world-runtime.ts",
       "testPaths": [
-        "tests/runtime/server/metaverse-presence-runtime.test.mjs"
+        "tests/runtime/server/metaverse-authoritative-world-runtime.test.mjs"
       ]
     },
     {
@@ -161,6 +233,24 @@
       "ownerPath": "server/src/metaverse/adapters/metaverse-presence-http-adapter.ts",
       "testPaths": [
         "tests/runtime/server/metaverse-presence-http-adapter.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/adapters/metaverse-presence-webtransport-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-presence-webtransport-adapter.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/adapters/metaverse-world-http-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-world-http-adapter.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/adapters/metaverse-world-webtransport-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-world-webtransport-adapter.test.mjs"
       ]
     },
     {

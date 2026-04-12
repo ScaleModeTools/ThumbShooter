@@ -28,6 +28,7 @@ import {
   createMetaverseLocalPlayerIdentity,
   createMetaversePresenceClient
 } from "../config/metaverse-presence-network";
+import { createMetaverseWorldClient } from "../config/metaverse-world-network";
 import {
   resolveMetaverseLocomotionMode
 } from "../config/metaverse-locomotion-modes";
@@ -90,6 +91,7 @@ export function MetaverseStageScreen({
         attachmentProofConfig,
         characterProofConfig,
         createMetaversePresenceClient,
+        createMetaverseWorldClient,
         environmentProofConfig,
         localPlayerIdentity
       });

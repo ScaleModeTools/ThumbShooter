@@ -299,6 +299,10 @@ export class MetaversePresenceRuntime {
     return this.#remoteCharacterPresentations;
   }
 
+  get isJoined(): boolean {
+    return this.#metaversePresenceClient?.statusSnapshot.joined ?? false;
+  }
+
   boot(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
     locomotionMode: MetaverseHudSnapshot["locomotionMode"],
@@ -505,6 +509,7 @@ export class MetaversePresenceRuntime {
           characterId: playerSnapshot.characterId,
           mountedOccupancy: playerSnapshot.pose.mountedOccupancy,
           playerId: playerSnapshot.playerId,
+          poseSyncMode: "scene-arrival-smoothed",
           presentation: Object.freeze({
             animationVocabulary: playerSnapshot.pose.animationVocabulary,
             position: playerSnapshot.pose.position,
