@@ -6,7 +6,8 @@ import {
   createRealtimeReliableTransportStatusSnapshot,
   createNativeWebTransportBrowserFactory,
   createMetaverseWorldHttpTransport,
-  createMetaverseRealtimeWorldDriverVehicleControlWebTransportDatagramTransport,
+  createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport,
+  createMetaverseWorldWebTransportSnapshotStreamTransport,
   createMetaverseWorldWebTransportTransport,
   type MetaverseWorldClientConfig
 } from "@/network";
@@ -111,25 +112,44 @@ function isLocalhostWebTransportUrl(rawUrl: string | null): boolean {
 export const metaverseWorldPath = "/metaverse/world" as const;
 export const metaverseWorldCommandPath = "/metaverse/world/commands" as const;
 
+export const metaverseWorldCadenceConfig = Object.freeze({
+  authoritativeTickIntervalMs: createMilliseconds(33),
+  defaultCommandIntervalMs: createMilliseconds(33),
+  defaultPollIntervalMs: createMilliseconds(33),
+  localAuthoritativeFreshnessMaxAgeMs: 66,
+  maxBufferedSnapshots: 6,
+  maxExtrapolationMs: 66,
+  remoteInterpolationDelayMs: 66
+});
+
 export const metaverseWorldClientConfig = {
-  defaultCommandIntervalMs: createMilliseconds(50),
-  defaultPollIntervalMs: createMilliseconds(50),
-  maxBufferedSnapshots: 12,
+  defaultCommandIntervalMs: metaverseWorldCadenceConfig.defaultCommandIntervalMs,
+  defaultPollIntervalMs: metaverseWorldCadenceConfig.defaultPollIntervalMs,
+  maxBufferedSnapshots: metaverseWorldCadenceConfig.maxBufferedSnapshots,
   serverOrigin: resolveMetaverseServerOrigin(),
+  snapshotStreamReconnectDelayMs: createMilliseconds(2_000),
   worldCommandPath: metaverseWorldCommandPath,
   worldPath: metaverseWorldPath
 } as const satisfies MetaverseWorldClientConfig;
 
+export const metaverseRealtimeMigrationConfig = Object.freeze({
+  metaverseAuthoritativeCombatRewindEnabled: false,
+  metaverseAuthoritativePlayerMovementEnabled: false,
+  metaverseWorldDatagramInputEnabled: true,
+  metaverseWorldSnapshotStreamEnabled: true
+});
+
 export const metaverseRemoteWorldSamplingConfig = Object.freeze({
   clockOffsetCorrectionAlpha: 0.2,
   clockOffsetMaxStepMs: 32,
-  interpolationDelayMs: 100,
-  maxExtrapolationMs: 90
+  interpolationDelayMs: metaverseWorldCadenceConfig.remoteInterpolationDelayMs,
+  maxExtrapolationMs: metaverseWorldCadenceConfig.maxExtrapolationMs
 });
 
-export const metaverseLocalMountedVehicleReconciliationConfig = Object.freeze({
-  maxAuthoritativeSnapshotAgeMs: 90,
-  mountedOccupancyMismatchHoldMs: 75
+export const metaverseLocalAuthorityReconciliationConfig = Object.freeze({
+  maxAuthoritativeSnapshotAgeMs:
+    metaverseWorldCadenceConfig.localAuthoritativeFreshnessMaxAgeMs,
+  mountedOccupancyMismatchHoldMs: 50
 });
 
 export function createMetaverseWorldClient(): MetaverseWorldClient {
@@ -167,8 +187,22 @@ export function createMetaverseWorldClient(): MetaverseWorldClient {
         httpTransport
       )
     : null;
-  const driverVehicleControlDatagramTransport = shouldUseWebTransport
-    ? createMetaverseRealtimeWorldDriverVehicleControlWebTransportDatagramTransport(
+  const latestWinsDatagramTransport = shouldUseWebTransport
+    && metaverseRealtimeMigrationConfig.metaverseWorldDatagramInputEnabled
+    ? createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
+        {
+          webTransportUrl
+        },
+        webTransportFactory === null
+          ? {}
+          : {
+              webTransportFactory
+            }
+      )
+    : null;
+  const snapshotStreamTransport = shouldUseWebTransport
+    && metaverseRealtimeMigrationConfig.metaverseWorldSnapshotStreamEnabled
+    ? createMetaverseWorldWebTransportSnapshotStreamTransport(
         {
           webTransportUrl
         },
@@ -181,10 +215,15 @@ export function createMetaverseWorldClient(): MetaverseWorldClient {
     : null;
 
   return new MetaverseWorldClient(metaverseWorldClientConfig, {
-    ...(driverVehicleControlDatagramTransport === null
+    ...(latestWinsDatagramTransport === null
       ? {}
       : {
-          driverVehicleControlDatagramTransport
+          latestWinsDatagramTransport
+        }),
+    ...(snapshotStreamTransport === null
+      ? {}
+      : {
+          snapshotStreamTransport
         }),
     resolveDriverVehicleControlDatagramTransportStatusSnapshot: (context) => {
       if (preferredTransportMode !== "webtransport-preferred") {

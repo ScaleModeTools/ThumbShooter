@@ -2,6 +2,7 @@ import {
   MetaverseGroundedBodyRuntime,
   type PhysicsVector3Snapshot
 } from "@/physics";
+import type { MetaverseRealtimePlayerSnapshot } from "@webgpu-metaverse/shared";
 import { defaultMetaverseLocomotionMode } from "../config/metaverse-locomotion-modes";
 import {
   advanceMetaverseCameraSnapshot,
@@ -65,6 +66,11 @@ function createIdleGroundedBodyIntentSnapshot() {
   });
 }
 
+const localPlayerAuthoritativePositionSnapDistanceMeters = 0.45;
+const localPlayerAuthoritativeYawSnapRadians = 0.25;
+const localPlayerAuthoritativeGroundedHeightToleranceMeters = 0.08;
+const localPlayerAuthoritativeGroundedVerticalSpeedToleranceUnitsPerSecond = 0.2;
+
 function createVehicleDeltaCarriedPosition(
   currentPosition: PhysicsVector3Snapshot,
   previousVehiclePosition: PhysicsVector3Snapshot,
@@ -80,6 +86,28 @@ function createVehicleDeltaCarriedPosition(
     nextVehiclePosition.x + relativeX * cosYaw + relativeZ * sinYaw,
     currentPosition.y + (nextVehiclePosition.y - previousVehiclePosition.y),
     nextVehiclePosition.z - relativeX * sinYaw + relativeZ * cosYaw
+  );
+}
+
+function didMountedVehiclePoseChange(
+  previousMountedVehicleState: TraversalMountedVehicleSnapshot,
+  nextMountedVehicleState: TraversalMountedVehicleSnapshot
+): boolean {
+  return (
+    Math.abs(
+      previousMountedVehicleState.position.x - nextMountedVehicleState.position.x
+    ) > 0.000001 ||
+    Math.abs(
+      previousMountedVehicleState.position.y - nextMountedVehicleState.position.y
+    ) > 0.000001 ||
+    Math.abs(
+      previousMountedVehicleState.position.z - nextMountedVehicleState.position.z
+    ) > 0.000001 ||
+    Math.abs(
+      wrapRadians(
+        previousMountedVehicleState.yawRadians - nextMountedVehicleState.yawRadians
+      )
+    ) > 0.000001
   );
 }
 
@@ -131,6 +159,7 @@ export class MetaverseTraversalRuntime {
     "entries" | "environmentAssetId" | "label" | "seats"
   > | null = null;
   #mountedOccupancyLookYawRadians = 0;
+  #localReconciliationCorrectionCount = 0;
   #routedDriverVehicleControlIntentSnapshot: RoutedDriverVehicleControlIntentSnapshot | null =
     null;
   #mountedVehicleRuntime: MetaverseVehicleRuntime | null = null;
@@ -220,12 +249,17 @@ export class MetaverseTraversalRuntime {
     return this.#routedDriverVehicleControlIntentSnapshot;
   }
 
+  get localReconciliationCorrectionCount(): number {
+    return this.#localReconciliationCorrectionCount;
+  }
+
   reset(): void {
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#cameraSnapshot = createMetaverseCameraSnapshot(this.#config.camera);
     this.#characterPresentationSnapshot = null;
     this.#locomotionMode = defaultMetaverseLocomotionMode;
     this.#clearMountedVehicleState();
+    this.#localReconciliationCorrectionCount = 0;
     this.#mountedOccupancyLookYawRadians = 0;
     this.#routedDriverVehicleControlIntentSnapshot = null;
     this.#swimForwardSpeedUnitsPerSecond = 0;
@@ -431,9 +465,18 @@ export class MetaverseTraversalRuntime {
       const previousMountedVehicleState = mountedVehicleRuntime.snapshot;
 
       mountedVehicleRuntime.syncAuthoritativePose(poseSnapshot);
-      if (this.#mountedOccupancyKeepsFreeRoam()) {
-        const nextMountedVehicleState = mountedVehicleRuntime.snapshot;
+      const nextMountedVehicleState = mountedVehicleRuntime.snapshot;
 
+      if (
+        didMountedVehiclePoseChange(
+          previousMountedVehicleState,
+          nextMountedVehicleState
+        )
+      ) {
+        this.#localReconciliationCorrectionCount += 1;
+      }
+
+      if (this.#mountedOccupancyKeepsFreeRoam()) {
         this.#setDynamicEnvironmentPose(nextMountedVehicleState.environmentAssetId, {
           position: nextMountedVehicleState.position,
           yawRadians: nextMountedVehicleState.yawRadians
@@ -450,6 +493,77 @@ export class MetaverseTraversalRuntime {
     }
 
     this.#setDynamicEnvironmentPose(environmentAssetId, poseSnapshot);
+  }
+
+  syncAuthoritativeLocalPlayerPose(
+    authoritativePlayerSnapshot: Pick<
+      MetaverseRealtimePlayerSnapshot,
+      | "linearVelocity"
+      | "locomotionMode"
+      | "mountedOccupancy"
+      | "position"
+      | "yawRadians"
+    >
+  ): void {
+    if (
+      authoritativePlayerSnapshot.mountedOccupancy !== null ||
+      authoritativePlayerSnapshot.locomotionMode === "mounted"
+    ) {
+      return;
+    }
+
+    const localTraversalPose = this.#readLocalTraversalPoseForReconciliation();
+
+    if (localTraversalPose === null) {
+      return;
+    }
+
+    const positionDistance = Math.hypot(
+      authoritativePlayerSnapshot.position.x - localTraversalPose.position.x,
+      authoritativePlayerSnapshot.position.y - localTraversalPose.position.y,
+      authoritativePlayerSnapshot.position.z - localTraversalPose.position.z
+    );
+    const yawDistance = Math.abs(
+      wrapRadians(
+        authoritativePlayerSnapshot.yawRadians - localTraversalPose.yawRadians
+      )
+    );
+
+    if (
+      authoritativePlayerSnapshot.locomotionMode ===
+        localTraversalPose.locomotionMode &&
+      positionDistance < localPlayerAuthoritativePositionSnapDistanceMeters &&
+      yawDistance < localPlayerAuthoritativeYawSnapRadians
+    ) {
+      return;
+    }
+
+    this.#localReconciliationCorrectionCount += 1;
+
+    if (authoritativePlayerSnapshot.locomotionMode === "swim") {
+      this.#enterSwimLocomotion(
+        authoritativePlayerSnapshot.position,
+        authoritativePlayerSnapshot.yawRadians
+      );
+    } else {
+      if (!this.#groundedBodyRuntime.isInitialized) {
+        return;
+      }
+
+      this.#groundedBodyRuntime.setAutostepEnabled(false);
+      this.#groundedBodyRuntime.syncAuthoritativeState({
+        grounded: this.#isAuthoritativeGroundedPlayerSnapshot(
+          authoritativePlayerSnapshot
+        ),
+        linearVelocity: authoritativePlayerSnapshot.linearVelocity,
+        position: authoritativePlayerSnapshot.position,
+        yawRadians: authoritativePlayerSnapshot.yawRadians
+      });
+      this.#setLocomotionMode("grounded");
+      this.#syncGroundedCameraPresentation();
+    }
+
+    this.#syncCharacterPresentationSnapshot();
   }
 
   #setLocomotionMode(locomotionMode: MetaverseLocomotionModeId): void {
@@ -569,6 +683,54 @@ export class MetaverseTraversalRuntime {
       this.#traversalCameraPitchRadians,
       this.#config
     );
+  }
+
+  #isAuthoritativeGroundedPlayerSnapshot(
+    authoritativePlayerSnapshot: Pick<
+      MetaverseRealtimePlayerSnapshot,
+      "linearVelocity" | "position"
+    >
+  ): boolean {
+    const supportHeightMeters = this.#resolveGroundedSupportHeightMeters(
+      authoritativePlayerSnapshot.position
+    );
+
+    return (
+      authoritativePlayerSnapshot.position.y <=
+        supportHeightMeters + localPlayerAuthoritativeGroundedHeightToleranceMeters &&
+      Math.abs(authoritativePlayerSnapshot.linearVelocity.y) <=
+        localPlayerAuthoritativeGroundedVerticalSpeedToleranceUnitsPerSecond
+    );
+  }
+
+  #readLocalTraversalPoseForReconciliation():
+    | {
+        readonly locomotionMode: "grounded" | "swim";
+        readonly position: PhysicsVector3Snapshot;
+        readonly yawRadians: number;
+      }
+    | null {
+    if (this.#mountedVehicleRuntime !== null || this.#locomotionMode === "mounted") {
+      return null;
+    }
+
+    if (this.#locomotionMode === "swim") {
+      return {
+        locomotionMode: "swim",
+        position: this.#swimSnapshot.position,
+        yawRadians: this.#swimSnapshot.yawRadians
+      };
+    }
+
+    if (!this.#groundedBodyRuntime.isInitialized) {
+      return null;
+    }
+
+    return {
+      locomotionMode: "grounded",
+      position: this.#groundedBodyRuntime.snapshot.position,
+      yawRadians: this.#groundedBodyRuntime.snapshot.yawRadians
+    };
   }
 
   #carryFreeRoamMountedOccupancyWithVehicle(

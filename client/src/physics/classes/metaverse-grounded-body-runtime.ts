@@ -327,6 +327,44 @@ export class MetaverseGroundedBodyRuntime {
     this.#syncAutostepConfiguration(controller);
   }
 
+  syncAuthoritativeState(snapshot: {
+    readonly grounded: boolean;
+    readonly linearVelocity: PhysicsVector3Snapshot;
+    readonly position: PhysicsVector3Snapshot;
+    readonly yawRadians: number;
+  }): void {
+    const collider = this.#requireCollider();
+    const sanitizedPosition = freezeVector3(
+      snapshot.position.x,
+      snapshot.position.y,
+      snapshot.position.z
+    );
+    const yawRadians = wrapRadians(snapshot.yawRadians);
+    const linearVelocityX = toFiniteNumber(snapshot.linearVelocity.x);
+    const linearVelocityY = toFiniteNumber(snapshot.linearVelocity.y);
+    const linearVelocityZ = toFiniteNumber(snapshot.linearVelocity.z);
+    const forwardX = Math.sin(yawRadians);
+    const forwardZ = -Math.cos(yawRadians);
+    const rightX = Math.cos(yawRadians);
+    const rightZ = Math.sin(yawRadians);
+
+    collider.setTranslation(this.#rootToColliderCenter(sanitizedPosition));
+    this.#forwardSpeedUnitsPerSecond =
+      linearVelocityX * forwardX + linearVelocityZ * forwardZ;
+    this.#strafeSpeedUnitsPerSecond =
+      linearVelocityX * rightX + linearVelocityZ * rightZ;
+    this.#verticalSpeedUnitsPerSecond =
+      snapshot.grounded === true ? 0 : linearVelocityY;
+    this.#snapshot = freezeGroundedBodySnapshot(
+      this.#config,
+      sanitizedPosition,
+      Math.hypot(linearVelocityX, linearVelocityZ),
+      this.#verticalSpeedUnitsPerSecond,
+      yawRadians,
+      snapshot.grounded === true
+    );
+  }
+
   advance(
     intentSnapshot: MetaverseGroundedBodyIntentSnapshot,
     deltaSeconds: number

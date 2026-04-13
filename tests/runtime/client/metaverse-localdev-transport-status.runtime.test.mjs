@@ -112,23 +112,40 @@ function createRealtimeWorldEvent(playerId, snapshotSequence = 1) {
   });
 }
 
-function createFailingDatagramWritable(message) {
+function createFailingDatagramWritable(
+  message,
+  failureState = {
+    remainingFailureCount: Number.POSITIVE_INFINITY
+  }
+) {
   return new WritableStream({
     write() {
-      throw new Error(message);
+      if (failureState.remainingFailureCount > 0) {
+        failureState.remainingFailureCount -= 1;
+        throw new Error(message);
+      }
     }
   });
 }
 
 function createEnvScopedWebTransportConstructor({
   bidirectionalErrorMessage,
-  datagramErrorMessage
+  datagramErrorMessage,
+  datagramFailureCount
 }) {
+  const datagramFailureState = {
+    remainingFailureCount:
+      datagramFailureCount ?? Number.POSITIVE_INFINITY
+  };
+
   return class FakeWebTransport {
     constructor() {
       this.closed = Promise.resolve();
       this.datagrams = {
-        writable: createFailingDatagramWritable(datagramErrorMessage)
+        writable: createFailingDatagramWritable(
+          datagramErrorMessage,
+          datagramFailureState
+        )
       };
       this.ready = Promise.resolve();
     }
@@ -467,7 +484,7 @@ test("createMetaverseWorldClient reports localdev WebTransport self-check failur
   }
 });
 
-test("createMetaverseWorldClient keeps reliable and datagram lane truth separate under fallback", async () => {
+test("createMetaverseWorldClient keeps reliable and datagram lane truth separate under fallback and recovers the datagram lane", async () => {
   const loader = await createClientModuleLoaderWithEnv({
     VITE_METAVERSE_REALTIME_TRANSPORT: "webtransport-preferred",
     VITE_METAVERSE_WORLD_WEBTRANSPORT_URL:
@@ -491,7 +508,8 @@ test("createMetaverseWorldClient keeps reliable and datagram lane truth separate
     };
     globalThis.WebTransport = createEnvScopedWebTransportConstructor({
       bidirectionalErrorMessage: "WebTransport stream failed.",
-      datagramErrorMessage: "Datagram transport unavailable."
+      datagramErrorMessage: "Datagram transport unavailable.",
+      datagramFailureCount: 1
     });
 
     const { createMetaverseWorldClient } = await loader.load(
@@ -524,7 +542,7 @@ test("createMetaverseWorldClient keeps reliable and datagram lane truth separate
       playerId
     });
 
-    await waitForTimers(80);
+    await waitForTimers(40);
 
     assert.equal(client.reliableTransportStatusSnapshot.activeTransport, "http");
     assert.equal(client.reliableTransportStatusSnapshot.fallbackActive, true);
@@ -543,6 +561,45 @@ test("createMetaverseWorldClient keeps reliable and datagram lane truth separate
     assert.equal(
       client.driverVehicleControlDatagramStatusSnapshot.lastTransportError,
       "Datagram transport unavailable."
+    );
+
+    await waitForTimers(40);
+
+    assert.equal(
+      client.driverVehicleControlDatagramStatusSnapshot.activeTransport,
+      "webtransport-datagram"
+    );
+    assert.equal(client.driverVehicleControlDatagramStatusSnapshot.state, "active");
+    assert.equal(
+      client.driverVehicleControlDatagramStatusSnapshot.lastTransportError,
+      "Datagram transport unavailable."
+    );
+
+    client.syncDriverVehicleControl({
+      controlIntent: {
+        boost: false,
+        environmentAssetId: "metaverse-hub-skiff-v1",
+        moveAxis: 0.6,
+        strafeAxis: 0,
+        yawAxis: 0.1
+      },
+      playerId
+    });
+
+    await waitForTimers(80);
+
+    assert.equal(
+      client.driverVehicleControlDatagramStatusSnapshot.activeTransport,
+      "webtransport-datagram"
+    );
+    assert.equal(client.driverVehicleControlDatagramStatusSnapshot.state, "active");
+    assert.equal(
+      client.driverVehicleControlDatagramStatusSnapshot.webTransportStatus,
+      "active"
+    );
+    assert.equal(
+      client.driverVehicleControlDatagramStatusSnapshot.lastTransportError,
+      null
     );
 
     client.dispose();

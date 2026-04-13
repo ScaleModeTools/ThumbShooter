@@ -5,6 +5,9 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand,
+  createMetaverseSyncPresenceCommand,
   createMilliseconds,
   createUsername
 } from "@webgpu-metaverse/shared";
@@ -66,13 +69,15 @@ test("MetaverseAuthoritativeWorldRuntime simulates driver-controlled vehicles fr
     }),
     100
   );
+  runtime.advanceToTime(1_000);
 
   const worldSnapshot = runtime.readWorldSnapshot(1_000, playerId);
 
   assert.equal(worldSnapshot.tick.currentTick, 10);
-  assert.equal(worldSnapshot.tick.serverTimeMs, 1_000);
+  assert.equal(worldSnapshot.tick.emittedAtServerTimeMs, 1_000);
+  assert.equal(worldSnapshot.tick.simulationTimeMs, 1_000);
   assert.equal(worldSnapshot.players.length, 1);
-  assert.equal(worldSnapshot.players[0]?.animationVocabulary, "idle");
+  assert.equal(worldSnapshot.players[0]?.animationVocabulary, "seated");
   assert.equal(worldSnapshot.players[0]?.locomotionMode, "mounted");
   assert.equal(worldSnapshot.players[0]?.position.x, 0);
   assert.equal(worldSnapshot.players[0]?.position.y, 0.4);
@@ -140,9 +145,11 @@ test("MetaverseAuthoritativeWorldRuntime prunes inactive players while keeping v
     }),
     0
   );
+  runtime.advanceToTime(200);
 
   assert.equal(runtime.readPresenceRosterSnapshot(200, playerId).players.length, 1);
 
+  runtime.advanceToTime(800);
   const prunedWorldSnapshot = runtime.readWorldSnapshot(800);
 
   assert.equal(prunedWorldSnapshot.players.length, 0);
@@ -156,6 +163,428 @@ test("MetaverseAuthoritativeWorldRuntime prunes inactive players while keeping v
     () => runtime.readWorldSnapshot(800, playerId),
     /Unknown metaverse player: watchful-harbor-pilot/
   );
+});
+
+test("MetaverseAuthoritativeWorldRuntime includes player turn rate in authoritative world snapshots", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const playerId = requireValue(
+    createMetaversePlayerId("turn-rate-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Turn Rate Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: -8.2,
+          y: 0.15,
+          z: -14.8
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 1
+      },
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(100);
+
+  const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.ok(
+    Math.abs(
+      (worldSnapshot.players[0]?.angularVelocityRadiansPerSecond ?? 0) - 3.6
+    ) < 0.000001
+  );
+});
+
+test("MetaverseAuthoritativeWorldRuntime simulates unmounted grounded and swim traversal from authoritative traversal intent commands", () => {
+  const groundedRuntime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const groundedPlayerId = requireValue(
+    createMetaversePlayerId("world-traversal-harbor-pilot"),
+    "playerId"
+  );
+  const groundedUsername = requireValue(
+    createUsername("World Traversal Pilot"),
+    "username"
+  );
+
+  groundedRuntime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId: groundedPlayerId,
+      pose: {
+        position: {
+          x: -8.2,
+          y: 0.15,
+          z: -14.8
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username: groundedUsername
+    }),
+    0
+  );
+  groundedRuntime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "swim",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId: groundedPlayerId
+    }),
+    0
+  );
+  groundedRuntime.advanceToTime(200);
+
+  const groundedWorldSnapshot =
+    groundedRuntime.readWorldSnapshot(200, groundedPlayerId);
+
+  assert.equal(groundedWorldSnapshot.tick.currentTick, 2);
+  assert.equal(groundedWorldSnapshot.players[0]?.animationVocabulary, "walk");
+  assert.equal(groundedWorldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.equal(groundedWorldSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.ok(
+    Math.abs((groundedWorldSnapshot.players[0]?.position.y ?? 0) - 0.15) <
+      0.000001
+  );
+  assert.ok((groundedWorldSnapshot.players[0]?.position.z ?? -14.8) < -14.8);
+  assert.ok((groundedWorldSnapshot.players[0]?.linearVelocity.z ?? 0) < 0);
+  assert.equal(groundedWorldSnapshot.players[0]?.stateSequence, 2);
+
+  const swimRuntime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const swimPlayerId = requireValue(
+    createMetaversePlayerId("world-swim-harbor-pilot"),
+    "swimPlayerId"
+  );
+  const swimUsername = requireValue(createUsername("World Swim Pilot"), "swimUsername");
+
+  swimRuntime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId: swimPlayerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username: swimUsername
+    }),
+    0
+  );
+  swimRuntime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: true,
+        inputSequence: 3,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId: swimPlayerId
+    }),
+    0
+  );
+  swimRuntime.advanceToTime(500);
+
+  const swimWorldSnapshot = swimRuntime.readWorldSnapshot(500, swimPlayerId);
+
+  assert.equal(swimWorldSnapshot.players[0]?.animationVocabulary, "swim");
+  assert.equal(swimWorldSnapshot.players[0]?.lastProcessedInputSequence, 3);
+  assert.equal(swimWorldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(swimWorldSnapshot.players[0]?.position.y, 0);
+  assert.ok(
+    (swimWorldSnapshot.players[0]?.position.z ?? Number.POSITIVE_INFINITY) <
+      24
+  );
+  assert.ok((swimWorldSnapshot.players[0]?.linearVelocity.z ?? 0) < 0);
+  assert.equal(swimWorldSnapshot.players[0]?.stateSequence, 3);
+});
+
+test("MetaverseAuthoritativeWorldRuntime simulates grounded jump ascent, descent, and landing on authoritative ticks", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const playerId = requireValue(
+    createMetaversePlayerId("world-jump-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("World Jump Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: -8.2,
+          y: 0.15,
+          z: -14.8
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: true,
+        locomotionMode: "grounded",
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(100);
+
+  const jumpAscentSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.equal(jumpAscentSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.equal(jumpAscentSnapshot.players[0]?.animationVocabulary, "jump-up");
+  assert.ok((jumpAscentSnapshot.players[0]?.position.y ?? 0) > 0.15);
+  assert.ok((jumpAscentSnapshot.players[0]?.linearVelocity.y ?? 0) > 0);
+  assert.equal(jumpAscentSnapshot.players[0]?.lastProcessedInputSequence, 2);
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 3,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    100
+  );
+  runtime.advanceToTime(500);
+
+  const jumpDescentSnapshot = runtime.readWorldSnapshot(500, playerId);
+
+  assert.equal(jumpDescentSnapshot.players[0]?.animationVocabulary, "jump-down");
+  assert.ok((jumpDescentSnapshot.players[0]?.position.y ?? 0) > 0.15);
+  assert.ok((jumpDescentSnapshot.players[0]?.linearVelocity.y ?? 0) < 0);
+  assert.equal(jumpDescentSnapshot.players[0]?.lastProcessedInputSequence, 3);
+  assert.equal(jumpDescentSnapshot.players[0]?.stateSequence, 3);
+
+  runtime.advanceToTime(1_000);
+
+  const landedSnapshot = runtime.readWorldSnapshot(1_000, playerId);
+
+  assert.equal(landedSnapshot.players[0]?.animationVocabulary, "idle");
+  assert.equal(landedSnapshot.players[0]?.linearVelocity.y, 0);
+  assert.ok(
+    Math.abs((landedSnapshot.players[0]?.position.y ?? 0) - 0.15) < 0.000001
+  );
+});
+
+test("MetaverseAuthoritativeWorldRuntime accepts mounted occupancy updates through reliable world commands", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const playerId = requireValue(
+    createMetaversePlayerId("world-mounted-occupancy-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("World Mounted Occupancy Pilot"),
+    "username"
+  );
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 12.2,
+          y: 0.4,
+          z: -13.8
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+  runtime.acceptWorldCommand(
+    createMetaverseSyncMountedOccupancyCommand({
+      mountedOccupancy: {
+        environmentAssetId: "metaverse-hub-skiff-v1",
+        entryId: null,
+        occupancyKind: "seat",
+        occupantRole: "driver",
+        seatId: "driver-seat"
+      },
+      playerId
+    }),
+    100
+  );
+
+  const mountedWorldSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.equal(mountedWorldSnapshot.players[0]?.lastProcessedInputSequence, 1);
+  assert.equal(mountedWorldSnapshot.players[0]?.locomotionMode, "mounted");
+  assert.equal(
+    mountedWorldSnapshot.players[0]?.mountedOccupancy?.seatId,
+    "driver-seat"
+  );
+  assert.equal(
+    mountedWorldSnapshot.vehicles[0]?.seats[0]?.occupantPlayerId,
+    playerId
+  );
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncMountedOccupancyCommand({
+      mountedOccupancy: null,
+      playerId
+    }),
+    200
+  );
+
+  const dismountedWorldSnapshot = runtime.readWorldSnapshot(200, playerId);
+
+  assert.equal(dismountedWorldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(dismountedWorldSnapshot.players[0]?.mountedOccupancy, null);
+  assert.equal(dismountedWorldSnapshot.players[0]?.position.y, 0);
+  assert.equal(
+    dismountedWorldSnapshot.vehicles[0]?.seats[0]?.occupantPlayerId,
+    null
+  );
+});
+
+test("MetaverseAuthoritativeWorldRuntime keeps simulation time stable between repeated reads inside one tick", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const playerId = requireValue(
+    createMetaversePlayerId("stable-tick-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Stable Tick Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  runtime.advanceToTime(150);
+
+  const firstSnapshot = runtime.readWorldSnapshot(160, playerId);
+  const secondSnapshot = runtime.readWorldSnapshot(190, playerId);
+
+  assert.equal(firstSnapshot.tick.currentTick, 1);
+  assert.equal(secondSnapshot.tick.currentTick, 1);
+  assert.equal(firstSnapshot.tick.simulationTimeMs, 100);
+  assert.equal(secondSnapshot.tick.simulationTimeMs, 100);
+  assert.equal(firstSnapshot.tick.emittedAtServerTimeMs, 160);
+  assert.equal(secondSnapshot.tick.emittedAtServerTimeMs, 190);
+});
+
+test("MetaverseAuthoritativeWorldRuntime does not advance simulation when snapshots are only read", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const playerId = requireValue(
+    createMetaversePlayerId("read-only-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Read Only Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+  runtime.advanceToTime(150);
+
+  const firstSnapshot = runtime.readWorldSnapshot(260, playerId);
+  const secondSnapshot = runtime.readWorldSnapshot(290, playerId);
+
+  assert.equal(firstSnapshot.tick.currentTick, 1);
+  assert.equal(secondSnapshot.tick.currentTick, 1);
+  assert.equal(firstSnapshot.tick.simulationTimeMs, 100);
+  assert.equal(secondSnapshot.tick.simulationTimeMs, 100);
 });
 
 test("MetaverseAuthoritativeWorldRuntime coalesces driver control per tick and rejects duplicate or stale sequences", () => {
@@ -252,6 +681,7 @@ test("MetaverseAuthoritativeWorldRuntime coalesces driver control per tick and r
     }),
     40
   );
+  runtime.advanceToTime(100);
 
   const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
 
@@ -350,6 +780,7 @@ test("MetaverseAuthoritativeWorldRuntime keeps a claimed driver seat exclusive a
     }),
     20
   );
+  runtime.advanceToTime(200);
 
   const worldSnapshot = runtime.readWorldSnapshot(200, firstDriverPlayerId);
   const firstDriverSnapshot = worldSnapshot.players.find(
@@ -364,5 +795,5 @@ test("MetaverseAuthoritativeWorldRuntime keeps a claimed driver seat exclusive a
   assert.equal(worldSnapshot.vehicles[0]?.linearVelocity.z, 0);
   assert.equal(firstDriverSnapshot?.mountedOccupancy?.seatId, "driver-seat");
   assert.equal(conflictingDriverSnapshot?.mountedOccupancy, null);
-  assert.equal(conflictingDriverSnapshot?.locomotionMode, "grounded");
+  assert.equal(conflictingDriverSnapshot?.locomotionMode, "swim");
 });

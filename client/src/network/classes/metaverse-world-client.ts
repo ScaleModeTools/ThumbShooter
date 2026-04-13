@@ -1,19 +1,29 @@
 import type {
   MetaverseDriverVehicleControlIntentSnapshot,
   MetaversePlayerId,
+  MetaversePlayerTraversalIntentSnapshot,
   MetaverseRealtimeWorldEvent,
   MetaverseRealtimeWorldSnapshot,
-  MetaverseSyncDriverVehicleControlCommandInput
+  MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseSyncMountedOccupancyCommandInput,
+  MetaverseSyncPlayerTraversalIntentCommandInput
 } from "@webgpu-metaverse/shared";
 import {
   createMetaverseDriverVehicleControlIntentSnapshot,
-  createMetaverseSyncDriverVehicleControlCommand
+  createMetaversePlayerTraversalIntentSnapshot,
+  createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand
 } from "@webgpu-metaverse/shared";
 
 import { createMetaverseWorldHttpTransport } from "../adapters/metaverse-world-http-transport";
-import type { MetaverseRealtimeWorldDriverVehicleControlDatagramTransport } from "../types/metaverse-realtime-world-driver-vehicle-control-datagram-transport";
+import type { MetaverseWorldSnapshotStreamTransport } from "../types/metaverse-world-snapshot-stream-transport";
+import type { MetaverseRealtimeWorldLatestWinsDatagramTransport } from "../types/metaverse-realtime-world-latest-wins-datagram-transport";
 import type {
   MetaverseWorldClientConfig,
+  MetaverseWorldClientTelemetrySnapshot,
+  MetaverseWorldSnapshotPath,
+  MetaverseWorldSnapshotStreamLiveness,
   MetaverseWorldClientStatusSnapshot
 } from "../types/metaverse-world-client";
 import type { MetaverseWorldTransport } from "../types/metaverse-world-transport";
@@ -26,8 +36,9 @@ import {
 
 interface MetaverseWorldClientDependencies {
   readonly clearTimeout?: typeof globalThis.clearTimeout;
-  readonly driverVehicleControlDatagramTransport?: MetaverseRealtimeWorldDriverVehicleControlDatagramTransport;
   readonly fetch?: typeof globalThis.fetch;
+  readonly latestWinsDatagramTransport?: MetaverseRealtimeWorldLatestWinsDatagramTransport;
+  readonly readWallClockMs?: () => number;
   readonly resolveDriverVehicleControlDatagramTransportStatusSnapshot?:
     | ((
         context: MetaverseWorldDriverVehicleControlDatagramTransportStatusContext
@@ -37,6 +48,7 @@ interface MetaverseWorldClientDependencies {
     | (() => RealtimeReliableTransportStatusSnapshot)
     | undefined;
   readonly setTimeout?: typeof globalThis.setTimeout;
+  readonly snapshotStreamTransport?: MetaverseWorldSnapshotStreamTransport;
   readonly transport?: MetaverseWorldTransport;
 }
 
@@ -52,6 +64,42 @@ type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
 type PendingDriverVehicleControlCommand = ReturnType<
   typeof createMetaverseSyncDriverVehicleControlCommand
 >;
+type PendingPlayerTraversalIntentCommand = ReturnType<
+  typeof createMetaverseSyncPlayerTraversalIntentCommand
+>;
+
+const latestWinsDatagramFallbackRecoveryDelayMultiplier = 1;
+
+function playerTraversalIntentMatches(
+  leftIntent: MetaversePlayerTraversalIntentSnapshot | null,
+  rightIntent: MetaverseSyncPlayerTraversalIntentCommandInput["intent"]
+): boolean {
+  if (leftIntent === null) {
+    return false;
+  }
+
+  const nextMoveAxis = rightIntent.moveAxis;
+  const nextStrafeAxis = rightIntent.strafeAxis;
+  const nextYawAxis = rightIntent.yawAxis;
+
+  return (
+    leftIntent.boost === (rightIntent.boost === true) &&
+    leftIntent.jump === (rightIntent.jump === true) &&
+    leftIntent.locomotionMode === (rightIntent.locomotionMode ?? "grounded") &&
+    leftIntent.moveAxis ===
+      (typeof nextMoveAxis === "number" && Number.isFinite(nextMoveAxis)
+        ? Math.min(1, Math.max(-1, nextMoveAxis))
+        : 0) &&
+    leftIntent.strafeAxis ===
+      (typeof nextStrafeAxis === "number" && Number.isFinite(nextStrafeAxis)
+        ? Math.min(1, Math.max(-1, nextStrafeAxis))
+        : 0) &&
+    leftIntent.yawAxis ===
+      (typeof nextYawAxis === "number" && Number.isFinite(nextYawAxis)
+        ? Math.min(1, Math.max(-1, nextYawAxis))
+        : 0)
+  );
+}
 
 function driverVehicleControlIntentsMatch(
   leftIntent: MetaverseDriverVehicleControlIntentSnapshot | null,
@@ -104,11 +152,32 @@ function clampBufferedSnapshotCount(rawValue: number): number {
   return Math.max(1, Math.floor(rawValue));
 }
 
+function freezeWorldClientTelemetrySnapshot(
+  snapshot: MetaverseWorldClientTelemetrySnapshot
+): MetaverseWorldClientTelemetrySnapshot {
+  return Object.freeze({
+    driverVehicleControlDatagramSendFailureCount:
+      snapshot.driverVehicleControlDatagramSendFailureCount,
+    latestSnapshotUpdateRateHz: snapshot.latestSnapshotUpdateRateHz,
+    playerTraversalInputDatagramSendFailureCount:
+      snapshot.playerTraversalInputDatagramSendFailureCount,
+    snapshotStream: Object.freeze({
+      available: snapshot.snapshotStream.available,
+      fallbackActive: snapshot.snapshotStream.fallbackActive,
+      lastTransportError: snapshot.snapshotStream.lastTransportError,
+      liveness: snapshot.snapshotStream.liveness,
+      path: snapshot.snapshotStream.path,
+      reconnectCount: snapshot.snapshotStream.reconnectCount
+    })
+  });
+}
+
 export class MetaverseWorldClient {
   readonly #clearTimeout: typeof globalThis.clearTimeout;
   readonly #config: MetaverseWorldClientConfig;
-  readonly #driverVehicleControlDatagramTransport: MetaverseRealtimeWorldDriverVehicleControlDatagramTransport | null;
   readonly #maxBufferedSnapshots: number;
+  readonly #latestWinsDatagramTransport: MetaverseRealtimeWorldLatestWinsDatagramTransport | null;
+  readonly #readWallClockMs: () => number;
   readonly #resolveDriverVehicleControlDatagramTransportStatusSnapshot:
     | ((
         context: MetaverseWorldDriverVehicleControlDatagramTransportStatusContext
@@ -118,23 +187,43 @@ export class MetaverseWorldClient {
     | (() => RealtimeReliableTransportStatusSnapshot)
     | null;
   readonly #setTimeout: typeof globalThis.setTimeout;
+  readonly #snapshotStreamTransport: MetaverseWorldSnapshotStreamTransport | null;
   readonly #transport: MetaverseWorldTransport;
   readonly #updateListeners = new Set<() => void>();
 
   #commandSyncHandle: TimeoutHandle | null = null;
   #commandSyncInFlight = false;
   #connectPromise: Promise<MetaverseRealtimeWorldSnapshot> | null = null;
-  #driverVehicleControlDatagramLastError: string | null = null;
-  #hasSuccessfulDriverVehicleControlDatagramSend = false;
+  #driverVehicleControlDatagramSendFailureCount = 0;
+  #hasSuccessfulLatestWinsDatagramSend = false;
   #lastDriverVehicleControlIntent: MetaverseDriverVehicleControlIntentSnapshot | null =
     null;
+  #lastLatestWinsDatagramError: string | null = null;
+  #lastPlayerTraversalIntent: MetaversePlayerTraversalIntentSnapshot | null = null;
+  #latestAcceptedSnapshotReceivedAtMs: number | null = null;
+  #previousAcceptedSnapshotReceivedAtMs: number | null = null;
   #nextDriverVehicleControlSequence = 0;
+  #nextPlayerInputSequence = 0;
+  #queuedReliableWorldCommandPromise: Promise<void> = Promise.resolve();
   #pendingDriverVehicleControlCommand: PendingDriverVehicleControlCommand | null =
     null;
+  #pendingPlayerTraversalIntentCommand: PendingPlayerTraversalIntentCommand | null =
+    null;
   #playerId: MetaversePlayerId | null = null;
+  #playerTraversalInputDatagramSendFailureCount = 0;
+  #playerTraversalInputSyncHandle: TimeoutHandle | null = null;
+  #playerTraversalInputSyncInFlight = false;
   #pollHandle: TimeoutHandle | null = null;
+  #latestWinsDatagramFallbackRecoveryHandle: TimeoutHandle | null = null;
+  #snapshotStreamLastError: string | null = null;
+  #snapshotStreamReconnectCount = 0;
+  #snapshotStreamReconnectHandle: TimeoutHandle | null = null;
+  #snapshotStreamSubscription:
+    | ReturnType<MetaverseWorldSnapshotStreamTransport["subscribeWorldSnapshots"]>
+    | null = null;
   #statusSnapshot: MetaverseWorldClientStatusSnapshot;
-  #useReliableDriverVehicleControlFallback = false;
+  #useReliableLatestWinsDatagramFallback = false;
+  #usingSnapshotStreamFallback = false;
   #worldSnapshotBuffer: readonly MetaverseRealtimeWorldSnapshot[] =
     Object.freeze([]);
 
@@ -143,11 +232,12 @@ export class MetaverseWorldClient {
     dependencies: MetaverseWorldClientDependencies = {}
   ) {
     this.#config = config;
-    this.#driverVehicleControlDatagramTransport =
-      dependencies.driverVehicleControlDatagramTransport ?? null;
     this.#maxBufferedSnapshots = clampBufferedSnapshotCount(
       config.maxBufferedSnapshots
     );
+    this.#latestWinsDatagramTransport =
+      dependencies.latestWinsDatagramTransport ?? null;
+    this.#readWallClockMs = dependencies.readWallClockMs ?? Date.now;
     this.#resolveDriverVehicleControlDatagramTransportStatusSnapshot =
       dependencies.resolveDriverVehicleControlDatagramTransportStatusSnapshot ??
       null;
@@ -157,6 +247,7 @@ export class MetaverseWorldClient {
       dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.#clearTimeout =
       dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.#snapshotStreamTransport = dependencies.snapshotStreamTransport ?? null;
     this.#transport =
       dependencies.transport ??
       createMetaverseWorldHttpTransport(
@@ -181,8 +272,41 @@ export class MetaverseWorldClient {
     return this.#statusSnapshot;
   }
 
+  get telemetrySnapshot(): MetaverseWorldClientTelemetrySnapshot {
+    const snapshotUpdateRateHz =
+      this.#latestAcceptedSnapshotReceivedAtMs !== null &&
+      this.#previousAcceptedSnapshotReceivedAtMs !== null
+        ? 1000 /
+          Math.max(
+            1,
+            this.#latestAcceptedSnapshotReceivedAtMs -
+              this.#previousAcceptedSnapshotReceivedAtMs
+          )
+        : null;
+
+    return freezeWorldClientTelemetrySnapshot({
+      driverVehicleControlDatagramSendFailureCount:
+        this.#driverVehicleControlDatagramSendFailureCount,
+      latestSnapshotUpdateRateHz: snapshotUpdateRateHz,
+      playerTraversalInputDatagramSendFailureCount:
+        this.#playerTraversalInputDatagramSendFailureCount,
+      snapshotStream: {
+        available: this.#snapshotStreamTransport !== null,
+        fallbackActive: this.#usingSnapshotStreamFallback,
+        lastTransportError: this.#snapshotStreamLastError,
+        liveness: this.#resolveSnapshotStreamLiveness(),
+        path: this.#resolveSnapshotStreamPath(),
+        reconnectCount: this.#snapshotStreamReconnectCount
+      }
+    });
+  }
+
   get worldSnapshotBuffer(): readonly MetaverseRealtimeWorldSnapshot[] {
     return this.#worldSnapshotBuffer;
+  }
+
+  get latestPlayerInputSequence(): number {
+    return this.#nextPlayerInputSequence;
   }
 
   get currentPollIntervalMs(): number {
@@ -216,8 +340,8 @@ export class MetaverseWorldClient {
 
   get supportsDriverVehicleControlDatagrams(): boolean {
     return (
-      this.#driverVehicleControlDatagramTransport !== null &&
-      !this.#useReliableDriverVehicleControlFallback
+      this.#latestWinsDatagramTransport !== null &&
+      !this.#useReliableLatestWinsDatagramFallback
     );
   }
 
@@ -276,6 +400,70 @@ export class MetaverseWorldClient {
     }
   }
 
+  syncPlayerTraversalIntent(
+    commandInput: MetaverseSyncPlayerTraversalIntentCommandInput | null
+  ): void {
+    if (commandInput === null) {
+      this.#lastPlayerTraversalIntent = null;
+      this.#pendingPlayerTraversalIntentCommand = null;
+      this.#cancelScheduledPlayerTraversalInputSync();
+      return;
+    }
+
+    this.#assertNotDisposed();
+
+    if (this.#playerId !== null && this.#playerId !== commandInput.playerId) {
+      throw new Error(
+        "Metaverse world client already connected with a different player."
+      );
+    }
+
+    this.#playerId ??= commandInput.playerId;
+
+    if (
+      playerTraversalIntentMatches(
+        this.#lastPlayerTraversalIntent,
+        commandInput.intent
+      )
+    ) {
+      return;
+    }
+
+    this.#nextPlayerInputSequence += 1;
+    this.#pendingPlayerTraversalIntentCommand =
+      createMetaverseSyncPlayerTraversalIntentCommand({
+      playerId: commandInput.playerId,
+      intent: {
+        ...commandInput.intent,
+        inputSequence: this.#nextPlayerInputSequence
+      }
+    });
+    this.#lastPlayerTraversalIntent =
+      this.#pendingPlayerTraversalIntentCommand.intent;
+
+    if (this.#statusSnapshot.connected) {
+      this.#schedulePlayerTraversalInputSync(this.#resolveCommandDelayMs());
+    }
+  }
+
+  syncMountedOccupancy(
+    commandInput: MetaverseSyncMountedOccupancyCommandInput
+  ): void {
+    this.#assertNotDisposed();
+
+    if (this.#playerId !== null && this.#playerId !== commandInput.playerId) {
+      throw new Error(
+        "Metaverse world client already connected with a different player."
+      );
+    }
+
+    this.#playerId ??= commandInput.playerId;
+    this.#enqueueReliableWorldCommand(
+      createMetaverseSyncMountedOccupancyCommand(commandInput),
+      "Metaverse mounted occupancy sync failed."
+    );
+  }
+
   async ensureConnected(
     playerId: MetaversePlayerId
   ): Promise<MetaverseRealtimeWorldSnapshot> {
@@ -329,6 +517,10 @@ export class MetaverseWorldClient {
 
     this.#cancelScheduledPoll();
     this.#cancelScheduledCommandSync();
+    this.#cancelScheduledPlayerTraversalInputSync();
+    this.#cancelScheduledLatestWinsDatagramFallbackRecovery();
+    this.#cancelScheduledSnapshotStreamReconnect();
+    this.#closeSnapshotStreamSubscription();
     this.#statusSnapshot = freezeStatusSnapshot(
       this.#playerId,
       "disposed",
@@ -338,7 +530,8 @@ export class MetaverseWorldClient {
       null
     );
     this.#notifyUpdates();
-    this.#driverVehicleControlDatagramTransport?.dispose?.();
+    this.#latestWinsDatagramTransport?.dispose?.();
+    this.#snapshotStreamTransport?.dispose?.();
     this.#transport.dispose?.();
   }
 
@@ -354,7 +547,14 @@ export class MetaverseWorldClient {
         if (this.#pendingDriverVehicleControlCommand !== null) {
           this.#scheduleCommandSync(0);
         }
-        this.#schedulePoll(0);
+        if (this.#pendingPlayerTraversalIntentCommand !== null) {
+          this.#schedulePlayerTraversalInputSync(0);
+        }
+        this.#startSnapshotStream(playerId);
+
+        if (this.#snapshotStreamTransport === null) {
+          this.#schedulePoll(0);
+        }
       }
 
       return worldEvent.world;
@@ -379,19 +579,31 @@ export class MetaverseWorldClient {
     } catch (error) {
       this.#applyWorldAccessError(error, "Metaverse world poll failed.");
     } finally {
-      if (!this.#isDisposed() && this.#playerId !== null) {
+      if (
+        !this.#isDisposed() &&
+        this.#playerId !== null &&
+        this.#shouldUsePollingHappyPath()
+      ) {
         this.#schedulePoll(this.#resolvePollDelayMs());
       }
     }
   }
 
-  #applyWorldEvent(worldEvent: MetaverseRealtimeWorldEvent): void {
+  #applyWorldEvent(worldEvent: MetaverseRealtimeWorldEvent): boolean {
     if (this.#isDisposed()) {
-      return;
+      return false;
     }
 
     if (!this.#shouldAcceptWorldSnapshot(worldEvent.world)) {
-      return;
+      return false;
+    }
+
+    const acceptedAtMs = this.#readWallClockMs();
+
+    if (Number.isFinite(acceptedAtMs)) {
+      this.#previousAcceptedSnapshotReceivedAtMs =
+        this.#latestAcceptedSnapshotReceivedAtMs;
+      this.#latestAcceptedSnapshotReceivedAtMs = acceptedAtMs;
     }
 
     const nextBuffer = [
@@ -414,6 +626,7 @@ export class MetaverseWorldClient {
       null
     );
     this.#notifyUpdates();
+    return true;
   }
 
   #shouldAcceptWorldSnapshot(
@@ -444,10 +657,24 @@ export class MetaverseWorldClient {
     return Number(this.#config.defaultCommandIntervalMs);
   }
 
+  #resolveLatestWinsDatagramFallbackRecoveryDelayMs(): number {
+    return Math.max(
+      1,
+      Math.floor(
+        this.#resolveCommandDelayMs() *
+          latestWinsDatagramFallbackRecoveryDelayMultiplier
+      )
+    );
+  }
+
   #schedulePoll(delayMs: number): void {
     this.#cancelScheduledPoll();
 
-    if (this.#statusSnapshot.state === "disposed" || this.#playerId === null) {
+    if (
+      this.#statusSnapshot.state === "disposed" ||
+      this.#playerId === null ||
+      !this.#shouldUsePollingHappyPath()
+    ) {
       return;
     }
 
@@ -464,6 +691,107 @@ export class MetaverseWorldClient {
 
     this.#clearTimeout(this.#pollHandle);
     this.#pollHandle = null;
+  }
+
+  #startSnapshotStream(playerId: MetaversePlayerId): void {
+    if (
+      this.#snapshotStreamTransport === null ||
+      this.#snapshotStreamSubscription !== null ||
+      this.#isDisposed()
+    ) {
+      return;
+    }
+
+    const transportStatusChanged =
+      this.#usingSnapshotStreamFallback ||
+      this.#snapshotStreamLastError !== null ||
+      this.#snapshotStreamReconnectHandle !== null;
+
+    this.#usingSnapshotStreamFallback = false;
+    this.#cancelScheduledPoll();
+    this.#cancelScheduledSnapshotStreamReconnect();
+    this.#snapshotStreamSubscription =
+      this.#snapshotStreamTransport.subscribeWorldSnapshots(playerId, {
+        onClose: () => {
+          this.#handleSnapshotStreamFailure(
+            "Metaverse world snapshot stream closed."
+          );
+        },
+        onError: (error) => {
+          const message =
+            error instanceof Error &&
+            typeof error.message === "string" &&
+            error.message.trim().length > 0
+              ? error.message
+              : "Metaverse world snapshot stream failed.";
+
+          this.#handleSnapshotStreamFailure(message);
+        },
+        onWorldEvent: (worldEvent) => {
+          const transportStatusChangedOnEvent =
+            this.#usingSnapshotStreamFallback ||
+            this.#snapshotStreamLastError !== null ||
+            this.#snapshotStreamReconnectHandle !== null;
+
+          this.#usingSnapshotStreamFallback = false;
+          this.#snapshotStreamLastError = null;
+          const acceptedWorldEvent = this.#applyWorldEvent(worldEvent);
+          this.#cancelScheduledPoll();
+          this.#cancelScheduledSnapshotStreamReconnect();
+
+          if (transportStatusChangedOnEvent && !acceptedWorldEvent) {
+            this.#notifyUpdates();
+          }
+        }
+      });
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
+  }
+
+  #closeSnapshotStreamSubscription(): void {
+    if (this.#snapshotStreamSubscription === null) {
+      return;
+    }
+
+    const subscription = this.#snapshotStreamSubscription;
+
+    this.#snapshotStreamSubscription = null;
+    subscription.close();
+  }
+
+  #scheduleSnapshotStreamReconnect(): void {
+    this.#cancelScheduledSnapshotStreamReconnect();
+
+    if (
+      this.#snapshotStreamTransport === null ||
+      this.#playerId === null ||
+      this.#isDisposed()
+    ) {
+      return;
+    }
+
+    this.#snapshotStreamReconnectCount += 1;
+
+    this.#snapshotStreamReconnectHandle = this.#setTimeout(() => {
+      this.#snapshotStreamReconnectHandle = null;
+
+      if (this.#playerId === null || this.#isDisposed()) {
+        return;
+      }
+
+      this.#startSnapshotStream(this.#playerId);
+    }, Math.max(0, Number(this.#config.snapshotStreamReconnectDelayMs)));
+  }
+
+  #cancelScheduledSnapshotStreamReconnect(): void {
+    if (this.#snapshotStreamReconnectHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#snapshotStreamReconnectHandle);
+    this.#snapshotStreamReconnectHandle = null;
   }
 
   #scheduleCommandSync(delayMs: number): void {
@@ -491,6 +819,97 @@ export class MetaverseWorldClient {
 
     this.#clearTimeout(this.#commandSyncHandle);
     this.#commandSyncHandle = null;
+  }
+
+  #schedulePlayerTraversalInputSync(delayMs: number): void {
+    if (
+      this.#statusSnapshot.state === "disposed" ||
+      this.#playerId === null ||
+      !this.#statusSnapshot.connected ||
+      this.#pendingPlayerTraversalIntentCommand === null ||
+      this.#playerTraversalInputSyncInFlight ||
+      this.#playerTraversalInputSyncHandle !== null
+    ) {
+      return;
+    }
+
+    this.#playerTraversalInputSyncHandle = this.#setTimeout(() => {
+      this.#playerTraversalInputSyncHandle = null;
+      void this.#flushPlayerTraversalInputSync();
+    }, Math.max(0, delayMs));
+  }
+
+  #cancelScheduledPlayerTraversalInputSync(): void {
+    if (this.#playerTraversalInputSyncHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#playerTraversalInputSyncHandle);
+    this.#playerTraversalInputSyncHandle = null;
+  }
+
+  #scheduleLatestWinsDatagramFallbackRecovery(): void {
+    this.#cancelScheduledLatestWinsDatagramFallbackRecovery();
+
+    if (
+      this.#statusSnapshot.state === "disposed" ||
+      this.#latestWinsDatagramTransport === null
+    ) {
+      return;
+    }
+
+    this.#latestWinsDatagramFallbackRecoveryHandle = this.#setTimeout(() => {
+      this.#latestWinsDatagramFallbackRecoveryHandle = null;
+
+      if (
+        this.#statusSnapshot.state === "disposed" ||
+        !this.#useReliableLatestWinsDatagramFallback
+      ) {
+        return;
+      }
+
+      this.#useReliableLatestWinsDatagramFallback = false;
+      this.#notifyUpdates();
+    }, this.#resolveLatestWinsDatagramFallbackRecoveryDelayMs());
+  }
+
+  #cancelScheduledLatestWinsDatagramFallbackRecovery(): void {
+    if (this.#latestWinsDatagramFallbackRecoveryHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#latestWinsDatagramFallbackRecoveryHandle);
+    this.#latestWinsDatagramFallbackRecoveryHandle = null;
+  }
+
+  #handleSuccessfulLatestWinsDatagramSend(): void {
+    const transportStatusChanged =
+      !this.#hasSuccessfulLatestWinsDatagramSend ||
+      this.#useReliableLatestWinsDatagramFallback ||
+      this.#lastLatestWinsDatagramError !== null;
+
+    this.#hasSuccessfulLatestWinsDatagramSend = true;
+    this.#useReliableLatestWinsDatagramFallback = false;
+    this.#lastLatestWinsDatagramError = null;
+    this.#cancelScheduledLatestWinsDatagramFallbackRecovery();
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
+  }
+
+  #handleLatestWinsDatagramSendFailure(nextError: string): void {
+    const transportStatusChanged =
+      !this.#useReliableLatestWinsDatagramFallback ||
+      this.#lastLatestWinsDatagramError !== nextError;
+
+    this.#lastLatestWinsDatagramError = nextError;
+    this.#useReliableLatestWinsDatagramFallback = true;
+    this.#scheduleLatestWinsDatagramFallbackRecovery();
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
   }
 
   async #flushCommandSync(): Promise<void> {
@@ -530,31 +949,61 @@ export class MetaverseWorldClient {
     }
   }
 
+  async #flushPlayerTraversalInputSync(): Promise<void> {
+    if (
+      this.#playerId === null ||
+      this.#statusSnapshot.state === "disposed" ||
+      !this.#statusSnapshot.connected ||
+      this.#pendingPlayerTraversalIntentCommand === null
+    ) {
+      return;
+    }
+
+    const pendingCommand = this.#pendingPlayerTraversalIntentCommand;
+
+    this.#pendingPlayerTraversalIntentCommand = null;
+    this.#playerTraversalInputSyncInFlight = true;
+
+    try {
+      const worldEvent =
+        await this.#sendPlayerTraversalIntentCommand(pendingCommand);
+
+      if (worldEvent !== null) {
+        this.#applyWorldEvent(worldEvent);
+      }
+    } catch (error) {
+      this.#applyWorldAccessError(
+        error,
+        "Metaverse world traversal intent sync failed."
+      );
+    } finally {
+      this.#playerTraversalInputSyncInFlight = false;
+
+      if (
+        !this.#isDisposed() &&
+        this.#statusSnapshot.connected &&
+        this.#pendingPlayerTraversalIntentCommand !== null
+      ) {
+        this.#schedulePlayerTraversalInputSync(0);
+      }
+    }
+  }
+
   async #sendDriverVehicleControlCommand(
     command: PendingDriverVehicleControlCommand
   ): Promise<MetaverseRealtimeWorldEvent | null> {
     if (
-      this.#driverVehicleControlDatagramTransport === null ||
-      this.#useReliableDriverVehicleControlFallback
+      this.#latestWinsDatagramTransport === null ||
+      this.#useReliableLatestWinsDatagramFallback
     ) {
       return this.#transport.sendCommand(command);
     }
 
     try {
-      await this.#driverVehicleControlDatagramTransport.sendDriverVehicleControlDatagram(
+      await this.#latestWinsDatagramTransport.sendDriverVehicleControlDatagram(
         command
       );
-
-      const transportStatusChanged =
-        !this.#hasSuccessfulDriverVehicleControlDatagramSend ||
-        this.#driverVehicleControlDatagramLastError !== null;
-
-      this.#hasSuccessfulDriverVehicleControlDatagramSend = true;
-      this.#driverVehicleControlDatagramLastError = null;
-
-      if (transportStatusChanged) {
-        this.#notifyUpdates();
-      }
+      this.#handleSuccessfulLatestWinsDatagramSend();
 
       return null;
     } catch (error) {
@@ -565,19 +1014,59 @@ export class MetaverseWorldClient {
           ? error.message
           : "Metaverse driver vehicle control datagram send failed.";
 
-      const transportStatusChanged =
-        !this.#useReliableDriverVehicleControlFallback ||
-        this.#driverVehicleControlDatagramLastError !== nextError;
-
-      this.#driverVehicleControlDatagramLastError = nextError;
-      this.#useReliableDriverVehicleControlFallback = true;
-
-      if (transportStatusChanged) {
-        this.#notifyUpdates();
-      }
+      this.#driverVehicleControlDatagramSendFailureCount += 1;
+      this.#handleLatestWinsDatagramSendFailure(nextError);
 
       return this.#transport.sendCommand(command);
     }
+  }
+
+  async #sendPlayerTraversalIntentCommand(
+    command: PendingPlayerTraversalIntentCommand
+  ): Promise<MetaverseRealtimeWorldEvent | null> {
+    if (
+      this.#latestWinsDatagramTransport === null ||
+      this.#useReliableLatestWinsDatagramFallback
+    ) {
+      return this.#transport.sendCommand(command);
+    }
+
+    try {
+      await this.#latestWinsDatagramTransport.sendPlayerTraversalIntentDatagram(
+        command
+      );
+      this.#handleSuccessfulLatestWinsDatagramSend();
+
+      return null;
+    } catch (error) {
+      const nextError =
+        error instanceof Error &&
+        typeof error.message === "string" &&
+        error.message.trim().length > 0
+          ? error.message
+          : "Metaverse player traversal intent datagram send failed.";
+
+      this.#playerTraversalInputDatagramSendFailureCount += 1;
+      this.#handleLatestWinsDatagramSendFailure(nextError);
+
+      return this.#transport.sendCommand(command);
+    }
+  }
+
+  #enqueueReliableWorldCommand(
+    command: ReturnType<typeof createMetaverseSyncMountedOccupancyCommand>,
+    fallbackMessage: string
+  ): void {
+    const queuedCommandPromise = this.#queuedReliableWorldCommandPromise
+      .catch(() => undefined)
+      .then(async () => {
+        this.#applyWorldEvent(await this.#transport.sendCommand(command));
+      })
+      .catch((error: unknown) => {
+        this.#applyWorldAccessError(error, fallbackMessage);
+      });
+
+    this.#queuedReliableWorldCommandPromise = queuedCommandPromise;
   }
 
   #applyWorldAccessError(error: unknown, fallbackMessage: string): void {
@@ -591,6 +1080,23 @@ export class MetaverseWorldClient {
     }
 
     this.#setError(message);
+  }
+
+  #handleSnapshotStreamFailure(message: string): void {
+    if (this.#isDisposed()) {
+      return;
+    }
+
+    this.#snapshotStreamSubscription = null;
+    this.#snapshotStreamLastError = message.trim().length > 0 ? message : null;
+    this.#usingSnapshotStreamFallback = true;
+    this.#schedulePoll(0);
+    this.#scheduleSnapshotStreamReconnect();
+    this.#notifyUpdates();
+
+    if (message.trim().length > 0) {
+      this.#applyWorldAccessError(new Error(message), message);
+    }
   }
 
   #setError(message: string): void {
@@ -627,19 +1133,59 @@ export class MetaverseWorldClient {
     }
   }
 
+  #resolveSnapshotStreamLiveness(): MetaverseWorldSnapshotStreamLiveness {
+    if (this.#snapshotStreamTransport === null) {
+      return "inactive";
+    }
+
+    if (this.#usingSnapshotStreamFallback) {
+      return this.#snapshotStreamReconnectHandle === null
+        ? "fallback-polling"
+        : "reconnecting";
+    }
+
+    if (this.#snapshotStreamSubscription !== null) {
+      return "subscribed";
+    }
+
+    return this.#snapshotStreamReconnectHandle !== null
+      ? "reconnecting"
+      : "inactive";
+  }
+
+  #resolveSnapshotStreamPath(): MetaverseWorldSnapshotPath {
+    if (this.#snapshotStreamTransport === null) {
+      return "http-polling";
+    }
+
+    if (this.#usingSnapshotStreamFallback) {
+      return "fallback-polling";
+    }
+
+    return this.#snapshotStreamSubscription !== null
+      ? "reliable-snapshot-stream"
+      : "http-polling";
+  }
+
+  #shouldUsePollingHappyPath(): boolean {
+    return (
+      this.#snapshotStreamTransport === null || this.#usingSnapshotStreamFallback
+    );
+  }
+
   #createDriverVehicleControlDatagramTransportStatusContext(): MetaverseWorldDriverVehicleControlDatagramTransportStatusContext {
     return Object.freeze({
       datagramTransportAvailable:
-        this.#driverVehicleControlDatagramTransport !== null,
+        this.#latestWinsDatagramTransport !== null,
       hasSuccessfulDatagramSend:
-        this.#hasSuccessfulDriverVehicleControlDatagramSend,
-      lastTransportError: this.#driverVehicleControlDatagramLastError,
-      usingReliableFallback: this.#useReliableDriverVehicleControlFallback
+        this.#hasSuccessfulLatestWinsDatagramSend,
+      lastTransportError: this.#lastLatestWinsDatagramError,
+      usingReliableFallback: this.#useReliableLatestWinsDatagramFallback
     });
   }
 
   #createDefaultDriverVehicleControlDatagramStatusSnapshot(): RealtimeDatagramTransportStatusSnapshot {
-    if (this.#driverVehicleControlDatagramTransport === null) {
+    if (this.#latestWinsDatagramTransport === null) {
       return createRealtimeDatagramTransportStatusSnapshot({
         activeTransport: null,
         browserWebTransportAvailable: false,
@@ -652,12 +1198,12 @@ export class MetaverseWorldClient {
       });
     }
 
-    if (this.#useReliableDriverVehicleControlFallback) {
+    if (this.#useReliableLatestWinsDatagramFallback) {
       return createRealtimeDatagramTransportStatusSnapshot({
         activeTransport: "reliable-command-fallback",
         browserWebTransportAvailable: true,
         enabled: true,
-        lastTransportError: this.#driverVehicleControlDatagramLastError,
+        lastTransportError: this.#lastLatestWinsDatagramError,
         preference: "webtransport-preferred",
         state: "degraded-to-reliable",
         webTransportConfigured: true,
@@ -669,11 +1215,11 @@ export class MetaverseWorldClient {
       activeTransport: "webtransport-datagram",
       browserWebTransportAvailable: true,
       enabled: true,
-      lastTransportError: this.#driverVehicleControlDatagramLastError,
+      lastTransportError: this.#lastLatestWinsDatagramError,
       preference: "webtransport-preferred",
       state: "active",
       webTransportConfigured: true,
-      webTransportStatus: this.#hasSuccessfulDriverVehicleControlDatagramSend
+      webTransportStatus: this.#hasSuccessfulLatestWinsDatagramSend
         ? "active"
         : "active"
     });

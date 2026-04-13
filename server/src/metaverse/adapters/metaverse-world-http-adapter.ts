@@ -6,6 +6,15 @@ import type {
 import {
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand,
+  metaversePlayerTraversalIntentLocomotionModeIds,
+  metaversePresenceMountedOccupancyKinds,
+  metaversePresenceMountedOccupantRoleIds,
+  type MetaversePlayerTraversalIntentLocomotionModeId,
+  type MetaversePresenceMountedOccupancySnapshotInput,
+  type MetaversePresenceMountedOccupancyKind,
+  type MetaversePresenceMountedOccupantRoleId,
   type MetaverseRealtimeWorldClientCommand
 } from "@webgpu-metaverse/shared";
 
@@ -118,6 +127,16 @@ function resolveObserverPlayerId(rawPlayerId: string | null) {
   return playerId;
 }
 
+function resolvePlayerId(rawPlayerId: string) {
+  const playerId = createMetaversePlayerId(rawPlayerId);
+
+  if (playerId === null) {
+    throw new Error("Invalid playerId.");
+  }
+
+  return playerId;
+}
+
 function isMetaverseWorldSnapshotPath(pathname: string): boolean {
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
 
@@ -139,6 +158,133 @@ function isMetaverseWorldCommandPath(pathname: string): boolean {
   );
 }
 
+function parseWorldMountedOccupancy(
+  rawMountedOccupancy: unknown,
+  allowUndefined: boolean
+): MetaversePresenceMountedOccupancySnapshotInput | null | undefined {
+  if (rawMountedOccupancy === undefined) {
+    return allowUndefined ? undefined : null;
+  }
+
+  if (rawMountedOccupancy === null) {
+    return null;
+  }
+
+  const mountedOccupancy = readRecordField(
+    rawMountedOccupancy,
+    "mountedOccupancy"
+  );
+
+  if (
+    !metaversePresenceMountedOccupancyKinds.includes(
+      readStringField(
+        mountedOccupancy.occupancyKind,
+        "mountedOccupancy.occupancyKind"
+      ) as MetaversePresenceMountedOccupancyKind
+    )
+  ) {
+    throw new Error(
+      `Unsupported mountedOccupancy.occupancyKind: ${mountedOccupancy.occupancyKind}`
+    );
+  }
+
+  if (
+    !metaversePresenceMountedOccupantRoleIds.includes(
+      readStringField(
+        mountedOccupancy.occupantRole,
+        "mountedOccupancy.occupantRole"
+      ) as MetaversePresenceMountedOccupantRoleId
+    )
+  ) {
+    throw new Error(
+      `Unsupported mountedOccupancy.occupantRole: ${mountedOccupancy.occupantRole}`
+    );
+  }
+
+  return {
+    environmentAssetId: readStringField(
+      mountedOccupancy.environmentAssetId,
+      "mountedOccupancy.environmentAssetId"
+    ),
+    entryId:
+      mountedOccupancy.entryId === null
+        ? null
+        : readStringField(
+            mountedOccupancy.entryId,
+            "mountedOccupancy.entryId"
+          ),
+    occupancyKind:
+      mountedOccupancy.occupancyKind as MetaversePresenceMountedOccupancyKind,
+    occupantRole:
+      mountedOccupancy.occupantRole as MetaversePresenceMountedOccupantRoleId,
+    seatId:
+      mountedOccupancy.seatId === null
+        ? null
+        : readStringField(
+            mountedOccupancy.seatId,
+            "mountedOccupancy.seatId"
+          )
+  };
+}
+
+function parseWorldTraversalIntent(intentBody: Record<string, unknown>) {
+  const locomotionMode =
+    intentBody.locomotionMode === undefined
+      ? undefined
+      : readStringField(intentBody.locomotionMode, "locomotionMode");
+
+  if (
+    locomotionMode !== undefined &&
+    !metaversePlayerTraversalIntentLocomotionModeIds.includes(
+      locomotionMode as MetaversePlayerTraversalIntentLocomotionModeId
+    )
+  ) {
+    throw new Error(`Unsupported locomotionMode: ${locomotionMode}`);
+  }
+
+  return {
+    ...(intentBody.boost === undefined
+      ? {}
+      : {
+          boost: readBooleanField(intentBody.boost, "intent.boost")
+        }),
+    ...(intentBody.inputSequence === undefined
+      ? {}
+      : {
+          inputSequence: readNumberField(
+            intentBody.inputSequence,
+            "intent.inputSequence"
+          )
+        }),
+    ...(intentBody.jump === undefined
+      ? {}
+      : {
+          jump: readBooleanField(intentBody.jump, "intent.jump")
+        }),
+    ...(locomotionMode === undefined
+      ? {}
+      : {
+          locomotionMode:
+            locomotionMode as MetaversePlayerTraversalIntentLocomotionModeId
+        }),
+    ...(intentBody.moveAxis === undefined
+      ? {}
+      : {
+          moveAxis: readNumberField(intentBody.moveAxis, "intent.moveAxis")
+        }),
+    ...(intentBody.strafeAxis === undefined
+      ? {}
+      : {
+          strafeAxis: readNumberField(intentBody.strafeAxis, "intent.strafeAxis")
+        }),
+    ...(intentBody.yawAxis === undefined
+      ? {}
+      : {
+          yawAxis: readNumberField(intentBody.yawAxis, "intent.yawAxis")
+        })
+  };
+}
+
 function parseWorldCommand(
   body: unknown
 ): MetaverseRealtimeWorldClientCommand {
@@ -149,6 +295,19 @@ function parseWorldCommand(
   const commandType = readStringField(body.type, "type");
 
   switch (commandType) {
+    case "sync-mounted-occupancy":
+      return createMetaverseSyncMountedOccupancyCommand({
+        mountedOccupancy: parseWorldMountedOccupancy(
+          body.mountedOccupancy,
+          false
+        ) ?? null,
+        playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+      });
+    case "sync-player-traversal-intent":
+      return createMetaverseSyncPlayerTraversalIntentCommand({
+        intent: parseWorldTraversalIntent(readRecordField(body.intent, "intent")),
+        playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+      });
     case "sync-driver-vehicle-control": {
       const controlIntentBody = readRecordField(body.controlIntent, "controlIntent");
 
@@ -179,17 +338,7 @@ function parseWorldCommand(
           body.controlSequence,
           "controlSequence"
         ),
-        playerId: (() => {
-          const playerId = createMetaversePlayerId(
-            readStringField(body.playerId, "playerId")
-          );
-
-          if (playerId === null) {
-            throw new Error("Invalid playerId.");
-          }
-
-          return playerId;
-        })()
+        playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
       });
     }
     default:

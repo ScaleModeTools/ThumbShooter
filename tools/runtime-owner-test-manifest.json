@@ -134,6 +134,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/network/adapters/coop-room-webtransport-snapshot-stream-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/coop-room-webtransport-snapshot-stream-transport.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/network/adapters/webtransport-http-fallback.ts",
       "testPaths": [
         "tests/runtime/client/webtransport-http-fallback.runtime.test.mjs"
@@ -176,9 +182,21 @@
       ]
     },
     {
+      "ownerPath": "client/src/network/adapters/metaverse-world-webtransport-snapshot-stream-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-webtransport-snapshot-stream-transport.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/network/adapters/reliable-webtransport-json-request-channel.ts",
       "testPaths": [
         "tests/runtime/client/reliable-webtransport-json-request-channel.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/reliable-webtransport-json-subscription-channel.ts",
+      "testPaths": [
+        "tests/runtime/client/reliable-webtransport-json-subscription-channel.runtime.test.mjs"
       ]
     },
     {
@@ -197,6 +215,12 @@
       "ownerPath": "client/src/network/adapters/metaverse-realtime-world-driver-vehicle-control-webtransport-datagram-transport.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-realtime-world-driver-vehicle-control-webtransport-datagram-transport.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/adapters/metaverse-realtime-world-latest-wins-webtransport-datagram-transport.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-realtime-world-latest-wins-webtransport-datagram-transport.runtime.test.mjs"
       ]
     },
     {

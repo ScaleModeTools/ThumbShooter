@@ -20,10 +20,13 @@ import {
   createMetaversePresenceWebTransportRosterRequest,
   createMetaversePresenceWebTransportServerEventMessage,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseRealtimeWorldSnapshot,
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   createMetaverseRealtimeWorldWebTransportServerEventMessage,
   createMetaverseRealtimeWorldWebTransportSnapshotRequest,
   createMetaverseSessionSnapshot,
@@ -175,6 +178,7 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
 
   const playerInputs = [
     {
+      angularVelocityRadiansPerSecond: 1.25,
       characterId: " metaverse-mannequin-v1 ",
       linearVelocity: {
         x: 0,
@@ -197,7 +201,8 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
     snapshotSequence: 9.6,
     tick: {
       currentTick: 42.9,
-      serverTimeMs: 7_500.25,
+      emittedAtServerTimeMs: 7_650.75,
+      simulationTimeMs: 7_500.25,
       tickIntervalMs: 100
     },
     vehicles: [
@@ -231,9 +236,12 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
 
   assert.equal(worldSnapshot.snapshotSequence, 9);
   assert.equal(worldSnapshot.tick.currentTick, 42);
-  assert.equal(worldSnapshot.tick.serverTimeMs, 7_500.25);
+  assert.equal(worldSnapshot.tick.emittedAtServerTimeMs, 7_650.75);
+  assert.equal(worldSnapshot.tick.serverTimeMs, 7_650.75);
+  assert.equal(worldSnapshot.tick.simulationTimeMs, 7_500.25);
   assert.equal(worldSnapshot.players.length, 1);
   assert.equal(worldSnapshot.players[0]?.characterId, "metaverse-mannequin-v1");
+  assert.equal(worldSnapshot.players[0]?.angularVelocityRadiansPerSecond, 1.25);
   assert.equal(worldSnapshot.players[0]?.stateSequence, 7);
   assert.equal(worldSnapshot.players[0]?.mountedOccupancy?.vehicleId, vehicleId);
   assert.equal(
@@ -245,6 +253,7 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
     worldSnapshot.players[0]?.mountedOccupancy?.occupantRole,
     "driver"
   );
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 7);
   assert.equal(
     worldSnapshot.vehicles[0]?.seats[0]?.occupantPlayerId,
     playerId
@@ -293,7 +302,8 @@ test("metaverse realtime world contracts reject seat occupancy that disagrees wi
         ],
         tick: {
           currentTick: 3,
-          serverTimeMs: 300,
+          emittedAtServerTimeMs: 360,
+          simulationTimeMs: 300,
           tickIntervalMs: 100
         },
         vehicles: [
@@ -357,6 +367,75 @@ test("metaverse realtime world driver control commands normalize explicit intent
   assert.equal(
     webTransportRequest.command.controlIntent.environmentAssetId,
     "metaverse-hub-skiff-v1"
+  );
+});
+
+test("metaverse realtime world traversal intent commands normalize explicit transport inputs", () => {
+  const playerId = createMetaversePlayerId(" harbor-pilot-1 ");
+
+  assert.notEqual(playerId, null);
+
+  const command = createMetaverseSyncPlayerTraversalIntentCommand({
+    intent: {
+      boost: true,
+      inputSequence: 4.9,
+      jump: true,
+      locomotionMode: "swim",
+      moveAxis: 2.4,
+      strafeAxis: -4,
+      yawAxis: 0.5
+    },
+    playerId
+  });
+  const webTransportRequest =
+    createMetaverseRealtimeWorldWebTransportCommandRequest({
+      command
+    });
+
+  assert.equal(command.type, "sync-player-traversal-intent");
+  assert.equal(command.intent.inputSequence, 4);
+  assert.equal(command.intent.locomotionMode, "swim");
+  assert.equal(command.intent.moveAxis, 1);
+  assert.equal(command.intent.strafeAxis, -1);
+  assert.equal(webTransportRequest.type, "world-command-request");
+  assert.equal(
+    webTransportRequest.command.type,
+    "sync-player-traversal-intent"
+  );
+  assert.equal(webTransportRequest.command.intent.inputSequence, 4);
+});
+
+test("metaverse realtime world mounted occupancy commands normalize explicit reliable transitions", () => {
+  const playerId = createMetaversePlayerId(" harbor-pilot-1 ");
+
+  assert.notEqual(playerId, null);
+
+  const command = createMetaverseSyncMountedOccupancyCommand({
+    mountedOccupancy: {
+      environmentAssetId: " metaverse-hub-skiff-v1 ",
+      entryId: null,
+      occupancyKind: "seat",
+      occupantRole: "driver",
+      seatId: " driver-seat "
+    },
+    playerId
+  });
+  const webTransportRequest =
+    createMetaverseRealtimeWorldWebTransportCommandRequest({
+      command
+    });
+
+  assert.equal(command.type, "sync-mounted-occupancy");
+  assert.equal(
+    command.mountedOccupancy?.environmentAssetId,
+    "metaverse-hub-skiff-v1"
+  );
+  assert.equal(command.mountedOccupancy?.seatId, "driver-seat");
+  assert.equal(webTransportRequest.type, "world-command-request");
+  assert.equal(webTransportRequest.command.type, "sync-mounted-occupancy");
+  assert.equal(
+    webTransportRequest.command.mountedOccupancy?.seatId,
+    "driver-seat"
   );
 });
 
@@ -424,7 +503,8 @@ test("webtransport shared contracts wrap presence, world, and Duck Hunt room mes
         snapshotSequence: 4,
         tick: {
           currentTick: 12,
-          serverTimeMs: 1_800,
+          emittedAtServerTimeMs: 1_920,
+          simulationTimeMs: 1_800,
           tickIntervalMs: 150
         },
         vehicles: [
@@ -546,6 +626,21 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
         playerId: metaversePlayerId
       })
     });
+  const playerTraversalIntentDatagram =
+    createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram({
+      command: createMetaverseSyncPlayerTraversalIntentCommand({
+        intent: {
+          boost: true,
+          inputSequence: 7.2,
+          jump: false,
+          locomotionMode: "grounded",
+          moveAxis: 1.5,
+          strafeAxis: -0.25,
+          yawAxis: 0.8
+        },
+        playerId: metaversePlayerId
+      })
+    });
   const playerPresenceDatagram =
     createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram({
       command: createCoopSyncPlayerPresenceCommand({
@@ -585,6 +680,21 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
     "metaverse-hub-skiff-v1"
   );
   assert.ok(Object.isFrozen(driverVehicleControlDatagram));
+  assert.equal(
+    playerTraversalIntentDatagram.type,
+    "world-player-traversal-intent-datagram"
+  );
+  assert.equal(
+    playerTraversalIntentDatagram.command.type,
+    "sync-player-traversal-intent"
+  );
+  assert.equal(playerTraversalIntentDatagram.command.intent.inputSequence, 7);
+  assert.equal(
+    playerTraversalIntentDatagram.command.intent.locomotionMode,
+    "grounded"
+  );
+  assert.equal(playerTraversalIntentDatagram.command.intent.moveAxis, 1);
+  assert.ok(Object.isFrozen(playerTraversalIntentDatagram));
 
   assert.equal(
     playerPresenceDatagram.type,

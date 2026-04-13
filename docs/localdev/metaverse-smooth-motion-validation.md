@@ -15,6 +15,21 @@ This document covers:
 - WebTransport-preferred boot with the localdev WebTransport host available
 - sustained skiff driving while watching live cadence and transport telemetry
 
+## Locked Budgets
+
+- on April 13, 2026 the Phase 0 cadence bench stayed under budget at `50 ms`,
+  `40 ms`, `33 ms`, and `25 ms` for both metaverse remote-world sampling and
+  Duck Hunt co-op room projection
+- `33 ms` is the locked final authoritative cadence because it is the highest
+  candidate rate that stayed comfortably under both suite budgets
+- locked metaverse values:
+  - authoritative tick: `33 ms`
+  - fallback poll and reliable command cadence: `33 ms`
+  - interpolation delay: `66 ms`
+  - max extrapolation: `66 ms`
+  - local freshness: `66 ms`
+  - snapshot buffer depth: `6`
+
 ## Preconditions
 
 - run from the repo root
@@ -44,10 +59,10 @@ Expected overlay truth:
 - `World Driver Datagram` shows `not requested · inactive`
 - `World Cadence` shows:
   - `Tick n/a` until authoritative world connection completes
-  - `Poll 50 ms`
-  - `Interpolation 100 ms`
-  - `Extrapolation 90 ms`
-  - `Local freshness 90 ms`
+  - `Poll 33 ms`
+  - `Interpolation 66 ms`
+  - `Extrapolation 66 ms`
+  - `Local freshness 66 ms`
 
 Behavior checks:
 
@@ -107,11 +122,11 @@ Expected overlay truth:
 - `World Reliable` reaches `active · webtransport`
 - `World Driver Datagram` reaches `active · webtransport datagram`
 - `World Cadence` shows:
-  - `Tick 50 ms` once the authoritative world is connected
-  - `Poll 50 ms`
-  - `Interpolation 100 ms`
-  - `Extrapolation 90 ms`
-  - `Local freshness 90 ms`
+  - `Tick 33 ms` once the authoritative world is connected
+  - `Poll 33 ms`
+  - `Interpolation 66 ms`
+  - `Extrapolation 66 ms`
+  - `Local freshness 66 ms`
 
 Behavior checks:
 
@@ -132,11 +147,11 @@ Checks while driving:
 - gross correction only occurs after a real divergence event, seat change, or
   authority context change
 - the overlay keeps reporting:
-  - `Tick 50 ms`
-  - `Poll 50 ms`
-  - `Interpolation 100 ms`
-  - `Extrapolation 90 ms`
-  - `Local freshness 90 ms`
+  - `Tick 33 ms`
+  - `Poll 33 ms`
+  - `Interpolation 66 ms`
+  - `Extrapolation 66 ms`
+  - `Local freshness 66 ms`
 
 ## Capture
 

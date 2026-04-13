@@ -15,6 +15,14 @@ function formatMillis(value: number | null): string {
   return value === null ? "n/a" : `${Math.round(value)} ms`;
 }
 
+function formatCount(value: number): string {
+  return value.toLocaleString();
+}
+
+function formatRateHz(value: number | null): string {
+  return value === null ? "n/a" : `${value.toFixed(1)} Hz`;
+}
+
 function formatPoint(value: { readonly x: number; readonly y: number } | null): string {
   return value === null
     ? "n/a"
@@ -120,6 +128,42 @@ export function DuckHuntGameplayDebugOverlay({
           <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
             Snapshot {formatMillis(trackingTelemetry.latestPoseAgeMs)}
           </div>
+          {gameplayTelemetry.coopRoom !== null ? (
+            <>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Room path{" "}
+                {`${gameplayTelemetry.coopRoom.snapshotStreamPath.replaceAll("-", " ")} · ${gameplayTelemetry.coopRoom.snapshotStreamLiveness.replaceAll("-", " ")}`}
+              </div>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Room buffer{" "}
+                {`${formatCount(gameplayTelemetry.coopRoom.bufferDepth)} · ${formatRateHz(gameplayTelemetry.coopRoom.latestSnapshotUpdateRateHz)}`}
+              </div>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Projection{" "}
+                {`${gameplayTelemetry.coopRoom.projectionSource.replaceAll("-", " ")} · ${formatMillis(gameplayTelemetry.coopRoom.projectedSimulationLagMs)}`}
+              </div>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Clock offset{" "}
+                {formatMillis(gameplayTelemetry.coopRoom.clockOffsetEstimateMs)}
+              </div>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Stream reconnects{" "}
+                {formatCount(gameplayTelemetry.coopRoom.snapshotStreamReconnectCount)}
+              </div>
+              <div className="surface-game-inset type-game-detail rounded-lg px-3 py-2">
+                Presence datagram{" "}
+                {gameplayTelemetry.coopRoom.playerPresenceReliableFallbackActive
+                  ? `fallback · ${formatCount(
+                      gameplayTelemetry.coopRoom
+                        .playerPresenceDatagramSendFailureCount
+                    )}`
+                  : formatCount(
+                      gameplayTelemetry.coopRoom
+                        .playerPresenceDatagramSendFailureCount
+                    )}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>

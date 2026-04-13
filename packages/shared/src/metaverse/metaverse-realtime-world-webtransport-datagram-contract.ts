@@ -1,7 +1,14 @@
-import type { MetaverseSyncDriverVehicleControlCommand } from "./metaverse-realtime-world-contract.js";
-import { createMetaverseSyncDriverVehicleControlCommand } from "./metaverse-realtime-world-contract.js";
+import type {
+  MetaverseSyncDriverVehicleControlCommand,
+  MetaverseSyncPlayerTraversalIntentCommand
+} from "./metaverse-realtime-world-contract.js";
+import {
+  createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand
+} from "./metaverse-realtime-world-contract.js";
 
 export const metaverseRealtimeWorldWebTransportClientDatagramTypes = [
+  "world-player-traversal-intent-datagram",
   "world-driver-vehicle-control-datagram"
 ] as const;
 
@@ -17,8 +24,27 @@ export interface MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramI
   readonly command: MetaverseSyncDriverVehicleControlCommand;
 }
 
+export interface MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram {
+  readonly command: MetaverseSyncPlayerTraversalIntentCommand;
+  readonly type: "world-player-traversal-intent-datagram";
+}
+
+export interface MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagramInput {
+  readonly command: MetaverseSyncPlayerTraversalIntentCommand;
+}
+
 export type MetaverseRealtimeWorldWebTransportClientDatagram =
-  MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram;
+  | MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram
+  | MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram;
+
+export function createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram(
+  input: MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagramInput
+): MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram {
+  return Object.freeze({
+    command: createMetaverseSyncPlayerTraversalIntentCommand(input.command),
+    type: "world-player-traversal-intent-datagram"
+  });
+}
 
 export function createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram(
   input: MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramInput

@@ -1,4 +1,5 @@
 import type { LatestHandTrackingSnapshot } from "../../../tracking";
+import type { GameplayTelemetrySnapshot } from "./duck-hunt-gameplay-presentation";
 import type {
   LocalArenaEnemyRenderState
 } from "./duck-hunt-local-arena-simulation";
@@ -12,6 +13,7 @@ export interface GameplayArenaRuntime {
   readonly cameraSnapshot: GameplayCameraSnapshot;
   readonly enemyRenderStates: readonly LocalArenaEnemyRenderState[];
   readonly hudSnapshot: GameplayArenaHudSnapshot;
+  readonly telemetrySnapshot: GameplayTelemetrySnapshot["coopRoom"];
   readonly worldTimeMs: number;
   advance: (
     trackingSnapshot: LatestHandTrackingSnapshot,

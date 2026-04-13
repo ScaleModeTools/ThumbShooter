@@ -14,6 +14,7 @@ import type {
   BackgroundMusicEngine,
   CalibrationAnchorId,
   CoopBirdBehaviorState,
+  CoopFireShotCommand,
   CoopRoomClientCommand,
   DuckHuntCoopRoomWebTransportClientDatagram,
   DuckHuntCoopRoomWebTransportClientDatagramType,
@@ -200,6 +201,15 @@ type MetaverseRealtimeTickOwnerMatches = AssertTrue<
 type MetaverseRealtimeTickIntervalUsesMilliseconds = AssertTrue<
   IsEqual<MetaverseRealtimeWorldSnapshot["tick"]["tickIntervalMs"], Milliseconds>
 >;
+type MetaverseRealtimeSimulationTimeUsesMilliseconds = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["tick"]["simulationTimeMs"], Milliseconds>
+>;
+type MetaverseRealtimeEmissionTimeUsesMilliseconds = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshot["tick"]["emittedAtServerTimeMs"],
+    Milliseconds
+  >
+>;
 type MetaversePresenceWebTransportCommandTypeMatches = AssertTrue<
   IsEqual<
     Extract<
@@ -225,13 +235,17 @@ type MetaversePresenceWebTransportServerMessageWrapsRosterEvent = AssertTrue<
 type MetaverseRealtimeWorldWebTransportSnapshotRequestTypeMatches = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldWebTransportClientMessage["type"],
-    "world-command-request" | "world-snapshot-request"
+    | "world-command-request"
+    | "world-snapshot-request"
+    | "world-snapshot-subscribe"
   >
 >;
 type MetaverseRealtimeWorldCommandTypeMatches = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldClientCommand["type"],
-    "sync-driver-vehicle-control"
+    | "sync-driver-vehicle-control"
+    | "sync-mounted-occupancy"
+    | "sync-player-traversal-intent"
   >
 >;
 type MetaverseRealtimeWorldDriverControlIntentUsesStringAssetId = AssertTrue<
@@ -239,6 +253,9 @@ type MetaverseRealtimeWorldDriverControlIntentUsesStringAssetId = AssertTrue<
     MetaverseDriverVehicleControlIntentSnapshot["environmentAssetId"],
     string
   >
+>;
+type MetaverseRealtimePlayerSnapshotAckUsesNumber = AssertTrue<
+  IsEqual<MetaverseRealtimeWorldSnapshot["players"][number]["lastProcessedInputSequence"], number>
 >;
 type MetaverseRealtimeWorldWebTransportServerMessageWrapsWorldEvent = AssertTrue<
   IsEqual<
@@ -254,13 +271,15 @@ type MetaverseRealtimeWorldWebTransportServerMessageWrapsWorldEvent = AssertTrue
 type MetaverseRealtimeWorldWebTransportDatagramTypeMatches = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldWebTransportClientDatagramType,
-    "world-driver-vehicle-control-datagram"
+    | "world-driver-vehicle-control-datagram"
+    | "world-player-traversal-intent-datagram"
   >
 >;
 type MetaverseRealtimeWorldWebTransportDatagramWrapsDriverControl = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldWebTransportClientDatagram["command"]["type"],
-    "sync-driver-vehicle-control"
+    | "sync-driver-vehicle-control"
+    | "sync-player-traversal-intent"
   >
 >;
 type MetaverseSessionUsesExperienceId = AssertTrue<
@@ -310,6 +329,12 @@ type CoopPlayerShotOutcomeCatalogMatches = AssertTrue<
 >;
 type CoopRoomClientCommandTypeMatches = AssertTrue<
   IsEqual<CoopRoomClientCommand["type"], ExpectedCoopRoomClientCommandType>
+>;
+type CoopFireShotCommandEstimatedSimulationTimeUsesMilliseconds = AssertTrue<
+  IsEqual<CoopFireShotCommand["clientEstimatedSimulationTimeMs"], Milliseconds>
+>;
+type CoopFireShotCommandWeaponContextUsesString = AssertTrue<
+  IsEqual<CoopFireShotCommand["weaponId"], string>
 >;
 type CoopRoomClientCommandCatalogMatches = AssertTrue<
   IsEqual<
@@ -421,6 +446,12 @@ type CoopRoomTickOwnerUsesServer = AssertTrue<
 type CoopRoomTickIntervalUsesMilliseconds = AssertTrue<
   IsEqual<CoopRoomSnapshot["tick"]["tickIntervalMs"], Milliseconds>
 >;
+type CoopRoomSimulationTimeUsesMilliseconds = AssertTrue<
+  IsEqual<CoopRoomSnapshot["tick"]["simulationTimeMs"], Milliseconds>
+>;
+type CoopRoomEmissionTimeUsesMilliseconds = AssertTrue<
+  IsEqual<CoopRoomSnapshot["tick"]["emittedAtServerTimeMs"], Milliseconds>
+>;
 type CoopRoomServerTimeUsesMilliseconds = AssertTrue<
   IsEqual<CoopRoomSnapshot["tick"]["serverTimeMs"], Milliseconds>
 >;
@@ -477,6 +508,8 @@ export type SharedContractTypeTests =
   | CoopPlayerShotOutcomeMatches
   | CoopPlayerShotOutcomeCatalogMatches
   | CoopRoomClientCommandTypeMatches
+  | CoopFireShotCommandEstimatedSimulationTimeUsesMilliseconds
+  | CoopFireShotCommandWeaponContextUsesString
   | CoopRoomClientCommandCatalogMatches
   | ReticleIdMatches
   | PlayerProfileReticleUsesReticleId

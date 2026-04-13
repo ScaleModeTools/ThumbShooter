@@ -5,6 +5,8 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand,
   createUsername
 } from "@webgpu-metaverse/shared";
 
@@ -159,6 +161,149 @@ test("MetaverseWorldHttpAdapter accepts driver vehicle control commands on the e
   assert.equal(handled, true);
   assert.equal(response.statusCode, 200);
   assert.equal(response.json.type, "world-snapshot");
+});
+
+test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explicit command route", async () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime();
+  const adapter = new MetaverseWorldHttpAdapter(runtime);
+  const playerId = createMetaversePlayerId("traversal-harbor-pilot-1");
+  const username = createUsername("Traversal Harbor Pilot");
+
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  const response = createResponseCapture();
+  const commandBody = JSON.stringify(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0.25
+      },
+      playerId
+    })
+  );
+  const handled = await adapter.handleRequest(
+    {
+      method: "POST",
+      on(eventName, listener) {
+        if (eventName === "data") {
+          listener(commandBody);
+        }
+
+        if (eventName === "end") {
+          listener();
+        }
+      }
+    },
+    response,
+    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    100
+  );
+
+  assert.equal(handled, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json.type, "world-snapshot");
+  assert.equal(response.json.world.players[0]?.lastProcessedInputSequence, 1);
+
+  runtime.advanceToTime(200);
+
+  const worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.animationVocabulary, "swim");
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
+});
+
+test("MetaverseWorldHttpAdapter accepts reliable mounted occupancy commands on the explicit command route", async () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime();
+  const adapter = new MetaverseWorldHttpAdapter(runtime);
+  const playerId = createMetaversePlayerId("harbor-pilot-1");
+  const username = createUsername("Harbor Pilot");
+
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  const response = createResponseCapture();
+  const commandBody = JSON.stringify(
+    createMetaverseSyncMountedOccupancyCommand({
+      mountedOccupancy: {
+        environmentAssetId: "metaverse-hub-skiff-v1",
+        entryId: null,
+        occupancyKind: "seat",
+        occupantRole: "driver",
+        seatId: "driver-seat"
+      },
+      playerId
+    })
+  );
+  const handled = await adapter.handleRequest(
+    {
+      method: "POST",
+      on(eventName, listener) {
+        if (eventName === "data") {
+          listener(commandBody);
+        }
+
+        if (eventName === "end") {
+          listener();
+        }
+      }
+    },
+    response,
+    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    100
+  );
+
+  assert.equal(handled, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json.type, "world-snapshot");
+  assert.equal(response.json.world.players[0]?.locomotionMode, "mounted");
+  assert.equal(
+    response.json.world.players[0]?.mountedOccupancy?.seatId,
+    "driver-seat"
+  );
 });
 
 test("MetaverseWorldHttpAdapter returns conflict for unknown observers", async () => {

@@ -1296,6 +1296,60 @@ test("MetaverseTraversalRuntime routes spacebar jump intent through up, mid, and
   }
 });
 
+test("MetaverseTraversalRuntime keeps authoritative airborne grounded corrections midair instead of flattening them onto support", async () => {
+  const { groundedBodyRuntime, traversalRuntime } =
+    await createTraversalHarness({
+      surfaceColliderSnapshots: [
+        Object.freeze({
+          halfExtents: freezeVector3(4, 0.2, 4),
+          rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+          translation: freezeVector3(0, -0.1, 24)
+        })
+      ]
+    });
+
+  try {
+    traversalRuntime.boot();
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+
+    traversalRuntime.syncAuthoritativeLocalPlayerPose({
+      linearVelocity: Object.freeze({
+        x: 0.6,
+        y: 3.4,
+        z: -0.8
+      }),
+      locomotionMode: "grounded",
+      mountedOccupancy: null,
+      position: Object.freeze({
+        x: 0.2,
+        y: 1.2,
+        z: 23.4
+      }),
+      yawRadians: Math.PI * 0.14
+    });
+
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+    assert.equal(groundedBodyRuntime.snapshot.grounded, false);
+    assert.ok(Math.abs(groundedBodyRuntime.snapshot.position.y - 1.2) < 0.0001);
+    assert.ok(
+      Math.abs(
+        groundedBodyRuntime.snapshot.verticalSpeedUnitsPerSecond - 3.4
+      ) < 0.0001
+    );
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "jump-up"
+    );
+    assert.ok(
+      Math.abs(
+        (traversalRuntime.characterPresentationSnapshot?.position.y ?? 0) - 1.2
+      ) < 0.0001
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
 test("MetaverseTraversalRuntime exits swim onto low step-eligible support and holds grounded after entry", async () => {
   const { config, groundedBodyRuntime, traversalRuntime } =
     await createTraversalHarness({

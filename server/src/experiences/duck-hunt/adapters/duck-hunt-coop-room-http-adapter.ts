@@ -253,15 +253,32 @@ function parseFireShotCommand(
     );
   }
 
+  const weaponId =
+    body.weaponId === undefined
+      ? null
+      : readStringField(body.weaponId, "weaponId");
+
   return createCoopFireShotCommand({
     aimDirection: body.aimDirection,
+    clientEstimatedSimulationTimeMs:
+      body.clientEstimatedSimulationTimeMs === undefined
+        ? 0
+        : readNumberField(
+            body.clientEstimatedSimulationTimeMs,
+            "clientEstimatedSimulationTimeMs"
+          ),
     clientShotSequence: readNumberField(
       body.clientShotSequence,
       "clientShotSequence"
     ),
     origin: body.origin,
     playerId,
-    roomId
+    roomId,
+    ...(weaponId === null
+      ? {}
+      : {
+          weaponId
+        })
   });
 }
 

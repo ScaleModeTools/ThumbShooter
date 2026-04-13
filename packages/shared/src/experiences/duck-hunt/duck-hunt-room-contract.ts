@@ -65,14 +65,18 @@ export type CoopBirdId = TypeBrand<string, "CoopBirdId">;
 
 export interface CoopRoomTickSnapshot {
   readonly currentTick: number;
+  readonly emittedAtServerTimeMs: Milliseconds;
   readonly owner: "server";
   readonly serverTimeMs: Milliseconds;
+  readonly simulationTimeMs: Milliseconds;
   readonly tickIntervalMs: Milliseconds;
 }
 
 export interface CoopRoomTickSnapshotInput {
   readonly currentTick: number;
+  readonly emittedAtServerTimeMs?: number;
   readonly serverTimeMs?: number;
+  readonly simulationTimeMs?: number;
   readonly tickIntervalMs: number;
 }
 
@@ -332,19 +336,23 @@ export interface CoopLeaveRoomCommandInput {
 
 export interface CoopFireShotCommand {
   readonly aimDirection: CoopVector3Snapshot;
+  readonly clientEstimatedSimulationTimeMs: Milliseconds;
   readonly clientShotSequence: number;
   readonly origin: CoopVector3Snapshot;
   readonly playerId: CoopPlayerId;
   readonly roomId: CoopRoomId;
   readonly type: "fire-shot";
+  readonly weaponId: string;
 }
 
 export interface CoopFireShotCommandInput {
   readonly aimDirection: CoopVector3SnapshotInput;
+  readonly clientEstimatedSimulationTimeMs?: number;
   readonly clientShotSequence: number;
   readonly origin: CoopVector3SnapshotInput;
   readonly playerId: CoopPlayerId;
   readonly roomId: CoopRoomId;
+  readonly weaponId?: string;
 }
 
 export interface CoopSyncPlayerPresenceCommand {
@@ -563,13 +571,23 @@ export function createCoopRoomTickSnapshot(
 ): CoopRoomTickSnapshot {
   const tickIntervalMs = createMilliseconds(input.tickIntervalMs);
   const currentTick = normalizeFiniteNonNegativeInteger(input.currentTick);
+  const simulationTimeMs = createMilliseconds(
+    input.simulationTimeMs ??
+      input.serverTimeMs ??
+      currentTick * Number(tickIntervalMs)
+  );
+  const emittedAtServerTimeMs = createMilliseconds(
+    input.emittedAtServerTimeMs ??
+      input.serverTimeMs ??
+      Number(simulationTimeMs)
+  );
 
   return Object.freeze({
     currentTick,
+    emittedAtServerTimeMs,
     owner: "server",
-    serverTimeMs: createMilliseconds(
-      input.serverTimeMs ?? currentTick * Number(tickIntervalMs)
-    ),
+    serverTimeMs: emittedAtServerTimeMs,
+    simulationTimeMs,
     tickIntervalMs
   });
 }
@@ -772,13 +790,17 @@ export function createCoopFireShotCommand(
 ): CoopFireShotCommand {
   return Object.freeze({
     aimDirection: createNormalizedDirectionSnapshot(input.aimDirection),
+    clientEstimatedSimulationTimeMs: createMilliseconds(
+      input.clientEstimatedSimulationTimeMs ?? 0
+    ),
     clientShotSequence: normalizeFiniteNonNegativeInteger(
       input.clientShotSequence
     ),
     origin: createCoopVector3Snapshot(input.origin),
     playerId: input.playerId,
     roomId: input.roomId,
-    type: "fire-shot"
+    type: "fire-shot",
+    weaponId: normalizeWeaponId(input.weaponId)
   });
 }
 

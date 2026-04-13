@@ -28,9 +28,41 @@ import type {
 
 interface PendingShotCommand {
   readonly aimDirection: CoopVector3Snapshot;
+  readonly clientEstimatedSimulationTimeMs: number;
   readonly clientShotSequence: number;
   readonly origin: CoopVector3Snapshot;
   readonly playerId: CoopPlayerId;
+  readonly weaponId: string;
+}
+
+interface CoopCombatHistoryBirdState {
+  readonly behavior: CoopBirdBehaviorState;
+  readonly birdId: CoopBirdId;
+  readonly positionX: number;
+  readonly positionY: number;
+  readonly positionZ: number;
+  readonly radius: number;
+}
+
+interface CoopCombatHistoryPlayerState {
+  readonly aimDirectionX: number;
+  readonly aimDirectionY: number;
+  readonly aimDirectionZ: number;
+  readonly connected: boolean;
+  readonly lastPresenceTick: number | null;
+  readonly playerId: CoopPlayerId;
+  readonly positionX: number;
+  readonly positionY: number;
+  readonly positionZ: number;
+  readonly ready: boolean;
+  readonly weaponId: string;
+}
+
+interface CoopCombatHistoryFrame {
+  readonly birds: readonly CoopCombatHistoryBirdState[];
+  readonly players: readonly CoopCombatHistoryPlayerState[];
+  readonly simulationTimeMs: number;
+  readonly tick: number;
 }
 
 interface CoopBirdRuntimeState {
@@ -122,6 +154,12 @@ interface PendingCoopPlayerPresenceRuntimeState {
   readonly stateSequence: number;
   readonly weaponId: string;
   readonly yawRadians: number;
+}
+
+interface AuthoritativeShotContext {
+  readonly aimDirection: CoopVector3Snapshot;
+  readonly historyFrame: CoopCombatHistoryFrame | null;
+  readonly origin: CoopVector3Snapshot;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -542,8 +580,79 @@ function scatterBirdsNearShot(
   return scatteredBirdCount;
 }
 
+function findNearestBirdIdFromHistory(
+  birdStates: readonly CoopCombatHistoryBirdState[],
+  origin: CoopVector3Snapshot,
+  direction: CoopVector3Snapshot,
+  extraRadius: number
+): CoopBirdId | null {
+  let nearestBirdId: CoopBirdId | null = null;
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+
+  for (const birdState of birdStates) {
+    if (birdState.behavior === "downed") {
+      continue;
+    }
+
+    const thresholdRadius = birdState.radius + extraRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      origin,
+      direction,
+      birdState.positionX,
+      birdState.positionY,
+      birdState.positionZ
+    );
+
+    if (
+      distanceToRay.distanceSquared > thresholdRadius * thresholdRadius ||
+      distanceToRay.distanceSquared >= nearestDistanceSquared
+    ) {
+      continue;
+    }
+
+    nearestBirdId = birdState.birdId;
+    nearestDistanceSquared = distanceToRay.distanceSquared;
+  }
+
+  return nearestBirdId;
+}
+
+function collectScatterBirdIdsFromHistory(
+  birdStates: readonly CoopCombatHistoryBirdState[],
+  origin: CoopVector3Snapshot,
+  direction: CoopVector3Snapshot,
+  scatterRadius: number
+): readonly CoopBirdId[] {
+  const scatteredBirdIds: CoopBirdId[] = [];
+
+  for (const birdState of birdStates) {
+    if (birdState.behavior === "downed") {
+      continue;
+    }
+
+    const thresholdRadius = birdState.radius + scatterRadius;
+    const distanceToRay = createDistanceSquaredFromRay(
+      origin,
+      direction,
+      birdState.positionX,
+      birdState.positionY,
+      birdState.positionZ
+    );
+
+    if (distanceToRay.distanceSquared > thresholdRadius * thresholdRadius) {
+      continue;
+    }
+
+    scatteredBirdIds.push(birdState.birdId);
+  }
+
+  return scatteredBirdIds;
+}
+
 export class CoopRoomRuntime {
   readonly #birdStates: CoopBirdRuntimeState[];
+  readonly #combatHistory: CoopCombatHistoryFrame[] = [];
+  readonly #combatHistoryFrameLimit: number;
   readonly #config: CoopRoomRuntimeConfig;
   readonly #pendingShots: PendingShotCommand[] = [];
   readonly #playerStates = new Map<CoopPlayerId, CoopPlayerRuntimeState>();
@@ -563,6 +672,13 @@ export class CoopRoomRuntime {
 
   constructor(config: CoopRoomRuntimeConfig = coopRoomRuntimeConfig) {
     this.#config = config;
+    this.#combatHistoryFrameLimit = Math.max(
+      1,
+      Math.ceil(
+        Number(this.#config.combatRewind.historyWindowMs) /
+          Math.max(1, Number(this.#config.tickIntervalMs))
+      ) + 2
+    );
     this.#roundPlan = resolveRoundPlan(1, config);
     this.#birdStates = this.#roundPlan.birdSeeds.map((seed) =>
       createBirdRuntimeState(seed)
@@ -570,6 +686,7 @@ export class CoopRoomRuntime {
     this.#roundDurationMs = this.#roundPlan.roundDurationMs;
     this.#roundPhaseRemainingMs = this.#roundDurationMs;
     this.#snapshot = this.#buildSnapshot(0);
+    this.#recordCombatHistoryFrame();
   }
 
   get roomId(): CoopRoomRuntimeConfig["roomId"] {
@@ -580,27 +697,44 @@ export class CoopRoomRuntime {
     return this.#snapshot;
   }
 
+  get playerCount(): number {
+    return this.#playerStates.size;
+  }
+
+  get tickIntervalMs(): number {
+    return Number(this.#config.tickIntervalMs);
+  }
+
   markPlayerSeen(playerId: CoopPlayerId, nowMs: number = Date.now()): void {
     this.#touchPlayer(playerId, nowMs);
   }
 
-  advanceTo(nowMs: number): CoopRoomSnapshot {
+  advanceToTime(nowMs: number): void {
     const safeNowMs = normalizeNowMs(nowMs);
 
     this.#pruneStalePlayers(safeNowMs);
 
     if (this.#lastAdvancedAtMs === null) {
       this.#lastAdvancedAtMs = safeNowMs;
-      this.#snapshot = this.#buildSnapshot(safeNowMs);
-      return this.#snapshot;
+      return;
     }
 
     while (this.#lastAdvancedAtMs + this.#config.tickIntervalMs <= safeNowMs) {
       this.#lastAdvancedAtMs += this.#config.tickIntervalMs;
       this.#advanceOneTick();
     }
+  }
 
+  advanceTo(nowMs: number): CoopRoomSnapshot {
+    const safeNowMs = normalizeNowMs(nowMs);
+    this.advanceToTime(safeNowMs);
     this.#snapshot = this.#buildSnapshot(safeNowMs);
+
+    return this.#snapshot;
+  }
+
+  readSnapshot(nowMs: number): CoopRoomSnapshot {
+    this.#snapshot = this.#buildSnapshot(normalizeNowMs(nowMs));
 
     return this.#snapshot;
   }
@@ -641,6 +775,7 @@ export class CoopRoomRuntime {
         break;
     }
 
+    this.#recordCombatHistoryFrame();
     this.#snapshot = this.#buildSnapshot(normalizeNowMs(nowMs));
 
     return createCoopRoomSnapshotEvent(this.#snapshot);
@@ -816,10 +951,229 @@ export class CoopRoomRuntime {
     playerState.lastQueuedShotSequence = command.clientShotSequence;
     this.#pendingShots.push({
       aimDirection: command.aimDirection,
+      clientEstimatedSimulationTimeMs: Number(
+        command.clientEstimatedSimulationTimeMs
+      ),
       clientShotSequence: command.clientShotSequence,
       origin: command.origin,
-      playerId: command.playerId
+      playerId: command.playerId,
+      weaponId: command.weaponId
     });
+  }
+
+  #resolveCurrentSimulationTimeMs(): number {
+    return this.#lastAdvancedAtMs ?? 0;
+  }
+
+  #recordCombatHistoryFrame(): void {
+    if (!this.#config.combatRewind.enabled) {
+      return;
+    }
+
+    const frame: CoopCombatHistoryFrame = {
+      birds: this.#birdStates.map((birdState) => ({
+        behavior: birdState.behavior,
+        birdId: birdState.birdId,
+        positionX: birdState.positionX,
+        positionY: birdState.positionY,
+        positionZ: birdState.positionZ,
+        radius: birdState.radius
+      })),
+      players: [...this.#playerStates.values()].map((playerState) => ({
+        aimDirectionX: playerState.aimDirectionX,
+        aimDirectionY: playerState.aimDirectionY,
+        aimDirectionZ: playerState.aimDirectionZ,
+        connected: playerState.connected,
+        lastPresenceTick: playerState.lastPresenceTick,
+        playerId: playerState.playerId,
+        positionX: playerState.positionX,
+        positionY: playerState.positionY,
+        positionZ: playerState.positionZ,
+        ready: playerState.ready,
+        weaponId: playerState.weaponId
+      })),
+      simulationTimeMs: this.#resolveCurrentSimulationTimeMs(),
+      tick: this.#tick
+    };
+    const latestFrame = this.#combatHistory[this.#combatHistory.length - 1] ?? null;
+
+    if (latestFrame !== null && latestFrame.tick === frame.tick) {
+      this.#combatHistory[this.#combatHistory.length - 1] = frame;
+      return;
+    }
+
+    this.#combatHistory.push(frame);
+
+    if (this.#combatHistory.length > this.#combatHistoryFrameLimit) {
+      this.#combatHistory.splice(
+        0,
+        this.#combatHistory.length - this.#combatHistoryFrameLimit
+      );
+    }
+  }
+
+  #resolveCombatHistoryFrame(
+    clientEstimatedSimulationTimeMs: number
+  ): CoopCombatHistoryFrame | null {
+    if (
+      !this.#config.combatRewind.enabled ||
+      this.#combatHistory.length === 0
+    ) {
+      return null;
+    }
+
+    const currentSimulationTimeMs = this.#resolveCurrentSimulationTimeMs();
+    const maxRewindWindowMs = Number(this.#config.combatRewind.maxRewindWindowMs);
+    const clampedTargetSimulationTimeMs = Math.min(
+      normalizeNowMs(clientEstimatedSimulationTimeMs),
+      currentSimulationTimeMs
+    );
+
+    if (
+      currentSimulationTimeMs - clampedTargetSimulationTimeMs >
+      maxRewindWindowMs
+    ) {
+      return null;
+    }
+
+    for (let index = this.#combatHistory.length - 1; index >= 0; index -= 1) {
+      const frame = this.#combatHistory[index]!;
+
+      if (frame.simulationTimeMs <= clampedTargetSimulationTimeMs) {
+        return frame;
+      }
+    }
+
+    return null;
+  }
+
+  #findCombatHistoryPlayerState(
+    frame: CoopCombatHistoryFrame,
+    playerId: CoopPlayerId
+  ): CoopCombatHistoryPlayerState | null {
+    return (
+      frame.players.find((playerState) => playerState.playerId === playerId) ?? null
+    );
+  }
+
+  #findBirdRuntimeState(birdId: CoopBirdId): CoopBirdRuntimeState | null {
+    return this.#birdStates.find((birdState) => birdState.birdId === birdId) ?? null;
+  }
+
+  #resolveAuthoritativeShotContext(
+    pendingShot: PendingShotCommand,
+    playerState: CoopPlayerRuntimeState
+  ): AuthoritativeShotContext | null {
+    const historyFrame = this.#resolveCombatHistoryFrame(
+      pendingShot.clientEstimatedSimulationTimeMs
+    );
+    const historicalPlayerState =
+      historyFrame === null
+        ? null
+        : this.#findCombatHistoryPlayerState(historyFrame, pendingShot.playerId);
+
+    if (
+      historicalPlayerState !== null &&
+      historicalPlayerState.connected &&
+      historicalPlayerState.lastPresenceTick !== null &&
+      historicalPlayerState.ready &&
+      historicalPlayerState.weaponId === pendingShot.weaponId
+    ) {
+      return {
+        aimDirection: {
+          x: historicalPlayerState.aimDirectionX,
+          y: historicalPlayerState.aimDirectionY,
+          z: historicalPlayerState.aimDirectionZ
+        },
+        historyFrame,
+        origin: {
+          x: historicalPlayerState.positionX,
+          y: historicalPlayerState.positionY,
+          z: historicalPlayerState.positionZ
+        }
+      };
+    }
+
+    if (playerState.weaponId !== pendingShot.weaponId) {
+      return null;
+    }
+
+    return {
+      aimDirection:
+        playerState.lastPresenceTick === null
+          ? pendingShot.aimDirection
+          : {
+              x: playerState.aimDirectionX,
+              y: playerState.aimDirectionY,
+              z: playerState.aimDirectionZ
+            },
+      historyFrame: null,
+      origin:
+        playerState.lastPresenceTick === null
+          ? pendingShot.origin
+          : {
+              x: playerState.positionX,
+              y: playerState.positionY,
+              z: playerState.positionZ
+            }
+    };
+  }
+
+  #scatterHistoricalBirdsNearShot(
+    historyFrame: CoopCombatHistoryFrame,
+    origin: CoopVector3Snapshot,
+    direction: CoopVector3Snapshot,
+    playerId: CoopPlayerId
+  ): number {
+    const historicalBirdIds = collectScatterBirdIdsFromHistory(
+      historyFrame.birds,
+      origin,
+      direction,
+      this.#roundPlan.shotScatterRadius
+    );
+
+    if (historicalBirdIds.length === 0) {
+      return 0;
+    }
+
+    const shotAzimuthRadians = Math.atan2(direction.x, -direction.z);
+    let scatteredBirdCount = 0;
+
+    for (const birdId of historicalBirdIds) {
+      const historicalBirdState =
+        historyFrame.birds.find((birdState) => birdState.birdId === birdId) ?? null;
+      const currentBirdState = this.#findBirdRuntimeState(birdId);
+
+      if (
+        historicalBirdState === null ||
+        currentBirdState === null ||
+        currentBirdState.behavior === "downed"
+      ) {
+        continue;
+      }
+
+      const distanceToRay = createDistanceSquaredFromRay(
+        origin,
+        direction,
+        historicalBirdState.positionX,
+        historicalBirdState.positionY,
+        historicalBirdState.positionZ
+      );
+      const targetAltitude =
+        origin.y + direction.y * Math.max(distanceToRay.rayDistance, 0);
+
+      setBirdScatter(
+        currentBirdState,
+        playerId,
+        this.#tick,
+        shotAzimuthRadians,
+        targetAltitude,
+        this.#roundPlan.movement
+      );
+      scatteredBirdCount += 1;
+    }
+
+    return scatteredBirdCount;
   }
 
   #syncPlayerPresence(command: CoopSyncPlayerPresenceCommand): void {
@@ -869,6 +1223,7 @@ export class CoopRoomRuntime {
     this.#applyPendingPlayerPresenceUpdates();
 
     if (this.#phase !== "active") {
+      this.#recordCombatHistoryFrame();
       return;
     }
 
@@ -883,6 +1238,7 @@ export class CoopRoomRuntime {
 
       if (this.#countRemainingBirds() === 0) {
         this.#beginRoundCooldown();
+        this.#recordCombatHistoryFrame();
         return;
       }
 
@@ -890,6 +1246,7 @@ export class CoopRoomRuntime {
         this.#failSession();
       }
 
+      this.#recordCombatHistoryFrame();
       return;
     }
 
@@ -901,6 +1258,8 @@ export class CoopRoomRuntime {
     if (this.#roundPhaseRemainingMs === 0) {
       this.#startRound(this.#roundNumber + 1);
     }
+
+    this.#recordCombatHistoryFrame();
   }
 
   #processPendingShots(): void {
@@ -922,14 +1281,33 @@ export class CoopRoomRuntime {
       playerState.lastHitBirdId = null;
       this.#teamShotsFired += 1;
 
-      const targetedBird = findNearestLiveBird(
-        this.#birdStates,
-        pendingShot.origin,
-        pendingShot.aimDirection,
-        this.#config.hitRadius
+      const shotContext = this.#resolveAuthoritativeShotContext(
+        pendingShot,
+        playerState
       );
 
-      if (targetedBird !== null) {
+      if (shotContext === null) {
+        continue;
+      }
+
+      const targetedBirdId =
+        shotContext.historyFrame === null
+          ? findNearestLiveBird(
+              this.#birdStates,
+              shotContext.origin,
+              shotContext.aimDirection,
+              this.#config.hitRadius
+            )?.birdId ?? null
+          : findNearestBirdIdFromHistory(
+              shotContext.historyFrame.birds,
+              shotContext.origin,
+              shotContext.aimDirection,
+              this.#config.hitRadius
+            );
+      const targetedBird =
+        targetedBirdId === null ? null : this.#findBirdRuntimeState(targetedBirdId);
+
+      if (targetedBird !== null && targetedBird.behavior !== "downed") {
         setBirdDowned(
           targetedBird,
           pendingShot.playerId,
@@ -943,14 +1321,22 @@ export class CoopRoomRuntime {
         continue;
       }
 
-      const scatteredBirdCount = scatterBirdsNearShot(
-        this.#birdStates,
-        pendingShot.origin,
-        pendingShot.aimDirection,
-        pendingShot.playerId,
-        this.#tick,
-        this.#roundPlan
-      );
+      const scatteredBirdCount =
+        shotContext.historyFrame === null
+          ? scatterBirdsNearShot(
+              this.#birdStates,
+              shotContext.origin,
+              shotContext.aimDirection,
+              pendingShot.playerId,
+              this.#tick,
+              this.#roundPlan
+            )
+          : this.#scatterHistoricalBirdsNearShot(
+              shotContext.historyFrame,
+              shotContext.origin,
+              shotContext.aimDirection,
+              pendingShot.playerId
+            );
 
       if (scatteredBirdCount > 0) {
         playerState.lastOutcome = "scatter";
@@ -1261,7 +1647,8 @@ export class CoopRoomRuntime {
       },
       tick: {
         currentTick: this.#tick,
-        serverTimeMs,
+        emittedAtServerTimeMs: serverTimeMs,
+        simulationTimeMs: this.#lastAdvancedAtMs ?? serverTimeMs,
         tickIntervalMs: this.#config.tickIntervalMs
       }
     });

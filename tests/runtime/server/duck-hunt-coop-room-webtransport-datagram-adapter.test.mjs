@@ -61,6 +61,7 @@ test("DuckHuntCoopRoomWebTransportDatagramAdapter forwards player-presence datag
     25
   );
 
+  roomDirectory.advanceToTime(50);
   const snapshot = roomDirectory.advanceRoom(roomId, 50, playerId);
   const playerSnapshot = snapshot.players[0];
 
@@ -115,5 +116,85 @@ test("DuckHuntCoopRoomWebTransportDatagramAdapter rejects datagrams after dispos
         0
       ),
     /already been disposed/
+  );
+});
+
+test("DuckHuntCoopRoomWebTransportDatagramAdapter binds the session to the first datagram player identity", () => {
+  const roomDirectory = new CoopRoomDirectory();
+  const adapter = new DuckHuntCoopRoomWebTransportDatagramAdapter(
+    roomDirectory
+  );
+  const session = adapter.openSession();
+  const playerId = requireValue(
+    createCoopPlayerId("bound-datagram-player"),
+    "playerId"
+  );
+  const otherPlayerId = requireValue(
+    createCoopPlayerId("other-datagram-player"),
+    "otherPlayerId"
+  );
+  const roomId = requireValue(createCoopRoomId("bound-datagram-room"), "roomId");
+  const username = requireValue(createUsername("Bound Datagram"), "username");
+
+  roomDirectory.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: false,
+      roomId,
+      username
+    }),
+    0
+  );
+
+  session.receiveClientDatagram(
+    createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram({
+      command: {
+        aimDirection: {
+          x: 0,
+          y: 0,
+          z: -1
+        },
+        pitchRadians: 0,
+        playerId,
+        position: {
+          x: 0,
+          y: 1.35,
+          z: 0
+        },
+        roomId,
+        stateSequence: 1,
+        weaponId: "semiautomatic-pistol",
+        yawRadians: 0
+      }
+    }),
+    0
+  );
+
+  assert.throws(
+    () =>
+      session.receiveClientDatagram(
+        createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram({
+          command: {
+            aimDirection: {
+              x: 0,
+              y: 0,
+              z: -1
+            },
+            pitchRadians: 0,
+            playerId: otherPlayerId,
+            position: {
+              x: 0,
+              y: 1.35,
+              z: 0
+            },
+            roomId,
+            stateSequence: 1,
+            weaponId: "semiautomatic-pistol",
+            yawRadians: 0
+          }
+        }),
+        10
+      ),
+    /already bound/
   );
 });

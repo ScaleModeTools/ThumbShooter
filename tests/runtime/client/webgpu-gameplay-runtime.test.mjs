@@ -292,6 +292,7 @@ test("WebGpuGameplayRuntime renders the calibrated reticle from live tracking sn
   assert.equal(runtime.telemetrySnapshot.renderer.drawCallCount, 6);
   assert.equal(runtime.telemetrySnapshot.renderer.triangleCount, 24);
   assert.equal(runtime.telemetrySnapshot.trackingSequenceNumber, 1);
+  assert.equal(runtime.telemetrySnapshot.coopRoom, null);
 
   trackingSource.latestPose = {
     trackingState: "tracked",

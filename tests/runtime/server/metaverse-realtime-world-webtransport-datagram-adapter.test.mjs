@@ -5,6 +5,8 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
+  createMetaverseSyncPlayerTraversalIntentCommand,
   createMilliseconds,
   createUsername
 } from "@webgpu-metaverse/shared";
@@ -75,6 +77,7 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards driver-control 
     }),
     100
   );
+  runtime.advanceToTime(1_000);
 
   const worldSnapshot = runtime.readWorldSnapshot(1_000, playerId);
 
@@ -116,5 +119,144 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter rejects datagrams after 
         0
       ),
     /already been disposed/
+  );
+});
+
+test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards traversal-intent datagrams into authoritative world state", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
+    runtime
+  );
+  const session = adapter.openSession();
+  const playerId = requireValue(
+    createMetaversePlayerId("harbor-pilot-traversal-datagram"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Harbor Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  session.receiveClientDatagram(
+    createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram({
+      command: createMetaverseSyncPlayerTraversalIntentCommand({
+        intent: {
+          boost: false,
+          inputSequence: 2,
+          jump: false,
+          locomotionMode: "grounded",
+          moveAxis: 1,
+          strafeAxis: 0,
+          yawAxis: 0
+        },
+        playerId
+      })
+    }),
+    0
+  );
+  runtime.advanceToTime(200);
+
+  const worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.animationVocabulary, "swim");
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
+  assert.equal(worldSnapshot.players[0]?.position.y, 0);
+  assert.ok((worldSnapshot.players[0]?.position.z ?? 24) < 24);
+});
+
+test("MetaverseRealtimeWorldWebTransportDatagramAdapter binds the session to the first datagram player identity", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime();
+  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
+    runtime
+  );
+  const session = adapter.openSession();
+  const firstPlayerId = requireValue(
+    createMetaversePlayerId("first-harbor-pilot"),
+    "first playerId"
+  );
+  const secondPlayerId = requireValue(
+    createMetaversePlayerId("second-harbor-pilot"),
+    "second playerId"
+  );
+  const firstUsername = requireValue(
+    createUsername("First Harbor Pilot"),
+    "first username"
+  );
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId: firstPlayerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username: firstUsername
+    }),
+    0
+  );
+
+  assert.throws(
+    () => {
+      session.receiveClientDatagram(
+        createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram({
+          command: {
+            controlIntent: {
+              boost: false,
+              environmentAssetId: "metaverse-hub-skiff-v1",
+              moveAxis: 0,
+              strafeAxis: 0,
+              yawAxis: 0
+            },
+            controlSequence: 1,
+            playerId: firstPlayerId
+          }
+        }),
+        0
+      );
+      session.receiveClientDatagram(
+        createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram({
+          command: {
+            intent: {
+              boost: false,
+              inputSequence: 1,
+              jump: false,
+              locomotionMode: "grounded",
+              moveAxis: 0,
+              strafeAxis: 0,
+              yawAxis: 0
+            },
+            playerId: secondPlayerId
+          }
+        }),
+        0
+      );
+    },
+    /already bound/
   );
 });

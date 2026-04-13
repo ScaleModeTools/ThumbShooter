@@ -47,6 +47,7 @@ import {
   type LatestHandTrackingSnapshot
 } from "../../../tracking";
 import { DuckHuntWeaponRuntime } from "./duck-hunt-weapon-runtime";
+import type { GameplayTelemetrySnapshot } from "../types/duck-hunt-gameplay-presentation";
 
 const defaultViewportSnapshot = Object.freeze({
   height: 1,
@@ -127,7 +128,7 @@ interface CoopBirdProjectionState {
   radius: number;
   scale: number;
   scalePerSecond: number;
-  snapshotServerTimeMs: number;
+  snapshotSimulationTimeMs: number;
   velocityX: number;
   velocityY: number;
   velocityZ: number;
@@ -172,7 +173,7 @@ function createBirdProjectionState(
     radius: 0,
     scale: 1,
     scalePerSecond: 0,
-    snapshotServerTimeMs: 0,
+    snapshotSimulationTimeMs: 0,
     velocityX: 0,
     velocityY: 0,
     velocityZ: 0,
@@ -182,13 +183,99 @@ function createBirdProjectionState(
   };
 }
 
-function clampProjectionDeltaMs(deltaMs: number, tickIntervalMs: number): number {
-  if (!Number.isFinite(deltaMs) || !Number.isFinite(tickIntervalMs)) {
+function clampProjectionDeltaMs(
+  deltaMs: number,
+  maxExtrapolationMs: number
+): number {
+  if (!Number.isFinite(deltaMs) || !Number.isFinite(maxExtrapolationMs)) {
     return 0;
   }
 
-  return Math.max(0, Math.min(deltaMs, tickIntervalMs));
+  return Math.max(0, Math.min(deltaMs, maxExtrapolationMs));
 }
+
+interface SampledRoomFrame {
+  readonly baseSnapshot: CoopRoomSnapshot;
+  readonly nextSnapshot: CoopRoomSnapshot | null;
+  readonly previousSnapshot: CoopRoomSnapshot | null;
+}
+
+function resolveSampledRoomFrame(
+  roomSnapshotBuffer: readonly CoopRoomSnapshot[],
+  targetServerTimeMs: number
+): SampledRoomFrame | null {
+  const firstSnapshot = roomSnapshotBuffer[0] ?? null;
+
+  if (firstSnapshot === null) {
+    return null;
+  }
+
+  if (roomSnapshotBuffer.length === 1) {
+    return Object.freeze({
+      baseSnapshot: firstSnapshot,
+      nextSnapshot: null,
+      previousSnapshot: null
+    });
+  }
+
+  const firstSnapshotTimeMs = Number(firstSnapshot.tick.simulationTimeMs);
+
+  if (targetServerTimeMs <= firstSnapshotTimeMs) {
+    return Object.freeze({
+      baseSnapshot: firstSnapshot,
+      nextSnapshot: null,
+      previousSnapshot: null
+    });
+  }
+
+  for (let index = 0; index < roomSnapshotBuffer.length - 1; index += 1) {
+    const baseSnapshot = roomSnapshotBuffer[index]!;
+    const nextSnapshot = roomSnapshotBuffer[index + 1]!;
+    const nextSnapshotTimeMs = Number(nextSnapshot.tick.simulationTimeMs);
+
+    if (targetServerTimeMs > nextSnapshotTimeMs) {
+      continue;
+    }
+
+    return Object.freeze({
+      baseSnapshot,
+      nextSnapshot,
+      previousSnapshot: index > 0 ? roomSnapshotBuffer[index - 1] ?? null : null
+    });
+  }
+
+  return Object.freeze({
+    baseSnapshot: roomSnapshotBuffer[roomSnapshotBuffer.length - 1] ?? firstSnapshot,
+    nextSnapshot: null,
+    previousSnapshot:
+      roomSnapshotBuffer[roomSnapshotBuffer.length - 2] ?? null
+  });
+}
+
+function resolveRoomSnapshotBuffer(
+  roomSource: CoopArenaRoomSource
+): readonly CoopRoomSnapshot[] {
+  return (roomSource.roomSnapshotBuffer?.length ?? 0) > 0
+    ? roomSource.roomSnapshotBuffer!
+    : roomSource.roomSnapshot === null
+      ? []
+      : [roomSource.roomSnapshot];
+}
+
+const defaultCoopRoomClientTelemetrySnapshot = Object.freeze({
+  latestSnapshotUpdateRateHz: null,
+  playerPresenceDatagramSendFailureCount: 0,
+  playerPresenceLastTransportError: null,
+  playerPresenceReliableFallbackActive: false,
+  snapshotStream: Object.freeze({
+    available: false,
+    fallbackActive: false,
+    lastTransportError: null,
+    liveness: "inactive",
+    path: "http-polling",
+    reconnectCount: 0
+  })
+});
 
 function wrapRadians(rawValue: number): number {
   if (!Number.isFinite(rawValue)) {
@@ -346,6 +433,52 @@ export class DuckHuntCoopArenaSimulation {
     return this.#hudSnapshot;
   }
 
+  get telemetrySnapshot(): GameplayTelemetrySnapshot["coopRoom"] {
+    const roomSnapshotBuffer = resolveRoomSnapshotBuffer(this.#roomSource);
+    const latestRoomSnapshot =
+      roomSnapshotBuffer[roomSnapshotBuffer.length - 1] ??
+      this.#roomSource.roomSnapshot;
+    const roomClientTelemetrySnapshot =
+      this.#roomSource.telemetrySnapshot ??
+      defaultCoopRoomClientTelemetrySnapshot;
+
+    return Object.freeze({
+      bufferDepth: roomSnapshotBuffer.length,
+      clockOffsetEstimateMs: this.#authoritativeServerClock.clockOffsetEstimateMs,
+      latestSnapshotUpdateRateHz:
+        roomClientTelemetrySnapshot.latestSnapshotUpdateRateHz,
+      playerPresenceDatagramSendFailureCount:
+        roomClientTelemetrySnapshot.playerPresenceDatagramSendFailureCount,
+      playerPresenceLastTransportError:
+        roomClientTelemetrySnapshot.playerPresenceLastTransportError,
+      playerPresenceReliableFallbackActive:
+        roomClientTelemetrySnapshot.playerPresenceReliableFallbackActive,
+      projectedSimulationLagMs:
+        latestRoomSnapshot === null
+          ? null
+          : Math.max(
+              0,
+              this.#worldTimeMs -
+                Number(latestRoomSnapshot.tick.simulationTimeMs)
+            ),
+      projectionSource:
+        roomSnapshotBuffer.length <= 0
+          ? "unavailable"
+          : roomSnapshotBuffer.length === 1
+            ? "latest-snapshot"
+            : "buffered-snapshots",
+      snapshotStreamAvailable:
+        roomClientTelemetrySnapshot.snapshotStream.available,
+      snapshotStreamLastTransportError:
+        roomClientTelemetrySnapshot.snapshotStream.lastTransportError,
+      snapshotStreamLiveness:
+        roomClientTelemetrySnapshot.snapshotStream.liveness,
+      snapshotStreamPath: roomClientTelemetrySnapshot.snapshotStream.path,
+      snapshotStreamReconnectCount:
+        roomClientTelemetrySnapshot.snapshotStream.reconnectCount
+    });
+  }
+
   get worldTimeMs(): number {
     return this.#worldTimeMs;
   }
@@ -360,15 +493,18 @@ export class DuckHuntCoopArenaSimulation {
       this.#lastStepAtMs === null
         ? 0
         : Math.max(0, Math.min(48, safeNowMs - this.#lastStepAtMs));
-    const roomSnapshot = this.#roomSource.roomSnapshot;
+    const roomSnapshotBuffer = resolveRoomSnapshotBuffer(this.#roomSource);
     const localWallClockMs = this.#readWallClockMs();
     const projectedServerTimeMs = this.#resolveProjectedServerTimeMs(
-      roomSnapshot,
+      roomSnapshotBuffer,
       localWallClockMs
     );
+    const roomSnapshot =
+      roomSnapshotBuffer[roomSnapshotBuffer.length - 1] ??
+      this.#roomSource.roomSnapshot;
 
     this.#lastStepAtMs = safeNowMs;
-    this.#syncEnemyRenderStates(roomSnapshot, projectedServerTimeMs);
+    this.#syncEnemyRenderStates(roomSnapshotBuffer, projectedServerTimeMs);
     this.#worldTimeMs = projectedServerTimeMs;
 
     const projectedAimPoint =
@@ -412,7 +548,11 @@ export class DuckHuntCoopArenaSimulation {
       });
       this.#roomSource.fireShot(
         this.#cameraSnapshot.position,
-        this.#cameraSnapshot.aimDirection
+        this.#cameraSnapshot.aimDirection,
+        {
+          clientEstimatedSimulationTimeMs: projectedServerTimeMs,
+          weaponId: this.#weaponRuntime.definition.weaponId
+        }
       );
     }
 
@@ -465,7 +605,10 @@ export class DuckHuntCoopArenaSimulation {
   }
 
   reset(trackingSnapshot?: LatestHandTrackingSnapshot): void {
-    const roomSnapshot = this.#roomSource.roomSnapshot;
+    const roomSnapshotBuffer = resolveRoomSnapshotBuffer(this.#roomSource);
+    const roomSnapshot =
+      roomSnapshotBuffer[roomSnapshotBuffer.length - 1] ??
+      this.#roomSource.roomSnapshot;
     const localPlayerSnapshot = roomSnapshot?.players.find(
       (playerSnapshot) => playerSnapshot.playerId === this.#localPlayerId
     );
@@ -488,29 +631,50 @@ export class DuckHuntCoopArenaSimulation {
     this.#birdProjectionStates.length = 0;
     const localWallClockMs = this.#readWallClockMs();
     const projectedServerTimeMs = this.#resolveProjectedServerTimeMs(
-      roomSnapshot,
+      roomSnapshotBuffer,
       localWallClockMs
     );
-    this.#syncEnemyRenderStates(roomSnapshot, projectedServerTimeMs);
+    this.#syncEnemyRenderStates(roomSnapshotBuffer, projectedServerTimeMs);
     this.#worldTimeMs = projectedServerTimeMs;
     this.#hudSnapshot = this.#buildHudSnapshot("unavailable", null);
   }
 
   #resolveProjectedServerTimeMs(
-    roomSnapshot: CoopRoomSnapshot | null,
+    roomSnapshotBuffer: readonly CoopRoomSnapshot[],
     localWallClockMs: number
   ): number {
+    const roomSnapshot =
+      roomSnapshotBuffer[roomSnapshotBuffer.length - 1] ?? null;
+
     if (roomSnapshot === null) {
       return 0;
     }
 
     this.#authoritativeServerClock.observeServerTime(
-      Number(roomSnapshot.tick.serverTimeMs),
+      Number(roomSnapshot.tick.emittedAtServerTimeMs),
       localWallClockMs
     );
 
-    return this.#authoritativeServerClock.readEstimatedServerTimeMs(
-      localWallClockMs
+    const firstRoomSnapshot = roomSnapshotBuffer[0] ?? roomSnapshot;
+    const projectedServerTimeMs =
+      roomSnapshotBuffer.length > 1
+        ? this.#authoritativeServerClock.readTargetServerTimeMs(
+            localWallClockMs,
+            this.#config.projection.interpolationDelayMs
+          )
+        : this.#authoritativeServerClock.readEstimatedServerTimeMs(
+            localWallClockMs
+          );
+    const minProjectedServerTimeMs = Number(
+      firstRoomSnapshot.tick.simulationTimeMs
+    );
+    const maxProjectedServerTimeMs =
+      Number(roomSnapshot.tick.simulationTimeMs) +
+      Math.max(0, this.#config.projection.maxExtrapolationMs);
+
+    return Math.min(
+      maxProjectedServerTimeMs,
+      Math.max(minProjectedServerTimeMs, projectedServerTimeMs)
     );
   }
 
@@ -605,10 +769,15 @@ export class DuckHuntCoopArenaSimulation {
   }
 
   #syncEnemyRenderStates(
-    roomSnapshot: CoopRoomSnapshot | null,
+    roomSnapshotBuffer: readonly CoopRoomSnapshot[],
     projectedServerTimeMs: number
   ): void {
-    if (roomSnapshot === null) {
+    const sampledRoomFrame = resolveSampledRoomFrame(
+      roomSnapshotBuffer,
+      projectedServerTimeMs
+    );
+
+    if (sampledRoomFrame === null) {
       this.#birdProjectionStates.length = 0;
 
       for (const enemyRenderState of this.#enemyRenderStates) {
@@ -618,10 +787,11 @@ export class DuckHuntCoopArenaSimulation {
       return;
     }
 
-    const birdSnapshots = roomSnapshot.birds;
-    const roomTick = roomSnapshot.tick.currentTick;
-    const roomServerTimeMs = Number(roomSnapshot.tick.serverTimeMs);
-    const tickIntervalMs = Math.max(0, Number(roomSnapshot.tick.tickIntervalMs));
+    const { baseSnapshot, nextSnapshot, previousSnapshot } = sampledRoomFrame;
+    const birdSnapshots = baseSnapshot.birds;
+    const roomTick = baseSnapshot.tick.currentTick;
+    const roomSimulationTimeMs = Number(baseSnapshot.tick.simulationTimeMs);
+    const tickIntervalMs = Math.max(0, Number(baseSnapshot.tick.tickIntervalMs));
 
     for (let index = 0; index < birdSnapshots.length; index += 1) {
       const birdSnapshot = birdSnapshots[index]!;
@@ -657,15 +827,27 @@ export class DuckHuntCoopArenaSimulation {
       this.#syncBirdProjectionState(
         birdProjectionState,
         birdSnapshot,
+        nextSnapshot?.birds.find(
+          (candidate) => candidate.birdId === birdSnapshot.birdId
+        ) ?? null,
+        previousSnapshot?.birds.find(
+          (candidate) => candidate.birdId === birdSnapshot.birdId
+        ) ?? null,
         roomTick,
-        roomServerTimeMs,
+        roomSimulationTimeMs,
+        nextSnapshot === null
+          ? null
+          : Number(nextSnapshot.tick.simulationTimeMs),
+        previousSnapshot === null
+          ? null
+          : Number(previousSnapshot.tick.simulationTimeMs),
         tickIntervalMs
       );
       this.#applyBirdProjectionState(
         birdProjectionState,
         enemyRenderState,
         projectedServerTimeMs,
-        tickIntervalMs
+        this.#config.projection.maxExtrapolationMs
       );
     }
   }
@@ -673,49 +855,119 @@ export class DuckHuntCoopArenaSimulation {
   #syncBirdProjectionState(
     birdProjectionState: CoopBirdProjectionState,
     birdSnapshot: CoopRoomSnapshot["birds"][number],
+    nextBirdSnapshot: CoopRoomSnapshot["birds"][number] | null,
+    previousBirdSnapshot: CoopRoomSnapshot["birds"][number] | null,
     roomTick: number,
-    roomServerTimeMs: number,
+    roomSimulationTimeMs: number,
+    nextRoomSimulationTimeMs: number | null,
+    previousRoomSimulationTimeMs: number | null,
     tickIntervalMs: number
   ): void {
     const birdChanged = birdProjectionState.birdId !== birdSnapshot.birdId;
     const hasNewSnapshotTick = birdProjectionState.lastSnapshotTick !== roomTick;
+    const snapshotDeltaSeconds =
+      nextRoomSimulationTimeMs !== null &&
+      nextRoomSimulationTimeMs > roomSimulationTimeMs
+        ? (nextRoomSimulationTimeMs - roomSimulationTimeMs) / 1000
+        : Math.max(0, tickIntervalMs / 1000);
+    const previousSnapshotDeltaSeconds =
+      previousRoomSimulationTimeMs !== null &&
+      roomSimulationTimeMs > previousRoomSimulationTimeMs
+        ? (roomSimulationTimeMs - previousRoomSimulationTimeMs) / 1000
+        : 0;
+    const priorProjectionStateTimeMs = birdProjectionState.snapshotSimulationTimeMs;
+    const priorProjectionStateVisible = birdProjectionState.visible;
+    const priorProjectionStatePositionX = birdProjectionState.positionX;
+    const priorProjectionStatePositionY = birdProjectionState.positionY;
+    const priorProjectionStatePositionZ = birdProjectionState.positionZ;
+    const priorProjectionStateHeadingRadians = birdProjectionState.headingRadians;
+    const priorProjectionStateScale = birdProjectionState.scale;
+    const priorProjectionStateWingPhase = birdProjectionState.wingPhase;
+    const priorProjectionStateDeltaSeconds =
+      roomSimulationTimeMs > priorProjectionStateTimeMs
+        ? (roomSimulationTimeMs - priorProjectionStateTimeMs) / 1000
+        : 0;
 
     if (!birdChanged && !hasNewSnapshotTick) {
       return;
     }
 
-    const sameBird = !birdChanged;
-    const previousSnapshotTick = birdProjectionState.lastSnapshotTick;
-    const tickDelta =
-      sameBird && previousSnapshotTick !== null ? roomTick - previousSnapshotTick : 0;
-    const snapshotDeltaSeconds =
-      tickDelta > 0 && tickIntervalMs > 0
-        ? (tickDelta * tickIntervalMs) / 1000
-        : 0;
-
     if (
-      sameBird &&
+      nextBirdSnapshot !== null &&
+      nextRoomSimulationTimeMs !== null &&
+      nextRoomSimulationTimeMs > roomSimulationTimeMs &&
       snapshotDeltaSeconds > 0 &&
-      birdProjectionState.visible &&
       birdSnapshot.visible
     ) {
       birdProjectionState.velocityX =
-        (birdSnapshot.position.x - birdProjectionState.positionX) /
+        (nextBirdSnapshot.position.x - birdSnapshot.position.x) /
         snapshotDeltaSeconds;
       birdProjectionState.velocityY =
-        (birdSnapshot.position.y - birdProjectionState.positionY) /
+        (nextBirdSnapshot.position.y - birdSnapshot.position.y) /
         snapshotDeltaSeconds;
       birdProjectionState.velocityZ =
-        (birdSnapshot.position.z - birdProjectionState.positionZ) /
+        (nextBirdSnapshot.position.z - birdSnapshot.position.z) /
         snapshotDeltaSeconds;
       birdProjectionState.headingRadiansPerSecond =
-        wrapRadians(birdSnapshot.headingRadians - birdProjectionState.headingRadians) /
+        wrapRadians(nextBirdSnapshot.headingRadians - birdSnapshot.headingRadians) /
         snapshotDeltaSeconds;
       birdProjectionState.scalePerSecond =
-        (birdSnapshot.scale - birdProjectionState.scale) / snapshotDeltaSeconds;
+        (nextBirdSnapshot.scale - birdSnapshot.scale) / snapshotDeltaSeconds;
       birdProjectionState.wingPhasePerSecond =
-        (birdSnapshot.wingPhase - birdProjectionState.wingPhase) /
-        snapshotDeltaSeconds;
+        (nextBirdSnapshot.wingPhase - birdSnapshot.wingPhase) / snapshotDeltaSeconds;
+    } else if (
+      previousBirdSnapshot !== null &&
+      previousRoomSimulationTimeMs !== null &&
+      previousRoomSimulationTimeMs < roomSimulationTimeMs &&
+      previousSnapshotDeltaSeconds > 0 &&
+      birdSnapshot.visible
+    ) {
+      birdProjectionState.velocityX =
+        (birdSnapshot.position.x - previousBirdSnapshot.position.x) /
+        previousSnapshotDeltaSeconds;
+      birdProjectionState.velocityY =
+        (birdSnapshot.position.y - previousBirdSnapshot.position.y) /
+        previousSnapshotDeltaSeconds;
+      birdProjectionState.velocityZ =
+        (birdSnapshot.position.z - previousBirdSnapshot.position.z) /
+        previousSnapshotDeltaSeconds;
+      birdProjectionState.headingRadiansPerSecond =
+        wrapRadians(
+          birdSnapshot.headingRadians - previousBirdSnapshot.headingRadians
+        ) / previousSnapshotDeltaSeconds;
+      birdProjectionState.scalePerSecond =
+        (birdSnapshot.scale - previousBirdSnapshot.scale) /
+        previousSnapshotDeltaSeconds;
+      birdProjectionState.wingPhasePerSecond =
+        (birdSnapshot.wingPhase - previousBirdSnapshot.wingPhase) /
+        previousSnapshotDeltaSeconds;
+    } else if (
+      !birdChanged &&
+      hasNewSnapshotTick &&
+      priorProjectionStateVisible &&
+      roomSimulationTimeMs > priorProjectionStateTimeMs &&
+      priorProjectionStateDeltaSeconds > 0 &&
+      birdSnapshot.visible
+    ) {
+      birdProjectionState.velocityX =
+        (birdSnapshot.position.x - priorProjectionStatePositionX) /
+        priorProjectionStateDeltaSeconds;
+      birdProjectionState.velocityY =
+        (birdSnapshot.position.y - priorProjectionStatePositionY) /
+        priorProjectionStateDeltaSeconds;
+      birdProjectionState.velocityZ =
+        (birdSnapshot.position.z - priorProjectionStatePositionZ) /
+        priorProjectionStateDeltaSeconds;
+      birdProjectionState.headingRadiansPerSecond =
+        wrapRadians(
+          birdSnapshot.headingRadians - priorProjectionStateHeadingRadians
+        ) / priorProjectionStateDeltaSeconds;
+      birdProjectionState.scalePerSecond =
+        (birdSnapshot.scale - priorProjectionStateScale) /
+        priorProjectionStateDeltaSeconds;
+      birdProjectionState.wingPhasePerSecond =
+        (birdSnapshot.wingPhase - priorProjectionStateWingPhase) /
+        priorProjectionStateDeltaSeconds;
     } else {
       birdProjectionState.velocityX = 0;
       birdProjectionState.velocityY = 0;
@@ -735,7 +987,7 @@ export class DuckHuntCoopArenaSimulation {
     birdProjectionState.positionZ = birdSnapshot.position.z;
     birdProjectionState.radius = birdSnapshot.radius;
     birdProjectionState.scale = birdSnapshot.scale;
-    birdProjectionState.snapshotServerTimeMs = roomServerTimeMs;
+    birdProjectionState.snapshotSimulationTimeMs = roomSimulationTimeMs;
     birdProjectionState.visible = birdSnapshot.visible;
     birdProjectionState.wingPhase = birdSnapshot.wingPhase;
   }
@@ -744,12 +996,12 @@ export class DuckHuntCoopArenaSimulation {
     birdProjectionState: CoopBirdProjectionState,
     enemyRenderState: MutableEnemyRenderState,
     projectedServerTimeMs: number,
-    tickIntervalMs: number
+    maxExtrapolationMs: number
   ): void {
     const projectionSeconds =
       clampProjectionDeltaMs(
-        projectedServerTimeMs - birdProjectionState.snapshotServerTimeMs,
-        tickIntervalMs
+        projectedServerTimeMs - birdProjectionState.snapshotSimulationTimeMs,
+        maxExtrapolationMs
       ) / 1000;
 
     enemyRenderState.behavior = birdProjectionState.behavior;

@@ -1,10 +1,14 @@
-import type { MetaverseRealtimeWorldWebTransportClientDatagram } from "@webgpu-metaverse/shared";
+import type {
+  MetaversePlayerId,
+  MetaverseRealtimeWorldWebTransportClientDatagram
+} from "@webgpu-metaverse/shared";
 
 import { MetaverseAuthoritativeWorldRuntime } from "../classes/metaverse-authoritative-world-runtime.js";
 
 export class MetaverseRealtimeWorldWebTransportDatagramSession {
   readonly #runtime: MetaverseAuthoritativeWorldRuntime;
 
+  #boundPlayerId: MetaversePlayerId | null = null;
   #disposed = false;
 
   constructor(runtime: MetaverseAuthoritativeWorldRuntime) {
@@ -16,6 +20,7 @@ export class MetaverseRealtimeWorldWebTransportDatagramSession {
     nowMs: number
   ): void {
     this.#assertNotDisposed();
+    this.#bindPlayerIdentity(datagram.command.playerId);
     this.#runtime.acceptWorldCommand(datagram.command, nowMs);
   }
 
@@ -29,6 +34,16 @@ export class MetaverseRealtimeWorldWebTransportDatagramSession {
         "Metaverse realtime world WebTransport datagram session has already been disposed."
       );
     }
+  }
+
+  #bindPlayerIdentity(playerId: MetaversePlayerId): void {
+    if (this.#boundPlayerId !== null && this.#boundPlayerId !== playerId) {
+      throw new Error(
+        `Metaverse world WebTransport datagram session is already bound to ${this.#boundPlayerId}.`
+      );
+    }
+
+    this.#boundPlayerId = playerId;
   }
 }
 

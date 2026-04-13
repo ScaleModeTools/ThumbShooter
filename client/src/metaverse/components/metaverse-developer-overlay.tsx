@@ -17,6 +17,8 @@ import type { MetaverseHudSnapshot } from "../types/metaverse-runtime";
 type ReliableTransportSnapshot = MetaverseHudSnapshot["transport"]["presenceReliable"];
 type DatagramTransportSnapshot =
   MetaverseHudSnapshot["transport"]["worldDriverDatagram"];
+type SnapshotStreamTransportSnapshot =
+  MetaverseHudSnapshot["transport"]["worldSnapshotStream"];
 
 const metaversePresenceWebTransportTarget = resolveConfiguredWebTransportTarget(
   import.meta.env?.VITE_METAVERSE_PRESENCE_WEBTRANSPORT_URL
@@ -146,6 +148,28 @@ function formatOptionalMilliseconds(value: number | null): string {
   return `${value.toFixed(0)} ms`;
 }
 
+function formatOptionalRateHz(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  return `${value.toFixed(1)} Hz`;
+}
+
+function formatPercentage(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+function formatSnapshotStreamPath(path: SnapshotStreamTransportSnapshot["path"]): string {
+  return path.replaceAll("-", " ");
+}
+
+function formatSnapshotStreamLiveness(
+  liveness: SnapshotStreamTransportSnapshot["liveness"]
+): string {
+  return liveness.replaceAll("-", " ");
+}
+
 function resolveConfiguredWebTransportTarget(rawUrl: string | undefined): string | null {
   const trimmedValue = rawUrl?.trim();
 
@@ -249,6 +273,65 @@ function formatDatagramHandshakeDebugLine(
   }
 }
 
+function formatSnapshotStreamSummary(
+  snapshot: SnapshotStreamTransportSnapshot
+): string {
+  if (!snapshot.available) {
+    return "Polling only: snapshot stream unavailable";
+  }
+
+  if (snapshot.path === "fallback-polling") {
+    return snapshot.liveness === "reconnecting"
+      ? "Polling fallback: snapshot stream reconnecting"
+      : "Polling fallback: snapshot stream failed";
+  }
+
+  if (
+    snapshot.path === "reliable-snapshot-stream" &&
+    snapshot.liveness === "subscribed"
+  ) {
+    return "Snapshot stream active";
+  }
+
+  if (snapshot.liveness === "reconnecting") {
+    return "Snapshot stream reconnecting";
+  }
+
+  return `Snapshot path: ${formatSnapshotStreamPath(snapshot.path)}`;
+}
+
+function formatSnapshotStreamDebugLine(
+  snapshot: SnapshotStreamTransportSnapshot,
+  target: string | null
+): string {
+  if (!snapshot.available) {
+    return "World snapshot updates are arriving through HTTP polling only.";
+  }
+
+  if (target === null) {
+    return `Snapshot stream lane is ${formatSnapshotStreamLiveness(snapshot.liveness)}.`;
+  }
+
+  if (
+    snapshot.path === "reliable-snapshot-stream" &&
+    snapshot.liveness === "subscribed"
+  ) {
+    return `Snapshot stream subscribed on ${target}.`;
+  }
+
+  if (snapshot.path === "fallback-polling") {
+    return snapshot.liveness === "reconnecting"
+      ? `Snapshot stream is reconnecting to ${target} while HTTP polling stays active.`
+      : `Snapshot stream targeted ${target} before falling back to HTTP polling.`;
+  }
+
+  if (snapshot.liveness === "reconnecting") {
+    return `Snapshot stream is reconnecting to ${target}.`;
+  }
+
+  return `Snapshot stream is targeting ${target}.`;
+}
+
 function formatTopLevelHandshakeDebugLine(hudSnapshot: MetaverseHudSnapshot): string {
   if (
     hudSnapshot.transport.worldReliable.activeTransport === "webtransport" &&
@@ -263,6 +346,15 @@ function formatTopLevelHandshakeDebugLine(hudSnapshot: MetaverseHudSnapshot): st
     return datagramsActive
       ? `World handshake established to ${metaverseWorldWebTransportTarget}. Datagrams live.`
       : `World handshake established to ${metaverseWorldWebTransportTarget}.`;
+  }
+
+  if (
+    hudSnapshot.transport.worldSnapshotStream.path ===
+      "reliable-snapshot-stream" &&
+    hudSnapshot.transport.worldSnapshotStream.liveness === "subscribed" &&
+    metaverseWorldWebTransportTarget !== null
+  ) {
+    return `World snapshot stream live on ${metaverseWorldWebTransportTarget}.`;
   }
 
   if (
@@ -446,6 +538,26 @@ export function MetaverseDeveloperOverlay({
       value: formatBooleanLabel(hudSnapshot.transport.worldReliable.fallbackActive)
     }
   ] as const;
+  const worldSnapshotStreamDetails = [
+    {
+      label: "Path",
+      value: formatSnapshotStreamPath(hudSnapshot.transport.worldSnapshotStream.path)
+    },
+    {
+      label: "Liveness",
+      value: formatSnapshotStreamLiveness(
+        hudSnapshot.transport.worldSnapshotStream.liveness
+      )
+    },
+    {
+      label: "Available",
+      value: formatBooleanLabel(hudSnapshot.transport.worldSnapshotStream.available)
+    },
+    {
+      label: "Reconnects",
+      value: formatCount(hudSnapshot.transport.worldSnapshotStream.reconnectCount)
+    }
+  ] as const;
   const datagramTransportDetails = [
     {
       label: "Status",
@@ -466,6 +578,12 @@ export function MetaverseDeveloperOverlay({
     {
       label: "State",
       value: hudSnapshot.transport.worldDriverDatagram.state.replaceAll("-", " ")
+    },
+    {
+      label: "Send failures",
+      value: formatCount(
+        hudSnapshot.telemetry.worldSnapshot.datagramSendFailureCount
+      )
     }
   ] as const;
 
@@ -647,6 +765,52 @@ export function MetaverseDeveloperOverlay({
               />
             </section>
 
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <StatPanel
+                description="Active metaverse world snapshot path"
+                label="Snapshot path"
+                value={`${formatSnapshotStreamPath(
+                  hudSnapshot.transport.worldSnapshotStream.path
+                )} · ${formatSnapshotStreamLiveness(
+                  hudSnapshot.transport.worldSnapshotStream.liveness
+                )}`}
+              />
+              <StatPanel
+                description="Buffered snapshot count and latest arrival cadence"
+                label="Buffer / rate"
+                value={`Buffer ${formatCount(
+                  hudSnapshot.telemetry.worldSnapshot.bufferDepth
+                )} · Update ${formatOptionalRateHz(
+                  hudSnapshot.telemetry.worldSnapshot.latestSnapshotUpdateRateHz
+                )}`}
+              />
+              <StatPanel
+                description="Latest authoritative simulation age and clock estimate"
+                label="Age / offset"
+                value={`Age ${formatOptionalMilliseconds(
+                  hudSnapshot.telemetry.worldSnapshot.latestSimulationAgeMs
+                )} · Offset ${formatOptionalMilliseconds(
+                  hudSnapshot.telemetry.worldSnapshot.clockOffsetEstimateMs
+                )}`}
+              />
+              <StatPanel
+                description="Current frame extrapolation use across rendered samples"
+                label="Extrapolation"
+                value={`${formatOptionalMilliseconds(
+                  hudSnapshot.telemetry.worldSnapshot.currentExtrapolationMs
+                )} · ${formatPercentage(
+                  hudSnapshot.telemetry.worldSnapshot.extrapolatedFramePercent
+                )} frames`}
+              />
+              <StatPanel
+                description="Cumulative local mounted-authority corrections applied by traversal"
+                label="Reconciliation"
+                value={formatCount(
+                  hudSnapshot.telemetry.worldSnapshot.localReconciliationCorrectionCount
+                )}
+              />
+            </section>
+
             <Separator className="bg-[color:var(--shell-border)]" />
 
             <section className="flex flex-col gap-3">
@@ -659,7 +823,7 @@ export function MetaverseDeveloperOverlay({
                 </p>
               </div>
 
-              <div className="grid gap-3 xl:grid-cols-3">
+              <div className="grid gap-3 xl:grid-cols-4">
                 <TransportDetailCard
                   debugLine={formatReliableHandshakeDebugLine(
                     hudSnapshot.transport.presenceReliable,
@@ -689,6 +853,20 @@ export function MetaverseDeveloperOverlay({
                   title="World reliable"
                 />
                 <TransportDetailCard
+                  debugLine={formatSnapshotStreamDebugLine(
+                    hudSnapshot.transport.worldSnapshotStream,
+                    metaverseWorldWebTransportTarget
+                  )}
+                  details={worldSnapshotStreamDetails}
+                  errorLine={formatTransportError(
+                    hudSnapshot.transport.worldSnapshotStream.lastTransportError
+                  )}
+                  summary={formatSnapshotStreamSummary(
+                    hudSnapshot.transport.worldSnapshotStream
+                  )}
+                  title="World snapshot stream"
+                />
+                <TransportDetailCard
                   debugLine={formatDatagramHandshakeDebugLine(
                     hudSnapshot.transport.worldDriverDatagram,
                     metaverseWorldWebTransportTarget
@@ -700,7 +878,7 @@ export function MetaverseDeveloperOverlay({
                   summary={formatDatagramTransportSummary(
                     hudSnapshot.transport.worldDriverDatagram
                   )}
-                  title="World driver datagram"
+                  title="World latest-wins datagram"
                 />
               </div>
             </section>

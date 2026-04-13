@@ -62,6 +62,11 @@ function createRuntimeConfig(overrides = {}) {
       createBirdSeed("bird-2", "Bird 2", 0.65, 2.1, -0.08, 0.06, 22)
     ],
     capacity: 4,
+    combatRewind: {
+      enabled: true,
+      historyWindowMs: createMilliseconds(500),
+      maxRewindWindowMs: createMilliseconds(250)
+    },
     hitRadius: 0.42,
     movement: {
       downedDriftSpeed: 1.6,
@@ -134,7 +139,8 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
 
   assert.equal(waitingSnapshot.tick.currentTick, 1);
   assert.equal(waitingSnapshot.tick.owner, "server");
-  assert.equal(waitingSnapshot.tick.serverTimeMs, 50);
+  assert.equal(waitingSnapshot.tick.emittedAtServerTimeMs, 50);
+  assert.equal(waitingSnapshot.tick.simulationTimeMs, 50);
   assert.equal(waitingSnapshot.session.phase, "waiting-for-players");
   assert.throws(
     () =>
@@ -160,7 +166,8 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
   const stillWaitingSnapshot = runtime.advanceTo(100);
 
   assert.equal(stillWaitingSnapshot.tick.currentTick, 2);
-  assert.equal(stillWaitingSnapshot.tick.serverTimeMs, 100);
+  assert.equal(stillWaitingSnapshot.tick.emittedAtServerTimeMs, 100);
+  assert.equal(stillWaitingSnapshot.tick.simulationTimeMs, 100);
   assert.equal(stillWaitingSnapshot.session.phase, "waiting-for-players");
 
   runtime.acceptCommand(
@@ -174,7 +181,8 @@ test("CoopRoomRuntime waits for enough ready players and an explicit leader star
   const activeSnapshot = runtime.advanceTo(150);
 
   assert.equal(activeSnapshot.tick.currentTick, 3);
-  assert.equal(activeSnapshot.tick.serverTimeMs, 150);
+  assert.equal(activeSnapshot.tick.emittedAtServerTimeMs, 150);
+  assert.equal(activeSnapshot.tick.simulationTimeMs, 150);
   assert.equal(activeSnapshot.session.phase, "active");
   assert.equal(activeSnapshot.session.roundNumber, 1);
   assert.equal(activeSnapshot.session.roundPhase, "combat");
@@ -251,7 +259,8 @@ test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequ
 
   assert.equal(resolvedSnapshot.session.phase, "active");
   assert.equal(resolvedSnapshot.session.roundPhase, "cooldown");
-  assert.equal(resolvedSnapshot.tick.serverTimeMs, 100);
+  assert.equal(resolvedSnapshot.tick.emittedAtServerTimeMs, 100);
+  assert.equal(resolvedSnapshot.tick.simulationTimeMs, 100);
   assert.equal(resolvedSnapshot.session.roundNumber, 1);
   assert.equal(resolvedSnapshot.session.teamShotsFired, 1);
   assert.equal(resolvedSnapshot.session.teamHitsLanded, 1);
@@ -264,11 +273,252 @@ test("CoopRoomRuntime applies shared hits once per acknowledged client shot sequ
   assert.equal(birdSnapshot?.lastInteractionTick, 2);
 });
 
+test("CoopRoomRuntime rewinds authoritative combat state for fire-shot resolution when combat rewind is enabled", () => {
+  const movingBirdSeed = {
+    ...createBirdSeed("bird-rewind", "Bird Rewind", 0, 1.35, 12, 0, 4),
+    radius: 0.15
+  };
+  const runtime = new CoopRoomRuntime(
+    createRuntimeConfig({
+      birds: [movingBirdSeed],
+      hitRadius: 0.05,
+      scatterRadius: 0.01
+    })
+  );
+  const roomId = runtime.roomId;
+  const playerId = requireValue(createCoopPlayerId("player-rewind"), "playerId");
+  const tickOneBirdPosition = {
+    x: Math.sin(0.6) * 4,
+    y: 1.35,
+    z: -Math.cos(0.6) * 4
+  };
+  const tickOneBirdDistance = Math.hypot(
+    tickOneBirdPosition.x,
+    tickOneBirdPosition.y - 1.35,
+    tickOneBirdPosition.z
+  );
+
+  runtime.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: true,
+      roomId,
+      username: requireValue(createUsername("rewind"), "username")
+    }),
+    0
+  );
+  runtime.acceptCommand(
+    createCoopStartSessionCommand({
+      playerId,
+      roomId
+    }),
+    10
+  );
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: tickOneBirdPosition.x / tickOneBirdDistance,
+        y: 0,
+        z: tickOneBirdPosition.z / tickOneBirdDistance
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 1,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    20
+  );
+
+  runtime.advanceTo(50);
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: -1,
+        y: 0,
+        z: 0
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 2,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    70
+  );
+  runtime.acceptCommand(
+    createCoopFireShotCommand({
+      aimDirection: {
+        x: 1,
+        y: 0,
+        z: 0
+      },
+      clientEstimatedSimulationTimeMs: 50,
+      clientShotSequence: 1,
+      origin: {
+        x: 50,
+        y: 50,
+        z: 50
+      },
+      playerId,
+      roomId,
+      weaponId: "semiautomatic-pistol"
+    }),
+    80
+  );
+
+  const resolvedSnapshot = runtime.advanceTo(100);
+
+  assert.equal(resolvedSnapshot.session.teamShotsFired, 1);
+  assert.equal(resolvedSnapshot.session.teamHitsLanded, 1);
+  assert.equal(resolvedSnapshot.players[0]?.activity.lastAcknowledgedShotSequence, 1);
+  assert.equal(resolvedSnapshot.players[0]?.activity.lastOutcome, "hit");
+  assert.equal(resolvedSnapshot.birds[0]?.behavior, "downed");
+});
+
+test("CoopRoomRuntime can disable combat rewind and fall back to present-frame authoritative resolution", () => {
+  const movingBirdSeed = {
+    ...createBirdSeed("bird-no-rewind", "Bird No Rewind", 0, 1.35, 12, 0, 4),
+    radius: 0.15
+  };
+  const runtime = new CoopRoomRuntime(
+    createRuntimeConfig({
+      birds: [movingBirdSeed],
+      combatRewind: {
+        enabled: false,
+        historyWindowMs: createMilliseconds(500),
+        maxRewindWindowMs: createMilliseconds(250)
+      },
+      hitRadius: 0.05,
+      scatterRadius: 0.01
+    })
+  );
+  const roomId = runtime.roomId;
+  const playerId = requireValue(createCoopPlayerId("player-no-rewind"), "playerId");
+  const tickOneBirdPosition = {
+    x: Math.sin(0.6) * 4,
+    y: 1.35,
+    z: -Math.cos(0.6) * 4
+  };
+  const tickOneBirdDistance = Math.hypot(
+    tickOneBirdPosition.x,
+    tickOneBirdPosition.y - 1.35,
+    tickOneBirdPosition.z
+  );
+
+  runtime.acceptCommand(
+    createCoopJoinRoomCommand({
+      playerId,
+      ready: true,
+      roomId,
+      username: requireValue(createUsername("present"), "username")
+    }),
+    0
+  );
+  runtime.acceptCommand(
+    createCoopStartSessionCommand({
+      playerId,
+      roomId
+    }),
+    10
+  );
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: tickOneBirdPosition.x / tickOneBirdDistance,
+        y: 0,
+        z: tickOneBirdPosition.z / tickOneBirdDistance
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 1,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    20
+  );
+
+  runtime.advanceTo(50);
+  runtime.acceptCommand(
+    createCoopSyncPlayerPresenceCommand({
+      aimDirection: {
+        x: -1,
+        y: 0,
+        z: 0
+      },
+      pitchRadians: 0,
+      playerId,
+      position: {
+        x: 0,
+        y: 1.35,
+        z: 0
+      },
+      roomId,
+      stateSequence: 2,
+      weaponId: "semiautomatic-pistol",
+      yawRadians: 0
+    }),
+    70
+  );
+  runtime.acceptCommand(
+    createCoopFireShotCommand({
+      aimDirection: {
+        x: 1,
+        y: 0,
+        z: 0
+      },
+      clientEstimatedSimulationTimeMs: 50,
+      clientShotSequence: 1,
+      origin: {
+        x: 50,
+        y: 50,
+        z: 50
+      },
+      playerId,
+      roomId,
+      weaponId: "semiautomatic-pistol"
+    }),
+    80
+  );
+
+  const resolvedSnapshot = runtime.advanceTo(100);
+
+  assert.equal(resolvedSnapshot.session.teamShotsFired, 1);
+  assert.equal(resolvedSnapshot.session.teamHitsLanded, 0);
+  assert.equal(resolvedSnapshot.players[0]?.activity.lastAcknowledgedShotSequence, 1);
+  assert.equal(resolvedSnapshot.players[0]?.activity.lastOutcome, "miss");
+  assert.equal(resolvedSnapshot.birds[0]?.behavior, "glide");
+});
+
 test("CoopRoomRuntime records scatter outcomes against the shared bird field", () => {
   const runtime = new CoopRoomRuntime(
     createRuntimeConfig({
-      hitRadius: 0.03,
-      scatterRadius: 2.4
+      birds: [
+        {
+          ...createBirdSeed("bird-scatter", "Bird Scatter", 0, 1.35, 0, 0, 6),
+          radius: 0.15
+        }
+      ],
+      hitRadius: 0.01,
+      scatterRadius: 1.8
     })
   );
   const roomId = runtime.roomId;
@@ -294,7 +544,7 @@ test("CoopRoomRuntime records scatter outcomes against the shared bird field", (
   runtime.acceptCommand(
     createCoopFireShotCommand({
       aimDirection: {
-        x: 0.08,
+        x: 0.25,
         y: 0,
         z: -1
       },

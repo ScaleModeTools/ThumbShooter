@@ -29,6 +29,50 @@ function flushAsyncWork() {
   });
 }
 
+function createManualTimerScheduler() {
+  const clearedHandles = new Set();
+  const scheduledTasks = [];
+  let nextHandle = 1;
+
+  return Object.freeze({
+    clearTimeout(handle) {
+      clearedHandles.add(handle);
+    },
+    get pendingTasks() {
+      return scheduledTasks.filter(
+        (task) => !clearedHandles.has(task.handle)
+      );
+    },
+    runNext(delay) {
+      const taskIndex = scheduledTasks.findIndex(
+        (task) =>
+          !clearedHandles.has(task.handle) &&
+          (delay === undefined || task.delay === delay)
+      );
+
+      assert.notEqual(taskIndex, -1);
+
+      const [task] = scheduledTasks.splice(taskIndex, 1);
+
+      assert.notEqual(task, undefined);
+      clearedHandles.add(task.handle);
+      task.callback();
+    },
+    setTimeout(callback, delay) {
+      const handle = nextHandle;
+
+      nextHandle += 1;
+      scheduledTasks.push({
+        callback,
+        delay,
+        handle
+      });
+
+      return handle;
+    }
+  });
+}
+
 function createRoomSnapshotEvent({
   playerId,
   roomId,
@@ -266,6 +310,8 @@ test("CoopRoomClient joins, polls shared snapshots, and posts fire-shot commands
 
   assert.equal(requests[4]?.type, "command");
   assert.equal(requests[4]?.command?.type, "fire-shot");
+  assert.equal(requests[4]?.command?.clientEstimatedSimulationTimeMs, 50);
+  assert.equal(requests[4]?.command?.weaponId, "semiautomatic-pistol");
   assert.equal(
     roomClient.roomSnapshot?.players[0]?.activity.lastAcknowledgedShotSequence,
     1
@@ -442,6 +488,11 @@ test("CoopRoomClient prefers player-presence datagrams over reliable command tra
   assert.equal(roomClient.roomSnapshot?.tick.currentTick, 0);
   assert.equal(roomClient.roomSnapshot?.players[0]?.presence.position.x, 0);
   assert.equal(roomClient.roomSnapshot?.players[0]?.presence.stateSequence, 0);
+  assert.equal(roomClient.telemetrySnapshot.playerPresenceDatagramSendFailureCount, 0);
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceReliableFallbackActive,
+    false
+  );
   assert.deepEqual(
     sentDatagrams[0],
     createCoopSyncPlayerPresenceCommand({
@@ -465,7 +516,7 @@ test("CoopRoomClient prefers player-presence datagrams over reliable command tra
   );
 });
 
-test("CoopRoomClient falls back to reliable commands after a player-presence datagram send failure", async () => {
+test("CoopRoomClient falls back to reliable commands after a player-presence datagram send failure and recovers datagram sends after the cooldown", async () => {
   const { CoopRoomClient } = await clientLoader.load("/src/network/index.ts");
   const roomId = createCoopRoomId("co-op-harbor");
   const sessionId = createCoopSessionId("co-op-harbor-session-1");
@@ -477,9 +528,10 @@ test("CoopRoomClient falls back to reliable commands after a player-presence dat
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  const scheduledTasks = [];
+  const scheduler = createManualTimerScheduler();
   const sentCommands = [];
   const sentDatagrams = [];
+  let remainingDatagramFailures = 1;
   const roomClient = new CoopRoomClient(
     {
       defaultPollIntervalMs: createMilliseconds(75),
@@ -491,7 +543,10 @@ test("CoopRoomClient falls back to reliable commands after a player-presence dat
       playerPresenceDatagramTransport: {
         async sendPlayerPresenceDatagram(command) {
           sentDatagrams.push(command);
-          throw new Error("Datagram transport unavailable.");
+          if (remainingDatagramFailures > 0) {
+            remainingDatagramFailures -= 1;
+            throw new Error("Datagram transport unavailable.");
+          }
         }
       },
       transport: {
@@ -513,14 +568,8 @@ test("CoopRoomClient falls back to reliable commands after a player-presence dat
           });
         }
       },
-      setTimeout(callback, delay) {
-        scheduledTasks.push({
-          callback,
-          delay
-        });
-        return scheduledTasks.length;
-      },
-      clearTimeout() {}
+      clearTimeout: scheduler.clearTimeout,
+      setTimeout: scheduler.setTimeout
     }
   );
 
@@ -546,8 +595,35 @@ test("CoopRoomClient falls back to reliable commands after a player-presence dat
     yawRadians: 0.4
   });
 
-  scheduledTasks.pop()?.callback();
+  scheduler.runNext(50);
   await flushAsyncWork();
+
+  assert.equal(sentDatagrams.length, 1);
+  assert.equal(sentCommands.length, 2);
+  assert.equal(sentCommands[1]?.type, "sync-player-presence");
+  assert.equal(roomClient.supportsCoopPlayerPresenceDatagrams, false);
+  assert.equal(roomClient.roomSnapshot?.tick.currentTick, 0);
+  assert.equal(roomClient.telemetrySnapshot.playerPresenceDatagramSendFailureCount, 1);
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceReliableFallbackActive,
+    true
+  );
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceLastTransportError,
+    "Datagram transport unavailable."
+  );
+
+  scheduler.runNext(50);
+
+  assert.equal(roomClient.supportsCoopPlayerPresenceDatagrams, true);
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceReliableFallbackActive,
+    false
+  );
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceLastTransportError,
+    "Datagram transport unavailable."
+  );
 
   roomClient.syncPlayerPresence({
     aimDirection: {
@@ -565,14 +641,22 @@ test("CoopRoomClient falls back to reliable commands after a player-presence dat
     yawRadians: 0
   });
 
-  scheduledTasks.pop()?.callback();
+  scheduler.runNext(50);
   await flushAsyncWork();
 
-  assert.equal(sentDatagrams.length, 1);
-  assert.equal(sentCommands.length, 3);
+  assert.equal(sentDatagrams.length, 2);
+  assert.equal(sentCommands.length, 2);
   assert.equal(sentCommands[1]?.type, "sync-player-presence");
-  assert.equal(sentCommands[2]?.type, "sync-player-presence");
-  assert.equal(roomClient.supportsCoopPlayerPresenceDatagrams, false);
+  assert.equal(roomClient.supportsCoopPlayerPresenceDatagrams, true);
+  assert.equal(roomClient.telemetrySnapshot.playerPresenceDatagramSendFailureCount, 1);
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceReliableFallbackActive,
+    false
+  );
+  assert.equal(
+    roomClient.telemetrySnapshot.playerPresenceLastTransportError,
+    null
+  );
   assert.equal(roomClient.roomSnapshot?.tick.currentTick, 0);
   assert.equal(roomClient.roomSnapshot?.players[0]?.presence.position.x, 0);
   assert.equal(roomClient.roomSnapshot?.players[0]?.presence.stateSequence, 0);
@@ -865,4 +949,211 @@ test("CoopRoomClient reports an outdated room snapshot contract instead of accep
   );
   assert.equal(roomClient.statusSnapshot.state, "error");
   assert.match(roomClient.statusSnapshot.lastError ?? "", /current room snapshot fields/);
+});
+
+test("CoopRoomClient prefers snapshot streams, falls back to polling on stream failure, and reconnects with a buffered room timeline", async () => {
+  const { CoopRoomClient } = await clientLoader.load("/src/network/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const sessionId = createCoopSessionId("co-op-harbor-session-1");
+  const playerId = createCoopPlayerId("coop-player-stream");
+  const username = createUsername("coop-stream-user");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(sessionId, null);
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  const scheduler = createManualTimerScheduler();
+  const streamSubscriptions = [];
+  const sentRequests = [];
+  const pollResponses = [
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 2
+    })
+  ];
+  const roomClient = new CoopRoomClient(
+    {
+      defaultPollIntervalMs: createMilliseconds(75),
+      maxBufferedSnapshots: 2,
+      roomCollectionPath: "/experiences/duck-hunt/coop/rooms",
+      roomId,
+      serverOrigin: "http://127.0.0.1:3210",
+      snapshotStreamReconnectDelayMs: createMilliseconds(20)
+    },
+    {
+      clearTimeout: scheduler.clearTimeout,
+      playerPresenceDatagramTransport: {
+        async sendPlayerPresenceDatagram() {},
+        dispose() {}
+      },
+      setTimeout: scheduler.setTimeout,
+      snapshotStreamTransport: {
+        dispose() {},
+        subscribeRoomSnapshots(nextPlayerId, handlers) {
+          const subscription = {
+            closeCallCount: 0,
+            handlers,
+            playerId: nextPlayerId
+          };
+
+          streamSubscriptions.push(subscription);
+
+          return {
+            closed: Promise.resolve(),
+            close() {
+              subscription.closeCallCount += 1;
+            }
+          };
+        }
+      },
+      transport: {
+        async pollRoomSnapshot(nextPlayerId) {
+          const response = pollResponses.shift();
+
+          assert.notEqual(response, undefined);
+          sentRequests.push({
+            playerId: nextPlayerId,
+            type: "poll"
+          });
+          return response;
+        },
+        async sendCommand(command, options) {
+          sentRequests.push({
+            command,
+            options: options ?? null,
+            type: "command"
+          });
+
+          if (command.type === "join-room") {
+            return createRoomSnapshotEvent({
+              playerId,
+              roomId,
+              sessionId,
+              tick: 0,
+              phase: "waiting-for-players"
+            });
+          }
+
+          if (command.type === "leave-room") {
+            return createRoomSnapshotEvent({
+              playerId,
+              roomId,
+              sessionId,
+              tick: 2
+            });
+          }
+
+          throw new Error(`Unexpected command: ${command.type}`);
+        }
+      }
+    }
+  );
+
+  await roomClient.ensureJoined({
+    playerId,
+    ready: false,
+    username
+  });
+
+  assert.equal(streamSubscriptions.length, 1);
+  assert.equal(streamSubscriptions[0]?.playerId, playerId);
+  assert.equal(scheduler.pendingTasks.length, 0);
+  assert.equal(
+    roomClient.telemetrySnapshot.snapshotStream.path,
+    "reliable-snapshot-stream"
+  );
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.liveness, "subscribed");
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.reconnectCount, 0);
+
+  streamSubscriptions[0]?.handlers.onRoomEvent(
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 1
+    })
+  );
+
+  assert.equal(roomClient.roomSnapshotBuffer.length, 2);
+  assert.equal(roomClient.roomSnapshotBuffer[1]?.tick.currentTick, 1);
+
+  streamSubscriptions[0]?.handlers.onRoomEvent(
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0
+    })
+  );
+
+  assert.equal(roomClient.roomSnapshotBuffer[1]?.tick.currentTick, 1);
+
+  streamSubscriptions[0]?.handlers.onError(
+    new Error("Co-op room snapshot stream failed.")
+  );
+
+  assert.equal(roomClient.statusSnapshot.state, "error");
+  assert.equal(roomClient.statusSnapshot.joined, true);
+  assert.equal(scheduler.pendingTasks.filter((task) => task.delay === 0).length, 1);
+  assert.equal(
+    scheduler.pendingTasks.filter((task) => task.delay === 20).length,
+    1
+  );
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.path, "fallback-polling");
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.liveness, "reconnecting");
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.reconnectCount, 1);
+  assert.equal(
+    roomClient.telemetrySnapshot.snapshotStream.lastTransportError,
+    "Co-op room snapshot stream failed."
+  );
+
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentRequests[1]?.type, "poll");
+  assert.equal(roomClient.statusSnapshot.state, "connected");
+  assert.equal(roomClient.roomSnapshotBuffer.length, 2);
+  assert.equal(roomClient.roomSnapshotBuffer[0]?.tick.currentTick, 1);
+  assert.equal(roomClient.roomSnapshotBuffer[1]?.tick.currentTick, 2);
+  assert.equal(
+    scheduler.pendingTasks.filter((task) => task.delay === 50).length,
+    1
+  );
+
+  scheduler.runNext(20);
+
+  assert.equal(streamSubscriptions.length, 2);
+  assert.equal(
+    scheduler.pendingTasks.filter((task) => task.delay === 50).length,
+    0
+  );
+  assert.equal(
+    roomClient.telemetrySnapshot.snapshotStream.path,
+    "reliable-snapshot-stream"
+  );
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.liveness, "subscribed");
+
+  streamSubscriptions[1]?.handlers.onRoomEvent(
+    createRoomSnapshotEvent({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 3
+    })
+  );
+
+  assert.equal(roomClient.statusSnapshot.state, "connected");
+  assert.equal(roomClient.roomSnapshotBuffer[0]?.tick.currentTick, 2);
+  assert.equal(roomClient.roomSnapshotBuffer[1]?.tick.currentTick, 3);
+  assert.equal(roomClient.telemetrySnapshot.snapshotStream.lastTransportError, null);
+
+  roomClient.dispose();
+  await flushAsyncWork();
+
+  assert.equal(streamSubscriptions[1]?.closeCallCount, 1);
+  assert.equal(sentRequests[2]?.type, "command");
+  assert.equal(sentRequests[2]?.command?.type, "leave-room");
 });

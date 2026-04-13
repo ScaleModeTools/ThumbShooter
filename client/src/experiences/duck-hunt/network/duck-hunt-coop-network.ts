@@ -7,6 +7,7 @@ import {
 import {
   CoopRoomClient,
   CoopRoomDirectoryClient,
+  createCoopRoomWebTransportSnapshotStreamTransport,
   createNativeWebTransportBrowserFactory,
   createDuckHuntCoopRoomPlayerPresenceWebTransportDatagramTransport,
   createCoopRoomHttpTransport,
@@ -81,13 +82,25 @@ export const duckHuntCoopRoomCollectionPath =
 export const duckHuntRoomDirectoryRefreshIntervalMs = 3_000;
 export const defaultDuckHuntCoopRoomId =
   requireDuckHuntCoopRoomId("co-op-harbor");
+export const duckHuntCoopRoomCadenceConfig = Object.freeze({
+  defaultPollIntervalMs: createMilliseconds(33),
+  maxBufferedSnapshots: 6,
+  snapshotStreamReconnectDelayMs: createMilliseconds(2_000)
+});
 
 export const duckHuntCoopRoomClientConfig = {
-  defaultPollIntervalMs: createMilliseconds(75),
+  defaultPollIntervalMs: duckHuntCoopRoomCadenceConfig.defaultPollIntervalMs,
+  maxBufferedSnapshots: duckHuntCoopRoomCadenceConfig.maxBufferedSnapshots,
   roomCollectionPath: duckHuntCoopRoomCollectionPath,
   roomId: defaultDuckHuntCoopRoomId,
-  serverOrigin: resolveDuckHuntServerOrigin()
+  serverOrigin: resolveDuckHuntServerOrigin(),
+  snapshotStreamReconnectDelayMs:
+    duckHuntCoopRoomCadenceConfig.snapshotStreamReconnectDelayMs
 } as const satisfies CoopRoomClientConfig;
+
+export const duckHuntRealtimeMigrationConfig = Object.freeze({
+  duckHuntRoomSnapshotStreamEnabled: true
+});
 
 export const duckHuntCoopRoomDirectoryClientConfig = {
   roomCollectionPath: duckHuntCoopRoomCollectionPath,
@@ -127,6 +140,20 @@ export function createDuckHuntCoopRoomClient(
             webTransportFactory
           })
     : null;
+  const snapshotStreamTransport = shouldUseWebTransport
+    && duckHuntRealtimeMigrationConfig.duckHuntRoomSnapshotStreamEnabled
+    ? createCoopRoomWebTransportSnapshotStreamTransport(
+        {
+          roomId,
+          webTransportUrl
+        },
+        webTransportFactory === null
+          ? {}
+          : {
+              webTransportFactory
+            }
+      )
+    : null;
 
   return new CoopRoomClient({
     ...duckHuntCoopRoomClientConfig,
@@ -136,6 +163,11 @@ export function createDuckHuntCoopRoomClient(
       ? {}
       : {
           playerPresenceDatagramTransport
+        }),
+    ...(snapshotStreamTransport === null
+      ? {}
+      : {
+          snapshotStreamTransport
         }),
     transport: shouldUseWebTransport
       ? (() => {

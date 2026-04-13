@@ -524,6 +524,116 @@ test("LocaldevWebTransportServer routes reliable frames and datagrams through th
   localdevServer.stop();
 });
 
+test("LocaldevWebTransportServer lets reliable sessions take over a persistent subscription stream after the first frame", async () => {
+  const fakeHttp3Server = createFakeHttp3Server();
+  const recordedStreamMessages = [];
+  const recordedWorldMessages = [];
+  const localdevServer = new LocaldevWebTransportServer(
+    {
+      certificatePem: "CERTIFICATE",
+      host: "127.0.0.1",
+      port: 3211,
+      privateKeyPem: "PRIVATE KEY",
+      secret: "localdev-secret"
+    },
+    {
+      duckHuntDatagramAdapter: {
+        openSession() {
+          return {
+            dispose() {},
+            receiveClientDatagram() {}
+          };
+        }
+      },
+      duckHuntReliableAdapter: {
+        openSession() {
+          return {
+            dispose() {},
+            receiveClientMessage() {
+              return {
+                message: "duck-hunt-ok",
+                type: "coop-room-error"
+              };
+            }
+          };
+        }
+      },
+      metaversePresenceReliableAdapter: {
+        openSession() {
+          return {
+            dispose() {},
+            receiveClientMessage() {
+              return {
+                message: "presence-ok",
+                type: "presence-error"
+              };
+            }
+          };
+        }
+      },
+      metaverseWorldDatagramAdapter: {
+        openSession() {
+          return {
+            dispose() {},
+            receiveClientDatagram() {}
+          };
+        }
+      },
+      metaverseWorldReliableAdapter: {
+        openSession() {
+          return {
+            dispose() {},
+            async handleClientStream(message, context) {
+              recordedStreamMessages.push(message);
+              await context.writeResponse({
+                message: "world-stream-ok",
+                type: "world-error"
+              });
+              await context.closed;
+              return true;
+            },
+            receiveClientMessage(message) {
+              recordedWorldMessages.push(message);
+              return {
+                message: "world-ok",
+                type: "world-error"
+              };
+            }
+          };
+        }
+      }
+    },
+    {
+      createHttp3Server() {
+        return fakeHttp3Server;
+      }
+    }
+  );
+
+  await localdevServer.start();
+
+  const worldSession = createFakeWebTransportSession();
+  fakeHttp3Server.enqueueSession(localdevMetaverseWorldWebTransportPath, worldSession);
+
+  const worldStream = worldSession.openClientBidirectionalStream();
+  await worldStream.writeJsonFrame({
+    observerPlayerId: "driver-player",
+    type: "world-snapshot-subscribe"
+  });
+
+  assert.deepEqual(await worldStream.readJsonFrame(), {
+    message: "world-stream-ok",
+    type: "world-error"
+  });
+  assert.equal(recordedStreamMessages.length, 1);
+  assert.equal(recordedStreamMessages[0]?.type, "world-snapshot-subscribe");
+  assert.equal(recordedWorldMessages.length, 0);
+
+  await worldStream.close();
+  await worldSession.close();
+  localdevServer.stop();
+});
+
 test("LocaldevWebTransportServer suppresses graceful WebTransport close errors for reliable streams", async () => {
   const fakeHttp3Server = createFakeHttp3Server();
   const recordedErrors = [];

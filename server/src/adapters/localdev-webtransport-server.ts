@@ -20,13 +20,16 @@ import {
   createDuckHuntCoopRoomWebTransportErrorMessage,
   createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram,
   createDuckHuntCoopRoomWebTransportSnapshotRequest,
+  createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest,
   createMetaversePresenceWebTransportCommandRequest,
   createMetaversePresenceWebTransportErrorMessage,
   createMetaversePresenceWebTransportRosterRequest,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   createMetaverseRealtimeWorldWebTransportErrorMessage,
-  createMetaverseRealtimeWorldWebTransportSnapshotRequest
+  createMetaverseRealtimeWorldWebTransportSnapshotRequest,
+  createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest
 } from "@webgpu-metaverse/shared";
 
 import type { DuckHuntCoopRoomWebTransportDatagramAdapter } from "../experiences/duck-hunt/adapters/duck-hunt-coop-room-webtransport-datagram-adapter.js";
@@ -158,6 +161,14 @@ interface ReliableRoute<
   Message,
   Response,
   Session extends {
+    handleClientStream?(
+      message: Message,
+      context: {
+        readonly closed: Promise<void>;
+        writeResponse(response: Response): Promise<void>;
+      },
+      nowMs: number
+    ): Promise<boolean>;
     receiveClientMessage(message: Message, nowMs: number): Response;
     dispose(): void;
   }
@@ -332,6 +343,15 @@ function parseMetaverseWorldClientMessage(
           typeof createMetaverseRealtimeWorldWebTransportSnapshotRequest
         >[0]["observerPlayerId"]
       });
+    case "world-snapshot-subscribe":
+      return createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest({
+        observerPlayerId: readNonEmptyStringField(
+          payload.observerPlayerId,
+          "observerPlayerId"
+        ) as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest
+        >[0]["observerPlayerId"]
+      });
     case "world-command-request":
       if (!isRecord(payload.command)) {
         throw new Error("Metaverse world WebTransport command must be an object.");
@@ -358,21 +378,28 @@ function parseMetaverseWorldClientDatagram(
 
   const datagramType = readNonEmptyStringField(payload.type, "type");
 
-  if (datagramType !== "world-driver-vehicle-control-datagram") {
-    throw new Error(
-      `Unsupported metaverse world WebTransport datagram type: ${datagramType}`
-    );
-  }
-
   if (!isRecord(payload.command)) {
     throw new Error("Metaverse world WebTransport datagram command must be an object.");
   }
 
-  return createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram({
-    command: payload.command as unknown as Parameters<
-      typeof createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram
-    >[0]["command"]
-  });
+  switch (datagramType) {
+    case "world-driver-vehicle-control-datagram":
+      return createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram({
+        command: payload.command as unknown as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram
+        >[0]["command"]
+      });
+    case "world-player-traversal-intent-datagram":
+      return createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram({
+        command: payload.command as unknown as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram
+        >[0]["command"]
+      });
+    default:
+      throw new Error(
+        `Unsupported metaverse world WebTransport datagram type: ${datagramType}`
+      );
+  }
 }
 
 function parseDuckHuntCoopRoomClientMessage(
@@ -395,6 +422,18 @@ function parseDuckHuntCoopRoomClientMessage(
         >[0]["observerPlayerId"],
         roomId: readNonEmptyStringField(payload.roomId, "roomId") as Parameters<
           typeof createDuckHuntCoopRoomWebTransportSnapshotRequest
+        >[0]["roomId"]
+      });
+    case "coop-room-snapshot-subscribe":
+      return createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest({
+        observerPlayerId: readNonEmptyStringField(
+          payload.observerPlayerId,
+          "observerPlayerId"
+        ) as Parameters<
+          typeof createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest
+        >[0]["observerPlayerId"],
+        roomId: readNonEmptyStringField(payload.roomId, "roomId") as Parameters<
+          typeof createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest
         >[0]["roomId"]
       });
     case "coop-room-command-request":
@@ -971,6 +1010,14 @@ export class LocaldevWebTransportServer {
     ReliableMessage,
     ReliableResponse,
     ReliableSession extends {
+      handleClientStream?(
+        message: ReliableMessage,
+        context: {
+          readonly closed: Promise<void>;
+          writeResponse(response: ReliableResponse): Promise<void>;
+        },
+        nowMs: number
+      ): Promise<boolean>;
       receiveClientMessage(
         message: ReliableMessage,
         nowMs: number
@@ -1005,13 +1052,45 @@ export class LocaldevWebTransportServer {
             continue;
           }
 
-          const response = this.#resolveReliableResponse(
-            rawFrame,
-            reliableRoute,
-            reliableSession
-          );
+          const parsedResult = this.#parseReliableMessage(rawFrame, reliableRoute);
+
+          if (parsedResult.ok) {
+            const nowMs = this.#readWallClockMs();
+            const streamHandled =
+              (await reliableSession.handleClientStream?.(
+                parsedResult.message,
+                {
+                  closed: reader.closed.catch(() => undefined),
+                  writeResponse: async (response) => {
+                    await writer.write(
+                      this.#encoder.encode(`${JSON.stringify(response)}\n`)
+                    );
+                  }
+                },
+                nowMs
+              )) ?? false;
+
+            if (streamHandled) {
+              return;
+            }
+
+            const response = reliableSession.receiveClientMessage(
+              parsedResult.message,
+              nowMs
+            );
+
+            await writer.write(
+              this.#encoder.encode(`${JSON.stringify(response)}\n`)
+            );
+            continue;
+          }
+
           await writer.write(
-            this.#encoder.encode(`${JSON.stringify(response)}\n`)
+            this.#encoder.encode(
+              `${JSON.stringify(
+                reliableRoute.createErrorResponse(parsedResult.message)
+              )}\n`
+            )
           );
           continue;
         }
@@ -1045,10 +1124,18 @@ export class LocaldevWebTransportServer {
     }
   }
 
-  #resolveReliableResponse<
+  #parseReliableMessage<
     ReliableMessage,
     ReliableResponse,
     ReliableSession extends {
+      handleClientStream?(
+        message: ReliableMessage,
+        context: {
+          readonly closed: Promise<void>;
+          writeResponse(response: ReliableResponse): Promise<void>;
+        },
+        nowMs: number
+      ): Promise<boolean>;
       receiveClientMessage(
         message: ReliableMessage,
         nowMs: number
@@ -1061,24 +1148,30 @@ export class LocaldevWebTransportServer {
       ReliableMessage,
       ReliableResponse,
       ReliableSession
-    >,
-    reliableSession: ReliableSession
-  ): ReliableResponse {
+    >
+  ):
+    | {
+        readonly message: ReliableMessage;
+        readonly ok: true;
+      }
+    | {
+        readonly message: string;
+        readonly ok: false;
+      } {
     try {
       const parsedPayload = JSON.parse(rawFrame);
-      const message = reliableRoute.parseClientMessage(parsedPayload);
-
-      return reliableSession.receiveClientMessage(
-        message,
-        this.#readWallClockMs()
-      );
+      return {
+        message: reliableRoute.parseClientMessage(parsedPayload),
+        ok: true
+      };
     } catch (error) {
-      return reliableRoute.createErrorResponse(
-        resolveErrorMessage(
+      return {
+        message: resolveErrorMessage(
           error,
           "WebTransport request handling failed before the domain adapter accepted the message."
-        )
-      );
+        ),
+        ok: false
+      };
     }
   }
 

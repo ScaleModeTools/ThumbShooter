@@ -16,6 +16,7 @@ import type {
   MountedVehicleSeatRoleId
 } from "../vehicles";
 import type {
+  MetaverseWorldSnapshotStreamTelemetrySnapshot,
   RealtimeDatagramTransportStatusSnapshot,
   RealtimeReliableTransportStatusSnapshot
 } from "@/network";
@@ -126,6 +127,16 @@ export interface MetaverseTelemetrySnapshot {
     readonly maxExtrapolationMs: number;
     readonly remoteInterpolationDelayMs: number;
     readonly worldPollIntervalMs: number;
+  };
+  readonly worldSnapshot: {
+    readonly bufferDepth: number;
+    readonly clockOffsetEstimateMs: number | null;
+    readonly currentExtrapolationMs: number;
+    readonly datagramSendFailureCount: number;
+    readonly extrapolatedFramePercent: number;
+    readonly localReconciliationCorrectionCount: number;
+    readonly latestSimulationAgeMs: number | null;
+    readonly latestSnapshotUpdateRateHz: number | null;
   };
 }
 
@@ -375,6 +386,7 @@ export interface MetaverseHudSnapshot {
     readonly presenceReliable: RealtimeReliableTransportStatusSnapshot;
     readonly worldDriverDatagram: RealtimeDatagramTransportStatusSnapshot;
     readonly worldReliable: RealtimeReliableTransportStatusSnapshot;
+    readonly worldSnapshotStream: MetaverseWorldSnapshotStreamTelemetrySnapshot;
   };
 }
 

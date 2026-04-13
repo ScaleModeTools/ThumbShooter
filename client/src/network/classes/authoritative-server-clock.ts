@@ -22,6 +22,10 @@ export class AuthoritativeServerClock {
     this.#config = config;
   }
 
+  get clockOffsetEstimateMs(): number | null {
+    return this.#clockOffsetMs;
+  }
+
   reset(): void {
     this.#clockOffsetMs = null;
     this.#lastObservedServerTimeMs = null;

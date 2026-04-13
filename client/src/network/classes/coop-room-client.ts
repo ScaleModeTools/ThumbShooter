@@ -17,8 +17,12 @@ import {
 } from "@webgpu-metaverse/shared";
 
 import { createCoopRoomHttpTransport } from "../adapters/coop-room-http-transport";
+import type { CoopRoomSnapshotStreamTransport } from "../types/coop-room-snapshot-stream-transport";
 import type {
   CoopRoomClientConfig,
+  CoopRoomClientTelemetrySnapshot,
+  CoopRoomSnapshotPath,
+  CoopRoomSnapshotStreamLiveness,
   CoopRoomClientStatusSnapshot,
   CoopRoomJoinRequest
 } from "../types/coop-room-client";
@@ -30,11 +34,15 @@ interface CoopRoomClientDependencies {
   readonly clearTimeout?: typeof globalThis.clearTimeout;
   readonly fetch?: typeof globalThis.fetch;
   readonly playerPresenceDatagramTransport?: DuckHuntCoopRoomPlayerPresenceDatagramTransport;
+  readonly readWallClockMs?: () => number;
   readonly setTimeout?: typeof globalThis.setTimeout;
+  readonly snapshotStreamTransport?: CoopRoomSnapshotStreamTransport;
   readonly transport?: CoopRoomTransport;
 }
 
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
+
+const playerPresenceDatagramFallbackRecoveryDelayMultiplier = 1;
 
 type PendingPlayerPresenceUpdate = Omit<
   CoopPlayerPresenceSnapshotInput,
@@ -59,6 +67,14 @@ function freezeStatusSnapshot(
     roomId,
     state
   });
+}
+
+function clampBufferedSnapshotCount(rawValue: number): number {
+  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    return 1;
+  }
+
+  return Math.max(1, Math.floor(rawValue));
 }
 
 function findPlayerAckSequence(
@@ -156,36 +172,79 @@ function isNewerRoomSession(
   return nextSessionOrder.ordinal > currentSessionOrder.ordinal;
 }
 
+function freezeRoomClientTelemetrySnapshot(
+  snapshot: CoopRoomClientTelemetrySnapshot
+): CoopRoomClientTelemetrySnapshot {
+  return Object.freeze({
+    latestSnapshotUpdateRateHz: snapshot.latestSnapshotUpdateRateHz,
+    playerPresenceDatagramSendFailureCount:
+      snapshot.playerPresenceDatagramSendFailureCount,
+    playerPresenceLastTransportError:
+      snapshot.playerPresenceLastTransportError,
+    playerPresenceReliableFallbackActive:
+      snapshot.playerPresenceReliableFallbackActive,
+    snapshotStream: Object.freeze({
+      available: snapshot.snapshotStream.available,
+      fallbackActive: snapshot.snapshotStream.fallbackActive,
+      lastTransportError: snapshot.snapshotStream.lastTransportError,
+      liveness: snapshot.snapshotStream.liveness,
+      path: snapshot.snapshotStream.path,
+      reconnectCount: snapshot.snapshotStream.reconnectCount
+    })
+  });
+}
+
 export class CoopRoomClient {
   readonly #clearTimeout: typeof globalThis.clearTimeout;
   readonly #config: CoopRoomClientConfig;
+  readonly #maxBufferedSnapshots: number;
   readonly #playerPresenceDatagramTransport: DuckHuntCoopRoomPlayerPresenceDatagramTransport | null;
+  readonly #readWallClockMs: () => number;
   readonly #setTimeout: typeof globalThis.setTimeout;
+  readonly #snapshotStreamTransport: CoopRoomSnapshotStreamTransport | null;
   readonly #transport: CoopRoomTransport;
   readonly #updateListeners = new Set<() => void>();
 
   #joinPromise: Promise<CoopRoomSnapshot> | null = null;
+  #latestAcceptedSnapshotReceivedAtMs: number | null = null;
   #nextClientShotSequence = 0;
   #nextPlayerPresenceSequence = 0;
   #playerId: CoopPlayerId | null = null;
+  #playerPresenceDatagramLastError: string | null = null;
+  #playerPresenceDatagramSendFailureCount = 0;
+  #playerPresenceDatagramFallbackRecoveryHandle: TimeoutHandle | null = null;
   #playerPresenceSyncHandle: TimeoutHandle | null = null;
   #pendingPlayerPresenceUpdate: PendingPlayerPresenceUpdate | null = null;
   #playerPresenceSyncInFlight = false;
   #pollHandle: TimeoutHandle | null = null;
+  #previousAcceptedSnapshotReceivedAtMs: number | null = null;
+  #roomSnapshotBuffer: readonly CoopRoomSnapshot[] = Object.freeze([]);
   #roomSnapshot: CoopRoomSnapshot | null = null;
+  #snapshotStreamLastError: string | null = null;
+  #snapshotStreamReconnectCount = 0;
+  #snapshotStreamReconnectHandle: TimeoutHandle | null = null;
+  #snapshotStreamSubscription:
+    | ReturnType<CoopRoomSnapshotStreamTransport["subscribeRoomSnapshots"]>
+    | null = null;
   #statusSnapshot: CoopRoomClientStatusSnapshot;
   #useReliablePlayerPresenceFallback = false;
+  #usingSnapshotStreamFallback = false;
 
   constructor(
     config: CoopRoomClientConfig,
     dependencies: CoopRoomClientDependencies = {}
   ) {
     this.#config = config;
+    this.#maxBufferedSnapshots = clampBufferedSnapshotCount(
+      config.maxBufferedSnapshots
+    );
     this.#playerPresenceDatagramTransport =
       dependencies.playerPresenceDatagramTransport ?? null;
+    this.#readWallClockMs = dependencies.readWallClockMs ?? Date.now;
     this.#setTimeout = dependencies.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.#clearTimeout =
       dependencies.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.#snapshotStreamTransport = dependencies.snapshotStreamTransport ?? null;
     this.#transport =
       dependencies.transport ??
       createCoopRoomHttpTransport(
@@ -210,12 +269,46 @@ export class CoopRoomClient {
     return this.#roomSnapshot;
   }
 
+  get roomSnapshotBuffer(): readonly CoopRoomSnapshot[] {
+    return this.#roomSnapshotBuffer;
+  }
+
   get roomId(): CoopRoomClientConfig["roomId"] {
     return this.#config.roomId;
   }
 
   get statusSnapshot(): CoopRoomClientStatusSnapshot {
     return this.#statusSnapshot;
+  }
+
+  get telemetrySnapshot(): CoopRoomClientTelemetrySnapshot {
+    const snapshotUpdateRateHz =
+      this.#latestAcceptedSnapshotReceivedAtMs !== null &&
+      this.#previousAcceptedSnapshotReceivedAtMs !== null
+        ? 1000 /
+          Math.max(
+            1,
+            this.#latestAcceptedSnapshotReceivedAtMs -
+              this.#previousAcceptedSnapshotReceivedAtMs
+          )
+        : null;
+
+    return freezeRoomClientTelemetrySnapshot({
+      latestSnapshotUpdateRateHz: snapshotUpdateRateHz,
+      playerPresenceDatagramSendFailureCount:
+        this.#playerPresenceDatagramSendFailureCount,
+      playerPresenceLastTransportError: this.#playerPresenceDatagramLastError,
+      playerPresenceReliableFallbackActive:
+        this.#useReliablePlayerPresenceFallback,
+      snapshotStream: {
+        available: this.#snapshotStreamTransport !== null,
+        fallbackActive: this.#usingSnapshotStreamFallback,
+        lastTransportError: this.#snapshotStreamLastError,
+        liveness: this.#resolveSnapshotStreamLiveness(),
+        path: this.#resolveSnapshotStreamPath(),
+        reconnectCount: this.#snapshotStreamReconnectCount
+      }
+    });
   }
 
   get supportsCoopPlayerPresenceDatagrams(): boolean {
@@ -351,7 +444,11 @@ export class CoopRoomClient {
 
   fireShot(
     origin: CoopVector3SnapshotInput,
-    aimDirection: CoopVector3SnapshotInput
+    aimDirection: CoopVector3SnapshotInput,
+    options: {
+      readonly clientEstimatedSimulationTimeMs?: number;
+      readonly weaponId?: string;
+    } = {}
   ): void {
     if (
       this.#playerId === null ||
@@ -364,10 +461,19 @@ export class CoopRoomClient {
     this.#nextClientShotSequence += 1;
     const command = createCoopFireShotCommand({
       aimDirection,
+      clientEstimatedSimulationTimeMs:
+        options.clientEstimatedSimulationTimeMs ??
+        Number(this.#roomSnapshot?.tick.simulationTimeMs ?? 0),
       clientShotSequence: this.#nextClientShotSequence,
       origin,
       playerId: this.#playerId,
-      roomId: this.#config.roomId
+      roomId: this.#config.roomId,
+      weaponId:
+        options.weaponId ??
+        this.#roomSnapshot?.players.find(
+          (playerSnapshot) => playerSnapshot.playerId === this.#playerId
+        )?.presence.weaponId ??
+        "semiautomatic-pistol"
     });
 
     void this.#postCommand(command)
@@ -410,6 +516,9 @@ export class CoopRoomClient {
 
     this.#cancelScheduledPoll();
     this.#cancelScheduledPlayerPresenceSync();
+    this.#cancelScheduledPlayerPresenceDatagramFallbackRecovery();
+    this.#cancelScheduledSnapshotStreamReconnect();
+    this.#closeSnapshotStreamSubscription();
     this.#statusSnapshot = freezeStatusSnapshot(
       this.#config.roomId,
       this.#playerId,
@@ -420,6 +529,7 @@ export class CoopRoomClient {
     );
     this.#notifyUpdates();
     this.#playerPresenceDatagramTransport?.dispose?.();
+    this.#snapshotStreamTransport?.dispose?.();
 
     if (playerIdToLeave !== null) {
       void this.#postLeaveRoomDuringDispose(playerIdToLeave);
@@ -445,7 +555,11 @@ export class CoopRoomClient {
       this.#applyServerEvent(serverEvent);
 
       if (!this.#isDisposed()) {
-        this.#schedulePoll(0);
+        this.#startSnapshotStream(request.playerId);
+
+        if (this.#snapshotStreamTransport === null) {
+          this.#schedulePoll(0);
+        }
       }
 
       return serverEvent.room;
@@ -458,21 +572,41 @@ export class CoopRoomClient {
     }
   }
 
-  #applyServerEvent(serverEvent: CoopRoomServerEvent): void {
+  #applyServerEvent(serverEvent: CoopRoomServerEvent): boolean {
     if (this.#isDisposed()) {
-      return;
+      return false;
     }
 
     if (!hasPlayerMembership(serverEvent.room, this.#playerId)) {
       this.#setMembershipLost("You are no longer in the co-op room.");
-      return;
+      return false;
     }
 
     if (!this.#shouldAcceptRoomSnapshot(serverEvent.room)) {
-      return;
+      return false;
+    }
+
+    const acceptedAtMs = this.#readWallClockMs();
+
+    if (Number.isFinite(acceptedAtMs)) {
+      this.#previousAcceptedSnapshotReceivedAtMs =
+        this.#latestAcceptedSnapshotReceivedAtMs;
+      this.#latestAcceptedSnapshotReceivedAtMs = acceptedAtMs;
     }
 
     this.#roomSnapshot = serverEvent.room;
+    const nextBuffer = [
+      ...this.#roomSnapshotBuffer.filter((snapshot) =>
+        this.#shouldKeepBufferedRoomSnapshot(snapshot, serverEvent.room)
+      ),
+      serverEvent.room
+    ];
+
+    this.#roomSnapshotBuffer = Object.freeze(
+      nextBuffer.slice(-this.#maxBufferedSnapshots)
+    );
+    this.#roomSnapshot =
+      this.#roomSnapshotBuffer[this.#roomSnapshotBuffer.length - 1] ?? null;
     this.#statusSnapshot = freezeStatusSnapshot(
       this.#config.roomId,
       this.#playerId,
@@ -482,6 +616,7 @@ export class CoopRoomClient {
       null
     );
     this.#notifyUpdates();
+    return true;
   }
 
   #shouldAcceptRoomSnapshot(nextSnapshot: CoopRoomSnapshot): boolean {
@@ -516,7 +651,8 @@ export class CoopRoomClient {
     if (
       this.#statusSnapshot.state === "disposed" ||
       this.#playerId === null ||
-      !this.#statusSnapshot.joined
+      !this.#statusSnapshot.joined ||
+      !this.#shouldUsePollingHappyPath()
     ) {
       return;
     }
@@ -534,6 +670,107 @@ export class CoopRoomClient {
 
     this.#clearTimeout(this.#pollHandle);
     this.#pollHandle = null;
+  }
+
+  #startSnapshotStream(playerId: CoopPlayerId): void {
+    if (
+      this.#snapshotStreamTransport === null ||
+      this.#snapshotStreamSubscription !== null ||
+      this.#isDisposed()
+    ) {
+      return;
+    }
+
+    const transportStatusChanged =
+      this.#usingSnapshotStreamFallback ||
+      this.#snapshotStreamLastError !== null ||
+      this.#snapshotStreamReconnectHandle !== null;
+
+    this.#usingSnapshotStreamFallback = false;
+    this.#cancelScheduledPoll();
+    this.#cancelScheduledSnapshotStreamReconnect();
+    this.#snapshotStreamSubscription =
+      this.#snapshotStreamTransport.subscribeRoomSnapshots(playerId, {
+        onClose: () => {
+          this.#handleSnapshotStreamFailure(
+            "Co-op room snapshot stream closed."
+          );
+        },
+        onError: (error) => {
+          const message =
+            error instanceof Error &&
+            typeof error.message === "string" &&
+            error.message.trim().length > 0
+              ? error.message
+              : "Co-op room snapshot stream failed.";
+
+          this.#handleSnapshotStreamFailure(message);
+        },
+        onRoomEvent: (serverEvent) => {
+          const transportStatusChangedOnEvent =
+            this.#usingSnapshotStreamFallback ||
+            this.#snapshotStreamLastError !== null ||
+            this.#snapshotStreamReconnectHandle !== null;
+
+          this.#usingSnapshotStreamFallback = false;
+          this.#snapshotStreamLastError = null;
+          const acceptedServerEvent = this.#applyServerEvent(serverEvent);
+          this.#cancelScheduledPoll();
+          this.#cancelScheduledSnapshotStreamReconnect();
+
+          if (transportStatusChangedOnEvent && !acceptedServerEvent) {
+            this.#notifyUpdates();
+          }
+        }
+      });
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
+  }
+
+  #closeSnapshotStreamSubscription(): void {
+    if (this.#snapshotStreamSubscription === null) {
+      return;
+    }
+
+    const subscription = this.#snapshotStreamSubscription;
+
+    this.#snapshotStreamSubscription = null;
+    subscription.close();
+  }
+
+  #scheduleSnapshotStreamReconnect(): void {
+    this.#cancelScheduledSnapshotStreamReconnect();
+
+    if (
+      this.#snapshotStreamTransport === null ||
+      this.#playerId === null ||
+      this.#isDisposed()
+    ) {
+      return;
+    }
+
+    this.#snapshotStreamReconnectCount += 1;
+
+    this.#snapshotStreamReconnectHandle = this.#setTimeout(() => {
+      this.#snapshotStreamReconnectHandle = null;
+
+      if (this.#playerId === null || this.#isDisposed()) {
+        return;
+      }
+
+      this.#startSnapshotStream(this.#playerId);
+    }, Math.max(0, Number(this.#config.snapshotStreamReconnectDelayMs)));
+  }
+
+  #cancelScheduledSnapshotStreamReconnect(): void {
+    if (this.#snapshotStreamReconnectHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#snapshotStreamReconnectHandle);
+    this.#snapshotStreamReconnectHandle = null;
   }
 
   #schedulePlayerPresenceSync(delayMs: number): void {
@@ -555,6 +792,16 @@ export class CoopRoomClient {
     }, Math.max(0, delayMs));
   }
 
+  #resolvePlayerPresenceDatagramFallbackRecoveryDelayMs(): number {
+    return Math.max(
+      1,
+      Math.floor(
+        this.#resolvePollDelayMs() *
+          playerPresenceDatagramFallbackRecoveryDelayMultiplier
+      )
+    );
+  }
+
   #cancelScheduledPlayerPresenceSync(): void {
     if (this.#playerPresenceSyncHandle === null) {
       return;
@@ -562,6 +809,68 @@ export class CoopRoomClient {
 
     this.#clearTimeout(this.#playerPresenceSyncHandle);
     this.#playerPresenceSyncHandle = null;
+  }
+
+  #schedulePlayerPresenceDatagramFallbackRecovery(): void {
+    this.#cancelScheduledPlayerPresenceDatagramFallbackRecovery();
+
+    if (
+      this.#statusSnapshot.state === "disposed" ||
+      this.#playerPresenceDatagramTransport === null
+    ) {
+      return;
+    }
+
+    this.#playerPresenceDatagramFallbackRecoveryHandle = this.#setTimeout(() => {
+      this.#playerPresenceDatagramFallbackRecoveryHandle = null;
+
+      if (
+        this.#statusSnapshot.state === "disposed" ||
+        !this.#useReliablePlayerPresenceFallback
+      ) {
+        return;
+      }
+
+      this.#useReliablePlayerPresenceFallback = false;
+      this.#notifyUpdates();
+    }, this.#resolvePlayerPresenceDatagramFallbackRecoveryDelayMs());
+  }
+
+  #cancelScheduledPlayerPresenceDatagramFallbackRecovery(): void {
+    if (this.#playerPresenceDatagramFallbackRecoveryHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#playerPresenceDatagramFallbackRecoveryHandle);
+    this.#playerPresenceDatagramFallbackRecoveryHandle = null;
+  }
+
+  #handleSuccessfulPlayerPresenceDatagramSend(): void {
+    const transportStatusChanged =
+      this.#useReliablePlayerPresenceFallback ||
+      this.#playerPresenceDatagramLastError !== null;
+
+    this.#useReliablePlayerPresenceFallback = false;
+    this.#playerPresenceDatagramLastError = null;
+    this.#cancelScheduledPlayerPresenceDatagramFallbackRecovery();
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
+  }
+
+  #handlePlayerPresenceDatagramSendFailure(nextError: string): void {
+    const transportStatusChanged =
+      !this.#useReliablePlayerPresenceFallback ||
+      this.#playerPresenceDatagramLastError !== nextError;
+
+    this.#playerPresenceDatagramLastError = nextError;
+    this.#useReliablePlayerPresenceFallback = true;
+    this.#schedulePlayerPresenceDatagramFallbackRecovery();
+
+    if (transportStatusChanged) {
+      this.#notifyUpdates();
+    }
   }
 
   async #flushPlayerPresenceSync(): Promise<void> {
@@ -620,9 +929,19 @@ export class CoopRoomClient {
       await this.#playerPresenceDatagramTransport.sendPlayerPresenceDatagram(
         command
       );
+      this.#handleSuccessfulPlayerPresenceDatagramSend();
       return null;
-    } catch {
-      this.#useReliablePlayerPresenceFallback = true;
+    } catch (error) {
+      const nextError =
+        error instanceof Error &&
+        typeof error.message === "string" &&
+        error.message.trim().length > 0
+          ? error.message
+          : "Co-op player presence datagram send failed.";
+
+      this.#playerPresenceDatagramSendFailureCount += 1;
+      this.#handlePlayerPresenceDatagramSendFailure(nextError);
+
       return this.#postCommand(command);
     }
   }
@@ -640,7 +959,8 @@ export class CoopRoomClient {
       if (
         !this.#isDisposed() &&
         this.#playerId !== null &&
-        this.#statusSnapshot.joined
+        this.#statusSnapshot.joined &&
+        this.#shouldUsePollingHappyPath()
       ) {
         this.#schedulePoll(this.#resolvePollDelayMs());
       }
@@ -693,6 +1013,7 @@ export class CoopRoomClient {
     this.#cancelScheduledPoll();
     this.#cancelScheduledPlayerPresenceSync();
     this.#pendingPlayerPresenceUpdate = null;
+    this.#roomSnapshotBuffer = Object.freeze([]);
     this.#roomSnapshot = null;
     this.#statusSnapshot = freezeStatusSnapshot(
       this.#config.roomId,
@@ -743,5 +1064,73 @@ export class CoopRoomClient {
     for (const listener of this.#updateListeners) {
       listener();
     }
+  }
+
+  #handleSnapshotStreamFailure(message: string): void {
+    if (this.#isDisposed()) {
+      return;
+    }
+
+    this.#snapshotStreamSubscription = null;
+    this.#snapshotStreamLastError = message.trim().length > 0 ? message : null;
+    this.#usingSnapshotStreamFallback = true;
+    this.#schedulePoll(0);
+    this.#scheduleSnapshotStreamReconnect();
+    this.#notifyUpdates();
+
+    if (message.trim().length > 0) {
+      this.#applyRoomAccessError(new Error(message), message);
+    }
+  }
+
+  #shouldKeepBufferedRoomSnapshot(
+    bufferedSnapshot: CoopRoomSnapshot,
+    nextSnapshot: CoopRoomSnapshot
+  ): boolean {
+    if (bufferedSnapshot.session.sessionId !== nextSnapshot.session.sessionId) {
+      return false;
+    }
+
+    return bufferedSnapshot.tick.currentTick < nextSnapshot.tick.currentTick;
+  }
+
+  #shouldUsePollingHappyPath(): boolean {
+    return (
+      this.#snapshotStreamTransport === null || this.#usingSnapshotStreamFallback
+    );
+  }
+
+  #resolveSnapshotStreamLiveness(): CoopRoomSnapshotStreamLiveness {
+    if (this.#snapshotStreamTransport === null) {
+      return "inactive";
+    }
+
+    if (this.#usingSnapshotStreamFallback) {
+      return this.#snapshotStreamReconnectHandle === null
+        ? "fallback-polling"
+        : "reconnecting";
+    }
+
+    if (this.#snapshotStreamSubscription !== null) {
+      return "subscribed";
+    }
+
+    return this.#snapshotStreamReconnectHandle !== null
+      ? "reconnecting"
+      : "inactive";
+  }
+
+  #resolveSnapshotStreamPath(): CoopRoomSnapshotPath {
+    if (this.#snapshotStreamTransport === null) {
+      return "http-polling";
+    }
+
+    if (this.#usingSnapshotStreamFallback) {
+      return "fallback-polling";
+    }
+
+    return this.#snapshotStreamSubscription !== null
+      ? "reliable-snapshot-stream"
+      : "http-polling";
   }
 }

@@ -14,6 +14,16 @@ export class CoopRoomDirectory {
   readonly #roomRuntimes = new Map<CoopRoomId, CoopRoomRuntime>();
   readonly #roomSessionOrdinals = new Map<CoopRoomId, number>();
 
+  advanceToTime(nowMs: number): void {
+    for (const [roomId, roomRuntime] of this.#roomRuntimes.entries()) {
+      roomRuntime.advanceToTime(nowMs);
+
+      if (roomRuntime.playerCount === 0) {
+        this.#roomRuntimes.delete(roomId);
+      }
+    }
+  }
+
   hasRoom(roomId: CoopRoomId): boolean {
     return this.#roomRuntimes.has(roomId);
   }
@@ -22,7 +32,7 @@ export class CoopRoomDirectory {
     const roomSnapshots: CoopRoomSnapshot[] = [];
 
     for (const [roomId, roomRuntime] of this.#roomRuntimes.entries()) {
-      const roomSnapshot = roomRuntime.advanceTo(nowMs);
+      const roomSnapshot = roomRuntime.readSnapshot(nowMs);
 
       if (roomSnapshot.players.length === 0) {
         this.#roomRuntimes.delete(roomId);
@@ -54,7 +64,7 @@ export class CoopRoomDirectory {
       roomRuntime.markPlayerSeen(observingPlayerId, nowMs);
     }
 
-    const roomSnapshot = roomRuntime.advanceTo(nowMs);
+    const roomSnapshot = roomRuntime.readSnapshot(nowMs);
 
     if (roomSnapshot.players.length === 0) {
       this.#roomRuntimes.delete(roomId);

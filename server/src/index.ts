@@ -77,6 +77,8 @@ const localdevWebTransportBootError = resolveOptionalEnvValue(
 );
 
 let localdevWebTransportServer: LocaldevWebTransportServer | null = null;
+let metaverseWorldTickHandle: ReturnType<typeof setInterval> | null = null;
+let duckHuntRoomTickHandle: ReturnType<typeof setInterval> | null = null;
 let shuttingDown = false;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
@@ -146,6 +148,40 @@ function stopLocaldevWebTransportServer(): void {
   }
 }
 
+function startAuthoritativeTickOwners(): void {
+  if (metaverseWorldTickHandle === null) {
+    metaverseAuthoritativeWorldRuntime.advanceToTime(Date.now());
+    metaverseWorldTickHandle = setInterval(() => {
+      const nowMs = Date.now();
+
+      metaverseAuthoritativeWorldRuntime.advanceToTime(nowMs);
+      metaverseWorldWebTransportAdapter.publishWorldSnapshots(nowMs);
+    }, Math.max(1, metaverseAuthoritativeWorldRuntime.tickIntervalMs));
+  }
+
+  if (duckHuntRoomTickHandle === null) {
+    coopRoomDirectory.advanceToTime(Date.now());
+    duckHuntRoomTickHandle = setInterval(() => {
+      const nowMs = Date.now();
+
+      coopRoomDirectory.advanceToTime(nowMs);
+      duckHuntCoopRoomWebTransportAdapter.publishRoomSnapshots(nowMs);
+    }, 50);
+  }
+}
+
+function stopAuthoritativeTickOwners(): void {
+  if (metaverseWorldTickHandle !== null) {
+    clearInterval(metaverseWorldTickHandle);
+    metaverseWorldTickHandle = null;
+  }
+
+  if (duckHuntRoomTickHandle !== null) {
+    clearInterval(duckHuntRoomTickHandle);
+    duckHuntRoomTickHandle = null;
+  }
+}
+
 function closeHttpServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((error) => {
@@ -165,6 +201,7 @@ async function shutdownServer(signal: NodeJS.Signals): Promise<void> {
   }
 
   shuttingDown = true;
+  stopAuthoritativeTickOwners();
   stopLocaldevWebTransportServer();
 
   try {
@@ -270,6 +307,8 @@ server.on("error", (error) => {
 
   throw error;
 });
+
+startAuthoritativeTickOwners();
 
 process.on("SIGINT", () => {
   void shutdownServer("SIGINT");

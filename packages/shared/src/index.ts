@@ -119,8 +119,10 @@ export type {
 } from "./metaverse/metaverse-session-contract.js";
 export {
   metaverseRealtimeWorldClientCommandTypes,
+  metaversePlayerTraversalIntentLocomotionModeIds,
   metaverseRealtimeWorldServerEventTypes,
   createMetaverseDriverVehicleControlIntentSnapshot,
+  createMetaversePlayerTraversalIntentSnapshot,
   createMetaverseRealtimeMountedOccupancySnapshot,
   createMetaverseRealtimePlayerSnapshot,
   createMetaverseRealtimeTickSnapshot,
@@ -129,11 +131,16 @@ export {
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldSnapshot,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseVehicleId
 } from "./metaverse/metaverse-realtime-world-contract.js";
 export type {
   MetaverseDriverVehicleControlIntentSnapshot,
   MetaverseDriverVehicleControlIntentSnapshotInput,
+  MetaversePlayerTraversalIntentLocomotionModeId,
+  MetaversePlayerTraversalIntentSnapshot,
+  MetaversePlayerTraversalIntentSnapshotInput,
   MetaverseRealtimeMountedOccupancySnapshot,
   MetaverseRealtimeMountedOccupancySnapshotInput,
   MetaverseRealtimeWorldClientCommand,
@@ -155,6 +162,10 @@ export type {
   MetaverseRealtimeWorldSnapshotInput,
   MetaverseSyncDriverVehicleControlCommand,
   MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseSyncMountedOccupancyCommand,
+  MetaverseSyncMountedOccupancyCommandInput,
+  MetaverseSyncPlayerTraversalIntentCommand,
+  MetaverseSyncPlayerTraversalIntentCommandInput,
   MetaverseVehicleId
 } from "./metaverse/metaverse-realtime-world-contract.js";
 export {
@@ -162,18 +173,22 @@ export {
   createMetaverseRealtimeWorldWebTransportErrorMessage,
   createMetaverseRealtimeWorldWebTransportServerEventMessage,
   createMetaverseRealtimeWorldWebTransportSnapshotRequest,
+  createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest,
   metaverseRealtimeWorldWebTransportClientMessageTypes,
   metaverseRealtimeWorldWebTransportServerMessageTypes
 } from "./metaverse/metaverse-realtime-world-webtransport-contract.js";
 export {
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   metaverseRealtimeWorldWebTransportClientDatagramTypes
 } from "./metaverse/metaverse-realtime-world-webtransport-datagram-contract.js";
 export type {
   MetaverseRealtimeWorldWebTransportClientDatagram,
   MetaverseRealtimeWorldWebTransportClientDatagramType,
   MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
-  MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramInput
+  MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramInput,
+  MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
+  MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagramInput
 } from "./metaverse/metaverse-realtime-world-webtransport-datagram-contract.js";
 export type {
   MetaverseRealtimeWorldWebTransportClientMessage,
@@ -187,7 +202,9 @@ export type {
   MetaverseRealtimeWorldWebTransportServerMessage,
   MetaverseRealtimeWorldWebTransportServerMessageType,
   MetaverseRealtimeWorldWebTransportSnapshotRequest,
-  MetaverseRealtimeWorldWebTransportSnapshotRequestInput
+  MetaverseRealtimeWorldWebTransportSnapshotRequestInput,
+  MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest,
+  MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequestInput
 } from "./metaverse/metaverse-realtime-world-webtransport-contract.js";
 export {
   metaversePresenceAnimationVocabularyIds,
@@ -301,6 +318,7 @@ export {
   createDuckHuntCoopRoomWebTransportErrorMessage,
   createDuckHuntCoopRoomWebTransportServerEventMessage,
   createDuckHuntCoopRoomWebTransportSnapshotRequest,
+  createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest,
   duckHuntCoopRoomWebTransportClientMessageTypes,
   duckHuntCoopRoomWebTransportServerMessageTypes
 } from "./experiences/duck-hunt/duck-hunt-room-webtransport-contract.js";
@@ -377,5 +395,7 @@ export type {
   DuckHuntCoopRoomWebTransportServerMessage,
   DuckHuntCoopRoomWebTransportServerMessageType,
   DuckHuntCoopRoomWebTransportSnapshotRequest,
-  DuckHuntCoopRoomWebTransportSnapshotRequestInput
+  DuckHuntCoopRoomWebTransportSnapshotRequestInput,
+  DuckHuntCoopRoomWebTransportSnapshotSubscribeRequest,
+  DuckHuntCoopRoomWebTransportSnapshotSubscribeRequestInput
 } from "./experiences/duck-hunt/duck-hunt-room-webtransport-contract.js";

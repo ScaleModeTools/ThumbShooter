@@ -3,11 +3,16 @@ import type {
   MetaverseRealtimePlayerSnapshot,
   MetaverseRealtimeVehicleSnapshot,
   MetaverseRealtimeWorldSnapshot,
-  MetaverseSyncDriverVehicleControlCommandInput
+  MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseSyncMountedOccupancyCommandInput,
+  MetaverseSyncPlayerTraversalIntentCommandInput,
+  MetaverseVehicleId
 } from "@webgpu-metaverse/shared";
 
 import type {
   AuthoritativeServerClockConfig,
+  MetaverseWorldClientTelemetrySnapshot,
+  MetaverseWorldSnapshotStreamTelemetrySnapshot,
   MetaverseWorldClientStatusSnapshot,
   RealtimeDatagramTransportStatusSnapshot,
   RealtimeReliableTransportStatusSnapshot
@@ -18,23 +23,61 @@ import {
   createDisabledRealtimeReliableTransportStatusSnapshot
 } from "@/network";
 import type {
+  MetaverseFlightInputSnapshot,
+  MetaverseHudSnapshot,
+  MountedEnvironmentSnapshot,
   MetaverseRemoteCharacterPresentationSnapshot,
   MetaverseRemoteVehiclePresentationSnapshot
 } from "../types/metaverse-runtime";
 import type { MetaverseLocalPlayerIdentity } from "./metaverse-presence-runtime";
 import type { RoutedDriverVehicleControlIntentSnapshot } from "../traversal/types/traversal";
 
+interface MutableVector3Snapshot {
+  x: number;
+  y: number;
+  z: number;
+}
+
+interface MutableRemoteCharacterPresentationSnapshot {
+  characterId: string;
+  mountedOccupancy: MetaverseRemoteCharacterPresentationSnapshot["mountedOccupancy"];
+  playerId: string;
+  poseSyncMode: "runtime-server-sampled";
+  presentation: {
+    animationVocabulary:
+      MetaverseRemoteCharacterPresentationSnapshot["presentation"]["animationVocabulary"];
+    position: MutableVector3Snapshot;
+    yawRadians: number;
+  };
+  sampleEpoch: number;
+}
+
+interface MutableRemoteVehiclePresentationSnapshot {
+  environmentAssetId: string;
+  position: MutableVector3Snapshot;
+  sampleEpoch: number;
+  yawRadians: number;
+}
+
 export interface MetaverseWorldClientRuntime {
   readonly currentPollIntervalMs: number;
   readonly driverVehicleControlDatagramStatusSnapshot: RealtimeDatagramTransportStatusSnapshot;
+  readonly latestPlayerInputSequence: number;
   readonly reliableTransportStatusSnapshot: RealtimeReliableTransportStatusSnapshot;
   readonly statusSnapshot: MetaverseWorldClientStatusSnapshot;
+  readonly telemetrySnapshot: MetaverseWorldClientTelemetrySnapshot;
   readonly worldSnapshotBuffer: readonly MetaverseRealtimeWorldSnapshot[];
   ensureConnected(
     playerId: MetaversePlayerId
   ): Promise<MetaverseRealtimeWorldSnapshot>;
   syncDriverVehicleControl(
     commandInput: MetaverseSyncDriverVehicleControlCommandInput | null
+  ): void;
+  syncMountedOccupancy(
+    commandInput: MetaverseSyncMountedOccupancyCommandInput
+  ): void;
+  syncPlayerTraversalIntent(
+    commandInput: MetaverseSyncPlayerTraversalIntentCommandInput | null
   ): void;
   subscribeUpdates(listener: () => void): () => void;
   dispose(): void;
@@ -54,6 +97,16 @@ interface MetaverseRemoteWorldRuntimeDependencies {
   readonly onRemoteWorldUpdate: () => void;
   readonly readWallClockMs?: () => number;
   readonly samplingConfig: MetaverseRemoteWorldSamplingConfig;
+}
+
+interface MetaverseRemoteWorldSamplingTelemetrySnapshot {
+  readonly bufferDepth: number;
+  readonly clockOffsetEstimateMs: number | null;
+  readonly currentExtrapolationMs: number;
+  readonly datagramSendFailureCount: number;
+  readonly extrapolatedFramePercent: number;
+  readonly latestSimulationAgeMs: number | null;
+  readonly latestSnapshotUpdateRateHz: number | null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -88,12 +141,29 @@ function lerpWrappedRadians(
   );
 }
 
-function freezeVector3(x: number, y: number, z: number) {
-  return Object.freeze({
+function createMutableVector3(
+  x: number = 0,
+  y: number = 0,
+  z: number = 0
+): MutableVector3Snapshot {
+  return {
     x,
     y,
     z
-  });
+  };
+}
+
+function writeMutableVector3(
+  target: MutableVector3Snapshot,
+  x: number,
+  y: number,
+  z: number
+): MutableVector3Snapshot {
+  target.x = x;
+  target.y = y;
+  target.z = z;
+
+  return target;
 }
 
 const remoteVehiclePresentationInterpolationRatePerSecond = 16;
@@ -112,14 +182,16 @@ function resolveRemoteVehiclePresentationInterpolationAlpha(
   );
 }
 
-function sampleRemotePlayerPosition(
+function sampleRemotePlayerPositionInto(
+  target: MutableVector3Snapshot,
   basePlayer: MetaverseRealtimePlayerSnapshot,
   nextPlayer: MetaverseRealtimePlayerSnapshot | null,
   alpha: number,
   extrapolationSeconds: number
-) {
+): MutableVector3Snapshot {
   if (nextPlayer !== null) {
-    return freezeVector3(
+    return writeMutableVector3(
+      target,
       lerp(basePlayer.position.x, nextPlayer.position.x, alpha),
       lerp(basePlayer.position.y, nextPlayer.position.y, alpha),
       lerp(basePlayer.position.z, nextPlayer.position.z, alpha)
@@ -127,10 +199,16 @@ function sampleRemotePlayerPosition(
   }
 
   if (extrapolationSeconds <= 0) {
-    return basePlayer.position;
+    return writeMutableVector3(
+      target,
+      basePlayer.position.x,
+      basePlayer.position.y,
+      basePlayer.position.z
+    );
   }
 
-  return freezeVector3(
+  return writeMutableVector3(
+    target,
     basePlayer.position.x + basePlayer.linearVelocity.x * extrapolationSeconds,
     basePlayer.position.y + basePlayer.linearVelocity.y * extrapolationSeconds,
     basePlayer.position.z + basePlayer.linearVelocity.z * extrapolationSeconds
@@ -140,23 +218,33 @@ function sampleRemotePlayerPosition(
 function sampleRemotePlayerYawRadians(
   basePlayer: MetaverseRealtimePlayerSnapshot,
   nextPlayer: MetaverseRealtimePlayerSnapshot | null,
-  alpha: number
+  alpha: number,
+  extrapolationSeconds: number
 ): number {
   if (nextPlayer === null) {
-    return basePlayer.yawRadians;
+    if (extrapolationSeconds <= 0) {
+      return basePlayer.yawRadians;
+    }
+
+    return wrapRadians(
+      basePlayer.yawRadians +
+        basePlayer.angularVelocityRadiansPerSecond * extrapolationSeconds
+    );
   }
 
   return lerpWrappedRadians(basePlayer.yawRadians, nextPlayer.yawRadians, alpha);
 }
 
-function sampleRemoteVehiclePosition(
+function sampleRemoteVehiclePositionInto(
+  target: MutableVector3Snapshot,
   baseVehicle: MetaverseRealtimeVehicleSnapshot,
   nextVehicle: MetaverseRealtimeVehicleSnapshot | null,
   alpha: number,
   extrapolationSeconds: number
-) {
+): MutableVector3Snapshot {
   if (nextVehicle !== null) {
-    return freezeVector3(
+    return writeMutableVector3(
+      target,
       lerp(baseVehicle.position.x, nextVehicle.position.x, alpha),
       lerp(baseVehicle.position.y, nextVehicle.position.y, alpha),
       lerp(baseVehicle.position.z, nextVehicle.position.z, alpha)
@@ -164,10 +252,16 @@ function sampleRemoteVehiclePosition(
   }
 
   if (extrapolationSeconds <= 0) {
-    return baseVehicle.position;
+    return writeMutableVector3(
+      target,
+      baseVehicle.position.x,
+      baseVehicle.position.y,
+      baseVehicle.position.z
+    );
   }
 
-  return freezeVector3(
+  return writeMutableVector3(
+    target,
     baseVehicle.position.x + baseVehicle.linearVelocity.x * extrapolationSeconds,
     baseVehicle.position.y + baseVehicle.linearVelocity.y * extrapolationSeconds,
     baseVehicle.position.z + baseVehicle.linearVelocity.z * extrapolationSeconds
@@ -217,7 +311,7 @@ function resolveSampledWorldFrame(
   }
 
   if (worldSnapshotBuffer.length === 1) {
-    const firstSnapshotTimeMs = Number(firstSnapshot.tick.serverTimeMs);
+    const firstSnapshotTimeMs = Number(firstSnapshot.tick.simulationTimeMs);
     const extrapolationMs = clamp(
       targetServerTimeMs - firstSnapshotTimeMs,
       0,
@@ -232,7 +326,7 @@ function resolveSampledWorldFrame(
     });
   }
 
-  const firstSnapshotTimeMs = Number(firstSnapshot.tick.serverTimeMs);
+  const firstSnapshotTimeMs = Number(firstSnapshot.tick.simulationTimeMs);
 
   if (targetServerTimeMs <= firstSnapshotTimeMs) {
     return Object.freeze({
@@ -246,8 +340,8 @@ function resolveSampledWorldFrame(
   for (let index = 0; index < worldSnapshotBuffer.length - 1; index += 1) {
     const baseSnapshot = worldSnapshotBuffer[index]!;
     const nextSnapshot = worldSnapshotBuffer[index + 1]!;
-    const baseTimeMs = Number(baseSnapshot.tick.serverTimeMs);
-    const nextTimeMs = Number(nextSnapshot.tick.serverTimeMs);
+    const baseTimeMs = Number(baseSnapshot.tick.simulationTimeMs);
+    const nextTimeMs = Number(nextSnapshot.tick.simulationTimeMs);
 
     if (targetServerTimeMs > nextTimeMs) {
       continue;
@@ -270,7 +364,7 @@ function resolveSampledWorldFrame(
 
   const latestSnapshot =
     worldSnapshotBuffer[worldSnapshotBuffer.length - 1] ?? firstSnapshot;
-  const latestTimeMs = Number(latestSnapshot.tick.serverTimeMs);
+  const latestTimeMs = Number(latestSnapshot.tick.simulationTimeMs);
   const extrapolationMs = clamp(
     targetServerTimeMs - latestTimeMs,
     0,
@@ -285,6 +379,47 @@ function resolveSampledWorldFrame(
   });
 }
 
+function indexPlayersByPlayerId(
+  players: readonly MetaverseRealtimePlayerSnapshot[],
+  playerSnapshotsByPlayerId: Map<MetaversePlayerId, MetaverseRealtimePlayerSnapshot>
+): void {
+  playerSnapshotsByPlayerId.clear();
+
+  for (const playerSnapshot of players) {
+    playerSnapshotsByPlayerId.set(playerSnapshot.playerId, playerSnapshot);
+  }
+}
+
+function indexVehiclesByVehicleId(
+  vehicles: readonly MetaverseRealtimeVehicleSnapshot[],
+  vehicleSnapshotsByVehicleId: Map<MetaverseVehicleId, MetaverseRealtimeVehicleSnapshot>
+): void {
+  vehicleSnapshotsByVehicleId.clear();
+
+  for (const vehicleSnapshot of vehicles) {
+    vehicleSnapshotsByVehicleId.set(vehicleSnapshot.vehicleId, vehicleSnapshot);
+  }
+}
+
+const emptyRealtimePlayerSnapshots: readonly MetaverseRealtimePlayerSnapshot[] =
+  Object.freeze([]);
+const emptyRealtimeVehicleSnapshots: readonly MetaverseRealtimeVehicleSnapshot[] =
+  Object.freeze([]);
+const disabledMetaverseWorldClientTelemetrySnapshot: MetaverseWorldClientTelemetrySnapshot =
+  Object.freeze({
+    driverVehicleControlDatagramSendFailureCount: 0,
+    latestSnapshotUpdateRateHz: null,
+    playerTraversalInputDatagramSendFailureCount: 0,
+    snapshotStream: Object.freeze({
+      available: false,
+      fallbackActive: false,
+      lastTransportError: null,
+      liveness: "inactive",
+      path: "http-polling",
+      reconnectCount: 0
+    })
+  });
+
 export class MetaverseRemoteWorldRuntime {
   readonly #createMetaverseWorldClient:
     | (() => MetaverseWorldClientRuntime)
@@ -294,13 +429,43 @@ export class MetaverseRemoteWorldRuntime {
   readonly #readWallClockMs: () => number;
   readonly #samplingConfig: MetaverseRemoteWorldSamplingConfig;
   readonly #authoritativeServerClock: AuthoritativeServerClock;
+  readonly #nextPlayerSnapshotsByPlayerId = new Map<
+    MetaversePlayerId,
+    MetaverseRealtimePlayerSnapshot
+  >();
+  readonly #nextVehicleSnapshotsByVehicleId = new Map<
+    MetaverseVehicleId,
+    MetaverseRealtimeVehicleSnapshot
+  >();
+  readonly #latestPlayerSnapshotsByPlayerId = new Map<
+    MetaversePlayerId,
+    MetaverseRealtimePlayerSnapshot
+  >();
+  readonly #latestVehicleSnapshotsByEnvironmentAssetId = new Map<
+    string,
+    MetaverseRealtimeVehicleSnapshot
+  >();
+  readonly #remoteCharacterPresentationsByPlayerId = new Map<
+    MetaversePlayerId,
+    MutableRemoteCharacterPresentationSnapshot
+  >();
+  readonly #remoteVehiclePresentationsByEnvironmentAssetId = new Map<
+    string,
+    MutableRemoteVehiclePresentationSnapshot
+  >();
+  readonly #remoteCharacterPresentations: MutableRemoteCharacterPresentationSnapshot[] =
+    [];
+  readonly #remoteVehiclePresentations: MutableRemoteVehiclePresentationSnapshot[] =
+    [];
+  readonly #sampledVehiclePositionScratch = createMutableVector3();
 
   #connectionPromise: Promise<MetaverseRealtimeWorldSnapshot> | null = null;
+  #extrapolatedFrameCount = 0;
   #lastSampledAtMs: number | null = null;
-  #remoteCharacterPresentations: readonly MetaverseRemoteCharacterPresentationSnapshot[] =
-    Object.freeze([]);
-  #remoteVehiclePresentations: readonly MetaverseRemoteVehiclePresentationSnapshot[] =
-    Object.freeze([]);
+  #lastSampledExtrapolationMs = 0;
+  #latestIndexedWorldSnapshot: MetaverseRealtimeWorldSnapshot | null = null;
+  #sampleEpoch = 0;
+  #sampledFrameCount = 0;
   #metaverseWorldClient: MetaverseWorldClientRuntime | null = null;
   #metaverseWorldUnsubscribe: (() => void) | null = null;
 
@@ -332,6 +497,52 @@ export class MetaverseRemoteWorldRuntime {
 
   get currentPollIntervalMs(): number | null {
     return this.#metaverseWorldClient?.currentPollIntervalMs ?? null;
+  }
+
+  get samplingTelemetrySnapshot(): MetaverseRemoteWorldSamplingTelemetrySnapshot {
+    const worldClientTelemetrySnapshot = this.#readWorldClientTelemetrySnapshot();
+    const latestSnapshot =
+      this.#metaverseWorldClient?.worldSnapshotBuffer[
+        (this.#metaverseWorldClient?.worldSnapshotBuffer.length ?? 0) - 1
+      ] ?? null;
+    const localWallClockMs = this.#readWallClockMs();
+
+    if (latestSnapshot !== null) {
+      this.#authoritativeServerClock.observeServerTime(
+        Number(latestSnapshot.tick.emittedAtServerTimeMs),
+        localWallClockMs
+      );
+    }
+
+    const latestSimulationAgeMs =
+      latestSnapshot === null
+        ? null
+        : Math.max(
+            0,
+            this.#authoritativeServerClock.readEstimatedServerTimeMs(
+              localWallClockMs
+            ) - Number(latestSnapshot.tick.simulationTimeMs)
+          );
+
+    return Object.freeze({
+      bufferDepth: this.#metaverseWorldClient?.worldSnapshotBuffer.length ?? 0,
+      clockOffsetEstimateMs: this.#authoritativeServerClock.clockOffsetEstimateMs,
+      currentExtrapolationMs: this.#lastSampledExtrapolationMs,
+      datagramSendFailureCount:
+        worldClientTelemetrySnapshot.driverVehicleControlDatagramSendFailureCount +
+        worldClientTelemetrySnapshot.playerTraversalInputDatagramSendFailureCount,
+      extrapolatedFramePercent:
+        this.#sampledFrameCount <= 0
+          ? 0
+          : (this.#extrapolatedFrameCount / this.#sampledFrameCount) * 100,
+      latestSimulationAgeMs,
+      latestSnapshotUpdateRateHz:
+        worldClientTelemetrySnapshot.latestSnapshotUpdateRateHz
+    });
+  }
+
+  get snapshotStreamTelemetrySnapshot(): MetaverseWorldSnapshotStreamTelemetrySnapshot {
+    return this.#readWorldClientTelemetrySnapshot().snapshotStream;
   }
 
   get latestAuthoritativeTickIntervalMs(): number | null {
@@ -381,12 +592,32 @@ export class MetaverseRemoteWorldRuntime {
       return null;
     }
 
-    return (
-      latestWorldSnapshot.players.find(
-        (playerSnapshot) =>
-          playerSnapshot.playerId === this.#localPlayerIdentity?.playerId
-      ) ?? null
-    );
+    this.#syncLatestWorldSnapshotIndexes(latestWorldSnapshot);
+
+    return this.#latestPlayerSnapshotsByPlayerId.get(
+      this.#localPlayerIdentity.playerId
+    ) ?? null;
+  }
+
+  readFreshAckedAuthoritativeLocalPlayerSnapshot(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): MetaverseRealtimePlayerSnapshot | null {
+    const authoritativeLocalPlayerSnapshot =
+      this.readFreshAuthoritativeLocalPlayerSnapshot(
+        maxAuthoritativeSnapshotAgeMs
+      );
+    const latestPlayerInputSequence =
+      this.#metaverseWorldClient?.latestPlayerInputSequence ?? 0;
+
+    if (
+      authoritativeLocalPlayerSnapshot === null ||
+      authoritativeLocalPlayerSnapshot.lastProcessedInputSequence <
+        latestPlayerInputSequence
+    ) {
+      return null;
+    }
+
+    return authoritativeLocalPlayerSnapshot;
   }
 
   readFreshAuthoritativeVehicleSnapshot(
@@ -401,11 +632,11 @@ export class MetaverseRemoteWorldRuntime {
       return null;
     }
 
+    this.#syncLatestWorldSnapshotIndexes(latestWorldSnapshot);
+
     return (
-      latestWorldSnapshot.vehicles.find(
-        (vehicleSnapshot) =>
-          vehicleSnapshot.environmentAssetId === environmentAssetId
-      ) ?? null
+      this.#latestVehicleSnapshotsByEnvironmentAssetId.get(environmentAssetId) ??
+      null
     );
   }
 
@@ -438,9 +669,20 @@ export class MetaverseRemoteWorldRuntime {
     this.#metaverseWorldClient = null;
     this.#connectionPromise = null;
     this.#authoritativeServerClock.reset();
+    this.#extrapolatedFrameCount = 0;
     this.#lastSampledAtMs = null;
-    this.#remoteCharacterPresentations = Object.freeze([]);
-    this.#remoteVehiclePresentations = Object.freeze([]);
+    this.#lastSampledExtrapolationMs = 0;
+    this.#latestIndexedWorldSnapshot = null;
+    this.#sampleEpoch = 0;
+    this.#sampledFrameCount = 0;
+    this.#latestPlayerSnapshotsByPlayerId.clear();
+    this.#latestVehicleSnapshotsByEnvironmentAssetId.clear();
+    this.#nextPlayerSnapshotsByPlayerId.clear();
+    this.#nextVehicleSnapshotsByVehicleId.clear();
+    this.#remoteCharacterPresentationsByPlayerId.clear();
+    this.#remoteVehiclePresentationsByEnvironmentAssetId.clear();
+    this.#remoteCharacterPresentations.length = 0;
+    this.#remoteVehiclePresentations.length = 0;
   }
 
   syncConnection(presenceJoined: boolean): void {
@@ -495,15 +737,33 @@ export class MetaverseRemoteWorldRuntime {
           );
 
     if (sampledWorldFrame === null || localPlayerIdentity === null) {
-      this.#remoteCharacterPresentations = Object.freeze([]);
-      this.#remoteVehiclePresentations = Object.freeze([]);
+      this.#lastSampledExtrapolationMs = 0;
+      this.#sampleEpoch += 1;
+      this.#nextPlayerSnapshotsByPlayerId.clear();
+      this.#nextVehicleSnapshotsByVehicleId.clear();
+      this.#remoteCharacterPresentationsByPlayerId.clear();
+      this.#remoteVehiclePresentationsByEnvironmentAssetId.clear();
+      this.#remoteCharacterPresentations.length = 0;
+      this.#remoteVehiclePresentations.length = 0;
       return;
     }
 
     const { alpha, baseSnapshot, extrapolationSeconds, nextSnapshot } =
       sampledWorldFrame;
-    const remoteCharacterPresentations: MetaverseRemoteCharacterPresentationSnapshot[] =
-      [];
+    const extrapolationMs = extrapolationSeconds * 1000;
+    const sampleEpoch = this.#sampleEpoch + 1;
+
+    this.#lastSampledExtrapolationMs = extrapolationMs;
+    this.#sampledFrameCount += 1;
+    if (extrapolationMs > 0) {
+      this.#extrapolatedFrameCount += 1;
+    }
+    this.#sampleEpoch = sampleEpoch;
+    indexPlayersByPlayerId(
+      nextSnapshot?.players ?? emptyRealtimePlayerSnapshots,
+      this.#nextPlayerSnapshotsByPlayerId
+    );
+    this.#remoteCharacterPresentations.length = 0;
 
     for (const basePlayer of baseSnapshot.players) {
       if (basePlayer.playerId === localPlayerIdentity.playerId) {
@@ -511,75 +771,123 @@ export class MetaverseRemoteWorldRuntime {
       }
 
       const nextPlayer =
-        nextSnapshot?.players.find(
-          (candidate) => candidate.playerId === basePlayer.playerId
-        ) ?? null;
+        this.#nextPlayerSnapshotsByPlayerId.get(basePlayer.playerId) ?? null;
+      let remoteCharacterPresentation =
+        this.#remoteCharacterPresentationsByPlayerId.get(basePlayer.playerId);
 
-      remoteCharacterPresentations.push(
-        Object.freeze({
+      if (remoteCharacterPresentation === undefined) {
+        remoteCharacterPresentation = {
           characterId: basePlayer.characterId,
           mountedOccupancy: basePlayer.mountedOccupancy,
           playerId: basePlayer.playerId,
           poseSyncMode: "runtime-server-sampled",
-          presentation: Object.freeze({
+          presentation: {
             animationVocabulary: basePlayer.animationVocabulary,
-            position: sampleRemotePlayerPosition(
-              basePlayer,
-              nextPlayer,
-              alpha,
-              extrapolationSeconds
-            ),
-            yawRadians: sampleRemotePlayerYawRadians(
-              basePlayer,
-              nextPlayer,
-              alpha
-            )
-          })
-        })
+            position: createMutableVector3(),
+            yawRadians: basePlayer.yawRadians
+          },
+          sampleEpoch
+        };
+        this.#remoteCharacterPresentationsByPlayerId.set(
+          basePlayer.playerId,
+          remoteCharacterPresentation
+        );
+      }
+
+      remoteCharacterPresentation.characterId = basePlayer.characterId;
+      remoteCharacterPresentation.mountedOccupancy = basePlayer.mountedOccupancy;
+      remoteCharacterPresentation.presentation.animationVocabulary =
+        basePlayer.animationVocabulary;
+      sampleRemotePlayerPositionInto(
+        remoteCharacterPresentation.presentation.position,
+        basePlayer,
+        nextPlayer,
+        alpha,
+        extrapolationSeconds
       );
+      remoteCharacterPresentation.presentation.yawRadians =
+        sampleRemotePlayerYawRadians(
+          basePlayer,
+          nextPlayer,
+          alpha,
+          extrapolationSeconds
+        );
+      remoteCharacterPresentation.sampleEpoch = sampleEpoch;
+      this.#remoteCharacterPresentations.push(remoteCharacterPresentation);
     }
 
-    const remoteVehiclePresentations: MetaverseRemoteVehiclePresentationSnapshot[] =
-      [];
+    for (const [playerId, remoteCharacterPresentation] of this
+      .#remoteCharacterPresentationsByPlayerId) {
+      if (remoteCharacterPresentation.sampleEpoch === sampleEpoch) {
+        continue;
+      }
+
+      this.#remoteCharacterPresentationsByPlayerId.delete(playerId);
+    }
+
+    indexVehiclesByVehicleId(
+      nextSnapshot?.vehicles ?? emptyRealtimeVehicleSnapshots,
+      this.#nextVehicleSnapshotsByVehicleId
+    );
+    this.#remoteVehiclePresentations.length = 0;
+    const vehicleInterpolationAlpha =
+      resolveRemoteVehiclePresentationInterpolationAlpha(deltaSeconds);
 
     for (const baseVehicle of baseSnapshot.vehicles) {
       const nextVehicle =
-        nextSnapshot?.vehicles.find(
-          (candidate) => candidate.vehicleId === baseVehicle.vehicleId
-        ) ?? null;
-      const sampledVehiclePresentation = Object.freeze({
-        environmentAssetId: baseVehicle.environmentAssetId,
-        position: sampleRemoteVehiclePosition(
-          baseVehicle,
-          nextVehicle,
-          alpha,
-          extrapolationSeconds
-        ),
-        yawRadians: sampleRemoteVehicleYawRadians(
-          baseVehicle,
-          nextVehicle,
-          alpha,
-          extrapolationSeconds
-        )
-      });
-      const previousVehiclePresentation =
-        this.#remoteVehiclePresentations.find(
-          (candidate) =>
-            candidate.environmentAssetId ===
-            sampledVehiclePresentation.environmentAssetId
-        ) ?? null;
+        this.#nextVehicleSnapshotsByVehicleId.get(baseVehicle.vehicleId) ?? null;
+      let remoteVehiclePresentation =
+        this.#remoteVehiclePresentationsByEnvironmentAssetId.get(
+          baseVehicle.environmentAssetId
+        );
+
+      if (remoteVehiclePresentation === undefined) {
+        remoteVehiclePresentation = {
+          environmentAssetId: baseVehicle.environmentAssetId,
+          position: createMutableVector3(),
+          sampleEpoch: 0,
+          yawRadians: baseVehicle.yawRadians
+        };
+        this.#remoteVehiclePresentationsByEnvironmentAssetId.set(
+          baseVehicle.environmentAssetId,
+          remoteVehiclePresentation
+        );
+      }
+
+      const previousVehiclePresentationSampled =
+        remoteVehiclePresentation.sampleEpoch > 0;
+      const previousVehiclePositionX = remoteVehiclePresentation.position.x;
+      const previousVehiclePositionY = remoteVehiclePresentation.position.y;
+      const previousVehiclePositionZ = remoteVehiclePresentation.position.z;
+      const previousVehicleYawRadians = remoteVehiclePresentation.yawRadians;
+      const sampledVehiclePosition = sampleRemoteVehiclePositionInto(
+        this.#sampledVehiclePositionScratch,
+        baseVehicle,
+        nextVehicle,
+        alpha,
+        extrapolationSeconds
+      );
+      const sampledVehicleYawRadians = sampleRemoteVehicleYawRadians(
+        baseVehicle,
+        nextVehicle,
+        alpha,
+        extrapolationSeconds
+      );
       const vehiclePositionDeltaX =
-        sampledVehiclePresentation.position.x -
-        (previousVehiclePresentation?.position.x ??
-          sampledVehiclePresentation.position.x);
+        sampledVehiclePosition.x -
+        (previousVehiclePresentationSampled
+          ? previousVehiclePositionX
+          : sampledVehiclePosition.x);
       const vehiclePositionDeltaY =
-        sampledVehiclePresentation.position.y -
-        (previousVehiclePresentation?.position.y ??
-          sampledVehiclePresentation.position.y);
+        sampledVehiclePosition.y -
+        (previousVehiclePresentationSampled
+          ? previousVehiclePositionY
+          : sampledVehiclePosition.y);
       const vehiclePositionDeltaZ =
-        sampledVehiclePresentation.position.z -
-        (previousVehiclePresentation?.position.z ??
-          sampledVehiclePresentation.position.z);
+        sampledVehiclePosition.z -
+        (previousVehiclePresentationSampled
+          ? previousVehiclePositionZ
+          : sampledVehiclePosition.z);
       const vehiclePositionDistance = Math.hypot(
         vehiclePositionDeltaX,
         vehiclePositionDeltaY,
@@ -587,53 +895,69 @@ export class MetaverseRemoteWorldRuntime {
       );
       const vehicleYawDistance = Math.abs(
         wrapRadians(
-          sampledVehiclePresentation.yawRadians -
-            (previousVehiclePresentation?.yawRadians ??
-              sampledVehiclePresentation.yawRadians)
+          sampledVehicleYawRadians -
+            (previousVehiclePresentationSampled
+              ? previousVehicleYawRadians
+              : sampledVehicleYawRadians)
         )
       );
-      const vehicleInterpolationAlpha =
-        resolveRemoteVehiclePresentationInterpolationAlpha(deltaSeconds);
 
-      remoteVehiclePresentations.push(
-        previousVehiclePresentation === null ||
-          vehicleInterpolationAlpha <= 0 ||
-          vehiclePositionDistance >=
-            remoteVehiclePresentationTeleportSnapDistanceMeters ||
-          vehicleYawDistance >= remoteVehiclePresentationYawSnapRadians
-          ? sampledVehiclePresentation
-          : Object.freeze({
-              environmentAssetId: sampledVehiclePresentation.environmentAssetId,
-              position: freezeVector3(
-                lerp(
-                  previousVehiclePresentation.position.x,
-                  sampledVehiclePresentation.position.x,
-                  vehicleInterpolationAlpha
-                ),
-                lerp(
-                  previousVehiclePresentation.position.y,
-                  sampledVehiclePresentation.position.y,
-                  vehicleInterpolationAlpha
-                ),
-                lerp(
-                  previousVehiclePresentation.position.z,
-                  sampledVehiclePresentation.position.z,
-                  vehicleInterpolationAlpha
-                )
-              ),
-              yawRadians: lerpWrappedRadians(
-                previousVehiclePresentation.yawRadians,
-                sampledVehiclePresentation.yawRadians,
-                vehicleInterpolationAlpha
-              )
-            })
-      );
+      remoteVehiclePresentation.environmentAssetId = baseVehicle.environmentAssetId;
+      if (
+        !previousVehiclePresentationSampled ||
+        vehicleInterpolationAlpha <= 0 ||
+        vehiclePositionDistance >=
+          remoteVehiclePresentationTeleportSnapDistanceMeters ||
+        vehicleYawDistance >= remoteVehiclePresentationYawSnapRadians
+      ) {
+        writeMutableVector3(
+          remoteVehiclePresentation.position,
+          sampledVehiclePosition.x,
+          sampledVehiclePosition.y,
+          sampledVehiclePosition.z
+        );
+        remoteVehiclePresentation.yawRadians = sampledVehicleYawRadians;
+      } else {
+        writeMutableVector3(
+          remoteVehiclePresentation.position,
+          lerp(
+            previousVehiclePositionX,
+            sampledVehiclePosition.x,
+            vehicleInterpolationAlpha
+          ),
+          lerp(
+            previousVehiclePositionY,
+            sampledVehiclePosition.y,
+            vehicleInterpolationAlpha
+          ),
+          lerp(
+            previousVehiclePositionZ,
+            sampledVehiclePosition.z,
+            vehicleInterpolationAlpha
+          )
+        );
+        remoteVehiclePresentation.yawRadians = lerpWrappedRadians(
+          previousVehicleYawRadians,
+          sampledVehicleYawRadians,
+          vehicleInterpolationAlpha
+        );
+      }
+      remoteVehiclePresentation.sampleEpoch = sampleEpoch;
+      this.#remoteVehiclePresentations.push(remoteVehiclePresentation);
     }
 
-    this.#remoteCharacterPresentations = Object.freeze(
-      remoteCharacterPresentations
-    );
-    this.#remoteVehiclePresentations = Object.freeze(remoteVehiclePresentations);
+    for (const [
+      environmentAssetId,
+      remoteVehiclePresentation
+    ] of this.#remoteVehiclePresentationsByEnvironmentAssetId) {
+      if (remoteVehiclePresentation.sampleEpoch === sampleEpoch) {
+        continue;
+      }
+
+      this.#remoteVehiclePresentationsByEnvironmentAssetId.delete(
+        environmentAssetId
+      );
+    }
   }
 
   syncLocalDriverVehicleControl(
@@ -663,6 +987,64 @@ export class MetaverseRemoteWorldRuntime {
     });
   }
 
+  syncMountedOccupancy(
+    mountedEnvironment: MountedEnvironmentSnapshot | null
+  ): void {
+    if (
+      this.#metaverseWorldClient === null ||
+      this.#localPlayerIdentity === null
+    ) {
+      return;
+    }
+
+    this.#metaverseWorldClient.syncMountedOccupancy({
+      mountedOccupancy:
+        mountedEnvironment === null
+          ? null
+          : {
+              environmentAssetId: mountedEnvironment.environmentAssetId,
+              entryId: mountedEnvironment.entryId,
+              occupancyKind: mountedEnvironment.occupancyKind,
+              occupantRole: mountedEnvironment.occupantRole,
+              seatId: mountedEnvironment.seatId
+            },
+      playerId: this.#localPlayerIdentity.playerId
+    });
+  }
+
+  syncLocalTraversalIntent(
+    movementInput: Pick<
+      MetaverseFlightInputSnapshot,
+      "boost" | "jump" | "moveAxis" | "strafeAxis" | "yawAxis"
+    >,
+    locomotionMode: MetaverseHudSnapshot["locomotionMode"]
+  ): void {
+    if (
+      this.#metaverseWorldClient === null ||
+      this.#localPlayerIdentity === null
+    ) {
+      this.#metaverseWorldClient?.syncPlayerTraversalIntent(null);
+      return;
+    }
+
+    if (locomotionMode !== "grounded" && locomotionMode !== "swim") {
+      this.#metaverseWorldClient.syncPlayerTraversalIntent(null);
+      return;
+    }
+
+    this.#metaverseWorldClient.syncPlayerTraversalIntent({
+      intent: {
+        boost: movementInput.boost,
+        jump: movementInput.jump,
+        locomotionMode,
+        moveAxis: movementInput.moveAxis,
+        strafeAxis: movementInput.strafeAxis,
+        yawAxis: movementInput.yawAxis
+      },
+      playerId: this.#localPlayerIdentity.playerId,
+    });
+  }
+
   #resolveTargetServerTimeMs(
     worldSnapshotBuffer: readonly MetaverseRealtimeWorldSnapshot[]
   ): number {
@@ -675,7 +1057,7 @@ export class MetaverseRemoteWorldRuntime {
     }
 
     this.#authoritativeServerClock.observeServerTime(
-      Number(latestSnapshot.tick.serverTimeMs),
+      Number(latestSnapshot.tick.emittedAtServerTimeMs),
       localWallClockMs
     );
 
@@ -700,19 +1082,52 @@ export class MetaverseRemoteWorldRuntime {
     const localWallClockMs = this.#readWallClockMs();
 
     this.#authoritativeServerClock.observeServerTime(
-      Number(latestWorldSnapshot.tick.serverTimeMs),
+      Number(latestWorldSnapshot.tick.emittedAtServerTimeMs),
       localWallClockMs
     );
 
     const authoritativeSnapshotAgeMs = Math.max(
       0,
       this.#authoritativeServerClock.readEstimatedServerTimeMs(localWallClockMs) -
-        Number(latestWorldSnapshot.tick.serverTimeMs)
+        Number(latestWorldSnapshot.tick.simulationTimeMs)
     );
 
     return authoritativeSnapshotAgeMs >
       Math.max(0, maxAuthoritativeSnapshotAgeMs)
       ? null
       : latestWorldSnapshot;
+  }
+
+  #syncLatestWorldSnapshotIndexes(
+    latestWorldSnapshot: MetaverseRealtimeWorldSnapshot
+  ): void {
+    if (this.#latestIndexedWorldSnapshot === latestWorldSnapshot) {
+      return;
+    }
+
+    this.#latestIndexedWorldSnapshot = latestWorldSnapshot;
+    this.#latestPlayerSnapshotsByPlayerId.clear();
+    this.#latestVehicleSnapshotsByEnvironmentAssetId.clear();
+
+    for (const playerSnapshot of latestWorldSnapshot.players) {
+      this.#latestPlayerSnapshotsByPlayerId.set(
+        playerSnapshot.playerId,
+        playerSnapshot
+      );
+    }
+
+    for (const vehicleSnapshot of latestWorldSnapshot.vehicles) {
+      this.#latestVehicleSnapshotsByEnvironmentAssetId.set(
+        vehicleSnapshot.environmentAssetId,
+        vehicleSnapshot
+      );
+    }
+  }
+
+  #readWorldClientTelemetrySnapshot(): MetaverseWorldClientTelemetrySnapshot {
+    return (
+      this.#metaverseWorldClient?.telemetrySnapshot ??
+      disabledMetaverseWorldClientTelemetrySnapshot
+    );
   }
 }

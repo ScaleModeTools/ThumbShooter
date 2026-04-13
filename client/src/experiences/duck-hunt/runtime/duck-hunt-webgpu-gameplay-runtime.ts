@@ -163,6 +163,32 @@ function freezeGameplayTelemetrySnapshot(
 ): GameplayTelemetrySnapshot {
   return Object.freeze({
     aimPoint: snapshot.aimPoint,
+    coopRoom:
+      snapshot.coopRoom === null
+        ? null
+        : Object.freeze({
+            bufferDepth: snapshot.coopRoom.bufferDepth,
+            clockOffsetEstimateMs: snapshot.coopRoom.clockOffsetEstimateMs,
+            latestSnapshotUpdateRateHz:
+              snapshot.coopRoom.latestSnapshotUpdateRateHz,
+            playerPresenceDatagramSendFailureCount:
+              snapshot.coopRoom.playerPresenceDatagramSendFailureCount,
+            playerPresenceLastTransportError:
+              snapshot.coopRoom.playerPresenceLastTransportError,
+            playerPresenceReliableFallbackActive:
+              snapshot.coopRoom.playerPresenceReliableFallbackActive,
+            projectedSimulationLagMs:
+              snapshot.coopRoom.projectedSimulationLagMs,
+            projectionSource: snapshot.coopRoom.projectionSource,
+            snapshotStreamAvailable: snapshot.coopRoom.snapshotStreamAvailable,
+            snapshotStreamLastTransportError:
+              snapshot.coopRoom.snapshotStreamLastTransportError,
+            snapshotStreamLiveness:
+              snapshot.coopRoom.snapshotStreamLiveness,
+            snapshotStreamPath: snapshot.coopRoom.snapshotStreamPath,
+            snapshotStreamReconnectCount:
+              snapshot.coopRoom.snapshotStreamReconnectCount
+          }),
     frameDeltaMs: snapshot.frameDeltaMs,
     frameRate: snapshot.frameRate,
     observedAimPoint: snapshot.observedAimPoint,
@@ -293,6 +319,7 @@ export class DuckHuntWebGpuGameplayRuntime {
 
     return freezeGameplayTelemetrySnapshot({
       aimPoint: this.#hudSnapshot.aimPoint,
+      coopRoom: this.#arenaSimulation.telemetrySnapshot,
       frameDeltaMs: this.#frameDeltaMs,
       frameRate: this.#frameRate,
       observedAimPoint: this.#lastObservedAimPoint,

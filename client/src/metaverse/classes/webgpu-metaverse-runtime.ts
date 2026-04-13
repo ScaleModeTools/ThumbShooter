@@ -14,8 +14,9 @@ import {
 import { metaverseBootCinematicConfig } from "../config/metaverse-boot-cinematic";
 import { defaultMetaverseControlMode } from "../config/metaverse-control-modes";
 import {
+  metaverseRealtimeMigrationConfig,
   metaverseWorldClientConfig,
-  metaverseLocalMountedVehicleReconciliationConfig,
+  metaverseLocalAuthorityReconciliationConfig,
   metaverseRemoteWorldSamplingConfig
 } from "../config/metaverse-world-network";
 import { metaverseRuntimeConfig } from "../config/metaverse-runtime";
@@ -83,6 +84,7 @@ interface MetaverseRendererTuningHandle {
 
 interface MetaverseRuntimeDependencies {
   readonly attachmentProofConfig?: MetaverseAttachmentProofConfig | null;
+  readonly authoritativePlayerMovementEnabled?: boolean;
   readonly bootCinematicConfig?: MetaverseBootCinematicConfig;
   readonly cancelAnimationFrame?: typeof globalThis.cancelAnimationFrame;
   readonly characterProofConfig?: MetaverseCharacterProofConfig | null;
@@ -228,6 +230,20 @@ function freezeTelemetrySnapshot(
       remoteInterpolationDelayMs:
         snapshot.worldCadence.remoteInterpolationDelayMs,
       worldPollIntervalMs: snapshot.worldCadence.worldPollIntervalMs
+    }),
+    worldSnapshot: Object.freeze({
+      bufferDepth: snapshot.worldSnapshot.bufferDepth,
+      clockOffsetEstimateMs: snapshot.worldSnapshot.clockOffsetEstimateMs,
+      currentExtrapolationMs: snapshot.worldSnapshot.currentExtrapolationMs,
+      datagramSendFailureCount:
+        snapshot.worldSnapshot.datagramSendFailureCount,
+      extrapolatedFramePercent:
+        snapshot.worldSnapshot.extrapolatedFramePercent,
+      localReconciliationCorrectionCount:
+        snapshot.worldSnapshot.localReconciliationCorrectionCount,
+      latestSimulationAgeMs: snapshot.worldSnapshot.latestSimulationAgeMs,
+      latestSnapshotUpdateRateHz:
+        snapshot.worldSnapshot.latestSnapshotUpdateRateHz
     })
   });
 }
@@ -245,6 +261,7 @@ function resolveRuntimeFailureReason(error: unknown): string {
 }
 
 export class WebGpuMetaverseRuntime {
+  readonly #authoritativePlayerMovementEnabled: boolean;
   readonly #bootCinematicConfig: MetaverseBootCinematicConfig;
   readonly #config: MetaverseRuntimeConfig;
   readonly #createRenderer: (canvas: HTMLCanvasElement) => MetaverseRendererHost;
@@ -292,6 +309,9 @@ export class WebGpuMetaverseRuntime {
     config: MetaverseRuntimeConfig = metaverseRuntimeConfig,
     dependencies: MetaverseRuntimeDependencies = {}
   ) {
+    this.#authoritativePlayerMovementEnabled =
+      dependencies.authoritativePlayerMovementEnabled ??
+      metaverseRealtimeMigrationConfig.metaverseAuthoritativePlayerMovementEnabled;
     this.#bootCinematicConfig =
       dependencies.bootCinematicConfig ?? metaverseBootCinematicConfig;
     this.#config = config;
@@ -430,6 +450,9 @@ export class WebGpuMetaverseRuntime {
       this.#focusedMountable.environmentAssetId,
       entryId
     );
+    this.#remoteWorldRuntime.syncMountedOccupancy(
+      this.#traversalRuntime.mountedEnvironmentSnapshot
+    );
     this.#syncOrPublishRuntimeState(true);
   }
 
@@ -445,12 +468,18 @@ export class WebGpuMetaverseRuntime {
 
     this.#resetMountedEnvironmentAuthorityMismatch();
     this.#traversalRuntime.occupySeat(environmentAssetId, seatId);
+    this.#remoteWorldRuntime.syncMountedOccupancy(
+      this.#traversalRuntime.mountedEnvironmentSnapshot
+    );
     this.#syncOrPublishRuntimeState(true);
   }
 
   leaveMountedEnvironment(): void {
     this.#resetMountedEnvironmentAuthorityMismatch();
     this.#traversalRuntime.leaveMountedEnvironment();
+    this.#remoteWorldRuntime.syncMountedOccupancy(
+      this.#traversalRuntime.mountedEnvironmentSnapshot
+    );
     this.#syncOrPublishRuntimeState(true);
   }
 
@@ -704,9 +733,7 @@ export class WebGpuMetaverseRuntime {
     this.#syncMountedOccupancyAuthorityFromWorldSnapshots();
     this.#syncVehicleAuthorityFromWorldSnapshots();
     const remoteCharacterPresentations =
-      this.#remoteWorldRuntime.hasWorldSnapshot
-        ? this.#remoteWorldRuntime.remoteCharacterPresentations
-        : this.#presenceRuntime.remoteCharacterPresentations;
+      this.#remoteWorldRuntime.remoteCharacterPresentations;
 
     this.#environmentPhysicsRuntime.syncRemoteCharacterBlockers(
       remoteCharacterPresentations
@@ -714,19 +741,17 @@ export class WebGpuMetaverseRuntime {
     const movementInput = bootCinematicActive
       ? neutralMetaverseFlightInputSnapshot
       : this.#flightInputRuntime.readSnapshot();
-    const cameraSnapshot = this.#traversalRuntime.advance(
-      movementInput,
-      deltaSeconds
-    );
+    this.#traversalRuntime.advance(movementInput, deltaSeconds);
+    this.#syncLocalPlayerAuthorityFromWorldSnapshots();
+    const cameraSnapshot = this.#traversalRuntime.cameraSnapshot;
     this.#mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
     this.#remoteWorldRuntime.syncLocalDriverVehicleControl(
       this.#traversalRuntime.routedDriverVehicleControlIntentSnapshot
     );
     this.#environmentPhysicsRuntime.syncPushableBodyPresentations();
-    this.#presenceRuntime.syncPresencePose(
-      this.#readCharacterPresentationSnapshot(),
-      this.#traversalRuntime.locomotionMode,
-      this.#mountedEnvironment
+    this.#remoteWorldRuntime.syncLocalTraversalIntent(
+      movementInput,
+      this.#traversalRuntime.locomotionMode
     );
     const liveFocusedPortal = resolveFocusedPortalSnapshot(
       cameraSnapshot,
@@ -882,7 +907,7 @@ export class WebGpuMetaverseRuntime {
     const localMountedVehicleAuthority =
       this.#remoteWorldRuntime.readFreshAuthoritativeVehicleSnapshot(
         localMountedEnvironmentAssetId,
-        metaverseLocalMountedVehicleReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 
     if (localMountedVehicleAuthority === null) {
@@ -899,10 +924,29 @@ export class WebGpuMetaverseRuntime {
     );
   }
 
+  #syncLocalPlayerAuthorityFromWorldSnapshots(): void {
+    if (!this.#authoritativePlayerMovementEnabled) {
+      return;
+    }
+
+    const authoritativeLocalPlayerSnapshot =
+      this.#remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+      );
+
+    if (authoritativeLocalPlayerSnapshot === null) {
+      return;
+    }
+
+    this.#traversalRuntime.syncAuthoritativeLocalPlayerPose(
+      authoritativeLocalPlayerSnapshot
+    );
+  }
+
   #syncMountedOccupancyAuthorityFromWorldSnapshots(): void {
     const authoritativeLocalPlayerSnapshot =
       this.#remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot(
-        metaverseLocalMountedVehicleReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 
     if (authoritativeLocalPlayerSnapshot === null) {
@@ -935,7 +979,7 @@ export class WebGpuMetaverseRuntime {
     if (
       this.#mountedEnvironmentAuthorityMismatchSinceMs === null ||
       wallClockMs - this.#mountedEnvironmentAuthorityMismatchSinceMs <
-        metaverseLocalMountedVehicleReconciliationConfig.mountedOccupancyMismatchHoldMs
+        metaverseLocalAuthorityReconciliationConfig.mountedOccupancyMismatchHoldMs
     ) {
       return;
     }
@@ -1054,12 +1098,15 @@ export class WebGpuMetaverseRuntime {
       presenceReliable: this.#presenceRuntime.reliableTransportStatusSnapshot,
       worldDriverDatagram:
         this.#remoteWorldRuntime.driverVehicleControlDatagramStatusSnapshot,
-      worldReliable: this.#remoteWorldRuntime.reliableTransportStatusSnapshot
+      worldReliable: this.#remoteWorldRuntime.reliableTransportStatusSnapshot,
+      worldSnapshotStream: this.#remoteWorldRuntime.snapshotStreamTelemetrySnapshot
     });
   }
 
   #createTelemetrySnapshot(): MetaverseHudSnapshot["telemetry"] {
     const renderInfo = this.#renderer?.info?.render;
+    const worldSamplingTelemetry =
+      this.#remoteWorldRuntime.samplingTelemetrySnapshot;
 
     return freezeTelemetrySnapshot({
       frameDeltaMs: this.#frameDeltaMs,
@@ -1076,13 +1123,27 @@ export class WebGpuMetaverseRuntime {
         authoritativeTickIntervalMs:
           this.#remoteWorldRuntime.latestAuthoritativeTickIntervalMs,
         localAuthoritativeFreshnessMaxAgeMs:
-          metaverseLocalMountedVehicleReconciliationConfig.maxAuthoritativeSnapshotAgeMs,
+          metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs,
         maxExtrapolationMs: metaverseRemoteWorldSamplingConfig.maxExtrapolationMs,
         remoteInterpolationDelayMs:
           metaverseRemoteWorldSamplingConfig.interpolationDelayMs,
         worldPollIntervalMs:
           this.#remoteWorldRuntime.currentPollIntervalMs ??
           Number(metaverseWorldClientConfig.defaultPollIntervalMs)
+      },
+      worldSnapshot: {
+        bufferDepth: worldSamplingTelemetry.bufferDepth,
+        clockOffsetEstimateMs: worldSamplingTelemetry.clockOffsetEstimateMs,
+        currentExtrapolationMs: worldSamplingTelemetry.currentExtrapolationMs,
+        datagramSendFailureCount:
+          worldSamplingTelemetry.datagramSendFailureCount,
+        extrapolatedFramePercent:
+          worldSamplingTelemetry.extrapolatedFramePercent,
+        localReconciliationCorrectionCount:
+          this.#traversalRuntime.localReconciliationCorrectionCount,
+        latestSimulationAgeMs: worldSamplingTelemetry.latestSimulationAgeMs,
+        latestSnapshotUpdateRateHz:
+          worldSamplingTelemetry.latestSnapshotUpdateRateHz
       }
     });
   }

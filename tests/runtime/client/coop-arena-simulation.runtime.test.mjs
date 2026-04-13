@@ -137,9 +137,10 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
       sessionId,
       tick: 0
     }),
-    fireShot(origin, aimDirection) {
+    fireShot(origin, aimDirection, options) {
       firedShots.push({
         aimDirection,
+        options,
         origin
       });
     },
@@ -184,6 +185,8 @@ test("CoopArenaSimulation projects authoritative birds and confirms hits from ro
 
   assert.equal(firedSnapshot.weapon.shotsFired, 1);
   assert.equal(firedShots.length, 1);
+  assert.equal(firedShots[0]?.options?.clientEstimatedSimulationTimeMs, 16);
+  assert.equal(firedShots[0]?.options?.weaponId, "semiautomatic-pistol");
   assert.deepEqual(emittedSignals, [
     {
       type: "weapon-fired",
@@ -292,6 +295,164 @@ test("CoopArenaSimulation projects authoritative birds forward between shared ro
   assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) > -17);
   assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) < -16.4);
   assert.ok((simulation.enemyRenderStates[0]?.wingPhase ?? 0) > 0.3);
+});
+
+test("CoopArenaSimulation caps room extrapolation to the configured battle budget", async () => {
+  const {
+    DuckHuntCoopArenaSimulation: CoopArenaSimulation
+  } = await clientLoader.load("/src/experiences/duck-hunt/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const sessionId = createCoopSessionId("co-op-harbor-session-1");
+  const playerId = createCoopPlayerId("coop-player-1");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(sessionId, null);
+  assert.notEqual(playerId, null);
+
+  const roomSnapshotBuffer = [
+    createRoomSnapshot({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0,
+      birdPositionZ: -18
+    }),
+    createRoomSnapshot({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 1,
+      birdPositionZ: -17
+    })
+  ];
+  const roomSource = {
+    roomId,
+    roomSnapshot: roomSnapshotBuffer[1],
+    roomSnapshotBuffer,
+    fireShot() {},
+    syncPlayerPresence() {}
+  };
+  let currentWallClockMs = 50;
+  const simulation = new CoopArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    roomSource,
+    undefined,
+    {
+      playerId,
+      readWallClockMs() {
+        return currentWallClockMs;
+      }
+    }
+  );
+
+  simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 50);
+
+  currentWallClockMs = 200;
+  simulation.advance(createTrackedHandSnapshot(2, 0.5, 0.5), 200);
+
+  assert.equal(simulation.worldTimeMs, 116);
+  assert.equal(simulation.telemetrySnapshot?.projectedSimulationLagMs, 66);
+  assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) < -15.6);
+  assert.ok((simulation.enemyRenderStates[0]?.positionZ ?? 0) > -16.4);
+});
+
+test("CoopArenaSimulation exposes room projection telemetry from buffered snapshots", async () => {
+  const {
+    DuckHuntCoopArenaSimulation: CoopArenaSimulation
+  } = await clientLoader.load("/src/experiences/duck-hunt/index.ts");
+  const roomId = createCoopRoomId("co-op-harbor");
+  const sessionId = createCoopSessionId("co-op-harbor-session-1");
+  const playerId = createCoopPlayerId("coop-player-1");
+
+  assert.notEqual(roomId, null);
+  assert.notEqual(sessionId, null);
+  assert.notEqual(playerId, null);
+
+  const roomSnapshotBuffer = [
+    createRoomSnapshot({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 0,
+      birdPositionZ: -18
+    }),
+    createRoomSnapshot({
+      playerId,
+      roomId,
+      sessionId,
+      tick: 1,
+      birdPositionZ: -17
+    })
+  ];
+  const roomSource = {
+    roomId,
+    roomSnapshot: roomSnapshotBuffer[1],
+    roomSnapshotBuffer,
+    telemetrySnapshot: Object.freeze({
+      latestSnapshotUpdateRateHz: 20,
+      playerPresenceDatagramSendFailureCount: 1,
+      playerPresenceLastTransportError: "Datagram transport unavailable.",
+      playerPresenceReliableFallbackActive: true,
+      snapshotStream: Object.freeze({
+        available: true,
+        fallbackActive: false,
+        lastTransportError: null,
+        liveness: "subscribed",
+        path: "reliable-snapshot-stream",
+        reconnectCount: 1
+      })
+    }),
+    fireShot() {},
+    syncPlayerPresence() {}
+  };
+  let currentWallClockMs = 0;
+  const simulation = new CoopArenaSimulation(
+    {
+      xCoefficients: [1, 0, 0],
+      yCoefficients: [0, 1, 0]
+    },
+    roomSource,
+    undefined,
+    {
+      playerId,
+      readWallClockMs() {
+        return currentWallClockMs;
+      }
+    }
+  );
+
+  currentWallClockMs = 50;
+  simulation.advance(createTrackedHandSnapshot(1, 0.5, 0.5), 0);
+
+  currentWallClockMs = 75;
+  simulation.advance(createTrackedHandSnapshot(2, 0.5, 0.5), 75);
+
+  assert.equal(simulation.telemetrySnapshot?.bufferDepth, 2);
+  assert.equal(simulation.telemetrySnapshot?.clockOffsetEstimateMs, 0);
+  assert.equal(simulation.telemetrySnapshot?.latestSnapshotUpdateRateHz, 20);
+  assert.equal(
+    simulation.telemetrySnapshot?.playerPresenceDatagramSendFailureCount,
+    1
+  );
+  assert.equal(
+    simulation.telemetrySnapshot?.playerPresenceReliableFallbackActive,
+    true
+  );
+  assert.equal(simulation.telemetrySnapshot?.projectedSimulationLagMs, 25);
+  assert.equal(simulation.telemetrySnapshot?.projectionSource, "buffered-snapshots");
+  assert.equal(simulation.telemetrySnapshot?.snapshotStreamAvailable, true);
+  assert.equal(
+    simulation.telemetrySnapshot?.snapshotStreamPath,
+    "reliable-snapshot-stream"
+  );
+  assert.equal(
+    simulation.telemetrySnapshot?.snapshotStreamLiveness,
+    "subscribed"
+  );
+  assert.equal(simulation.telemetrySnapshot?.snapshotStreamReconnectCount, 1);
 });
 
 test("CoopArenaSimulation keeps the camera fixed while the round is not in combat", async () => {

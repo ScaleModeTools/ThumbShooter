@@ -14,6 +14,14 @@ function formatCount(value: number): string {
   return value.toLocaleString();
 }
 
+function formatMillis(value: number | null): string {
+  return value === null ? "n/a" : `${Math.round(value)} ms`;
+}
+
+function formatRateHz(value: number | null): string {
+  return value === null ? "n/a" : `${value.toFixed(1)} Hz`;
+}
+
 export function DuckHuntGameplayDeveloperPanel({
   gameplayTelemetry
 }: DuckHuntGameplayDeveloperPanelProps) {
@@ -37,7 +45,36 @@ export function DuckHuntGameplayDeveloperPanel({
     {
       label: "DPR",
       value: gameplayTelemetry.renderer.devicePixelRatio.toFixed(2)
-    }
+    },
+    ...(gameplayTelemetry.coopRoom === null
+      ? []
+      : [
+          {
+            label: "Room path",
+            value: `${gameplayTelemetry.coopRoom.snapshotStreamPath.replaceAll("-", " ")} · ${gameplayTelemetry.coopRoom.snapshotStreamLiveness.replaceAll("-", " ")}`
+          },
+          {
+            label: "Room buffer",
+            value: `${formatCount(gameplayTelemetry.coopRoom.bufferDepth)} · ${formatRateHz(gameplayTelemetry.coopRoom.latestSnapshotUpdateRateHz)}`
+          },
+          {
+            label: "Projection",
+            value: `${gameplayTelemetry.coopRoom.projectionSource.replaceAll("-", " ")} · ${formatMillis(gameplayTelemetry.coopRoom.projectedSimulationLagMs)}`
+          },
+          {
+            label: "Clock offset",
+            value: formatMillis(gameplayTelemetry.coopRoom.clockOffsetEstimateMs)
+          },
+          {
+            label: "Presence datagram",
+            value: gameplayTelemetry.coopRoom.playerPresenceReliableFallbackActive
+              ? `fallback · ${formatCount(gameplayTelemetry.coopRoom.playerPresenceDatagramSendFailureCount)}`
+              : formatCount(
+                  gameplayTelemetry.coopRoom
+                    .playerPresenceDatagramSendFailureCount
+                )
+          }
+        ])
   ] as const;
 
   return (

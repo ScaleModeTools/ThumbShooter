@@ -24,6 +24,7 @@ test("AuthoritativeServerClock advances locally between fresh server-time observ
 
   clock.observeServerTime(1_000, 900);
 
+  assert.equal(clock.clockOffsetEstimateMs, 100);
   assert.equal(clock.readEstimatedServerTimeMs(910), 1_010);
 
   clock.observeServerTime(1_000, 920);
@@ -32,6 +33,7 @@ test("AuthoritativeServerClock advances locally between fresh server-time observ
 
   clock.observeServerTime(1_050, 940);
 
+  assert.equal(clock.clockOffsetEstimateMs, 105);
   assert.equal(clock.readEstimatedServerTimeMs(940), 1_045);
   assert.equal(clock.readTargetServerTimeMs(950, 25), 1_030);
 });
@@ -50,5 +52,6 @@ test("AuthoritativeServerClock resets its offset state explicitly", async () => 
 
   clock.reset();
 
+  assert.equal(clock.clockOffsetEstimateMs, null);
   assert.equal(clock.readEstimatedServerTimeMs(4_920), 4_920);
 });

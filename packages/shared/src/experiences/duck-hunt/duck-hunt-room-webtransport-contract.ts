@@ -24,6 +24,7 @@ import {
 
 export const duckHuntCoopRoomWebTransportClientMessageTypes = [
   "coop-room-snapshot-request",
+  "coop-room-snapshot-subscribe",
   "coop-room-command-request"
 ] as const;
 
@@ -44,6 +45,17 @@ export interface DuckHuntCoopRoomWebTransportSnapshotRequest {
 }
 
 export interface DuckHuntCoopRoomWebTransportSnapshotRequestInput {
+  readonly observerPlayerId: CoopPlayerId;
+  readonly roomId: CoopRoomId;
+}
+
+export interface DuckHuntCoopRoomWebTransportSnapshotSubscribeRequest {
+  readonly observerPlayerId: CoopPlayerId;
+  readonly roomId: CoopRoomId;
+  readonly type: "coop-room-snapshot-subscribe";
+}
+
+export interface DuckHuntCoopRoomWebTransportSnapshotSubscribeRequestInput {
   readonly observerPlayerId: CoopPlayerId;
   readonly roomId: CoopRoomId;
 }
@@ -77,6 +89,7 @@ export interface DuckHuntCoopRoomWebTransportErrorMessageInput {
 
 export type DuckHuntCoopRoomWebTransportClientMessage =
   | DuckHuntCoopRoomWebTransportSnapshotRequest
+  | DuckHuntCoopRoomWebTransportSnapshotSubscribeRequest
   | DuckHuntCoopRoomWebTransportCommandRequest;
 
 export type DuckHuntCoopRoomWebTransportServerMessage =
@@ -122,6 +135,16 @@ export function createDuckHuntCoopRoomWebTransportSnapshotRequest(
     observerPlayerId: input.observerPlayerId,
     roomId: input.roomId,
     type: "coop-room-snapshot-request"
+  });
+}
+
+export function createDuckHuntCoopRoomWebTransportSnapshotSubscribeRequest(
+  input: DuckHuntCoopRoomWebTransportSnapshotSubscribeRequestInput
+): DuckHuntCoopRoomWebTransportSnapshotSubscribeRequest {
+  return Object.freeze({
+    observerPlayerId: input.observerPlayerId,
+    roomId: input.roomId,
+    type: "coop-room-snapshot-subscribe"
   });
 }
 

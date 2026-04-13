@@ -29,6 +29,11 @@ export interface CoopRoomRuntimeConfig {
   };
   readonly birds: readonly CoopRoomBirdSeed[];
   readonly capacity: number;
+  readonly combatRewind: {
+    readonly enabled: boolean;
+    readonly historyWindowMs: Milliseconds;
+    readonly maxRewindWindowMs: Milliseconds;
+  };
   readonly hitRadius: number;
   readonly movement: {
     readonly downedDriftSpeed: number;

@@ -1,10 +1,14 @@
-import type { DuckHuntCoopRoomWebTransportClientDatagram } from "@webgpu-metaverse/shared";
+import type {
+  CoopPlayerId,
+  DuckHuntCoopRoomWebTransportClientDatagram
+} from "@webgpu-metaverse/shared";
 
 import { CoopRoomDirectory } from "../classes/coop-room-directory.js";
 
 export class DuckHuntCoopRoomWebTransportDatagramSession {
   readonly #roomDirectory: CoopRoomDirectory;
 
+  #boundPlayerId: CoopPlayerId | null = null;
   #disposed = false;
 
   constructor(roomDirectory: CoopRoomDirectory) {
@@ -16,6 +20,7 @@ export class DuckHuntCoopRoomWebTransportDatagramSession {
     nowMs: number
   ): void {
     this.#assertNotDisposed();
+    this.#bindPlayerIdentity(datagram.command.playerId);
     this.#roomDirectory.acceptCommand(datagram.command, nowMs);
   }
 
@@ -29,6 +34,16 @@ export class DuckHuntCoopRoomWebTransportDatagramSession {
         "Duck Hunt co-op room WebTransport datagram session has already been disposed."
       );
     }
+  }
+
+  #bindPlayerIdentity(playerId: CoopPlayerId): void {
+    if (this.#boundPlayerId !== null && this.#boundPlayerId !== playerId) {
+      throw new Error(
+        `Duck Hunt co-op room WebTransport datagram session is already bound to ${this.#boundPlayerId}.`
+      );
+    }
+
+    this.#boundPlayerId = playerId;
   }
 }
 

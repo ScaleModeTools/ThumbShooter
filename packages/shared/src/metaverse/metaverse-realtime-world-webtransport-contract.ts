@@ -1,16 +1,18 @@
 import type {
   MetaverseRealtimeWorldClientCommand,
-  MetaverseRealtimeWorldEvent,
-  MetaverseSyncDriverVehicleControlCommand
+  MetaverseRealtimeWorldEvent
 } from "./metaverse-realtime-world-contract.js";
 import {
   createMetaverseRealtimeWorldEvent,
-  createMetaverseSyncDriverVehicleControlCommand
+  createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerTraversalIntentCommand
 } from "./metaverse-realtime-world-contract.js";
 import type { MetaversePlayerId } from "./metaverse-presence-contract.js";
 
 export const metaverseRealtimeWorldWebTransportClientMessageTypes = [
   "world-snapshot-request",
+  "world-snapshot-subscribe",
   "world-command-request"
 ] as const;
 
@@ -30,6 +32,15 @@ export interface MetaverseRealtimeWorldWebTransportSnapshotRequest {
 }
 
 export interface MetaverseRealtimeWorldWebTransportSnapshotRequestInput {
+  readonly observerPlayerId: MetaversePlayerId;
+}
+
+export interface MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest {
+  readonly observerPlayerId: MetaversePlayerId;
+  readonly type: "world-snapshot-subscribe";
+}
+
+export interface MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequestInput {
   readonly observerPlayerId: MetaversePlayerId;
 }
 
@@ -62,7 +73,8 @@ export interface MetaverseRealtimeWorldWebTransportErrorMessageInput {
 
 export type MetaverseRealtimeWorldWebTransportClientMessage =
   | MetaverseRealtimeWorldWebTransportCommandRequest
-  | MetaverseRealtimeWorldWebTransportSnapshotRequest;
+  | MetaverseRealtimeWorldWebTransportSnapshotRequest
+  | MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest;
 
 export type MetaverseRealtimeWorldWebTransportServerMessage =
   | MetaverseRealtimeWorldWebTransportErrorMessage
@@ -77,10 +89,33 @@ export function createMetaverseRealtimeWorldWebTransportSnapshotRequest(
   });
 }
 
+export function createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest(
+  input: MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequestInput
+): MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest {
+  return Object.freeze({
+    observerPlayerId: input.observerPlayerId,
+    type: "world-snapshot-subscribe"
+  });
+}
+
 function normalizeMetaverseRealtimeWorldClientCommand(
   command: MetaverseRealtimeWorldClientCommand
-): MetaverseSyncDriverVehicleControlCommand {
-  return createMetaverseSyncDriverVehicleControlCommand(command);
+): MetaverseRealtimeWorldClientCommand {
+  switch (command.type) {
+    case "sync-driver-vehicle-control":
+      return createMetaverseSyncDriverVehicleControlCommand(command);
+    case "sync-mounted-occupancy":
+      return createMetaverseSyncMountedOccupancyCommand(command);
+    case "sync-player-traversal-intent":
+      return createMetaverseSyncPlayerTraversalIntentCommand(command);
+    default: {
+      const exhaustiveCommand: never = command;
+
+      throw new Error(
+        `Unsupported metaverse realtime world command type: ${exhaustiveCommand}`
+      );
+    }
+  }
 }
 
 export function createMetaverseRealtimeWorldWebTransportCommandRequest(

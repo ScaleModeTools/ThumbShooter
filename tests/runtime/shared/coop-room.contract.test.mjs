@@ -108,7 +108,8 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
     },
     tick: {
       currentTick: 19.9,
-      serverTimeMs: 995.6,
+      emittedAtServerTimeMs: 1_020.4,
+      simulationTimeMs: 995.6,
       tickIntervalMs: 50.4
     }
   };
@@ -121,7 +122,9 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
   assert.equal(snapshot.capacity, 1);
   assert.equal(snapshot.tick.owner, "server");
   assert.equal(snapshot.tick.currentTick, 19);
-  assert.equal(snapshot.tick.serverTimeMs, 995.6);
+  assert.equal(snapshot.tick.emittedAtServerTimeMs, 1_020.4);
+  assert.equal(snapshot.tick.serverTimeMs, 1_020.4);
+  assert.equal(snapshot.tick.simulationTimeMs, 995.6);
   assert.equal(snapshot.tick.tickIntervalMs, 50.4);
   assert.deepEqual(snapshot.birds[0]?.position, {
     x: 1.4,
@@ -144,13 +147,14 @@ test("createCoopRoomSnapshot clones nested arrays and normalizes hot snapshot va
   assert.equal(Object.isFrozen(snapshot.players), true);
 });
 
-test("createCoopFireShotCommand normalizes shot rays and floors client shot sequences", () => {
+test("createCoopFireShotCommand normalizes shot rays, rewind time, weapon context, and shot sequence", () => {
   const command = createCoopFireShotCommand({
     aimDirection: {
       x: 2.4,
       y: -0.4,
       z: -2.4
     },
+    clientEstimatedSimulationTimeMs: 112.9,
     clientShotSequence: 7.8,
     origin: {
       x: 3,
@@ -158,14 +162,17 @@ test("createCoopFireShotCommand normalizes shot rays and floors client shot sequ
       z: 2
     },
     playerId: requireValue(createCoopPlayerId("player-2"), "playerId"),
-    roomId: requireValue(createCoopRoomId("harbor-room"), "roomId")
+    roomId: requireValue(createCoopRoomId("harbor-room"), "roomId"),
+    weaponId: " semiautomatic-pistol "
   });
 
   assert.equal(command.type, "fire-shot");
+  assert.equal(command.clientEstimatedSimulationTimeMs, 112.9);
   assert.equal(command.clientShotSequence, 7);
   assert.equal(command.origin.x, 3);
   assert.equal(command.origin.y, 1.35);
   assert.equal(command.origin.z, 2);
+  assert.equal(command.weaponId, "semiautomatic-pistol");
   assert.ok(Math.abs(Math.hypot(
     command.aimDirection.x,
     command.aimDirection.y,

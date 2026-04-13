@@ -41,6 +41,9 @@ function requireCoopBirdId(rawValue: string) {
 
 const defaultCoopRoomId = requireCoopRoomId("co-op-harbor");
 const roomSessionBootSequence = `${Date.now()}`.padStart(13, "0");
+export const duckHuntCoopRoomCadenceConfig = Object.freeze({
+  tickIntervalMs: createMilliseconds(33)
+});
 
 const baseCoopRoomRuntimeConfig = {
   birdAltitudeBounds: {
@@ -114,6 +117,11 @@ const baseCoopRoomRuntimeConfig = {
     }
   ],
   capacity: 4,
+  combatRewind: {
+    enabled: true,
+    historyWindowMs: createMilliseconds(1_000),
+    maxRewindWindowMs: createMilliseconds(350)
+  },
   hitRadius: 0.42,
   movement: {
     downedDriftSpeed: 2.8,
@@ -142,7 +150,7 @@ const baseCoopRoomRuntimeConfig = {
   requiredReadyPlayerCount: 2,
   reticleScatterRadius: 0.72,
   scatterRadius: 5.2,
-  tickIntervalMs: createMilliseconds(50)
+  tickIntervalMs: duckHuntCoopRoomCadenceConfig.tickIntervalMs
 } as const satisfies Omit<CoopRoomRuntimeConfig, "roomId" | "sessionId">;
 
 function normalizeSessionOrdinal(rawValue: number): number {

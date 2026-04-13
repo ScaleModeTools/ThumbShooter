@@ -7,6 +7,10 @@ single-player and server-authoritative co-op.
 
 ## Current Status
 
+- the multiplayer battle readiness push is implemented: authoritative tick and
+  time semantics, server-pushed snapshot streams, latest-wins realtime input
+  lanes, server-authoritative metaverse movement, and Duck Hunt combat rewind
+  validation are all live behind the repo stop-ship gate
 - metaverse shell flow is live: profile setup -> metaverse hub -> experience
   launch -> return to hub without a full reload
 - metaverse hub vehicle-seat foundation is live: manifest-driven seats and
@@ -21,8 +25,8 @@ single-player and server-authoritative co-op.
   remote avatars can occupy the correct vehicle seat or boarding state
 - localhost development now supports WebTransport-preferred metaverse boot with
   HTTP bootstrap and fallback still intact
-- metaverse networking now exposes separate reliable and latest-wins datagram
-  lanes instead of hiding all realtime traffic behind polling-only seams
+- metaverse and Duck Hunt realtime networking now use persistent authoritative
+  snapshot streams plus separate reliable and latest-wins datagram lanes
 - shared browser services such as `audio`, `network`, `tracking`, and `ui`
   stay top-level reusable domains
 
@@ -37,11 +41,17 @@ single-player and server-authoritative co-op.
 - dynamic skiff hull, deck, and seat-support collision in local physics
 - remote metaverse presence that keeps mounted occupants attached to the
   correct vehicle seat
-- WebTransport-preferred metaverse presence and authoritative world transport
-  with HTTP fallback
+- authoritative metaverse world and Duck Hunt room progression on independent
+  server tick owners
+- WebTransport-preferred metaverse presence, world snapshot streaming, and
+  Duck Hunt room snapshot streaming with HTTP bootstrap and fallback
 - latest-wins WebTransport datagrams for metaverse driver vehicle control and
-  Duck Hunt player presence, with reliable fallback when datagrams are
-  unavailable
+  traversal intent plus Duck Hunt player presence, with recoverable reliable
+  fallback when datagrams are unavailable
+- server-authoritative metaverse traversal with processed-input ack-based
+  client reconciliation
+- Duck Hunt co-op buffered room projection and authoritative combat rewind
+  validation
 - explicit forward/up grip alignment for handheld socket attachments
 - Duck Hunt launch flow from the shell into gameplay and back out again
 - Duck Hunt mouse input and camera thumb-trigger input
@@ -182,14 +192,17 @@ Default local ports:
   server during development.
 - The localdev WebTransport host is separate from the HTTP server and runs on
   `https://127.0.0.1:3211` when enabled by `npm run dev`.
-- Reliable metaverse traffic and latest-wins datagram traffic are now distinct
-  lanes:
-  - presence and authoritative world snapshots or commands use reliable
-    transport
-  - metaverse driver vehicle control and Duck Hunt player presence can use
-    WebTransport datagrams
+- Reliable snapshot subscriptions, reliable commands, and latest-wins datagram
+  traffic are distinct lanes:
+  - metaverse world snapshots and Duck Hunt room snapshots can use persistent
+    reliable WebTransport subscriptions
+  - presence and discrete world or room commands use reliable transport
+  - metaverse traversal intent, metaverse driver vehicle control, and Duck
+    Hunt player presence can use WebTransport datagrams
 - If WebTransport is unavailable in localdev, reliable traffic falls back to
   HTTP and datagram traffic falls back to the existing reliable command path.
+- Reliable and datagram gameplay lanes bind to the server-owned session
+  identity instead of trusting raw payload player ids.
 - Metaverse presence traffic lives under `/metaverse/presence` and now carries
   mounted occupancy as well as pose.
 - Duck Hunt co-op traffic lives under `/experiences/duck-hunt/coop/rooms`.
@@ -197,6 +210,8 @@ Default local ports:
   `VITE_SERVER_ORIGIN`.
 - For the current localhost validation matrix, see
   `docs/localdev/metaverse-smooth-motion-validation.md`.
+- For the implemented multiplayer push record, see
+  `docs/localdev/metaverse-multiplayer-battle-readiness-plan.md`.
 
 ## Contributor Orientation
 

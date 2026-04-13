@@ -87,6 +87,7 @@ test("CoopRoomDirectory drops empty rooms after the last player leaves", () => {
     10
   );
 
+  roomDirectory.advanceToTime(10);
   assert.equal(roomDirectory.listRoomSnapshots(10).length, 0);
   assert.throws(
     () => roomDirectory.advanceRoom(roomId, 10),
@@ -109,6 +110,7 @@ test("CoopRoomDirectory prunes rooms once their players stop polling", () => {
     0
   );
 
+  roomDirectory.advanceToTime(10_500);
   assert.equal(roomDirectory.listRoomSnapshots(10_500).length, 0);
   assert.throws(
     () => roomDirectory.advanceRoom(roomId, 10_500, playerId),

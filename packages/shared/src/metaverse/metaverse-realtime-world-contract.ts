@@ -9,12 +9,18 @@ import type {
   MetaversePlayerId,
   MetaversePresenceAnimationVocabularyId,
   MetaversePresenceLocomotionModeId,
+  MetaversePresenceMountedOccupancySnapshot,
+  MetaversePresenceMountedOccupancySnapshotInput,
   MetaversePresenceMountedOccupancyKind,
   MetaversePresenceMountedOccupantRoleId,
+  MetaversePresencePoseSnapshot,
+  MetaversePresencePoseSnapshotInput,
   MetaversePresenceVector3Snapshot,
   MetaversePresenceVector3SnapshotInput
 } from "./metaverse-presence-contract.js";
 import {
+  createMetaversePresenceMountedOccupancySnapshot,
+  createMetaversePresencePoseSnapshot,
   createMetaversePresenceVector3Snapshot,
   metaversePresenceAnimationVocabularyIds,
   metaversePresenceLocomotionModeIds,
@@ -27,13 +33,22 @@ export const metaverseRealtimeWorldServerEventTypes = [
 ] as const;
 
 export const metaverseRealtimeWorldClientCommandTypes = [
+  "sync-mounted-occupancy",
+  "sync-player-traversal-intent",
   "sync-driver-vehicle-control"
+] as const;
+
+export const metaversePlayerTraversalIntentLocomotionModeIds = [
+  "grounded",
+  "swim"
 ] as const;
 
 export type MetaverseRealtimeWorldServerEventType =
   (typeof metaverseRealtimeWorldServerEventTypes)[number];
 export type MetaverseRealtimeWorldClientCommandType =
   (typeof metaverseRealtimeWorldClientCommandTypes)[number];
+export type MetaversePlayerTraversalIntentLocomotionModeId =
+  (typeof metaversePlayerTraversalIntentLocomotionModeIds)[number];
 
 export type MetaverseVehicleId = TypeBrand<string, "MetaverseVehicleId">;
 
@@ -43,14 +58,18 @@ export type MetaverseRealtimeVector3SnapshotInput =
 
 export interface MetaverseRealtimeTickSnapshot {
   readonly currentTick: number;
+  readonly emittedAtServerTimeMs: Milliseconds;
   readonly owner: "server";
   readonly serverTimeMs: Milliseconds;
+  readonly simulationTimeMs: Milliseconds;
   readonly tickIntervalMs: Milliseconds;
 }
 
 export interface MetaverseRealtimeTickSnapshotInput {
   readonly currentTick: number;
-  readonly serverTimeMs: number;
+  readonly emittedAtServerTimeMs?: number;
+  readonly serverTimeMs?: number;
+  readonly simulationTimeMs?: number;
   readonly tickIntervalMs: number;
 }
 
@@ -100,9 +119,31 @@ export interface MetaverseDriverVehicleControlIntentSnapshotInput {
   readonly yawAxis?: number;
 }
 
+export interface MetaversePlayerTraversalIntentSnapshot {
+  readonly boost: boolean;
+  readonly inputSequence: number;
+  readonly jump: boolean;
+  readonly locomotionMode: MetaversePlayerTraversalIntentLocomotionModeId;
+  readonly moveAxis: number;
+  readonly strafeAxis: number;
+  readonly yawAxis: number;
+}
+
+export interface MetaversePlayerTraversalIntentSnapshotInput {
+  readonly boost?: boolean;
+  readonly inputSequence?: number;
+  readonly jump?: boolean;
+  readonly locomotionMode?: MetaversePlayerTraversalIntentLocomotionModeId;
+  readonly moveAxis?: number;
+  readonly strafeAxis?: number;
+  readonly yawAxis?: number;
+}
+
 export interface MetaverseRealtimePlayerSnapshot {
+  readonly angularVelocityRadiansPerSecond: number;
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly characterId: string;
+  readonly lastProcessedInputSequence: number;
   readonly linearVelocity: MetaverseRealtimeVector3Snapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null;
@@ -114,8 +155,10 @@ export interface MetaverseRealtimePlayerSnapshot {
 }
 
 export interface MetaverseRealtimePlayerSnapshotInput {
+  readonly angularVelocityRadiansPerSecond?: number;
   readonly animationVocabulary?: MetaversePresenceAnimationVocabularyId;
   readonly characterId: string;
+  readonly lastProcessedInputSequence?: number;
   readonly linearVelocity: MetaverseRealtimeVector3SnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy?: MetaverseRealtimeMountedOccupancySnapshotInput | null;
@@ -182,8 +225,32 @@ export interface MetaverseSyncDriverVehicleControlCommandInput {
   readonly playerId: MetaversePlayerId;
 }
 
+export interface MetaverseSyncMountedOccupancyCommand {
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
+  readonly playerId: MetaversePlayerId;
+  readonly type: "sync-mounted-occupancy";
+}
+
+export interface MetaverseSyncMountedOccupancyCommandInput {
+  readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshotInput | null;
+  readonly playerId: MetaversePlayerId;
+}
+
+export interface MetaverseSyncPlayerTraversalIntentCommand {
+  readonly intent: MetaversePlayerTraversalIntentSnapshot;
+  readonly playerId: MetaversePlayerId;
+  readonly type: "sync-player-traversal-intent";
+}
+
+export interface MetaverseSyncPlayerTraversalIntentCommandInput {
+  readonly intent: MetaversePlayerTraversalIntentSnapshotInput;
+  readonly playerId: MetaversePlayerId;
+}
+
 export type MetaverseRealtimeWorldClientCommand =
-  MetaverseSyncDriverVehicleControlCommand;
+  | MetaverseSyncMountedOccupancyCommand
+  | MetaverseSyncPlayerTraversalIntentCommand
+  | MetaverseSyncDriverVehicleControlCommand;
 
 const metaverseVehicleIdPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
@@ -260,6 +327,19 @@ function resolveLocomotionMode(
   return "grounded";
 }
 
+function resolveTraversalIntentLocomotionMode(
+  rawValue: MetaversePlayerTraversalIntentSnapshotInput["locomotionMode"]
+): MetaversePlayerTraversalIntentLocomotionModeId {
+  if (
+    rawValue !== undefined &&
+    metaversePlayerTraversalIntentLocomotionModeIds.includes(rawValue)
+  ) {
+    return rawValue;
+  }
+
+  return "grounded";
+}
+
 function resolveMountedOccupancyKind(
   rawValue: MetaverseRealtimeMountedOccupancySnapshotInput["occupancyKind"]
 ): MetaversePresenceMountedOccupancyKind {
@@ -302,6 +382,20 @@ function freezeDriverVehicleControlIntentSnapshot(
   return Object.freeze({
     boost: input.boost === true,
     environmentAssetId: normalizeVehicleAssetId(input.environmentAssetId),
+    moveAxis: clampNormalizedAxis(input.moveAxis),
+    strafeAxis: clampNormalizedAxis(input.strafeAxis),
+    yawAxis: clampNormalizedAxis(input.yawAxis)
+  });
+}
+
+function freezePlayerTraversalIntentSnapshot(
+  input: MetaversePlayerTraversalIntentSnapshotInput
+): MetaversePlayerTraversalIntentSnapshot {
+  return Object.freeze({
+    boost: input.boost === true,
+    inputSequence: normalizeFiniteNonNegativeInteger(input.inputSequence ?? 0),
+    jump: input.jump === true,
+    locomotionMode: resolveTraversalIntentLocomotionMode(input.locomotionMode),
     moveAxis: clampNormalizedAxis(input.moveAxis),
     strafeAxis: clampNormalizedAxis(input.strafeAxis),
     yawAxis: clampNormalizedAxis(input.yawAxis)
@@ -357,8 +451,14 @@ function freezePlayerSnapshot(
   mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null
 ): MetaverseRealtimePlayerSnapshot {
   return Object.freeze({
+    angularVelocityRadiansPerSecond: normalizeFiniteNumber(
+      input.angularVelocityRadiansPerSecond ?? 0
+    ),
     animationVocabulary: resolveAnimationVocabulary(input.animationVocabulary),
     characterId: normalizeCharacterId(input.characterId),
+    lastProcessedInputSequence: normalizeFiniteNonNegativeInteger(
+      input.lastProcessedInputSequence ?? input.stateSequence ?? 0
+    ),
     linearVelocity: createMetaversePresenceVector3Snapshot(input.linearVelocity),
     locomotionMode: resolveLocomotionMode(input.locomotionMode),
     mountedOccupancy,
@@ -473,11 +573,26 @@ export function createMetaverseVehicleId(
 export function createMetaverseRealtimeTickSnapshot(
   input: MetaverseRealtimeTickSnapshotInput
 ): MetaverseRealtimeTickSnapshot {
+  const currentTick = normalizeFiniteNonNegativeInteger(input.currentTick);
+  const tickIntervalMs = createMilliseconds(input.tickIntervalMs);
+  const simulationTimeMs = createMilliseconds(
+    input.simulationTimeMs ??
+      input.serverTimeMs ??
+      currentTick * Number(tickIntervalMs)
+  );
+  const emittedAtServerTimeMs = createMilliseconds(
+    input.emittedAtServerTimeMs ??
+      input.serverTimeMs ??
+      Number(simulationTimeMs)
+  );
+
   return Object.freeze({
-    currentTick: normalizeFiniteNonNegativeInteger(input.currentTick),
+    currentTick,
+    emittedAtServerTimeMs,
     owner: "server",
-    serverTimeMs: createMilliseconds(input.serverTimeMs),
-    tickIntervalMs: createMilliseconds(input.tickIntervalMs)
+    serverTimeMs: emittedAtServerTimeMs,
+    simulationTimeMs,
+    tickIntervalMs
   });
 }
 
@@ -485,6 +600,12 @@ export function createMetaverseDriverVehicleControlIntentSnapshot(
   input: MetaverseDriverVehicleControlIntentSnapshotInput
 ): MetaverseDriverVehicleControlIntentSnapshot {
   return freezeDriverVehicleControlIntentSnapshot(input);
+}
+
+export function createMetaversePlayerTraversalIntentSnapshot(
+  input: MetaversePlayerTraversalIntentSnapshotInput
+): MetaversePlayerTraversalIntentSnapshot {
+  return freezePlayerTraversalIntentSnapshot(input);
 }
 
 export function createMetaverseRealtimeMountedOccupancySnapshot(
@@ -621,5 +742,28 @@ export function createMetaverseSyncDriverVehicleControlCommand(
     ),
     playerId: input.playerId,
     type: "sync-driver-vehicle-control"
+  });
+}
+
+export function createMetaverseSyncMountedOccupancyCommand(
+  input: MetaverseSyncMountedOccupancyCommandInput
+): MetaverseSyncMountedOccupancyCommand {
+  return Object.freeze({
+    mountedOccupancy:
+      input.mountedOccupancy === null
+        ? null
+        : createMetaversePresenceMountedOccupancySnapshot(input.mountedOccupancy),
+    playerId: input.playerId,
+    type: "sync-mounted-occupancy"
+  });
+}
+
+export function createMetaverseSyncPlayerTraversalIntentCommand(
+  input: MetaverseSyncPlayerTraversalIntentCommandInput
+): MetaverseSyncPlayerTraversalIntentCommand {
+  return Object.freeze({
+    intent: freezePlayerTraversalIntentSnapshot(input.intent),
+    playerId: input.playerId,
+    type: "sync-player-traversal-intent"
   });
 }
