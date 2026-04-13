@@ -462,7 +462,8 @@ export class MetaverseEnvironmentPhysicsRuntime {
 
       if (
         environmentAsset.placement === "dynamic" ||
-        environmentAsset.physicsColliders !== null ||
+        (environmentAsset.physicsColliders !== null &&
+          environmentAsset.physicsColliders.length > 0) ||
         environmentAsset.collisionPath === null
       ) {
         continue;
@@ -650,6 +651,7 @@ export class MetaverseEnvironmentPhysicsRuntime {
         planarHalfExtentMeters
       ),
       ownerEnvironmentAssetId: null,
+      rotationYRadians: 0,
       rotation: identityQuaternion,
       translation: freezeVector3(
         presentationPosition.x,

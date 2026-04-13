@@ -122,6 +122,7 @@ export interface MetaverseDriverVehicleControlIntentSnapshotInput {
 export interface MetaversePlayerTraversalIntentSnapshot {
   readonly boost: boolean;
   readonly inputSequence: number;
+  readonly jumpActionSequence: number;
   readonly jump: boolean;
   readonly locomotionMode: MetaversePlayerTraversalIntentLocomotionModeId;
   readonly moveAxis: number;
@@ -132,6 +133,7 @@ export interface MetaversePlayerTraversalIntentSnapshot {
 export interface MetaversePlayerTraversalIntentSnapshotInput {
   readonly boost?: boolean;
   readonly inputSequence?: number;
+  readonly jumpActionSequence?: number;
   readonly jump?: boolean;
   readonly locomotionMode?: MetaversePlayerTraversalIntentLocomotionModeId;
   readonly moveAxis?: number;
@@ -394,6 +396,10 @@ function freezePlayerTraversalIntentSnapshot(
   return Object.freeze({
     boost: input.boost === true,
     inputSequence: normalizeFiniteNonNegativeInteger(input.inputSequence ?? 0),
+    jumpActionSequence: normalizeFiniteNonNegativeInteger(
+      input.jumpActionSequence ??
+        (input.jump === true ? input.inputSequence ?? 0 : 0)
+    ),
     jump: input.jump === true,
     locomotionMode: resolveTraversalIntentLocomotionMode(input.locomotionMode),
     moveAxis: clampNormalizedAxis(input.moveAxis),

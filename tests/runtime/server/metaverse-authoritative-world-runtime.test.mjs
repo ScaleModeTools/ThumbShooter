@@ -19,6 +19,34 @@ function requireValue(value, label) {
   return value;
 }
 
+function createAuthoritativeRuntime() {
+  return new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+}
+
+function joinSurfacePlayer(runtime, playerId, username, poseOverrides = {}) {
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: -8.2,
+          y: 0.15,
+          z: -14.8
+        },
+        stateSequence: 1,
+        yawRadians: Math.PI * 0.06,
+        ...poseOverrides
+      },
+      username
+    }),
+    0
+  );
+}
+
 test("MetaverseAuthoritativeWorldRuntime simulates driver-controlled vehicles from authoritative world commands", () => {
   const runtime = new MetaverseAuthoritativeWorldRuntime({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
@@ -338,6 +366,181 @@ test("MetaverseAuthoritativeWorldRuntime simulates unmounted grounded and swim t
   );
   assert.ok((swimWorldSnapshot.players[0]?.linearVelocity.z ?? 0) < 0);
   assert.equal(swimWorldSnapshot.players[0]?.stateSequence, 3);
+});
+
+test("MetaverseAuthoritativeWorldRuntime routes the shipped dock spawn into water on the shared shoreline slice", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("shoreline-water-entry-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Shoreline Water Entry"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  let worldSnapshot = null;
+
+  for (let timeMs = 100; timeMs <= 1_000; timeMs += 100) {
+    runtime.advanceToTime(timeMs);
+    const candidateSnapshot = runtime.readWorldSnapshot(timeMs, playerId);
+
+    if (candidateSnapshot.players[0]?.locomotionMode === "swim") {
+      worldSnapshot = candidateSnapshot;
+      break;
+    }
+  }
+
+  assert.notEqual(worldSnapshot, null);
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.ok((worldSnapshot.players[0]?.position.z ?? 0) < -19.2);
+});
+
+test("MetaverseAuthoritativeWorldRuntime holds sustained swim after dock entry before the shipped shoreline exit lane", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("shoreline-sustained-swim-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Shoreline Swim Pilot"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  let swimEntryTimeMs = null;
+
+  for (let timeMs = 100; timeMs <= 1_000; timeMs += 100) {
+    runtime.advanceToTime(timeMs);
+
+    if (runtime.readWorldSnapshot(timeMs, playerId).players[0]?.locomotionMode === "swim") {
+      swimEntryTimeMs = timeMs;
+      break;
+    }
+  }
+
+  assert.notEqual(swimEntryTimeMs, null);
+
+  const sustainedSwimTimeMs = swimEntryTimeMs + 200;
+
+  runtime.advanceToTime(sustainedSwimTimeMs);
+
+  const worldSnapshot = runtime.readWorldSnapshot(sustainedSwimTimeMs, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(worldSnapshot.players[0]?.position.y, 0);
+  assert.ok((worldSnapshot.players[0]?.position.z ?? 0) < -20);
+});
+
+test("MetaverseAuthoritativeWorldRuntime keeps a dock jump airborne above the water before switching into swim", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("shoreline-jump-arc-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Shoreline Jump Arc"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: true,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(300);
+
+  const airborneSnapshot = runtime.readWorldSnapshot(300, playerId);
+
+  assert.equal(airborneSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.match(airborneSnapshot.players[0]?.animationVocabulary ?? "", /^jump-/);
+  assert.ok((airborneSnapshot.players[0]?.position.y ?? 0) > 0.05);
+
+  runtime.advanceToTime(800);
+
+  const swimSnapshot = runtime.readWorldSnapshot(800, playerId);
+
+  assert.equal(swimSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(swimSnapshot.players[0]?.position.y, 0);
+});
+
+test("MetaverseAuthoritativeWorldRuntime exits onto the shipped shoreline support lane without vertical seam ejection", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("shoreline-exit-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Shoreline Exit Pilot"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(1_700);
+
+  const shorelineExitSnapshot = runtime.readWorldSnapshot(1_700, playerId);
+
+  assert.equal(shorelineExitSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.ok((shorelineExitSnapshot.players[0]?.position.y ?? 0) > 0.17);
+  assert.ok((shorelineExitSnapshot.players[0]?.position.y ?? 0) < 0.35);
+  assert.ok(
+    Math.abs(shorelineExitSnapshot.players[0]?.linearVelocity.y ?? 0) < 0.000001
+  );
+
+  runtime.advanceToTime(2_100);
+
+  const settledSnapshot = runtime.readWorldSnapshot(2_100, playerId);
+
+  assert.equal(settledSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.ok((settledSnapshot.players[0]?.position.y ?? 0) > 0.17);
+  assert.ok((settledSnapshot.players[0]?.position.y ?? 0) < 0.35);
+  assert.ok(Math.abs(settledSnapshot.players[0]?.linearVelocity.y ?? 0) < 0.000001);
 });
 
 test("MetaverseAuthoritativeWorldRuntime simulates grounded jump ascent, descent, and landing on authoritative ticks", () => {

@@ -2,7 +2,11 @@ import {
   MetaverseGroundedBodyRuntime,
   type PhysicsVector3Snapshot
 } from "@/physics";
-import type { MetaverseRealtimePlayerSnapshot } from "@webgpu-metaverse/shared";
+import {
+  MetaverseMovementAnimationPolicyRuntime,
+  metaverseWorldAutomaticSurfaceWaterlineThresholdMeters,
+  type MetaverseRealtimePlayerSnapshot
+} from "@webgpu-metaverse/shared";
 import { defaultMetaverseLocomotionMode } from "../config/metaverse-locomotion-modes";
 import {
   advanceMetaverseCameraSnapshot,
@@ -15,6 +19,7 @@ import type {
   MetaverseCharacterPresentationSnapshot,
   MetaverseEnvironmentAssetProofConfig,
   MetaverseRuntimeConfig,
+  MetaverseTelemetrySnapshot,
   MountedEnvironmentSnapshot
 } from "../types/metaverse-runtime";
 import {
@@ -41,7 +46,7 @@ import {
 import {
   constrainPlanarPositionAgainstBlockers,
   isWaterbornePosition,
-  resolveAutomaticSurfaceLocomotionMode,
+  resolveAutomaticSurfaceLocomotionSnapshot,
   resolveGroundedAutostepHeightMeters,
   resolveSurfaceHeightMeters,
 } from "../traversal/policies/surface-routing";
@@ -66,8 +71,91 @@ function createIdleGroundedBodyIntentSnapshot() {
   });
 }
 
-const localPlayerAuthoritativePositionSnapDistanceMeters = 0.45;
-const localPlayerAuthoritativeYawSnapRadians = 0.25;
+type LocalShorelineTelemetrySnapshot =
+  MetaverseTelemetrySnapshot["worldSnapshot"]["shoreline"]["local"];
+type AuthoritativeCorrectionTelemetrySnapshot =
+  MetaverseTelemetrySnapshot["worldSnapshot"]["shoreline"]["authoritativeCorrection"];
+
+interface LocalTraversalPoseSnapshot {
+  readonly locomotionMode: "grounded" | "swim";
+  readonly position: PhysicsVector3Snapshot;
+  readonly yawRadians: number;
+}
+
+interface GroundedWaterEntryStateSnapshot {
+  readonly grounded: boolean;
+  readonly position: PhysicsVector3Snapshot;
+  readonly verticalSpeedUnitsPerSecond: number;
+  readonly yawRadians: number;
+}
+
+function createDefaultAuthoritativeCorrectionTelemetrySnapshot(): AuthoritativeCorrectionTelemetrySnapshot {
+  return Object.freeze({
+    applied: false,
+    locomotionMismatch: false,
+    planarMagnitudeMeters: 0,
+    verticalMagnitudeMeters: 0
+  });
+}
+
+function lerp(start: number, end: number, alpha: number): number {
+  return start + (end - start) * alpha;
+}
+
+function resolveCorrectionBlendAlpha(
+  errorMagnitude: number,
+  routineThreshold: number,
+  grossThreshold: number,
+  routineBlendAlpha: number
+): number {
+  const normalizedRoutineBlendAlpha = clamp(
+    toFiniteNumber(routineBlendAlpha, 0.35),
+    0,
+    1
+  );
+  const normalizedRoutineThreshold = Math.max(
+    0,
+    toFiniteNumber(routineThreshold, 0)
+  );
+  const normalizedGrossThreshold = Math.max(
+    normalizedRoutineThreshold,
+    toFiniteNumber(grossThreshold, normalizedRoutineThreshold)
+  );
+  const normalizedErrorMagnitude = Math.max(0, toFiniteNumber(errorMagnitude, 0));
+
+  if (
+    normalizedErrorMagnitude <= normalizedRoutineThreshold ||
+    normalizedGrossThreshold <= normalizedRoutineThreshold
+  ) {
+    return normalizedRoutineBlendAlpha;
+  }
+
+  return lerp(
+    normalizedRoutineBlendAlpha,
+    1,
+    (normalizedErrorMagnitude - normalizedRoutineThreshold) /
+      Math.max(
+        0.000001,
+        normalizedGrossThreshold - normalizedRoutineThreshold
+      )
+  );
+}
+
+function resolveMovementInputMagnitude(
+  movementInput: Pick<MetaverseFlightInputSnapshot, "moveAxis" | "strafeAxis">
+): number {
+  return Math.hypot(
+    clamp(toFiniteNumber(movementInput.moveAxis, 0), -1, 1),
+    clamp(toFiniteNumber(movementInput.strafeAxis, 0), -1, 1)
+  );
+}
+
+const localPlayerAuthoritativeRoutinePositionBlendThresholdMeters = 0.08;
+const localPlayerAuthoritativeRoutineYawBlendThresholdRadians = 0.04;
+const localPlayerAuthoritativeGrossSnapDistanceMeters = 1.35;
+const localPlayerAuthoritativeGrossSnapYawRadians = 0.55;
+const localPlayerAuthoritativeRoutineBlendAlpha = 0.35;
+const localPlayerAuthoritativeLocomotionMismatchSnapCount = 3;
 const localPlayerAuthoritativeGroundedHeightToleranceMeters = 0.08;
 const localPlayerAuthoritativeGroundedVerticalSpeedToleranceUnitsPerSecond = 0.2;
 
@@ -153,6 +241,17 @@ export class MetaverseTraversalRuntime {
   #cameraSnapshot: MetaverseCameraSnapshot;
   #characterPresentationSnapshot: MetaverseCharacterPresentationSnapshot | null =
     null;
+  readonly #movementAnimationRuntime = new MetaverseMovementAnimationPolicyRuntime();
+  #latestAuthoritativeCorrectionTelemetrySnapshot =
+    createDefaultAuthoritativeCorrectionTelemetrySnapshot();
+  #latestAutomaticSurfaceDecisionReason: LocalShorelineTelemetrySnapshot["decisionReason"] =
+    "grounded-hold";
+  #latestBlockerOverlap = false;
+  #latestResolvedSupportHeightMeters = 0;
+  #latestStepSupportedProbeCount = 0;
+  #latestAutostepHeightMeters: number | null = null;
+  #latestMovementInputMagnitude = 0;
+  #localAuthoritativeLocomotionMismatchCount = 0;
   #locomotionMode = defaultMetaverseLocomotionMode;
   #mountedEnvironmentConfig: Pick<
     MetaverseEnvironmentAssetProofConfig,
@@ -191,6 +290,7 @@ export class MetaverseTraversalRuntime {
       ),
       config.camera.initialYawRadians
     );
+    this.#latestResolvedSupportHeightMeters = config.ocean.height;
   }
 
   get cameraSnapshot(): MetaverseCameraSnapshot {
@@ -253,13 +353,42 @@ export class MetaverseTraversalRuntime {
     return this.#localReconciliationCorrectionCount;
   }
 
+  get localTraversalPoseSnapshot(): LocalTraversalPoseSnapshot | null {
+    return this.#readLocalTraversalPoseForReconciliation();
+  }
+
+  get shorelineLocalTelemetrySnapshot(): LocalShorelineTelemetrySnapshot {
+    return Object.freeze({
+      autostepHeightMeters: this.#latestAutostepHeightMeters,
+      blockerOverlap: this.#latestBlockerOverlap,
+      decisionReason: this.#latestAutomaticSurfaceDecisionReason,
+      locomotionMode: this.#locomotionMode,
+      resolvedSupportHeightMeters: this.#latestResolvedSupportHeightMeters,
+      stepSupportedProbeCount: this.#latestStepSupportedProbeCount
+    });
+  }
+
+  get authoritativeCorrectionTelemetrySnapshot(): AuthoritativeCorrectionTelemetrySnapshot {
+    return this.#latestAuthoritativeCorrectionTelemetrySnapshot;
+  }
+
   reset(): void {
     this.#groundedBodyRuntime.setAutostepEnabled(false);
     this.#cameraSnapshot = createMetaverseCameraSnapshot(this.#config.camera);
     this.#characterPresentationSnapshot = null;
     this.#locomotionMode = defaultMetaverseLocomotionMode;
     this.#clearMountedVehicleState();
+    this.#latestAuthoritativeCorrectionTelemetrySnapshot =
+      createDefaultAuthoritativeCorrectionTelemetrySnapshot();
+    this.#latestAutomaticSurfaceDecisionReason = "grounded-hold";
+    this.#latestAutostepHeightMeters = null;
+    this.#latestBlockerOverlap = false;
+    this.#latestResolvedSupportHeightMeters = this.#config.ocean.height;
+    this.#latestStepSupportedProbeCount = 0;
+    this.#latestMovementInputMagnitude = 0;
     this.#localReconciliationCorrectionCount = 0;
+    this.#localAuthoritativeLocomotionMismatchCount = 0;
+    this.#movementAnimationRuntime.reset();
     this.#mountedOccupancyLookYawRadians = 0;
     this.#routedDriverVehicleControlIntentSnapshot = null;
     this.#swimForwardSpeedUnitsPerSecond = 0;
@@ -425,6 +554,7 @@ export class MetaverseTraversalRuntime {
     movementInput: MetaverseFlightInputSnapshot,
     deltaSeconds: number
   ): MetaverseCameraSnapshot {
+    this.#latestMovementInputMagnitude = resolveMovementInputMagnitude(movementInput);
     const constrainedMountedOccupancy =
       this.#mountedVehicleRuntime !== null &&
       shouldConstrainMountedOccupancyToAnchor(this.#mountedVehicleOccupancy());
@@ -442,7 +572,7 @@ export class MetaverseTraversalRuntime {
                 this.#config,
                 deltaSeconds
               );
-    this.#syncCharacterPresentationSnapshot();
+    this.#syncCharacterPresentationSnapshot(deltaSeconds);
 
     return this.#cameraSnapshot;
   }
@@ -528,39 +658,124 @@ export class MetaverseTraversalRuntime {
         authoritativePlayerSnapshot.yawRadians - localTraversalPose.yawRadians
       )
     );
+    const locomotionMismatch =
+      authoritativePlayerSnapshot.locomotionMode !==
+      localTraversalPose.locomotionMode;
+    const authoritativeGrounded =
+      authoritativePlayerSnapshot.locomotionMode === "grounded"
+        ? this.#isAuthoritativeGroundedPlayerSnapshot(authoritativePlayerSnapshot)
+        : false;
+
+    this.#localAuthoritativeLocomotionMismatchCount = locomotionMismatch
+      ? this.#localAuthoritativeLocomotionMismatchCount + 1
+      : 0;
+
+    this.#syncAuthoritativeCorrectionTelemetry(
+      localTraversalPose,
+      authoritativePlayerSnapshot,
+      false
+    );
 
     if (
-      authoritativePlayerSnapshot.locomotionMode ===
-        localTraversalPose.locomotionMode &&
-      positionDistance < localPlayerAuthoritativePositionSnapDistanceMeters &&
-      yawDistance < localPlayerAuthoritativeYawSnapRadians
+      !locomotionMismatch &&
+      positionDistance <
+        localPlayerAuthoritativeRoutinePositionBlendThresholdMeters &&
+      yawDistance < localPlayerAuthoritativeRoutineYawBlendThresholdRadians
     ) {
       return;
     }
 
+    const shouldSnapCorrection =
+      (authoritativePlayerSnapshot.locomotionMode === "grounded" &&
+        !authoritativeGrounded) ||
+      positionDistance >= localPlayerAuthoritativeGrossSnapDistanceMeters ||
+      yawDistance >= localPlayerAuthoritativeGrossSnapYawRadians ||
+      (locomotionMismatch &&
+        this.#localAuthoritativeLocomotionMismatchCount >=
+          localPlayerAuthoritativeLocomotionMismatchSnapCount);
+    const positionBlendAlpha = shouldSnapCorrection
+      ? 1
+      : resolveCorrectionBlendAlpha(
+          positionDistance,
+          localPlayerAuthoritativeRoutinePositionBlendThresholdMeters,
+          localPlayerAuthoritativeGrossSnapDistanceMeters,
+          localPlayerAuthoritativeRoutineBlendAlpha
+        );
+    const yawBlendAlpha = shouldSnapCorrection
+      ? 1
+      : resolveCorrectionBlendAlpha(
+          yawDistance,
+          localPlayerAuthoritativeRoutineYawBlendThresholdRadians,
+          localPlayerAuthoritativeGrossSnapYawRadians,
+          localPlayerAuthoritativeRoutineBlendAlpha
+        );
+
     this.#localReconciliationCorrectionCount += 1;
+    this.#syncAuthoritativeCorrectionTelemetry(
+      localTraversalPose,
+      authoritativePlayerSnapshot,
+      true
+    );
 
     if (authoritativePlayerSnapshot.locomotionMode === "swim") {
-      this.#enterSwimLocomotion(
-        authoritativePlayerSnapshot.position,
-        authoritativePlayerSnapshot.yawRadians
-      );
-    } else {
-      if (!this.#groundedBodyRuntime.isInitialized) {
-        return;
+      if (locomotionMismatch && !shouldSnapCorrection) {
+        if (localTraversalPose.locomotionMode === "swim") {
+          this.#syncAuthoritativeSwimLocomotion(
+            authoritativePlayerSnapshot.position,
+            authoritativePlayerSnapshot.yawRadians,
+            authoritativePlayerSnapshot.linearVelocity,
+            positionBlendAlpha,
+            yawBlendAlpha
+          );
+        } else {
+          this.#syncAuthoritativeGroundedLocomotion(
+            authoritativePlayerSnapshot.position,
+            authoritativePlayerSnapshot.yawRadians,
+            authoritativePlayerSnapshot.linearVelocity,
+            this.#groundedBodyRuntime.snapshot.grounded,
+            positionBlendAlpha,
+            yawBlendAlpha
+          );
+        }
+      } else {
+        this.#syncAuthoritativeSwimLocomotion(
+          authoritativePlayerSnapshot.position,
+          authoritativePlayerSnapshot.yawRadians,
+          authoritativePlayerSnapshot.linearVelocity,
+          positionBlendAlpha,
+          yawBlendAlpha
+        );
       }
-
-      this.#groundedBodyRuntime.setAutostepEnabled(false);
-      this.#groundedBodyRuntime.syncAuthoritativeState({
-        grounded: this.#isAuthoritativeGroundedPlayerSnapshot(
-          authoritativePlayerSnapshot
-        ),
-        linearVelocity: authoritativePlayerSnapshot.linearVelocity,
-        position: authoritativePlayerSnapshot.position,
-        yawRadians: authoritativePlayerSnapshot.yawRadians
-      });
-      this.#setLocomotionMode("grounded");
-      this.#syncGroundedCameraPresentation();
+    } else {
+      if (locomotionMismatch && !shouldSnapCorrection) {
+        if (localTraversalPose.locomotionMode === "swim") {
+          this.#syncAuthoritativeSwimLocomotion(
+            authoritativePlayerSnapshot.position,
+            authoritativePlayerSnapshot.yawRadians,
+            authoritativePlayerSnapshot.linearVelocity,
+            positionBlendAlpha,
+            yawBlendAlpha
+          );
+        } else {
+          this.#syncAuthoritativeGroundedLocomotion(
+            authoritativePlayerSnapshot.position,
+            authoritativePlayerSnapshot.yawRadians,
+            authoritativePlayerSnapshot.linearVelocity,
+            this.#groundedBodyRuntime.snapshot.grounded,
+            positionBlendAlpha,
+            yawBlendAlpha
+          );
+        }
+      } else {
+        this.#syncAuthoritativeGroundedLocomotion(
+          authoritativePlayerSnapshot.position,
+          authoritativePlayerSnapshot.yawRadians,
+          authoritativePlayerSnapshot.linearVelocity,
+          authoritativeGrounded,
+          positionBlendAlpha,
+          yawBlendAlpha
+        );
+      }
     }
 
     this.#syncCharacterPresentationSnapshot();
@@ -568,6 +783,10 @@ export class MetaverseTraversalRuntime {
 
   #setLocomotionMode(locomotionMode: MetaverseLocomotionModeId): void {
     this.#locomotionMode = locomotionMode;
+
+    if (locomotionMode === "mounted") {
+      this.#movementAnimationRuntime.reset("idle");
+    }
   }
 
   #mountedVehicleOccupancy() {
@@ -646,17 +865,139 @@ export class MetaverseTraversalRuntime {
     );
   }
 
+  #syncAuthoritativeGroundedLocomotion(
+    position: PhysicsVector3Snapshot,
+    yawRadians: number,
+    linearVelocity: PhysicsVector3Snapshot,
+    grounded: boolean,
+    positionBlendAlpha = 1,
+    yawBlendAlpha = 1
+  ): void {
+    if (!this.#groundedBodyRuntime.isInitialized) {
+      return;
+    }
+
+    const currentBodySnapshot = this.#groundedBodyRuntime.snapshot;
+    const blendedYawRadians = wrapRadians(
+      currentBodySnapshot.yawRadians +
+        wrapRadians(yawRadians - currentBodySnapshot.yawRadians) * yawBlendAlpha
+    );
+    const blendedPosition = freezeVector3(
+      lerp(currentBodySnapshot.position.x, position.x, positionBlendAlpha),
+      lerp(currentBodySnapshot.position.y, position.y, positionBlendAlpha),
+      lerp(currentBodySnapshot.position.z, position.z, positionBlendAlpha)
+    );
+
+    this.#groundedBodyRuntime.setAutostepEnabled(false);
+    this.#groundedBodyRuntime.syncAuthoritativeState({
+      grounded,
+      linearVelocity,
+      position: blendedPosition,
+      yawRadians: blendedYawRadians
+    });
+    this.#setLocomotionMode("grounded");
+    this.#syncGroundedCameraPresentation();
+  }
+
+  #syncAuthoritativeSwimLocomotion(
+    position: PhysicsVector3Snapshot,
+    yawRadians: number,
+    linearVelocity: PhysicsVector3Snapshot,
+    positionBlendAlpha = 1,
+    yawBlendAlpha = 1
+  ): void {
+    const currentSwimSnapshot = this.#swimSnapshot;
+    const wrappedYawRadians = wrapRadians(
+      currentSwimSnapshot.yawRadians +
+        wrapRadians(yawRadians - currentSwimSnapshot.yawRadians) * yawBlendAlpha
+    );
+    const forwardX = Math.sin(wrappedYawRadians);
+    const forwardZ = -Math.cos(wrappedYawRadians);
+    const rightX = Math.cos(wrappedYawRadians);
+    const rightZ = Math.sin(wrappedYawRadians);
+    const linearVelocityX = toFiniteNumber(linearVelocity.x, 0);
+    const linearVelocityZ = toFiniteNumber(linearVelocity.z, 0);
+
+    this.#groundedBodyRuntime.setAutostepEnabled(false);
+    this.#swimForwardSpeedUnitsPerSecond =
+      linearVelocityX * forwardX + linearVelocityZ * forwardZ;
+    this.#swimStrafeSpeedUnitsPerSecond =
+      linearVelocityX * rightX + linearVelocityZ * rightZ;
+    this.#swimSnapshot = Object.freeze({
+      planarSpeedUnitsPerSecond: Math.hypot(linearVelocityX, linearVelocityZ),
+      position: freezeVector3(
+        lerp(currentSwimSnapshot.position.x, position.x, positionBlendAlpha),
+        this.#config.ocean.height,
+        lerp(currentSwimSnapshot.position.z, position.z, positionBlendAlpha)
+      ),
+      yawRadians: wrappedYawRadians
+    });
+    this.#setLocomotionMode("swim");
+    this.#cameraSnapshot = createTraversalSwimCameraPresentationSnapshot(
+      this.#swimSnapshot,
+      this.#traversalCameraPitchRadians,
+      this.#config
+    );
+  }
+
+  #syncAutomaticSurfaceTelemetry(
+    automaticSurfaceSnapshot: ReturnType<typeof resolveAutomaticSurfaceLocomotionSnapshot>,
+    autostepHeightMeters: number | null
+  ): void {
+    this.#latestAutostepHeightMeters = autostepHeightMeters;
+    this.#latestBlockerOverlap = automaticSurfaceSnapshot.debug.blockerOverlap;
+    this.#latestResolvedSupportHeightMeters =
+      automaticSurfaceSnapshot.debug.resolvedSupportHeightMeters;
+    this.#latestStepSupportedProbeCount =
+      automaticSurfaceSnapshot.debug.stepSupportedProbeCount;
+
+    if (
+      automaticSurfaceSnapshot.debug.reason !== "shoreline-exit-blocked" ||
+      automaticSurfaceSnapshot.debug.blockerOverlap ||
+      automaticSurfaceSnapshot.debug.stepSupportedProbeCount > 0
+    ) {
+      this.#latestAutomaticSurfaceDecisionReason =
+        automaticSurfaceSnapshot.debug.reason;
+    }
+  }
+
+  #syncAuthoritativeCorrectionTelemetry(
+    localTraversalPose: LocalTraversalPoseSnapshot,
+    authoritativePlayerSnapshot: Pick<
+      MetaverseRealtimePlayerSnapshot,
+      "locomotionMode" | "position"
+    >,
+    applied: boolean
+  ): void {
+    this.#latestAuthoritativeCorrectionTelemetrySnapshot = Object.freeze({
+      applied,
+      locomotionMismatch:
+        authoritativePlayerSnapshot.locomotionMode !==
+        localTraversalPose.locomotionMode,
+      planarMagnitudeMeters: Math.hypot(
+        authoritativePlayerSnapshot.position.x - localTraversalPose.position.x,
+        authoritativePlayerSnapshot.position.z - localTraversalPose.position.z
+      ),
+      verticalMagnitudeMeters: Math.abs(
+        authoritativePlayerSnapshot.position.y - localTraversalPose.position.y
+      )
+    });
+  }
+
   #syncAutomaticSurfaceLocomotion(
     position: PhysicsVector3Snapshot,
     yawRadians: number
   ): void {
-    const locomotionDecision = resolveAutomaticSurfaceLocomotionMode(
+    const locomotionSnapshot = resolveAutomaticSurfaceLocomotionSnapshot(
       this.#config,
       this.#surfaceColliderSnapshots,
       position,
       yawRadians,
       this.#locomotionMode === "grounded" ? "grounded" : "swim"
     );
+    const locomotionDecision = locomotionSnapshot.decision;
+
+    this.#syncAutomaticSurfaceTelemetry(locomotionSnapshot, null);
 
     if (locomotionDecision.locomotionMode === "grounded") {
       this.#enterGroundedLocomotion(
@@ -703,13 +1044,7 @@ export class MetaverseTraversalRuntime {
     );
   }
 
-  #readLocalTraversalPoseForReconciliation():
-    | {
-        readonly locomotionMode: "grounded" | "swim";
-        readonly position: PhysicsVector3Snapshot;
-        readonly yawRadians: number;
-      }
-    | null {
+  #readLocalTraversalPoseForReconciliation(): LocalTraversalPoseSnapshot | null {
     if (this.#mountedVehicleRuntime !== null || this.#locomotionMode === "mounted") {
       return null;
     }
@@ -945,16 +1280,30 @@ export class MetaverseTraversalRuntime {
       deltaSeconds
     );
 
-    const locomotionDecision = resolveAutomaticSurfaceLocomotionMode(
+    const locomotionSnapshot = resolveAutomaticSurfaceLocomotionSnapshot(
       this.#config,
       this.#surfaceColliderSnapshots,
       bodySnapshot.position,
       bodySnapshot.yawRadians,
       "grounded"
     );
+    const locomotionDecision = locomotionSnapshot.decision;
+
+    this.#syncAutomaticSurfaceTelemetry(
+      locomotionSnapshot,
+      autostepHeightMeters
+    );
 
     if (locomotionDecision.locomotionMode === "swim") {
       if (this.#mountedOccupancyKeepsFreeRoam()) {
+        return createTraversalGroundedCameraPresentationSnapshot(
+          bodySnapshot,
+          this.#traversalCameraPitchRadians,
+          this.#config
+        );
+      }
+
+      if (this.#shouldDelaySwimEntryFromGrounded(bodySnapshot)) {
         return createTraversalGroundedCameraPresentationSnapshot(
           bodySnapshot,
           this.#traversalCameraPitchRadians,
@@ -1034,13 +1383,16 @@ export class MetaverseTraversalRuntime {
       yawRadians: nextSwimState.snapshot.yawRadians
     });
 
-    const locomotionDecision = resolveAutomaticSurfaceLocomotionMode(
+    const locomotionSnapshot = resolveAutomaticSurfaceLocomotionSnapshot(
       this.#config,
       this.#surfaceColliderSnapshots,
       this.#swimSnapshot.position,
       this.#swimSnapshot.yawRadians,
       "swim"
     );
+    const locomotionDecision = locomotionSnapshot.decision;
+
+    this.#syncAutomaticSurfaceTelemetry(locomotionSnapshot, null);
 
     if (locomotionDecision.locomotionMode === "grounded") {
       this.#enterGroundedLocomotion(
@@ -1056,6 +1408,20 @@ export class MetaverseTraversalRuntime {
       this.#swimSnapshot,
       this.#traversalCameraPitchRadians,
       this.#config
+    );
+  }
+
+  #shouldDelaySwimEntryFromGrounded(
+    bodySnapshot: GroundedWaterEntryStateSnapshot
+  ): boolean {
+    if (bodySnapshot.grounded) {
+      return false;
+    }
+
+    return (
+      bodySnapshot.position.y >
+      this.#config.ocean.height +
+        metaverseWorldAutomaticSurfaceWaterlineThresholdMeters
     );
   }
 
@@ -1178,8 +1544,45 @@ export class MetaverseTraversalRuntime {
     });
   }
 
-  #syncCharacterPresentationSnapshot(): void {
+  #resolveLocalAnimationVocabulary(
+    deltaSeconds: number
+  ): MetaverseCharacterPresentationSnapshot["animationVocabulary"] {
+    if (this.#locomotionMode === "grounded" && this.#groundedBodyRuntime.isInitialized) {
+      const groundedBodySnapshot = this.#groundedBodyRuntime.snapshot;
+
+      return this.#movementAnimationRuntime.advance(
+        {
+          grounded: groundedBodySnapshot.grounded,
+          inputMagnitude: this.#latestMovementInputMagnitude,
+          locomotionMode: "grounded",
+          planarSpeedUnitsPerSecond: groundedBodySnapshot.planarSpeedUnitsPerSecond,
+          verticalSpeedUnitsPerSecond:
+            groundedBodySnapshot.verticalSpeedUnitsPerSecond
+        },
+        deltaSeconds
+      );
+    }
+
+    if (this.#locomotionMode === "swim") {
+      return this.#movementAnimationRuntime.advance(
+        {
+          grounded: false,
+          inputMagnitude: this.#latestMovementInputMagnitude,
+          locomotionMode: "swim",
+          planarSpeedUnitsPerSecond: this.#swimSnapshot.planarSpeedUnitsPerSecond,
+          verticalSpeedUnitsPerSecond: 0
+        },
+        deltaSeconds
+      );
+    }
+
+    this.#movementAnimationRuntime.reset("idle");
+    return this.#movementAnimationRuntime.animationVocabulary;
+  }
+
+  #syncCharacterPresentationSnapshot(deltaSeconds = 0): void {
     this.#characterPresentationSnapshot = createTraversalCharacterPresentationSnapshot({
+      animationVocabulary: this.#resolveLocalAnimationVocabulary(deltaSeconds),
       config: this.#config,
       groundedBodySnapshot: this.#groundedBodyRuntime.isInitialized
         ? this.#groundedBodyRuntime.snapshot

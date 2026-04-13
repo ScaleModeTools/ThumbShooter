@@ -5,25 +5,61 @@ import {
   defaultMountedVehicleLookLimitPolicyId,
   defaultMountedVehicleOccupancyAnimationId
 } from "../types/environment-seat";
+import {
+  metaverseHubCrateEnvironmentAssetId as sharedMetaverseHubCrateEnvironmentAssetId,
+  metaverseHubDockEnvironmentAssetId as sharedMetaverseHubDockEnvironmentAssetId,
+  metaverseHubDiveBoatEnvironmentAssetId as sharedMetaverseHubDiveBoatEnvironmentAssetId,
+  metaverseHubPushableCrateEnvironmentAssetId as sharedMetaverseHubPushableCrateEnvironmentAssetId,
+  metaverseHubShorelineEnvironmentAssetId as sharedMetaverseHubShorelineEnvironmentAssetId,
+  metaverseHubSkiffEnvironmentAssetId as sharedMetaverseHubSkiffEnvironmentAssetId,
+  readMetaverseWorldSurfaceAssetAuthoring
+} from "@webgpu-metaverse/shared";
+
+function resolveSurfaceColliders(environmentAssetId: string) {
+  const surfaceAsset = readMetaverseWorldSurfaceAssetAuthoring(environmentAssetId);
+
+  if (surfaceAsset === null) {
+    return null;
+  }
+
+  return surfaceAsset.surfaceColliders.map((collider) => ({
+    center: {
+      x: collider.center.x,
+      y: collider.center.y,
+      z: collider.center.z
+    },
+    shape: "box" as const,
+    size: {
+      x: collider.size.x,
+      y: collider.size.y,
+      z: collider.size.z
+    },
+    traversalAffordance: collider.traversalAffordance
+  }));
+}
 
 export const metaverseHubCrateEnvironmentAssetId = createEnvironmentAssetId(
-  "metaverse-hub-crate-v1"
+  sharedMetaverseHubCrateEnvironmentAssetId
 );
 
 export const metaverseHubPushableCrateEnvironmentAssetId = createEnvironmentAssetId(
-  "metaverse-hub-pushable-crate-v1"
+  sharedMetaverseHubPushableCrateEnvironmentAssetId
 );
 
 export const metaverseHubDockEnvironmentAssetId = createEnvironmentAssetId(
-  "metaverse-hub-dock-v1"
+  sharedMetaverseHubDockEnvironmentAssetId
+);
+
+export const metaverseHubShorelineEnvironmentAssetId = createEnvironmentAssetId(
+  sharedMetaverseHubShorelineEnvironmentAssetId
 );
 
 export const metaverseHubSkiffEnvironmentAssetId = createEnvironmentAssetId(
-  "metaverse-hub-skiff-v1"
+  sharedMetaverseHubSkiffEnvironmentAssetId
 );
 
 export const metaverseHubDiveBoatEnvironmentAssetId = createEnvironmentAssetId(
-  "metaverse-hub-dive-boat-v1"
+  sharedMetaverseHubDiveBoatEnvironmentAssetId
 );
 
 export const metaverseHubSkiffForwardModelYawRadians = Math.PI * 0.5;
@@ -35,22 +71,9 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     label: "Metaverse hub crate",
     placement: "instanced",
     traversalAffordance: "blocker",
-    physicsColliders: [
-      {
-        center: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 0.92,
-          y: 0.92,
-          z: 0.92
-        },
-        traversalAffordance: "blocker"
-      }
-    ],
+    physicsColliders: resolveSurfaceColliders(
+      sharedMetaverseHubCrateEnvironmentAssetId
+    ),
     renderModel: {
       defaultTier: "high",
       lods: [
@@ -77,22 +100,9 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     label: "Metaverse hub dock",
     placement: "static",
     traversalAffordance: "support",
-    physicsColliders: [
-      {
-        center: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 8.4,
-          y: 0.34,
-          z: 4.2
-        },
-        traversalAffordance: "support"
-      }
-    ],
+    physicsColliders: resolveSurfaceColliders(
+      sharedMetaverseHubDockEnvironmentAssetId
+    ),
     renderModel: {
       defaultTier: "high",
       lods: [
@@ -111,6 +121,36 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     orientation: null,
     collider: null,
     collisionPath: null,
+    entries: null,
+    seats: null
+  },
+  {
+    id: metaverseHubShorelineEnvironmentAssetId,
+    label: "Metaverse hub shoreline",
+    placement: "static",
+    traversalAffordance: "support",
+    physicsColliders: resolveSurfaceColliders(
+      sharedMetaverseHubShorelineEnvironmentAssetId
+    ),
+    renderModel: {
+      defaultTier: "high",
+      lods: [
+        {
+          tier: "high",
+          modelPath: "/models/metaverse/environment/metaverse-hub-shoreline-high.gltf",
+          maxDistanceMeters: 42
+        },
+        {
+          tier: "low",
+          modelPath: "/models/metaverse/environment/metaverse-hub-shoreline-low.gltf",
+          maxDistanceMeters: null
+        }
+      ]
+    },
+    orientation: null,
+    collider: null,
+    collisionPath:
+      "/models/metaverse/environment/metaverse-hub-shoreline-collision.gltf",
     entries: null,
     seats: null
   },
@@ -153,120 +193,9 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     label: "Metaverse hub skiff",
     placement: "dynamic",
     traversalAffordance: "mount",
-    physicsColliders: [
-      {
-        center: {
-          x: 0,
-          y: 0.28,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 5.8,
-          y: 0.56,
-          z: 2.6
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: 0,
-          y: 0.62,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 5.2,
-          y: 0.12,
-          z: 2
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: 1.35,
-          y: 0.94,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 0.9,
-          y: 0.18,
-          z: 0.8
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: 1.72,
-          y: 1.18,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 0.62,
-          y: 0.58,
-          z: 0.84
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: 0,
-          y: 0.92,
-          z: -0.74
-        },
-        shape: "box",
-        size: {
-          x: 2.6,
-          y: 0.16,
-          z: 0.52
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: 0,
-          y: 1.12,
-          z: -0.88
-        },
-        shape: "box",
-        size: {
-          x: 2.6,
-          y: 0.42,
-          z: 0.24
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: 0,
-          y: 0.92,
-          z: 0.74
-        },
-        shape: "box",
-        size: {
-          x: 2.6,
-          y: 0.16,
-          z: 0.52
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: 0,
-          y: 1.12,
-          z: 0.88
-        },
-        shape: "box",
-        size: {
-          x: 2.6,
-          y: 0.42,
-          z: 0.24
-        },
-        traversalAffordance: "blocker"
-      }
-    ],
+    physicsColliders: resolveSurfaceColliders(
+      sharedMetaverseHubSkiffEnvironmentAssetId
+    ),
     renderModel: {
       defaultTier: "high",
       lods: [
@@ -399,134 +328,9 @@ export const environmentPropManifest = defineEnvironmentAssetManifest([
     label: "Metaverse hub dive boat",
     placement: "dynamic",
     traversalAffordance: "mount",
-    physicsColliders: [
-      {
-        center: {
-          x: 0,
-          y: 0.28,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 10.8,
-          y: 0.56,
-          z: 3.6
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: 0,
-          y: 0.64,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 9.8,
-          y: 0.12,
-          z: 2.6
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: -4.2,
-          y: 0.64,
-          z: 0
-        },
-        shape: "box",
-        size: {
-          x: 1.6,
-          y: 0.12,
-          z: 2.2
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: 2.6,
-          y: 0.96,
-          z: 0.52
-        },
-        shape: "box",
-        size: {
-          x: 1.1,
-          y: 0.16,
-          z: 0.9
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: -0.3,
-          y: 0.92,
-          z: -1.02
-        },
-        shape: "box",
-        size: {
-          x: 5.8,
-          y: 0.16,
-          z: 0.56
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: -0.3,
-          y: 1.14,
-          z: -1.18
-        },
-        shape: "box",
-        size: {
-          x: 5.8,
-          y: 0.46,
-          z: 0.26
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: -0.3,
-          y: 0.92,
-          z: 1.02
-        },
-        shape: "box",
-        size: {
-          x: 5.8,
-          y: 0.16,
-          z: 0.56
-        },
-        traversalAffordance: "support"
-      },
-      {
-        center: {
-          x: -0.3,
-          y: 1.14,
-          z: 1.18
-        },
-        shape: "box",
-        size: {
-          x: 5.8,
-          y: 0.46,
-          z: 0.26
-        },
-        traversalAffordance: "blocker"
-      },
-      {
-        center: {
-          x: 3.15,
-          y: 1.18,
-          z: 0.45
-        },
-        shape: "box",
-        size: {
-          x: 0.9,
-          y: 0.72,
-          z: 0.92
-        },
-        traversalAffordance: "blocker"
-      }
-    ],
+    physicsColliders: resolveSurfaceColliders(
+      sharedMetaverseHubDiveBoatEnvironmentAssetId
+    ),
     renderModel: {
       defaultTier: "high",
       lods: [

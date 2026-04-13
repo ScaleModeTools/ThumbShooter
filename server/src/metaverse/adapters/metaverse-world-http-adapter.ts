@@ -256,6 +256,14 @@ function parseWorldTraversalIntent(intentBody: Record<string, unknown>) {
             "intent.inputSequence"
           )
         }),
+    ...(intentBody.jumpActionSequence === undefined
+      ? {}
+      : {
+          jumpActionSequence: readNumberField(
+            intentBody.jumpActionSequence,
+            "intent.jumpActionSequence"
+          )
+        }),
     ...(intentBody.jump === undefined
       ? {}
       : {

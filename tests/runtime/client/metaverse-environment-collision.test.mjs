@@ -76,6 +76,7 @@ test("resolvePlacedCuboidColliders applies placement translation rotation and sc
     y: 1,
     z: 18
   });
+  assert.ok(Math.abs(colliders[0]?.rotationYRadians - Math.PI * 0.5) < 0.00001);
   assert.ok(Math.abs(colliders[0]?.rotation.y - Math.SQRT1_2) < 0.00001);
   assert.ok(Math.abs(colliders[0]?.rotation.w - Math.SQRT1_2) < 0.00001);
 });
@@ -132,6 +133,7 @@ test("resolveDynamicEnvironmentCuboidColliders applies runtime pose while preser
     y: 1.25,
     z: -6
   });
+  assert.ok(Math.abs(colliders[0]?.rotationYRadians - Math.PI * 0.5) < 0.00001);
   assert.ok(Math.abs(colliders[0]?.rotation.y - Math.SQRT1_2) < 0.00001);
   assert.ok(Math.abs(colliders[0]?.rotation.w - Math.SQRT1_2) < 0.00001);
 });
@@ -190,4 +192,55 @@ test("resolvePlacedCollisionTriMeshes bakes placement transforms into world-spac
     y: 1,
     z: 5
   });
+});
+
+test("resolvePlacedCollisionTriMeshes keeps static contact meshes when semantic physics colliders are also authored", async () => {
+  const [{ BoxGeometry, Group, Mesh, MeshStandardMaterial }, { resolvePlacedCollisionTriMeshes }] =
+    await Promise.all([
+      import("three/webgpu"),
+      clientLoader.load("/src/metaverse/states/metaverse-environment-collision.ts")
+    ]);
+  const collisionScene = new Group();
+  const collisionMesh = new Mesh(
+    new BoxGeometry(4, 0.5, 3),
+    new MeshStandardMaterial({ color: 0xffffff })
+  );
+
+  collisionScene.add(collisionMesh);
+  collisionScene.updateMatrixWorld(true);
+
+  const triMeshes = resolvePlacedCollisionTriMeshes(
+    {
+      collisionPath:
+        "/models/metaverse/environment/metaverse-hub-shoreline-collision.gltf",
+      collider: null,
+      environmentAssetId: "metaverse-hub-shoreline-v1",
+      label: "Metaverse hub shoreline",
+      lods: [],
+      placement: "static",
+      placements: [
+        {
+          position: { x: -4, y: 0, z: 6 },
+          rotationYRadians: 0,
+          scale: 1
+        }
+      ],
+      entries: null,
+      seats: null,
+      traversalAffordance: "support",
+      physicsColliders: [
+        {
+          center: { x: 0, y: 0.09, z: 3.05 },
+          shape: "box",
+          size: { x: 2.8, y: 0.18, z: 3.2 },
+          traversalAffordance: "support"
+        }
+      ]
+    },
+    collisionScene
+  );
+
+  assert.equal(triMeshes.length, 1);
+  assert.ok(triMeshes[0].vertices.length > 0);
+  assert.ok(triMeshes[0].indices.length > 0);
 });

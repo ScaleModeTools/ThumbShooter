@@ -77,12 +77,12 @@ export const metaverseBootCinematicConfig = Object.freeze({
       id: "harbor-handoff",
       pitchRadians: -0.1,
       position: Object.freeze({
-        x: 1.4,
-        y: 7.2,
-        z: 21.5
+        x: -8.2,
+        y: 1.77,
+        z: -15.04
       }),
       requiresEnvironment: true,
-      yawRadians: -0.04
+      yawRadians: Math.PI * 0.06
     })
   ])
 } as const satisfies MetaverseBootCinematicConfig);

@@ -5,12 +5,12 @@ export const metaverseRuntimeConfig = {
     far: 420,
     fieldOfViewDegrees: 62,
     initialPitchRadians: -0.08,
-    initialYawRadians: 0,
+    initialYawRadians: Math.PI * 0.06,
     near: 0.1,
     spawnPosition: {
-      x: 0,
-      y: 6.5,
-      z: 24
+      x: -8.2,
+      y: 1.77,
+      z: -15.04
     }
   },
   bodyPresentation: {
@@ -62,9 +62,9 @@ export const metaverseRuntimeConfig = {
     stepHeightMeters: 0.28,
     stepWidthMeters: 0.24,
     spawnPosition: {
-      x: 0,
-      y: 0,
-      z: 24
+      x: -8.2,
+      y: 0.15,
+      z: -14.8
     }
   },
   orientation: {
@@ -121,10 +121,10 @@ export const metaverseRuntimeConfig = {
   },
   swim: {
     accelerationCurveExponent: 1.15,
-    accelerationUnitsPerSecondSquared: 11,
-    baseSpeedUnitsPerSecond: 4.8,
+    accelerationUnitsPerSecondSquared: 13,
+    baseSpeedUnitsPerSecond: 6.4,
     boostCurveExponent: 1.1,
-    boostMultiplier: 1.35,
+    boostMultiplier: 1.45,
     cameraEyeHeightMeters: 1.38,
     decelerationUnitsPerSecondSquared: 12,
     dragCurveExponent: 1.35,

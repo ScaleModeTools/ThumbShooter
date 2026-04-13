@@ -156,8 +156,26 @@ function formatOptionalRateHz(value: number | null): string {
   return `${value.toFixed(1)} Hz`;
 }
 
+function formatMeters(value: number): string {
+  return `${value.toFixed(2)} m`;
+}
+
+function formatOptionalMeters(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  return formatMeters(value);
+}
+
 function formatPercentage(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+function formatDecisionReason(
+  reason: MetaverseHudSnapshot["telemetry"]["worldSnapshot"]["shoreline"]["local"]["decisionReason"]
+): string {
+  return reason.replaceAll("-", " ");
 }
 
 function formatSnapshotStreamPath(path: SnapshotStreamTransportSnapshot["path"]): string {
@@ -808,6 +826,99 @@ export function MetaverseDeveloperOverlay({
                 value={formatCount(
                   hudSnapshot.telemetry.worldSnapshot.localReconciliationCorrectionCount
                 )}
+              />
+            </section>
+
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <StatPanel
+                description="Client shoreline mode hold and the latest automatic routing reason"
+                label="Local shoreline"
+                value={`${hudSnapshot.telemetry.worldSnapshot.shoreline.local.locomotionMode} · ${formatDecisionReason(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline.local
+                    .decisionReason
+                )}`}
+              />
+              <StatPanel
+                description="Resolved local support height and whether the exit probe path saw blocker overlap"
+                label="Support / blocker"
+                value={`${formatMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline.local
+                    .resolvedSupportHeightMeters
+                )} · blocker ${formatBooleanLabel(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline.local
+                    .blockerOverlap
+                )}`}
+              />
+              <StatPanel
+                description="Current local autostep window and shoreline support coverage"
+                label="Autostep / probes"
+                value={`${formatOptionalMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline.local
+                    .autostepHeightMeters
+                )} · ${formatCount(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline.local
+                    .stepSupportedProbeCount
+                )} probes`}
+              />
+              <StatPanel
+                description="Latest traversal intent issued by the client with its local input sequence"
+                label="Intent / seq"
+                value={
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .issuedTraversalIntent === null
+                    ? "inactive"
+                    : `${hudSnapshot.telemetry.worldSnapshot.shoreline.issuedTraversalIntent.locomotionMode} · seq ${formatCount(
+                        hudSnapshot.telemetry.worldSnapshot.shoreline
+                          .issuedTraversalIntent.inputSequence
+                      )}`
+                }
+              />
+              <StatPanel
+                description="Latest fresh authoritative local-player locomotion and processed-input acknowledgement"
+                label="Authority / ack"
+                value={
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeLocalPlayer.locomotionMode === null
+                    ? "n/a"
+                    : `${hudSnapshot.telemetry.worldSnapshot.shoreline.authoritativeLocalPlayer.locomotionMode} · ack ${formatCount(
+                        hudSnapshot.telemetry.worldSnapshot.shoreline
+                          .authoritativeLocalPlayer.lastProcessedInputSequence ??
+                          0
+                      )}`
+                }
+              />
+            </section>
+
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <StatPanel
+                description="Fresh authoritative delta between local traversal pose and the latest player snapshot"
+                label="Authority delta"
+                value={`${formatOptionalMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeLocalPlayer.correctionPlanarMagnitudeMeters
+                )} planar · ${formatOptionalMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeLocalPlayer.correctionVerticalMagnitudeMeters
+                )} vertical`}
+              />
+              <StatPanel
+                description="Whether the latest fresh authoritative pose disagrees with the current local locomotion mode"
+                label="Mode mismatch"
+                value={formatBooleanLabel(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeLocalPlayer.locomotionMismatch
+                )}
+              />
+              <StatPanel
+                description="Most recent authoritative correction evaluated by traversal during local reconciliation"
+                label="Correction"
+                value={`${formatOptionalMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeCorrection.planarMagnitudeMeters
+                )} planar · ${formatOptionalMeters(
+                  hudSnapshot.telemetry.worldSnapshot.shoreline
+                    .authoritativeCorrection.verticalMagnitudeMeters
+                )} vertical`}
               />
             </section>
 

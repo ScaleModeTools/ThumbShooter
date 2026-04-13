@@ -214,6 +214,20 @@ function freezeRendererTelemetrySnapshot(
   });
 }
 
+function freezeOptionalVector3Snapshot(
+  snapshot: MetaverseTelemetrySnapshot["worldSnapshot"]["shoreline"]["authoritativeLocalPlayer"]["position"]
+): MetaverseTelemetrySnapshot["worldSnapshot"]["shoreline"]["authoritativeLocalPlayer"]["position"] {
+  if (snapshot === null) {
+    return null;
+  }
+
+  return Object.freeze({
+    x: snapshot.x,
+    y: snapshot.y,
+    z: snapshot.z
+  });
+}
+
 function freezeTelemetrySnapshot(
   snapshot: MetaverseTelemetrySnapshot
 ): MetaverseTelemetrySnapshot {
@@ -241,6 +255,75 @@ function freezeTelemetrySnapshot(
         snapshot.worldSnapshot.extrapolatedFramePercent,
       localReconciliationCorrectionCount:
         snapshot.worldSnapshot.localReconciliationCorrectionCount,
+      shoreline: Object.freeze({
+        authoritativeCorrection: Object.freeze({
+          applied: snapshot.worldSnapshot.shoreline.authoritativeCorrection.applied,
+          locomotionMismatch:
+            snapshot.worldSnapshot.shoreline.authoritativeCorrection
+              .locomotionMismatch,
+          planarMagnitudeMeters:
+            snapshot.worldSnapshot.shoreline.authoritativeCorrection
+              .planarMagnitudeMeters,
+          verticalMagnitudeMeters:
+            snapshot.worldSnapshot.shoreline.authoritativeCorrection
+              .verticalMagnitudeMeters
+        }),
+        authoritativeLocalPlayer: Object.freeze({
+          correctionPlanarMagnitudeMeters:
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer
+              .correctionPlanarMagnitudeMeters,
+          correctionVerticalMagnitudeMeters:
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer
+              .correctionVerticalMagnitudeMeters,
+          lastProcessedInputSequence:
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer
+              .lastProcessedInputSequence,
+          locomotionMismatch:
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer
+              .locomotionMismatch,
+          locomotionMode:
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer
+              .locomotionMode,
+          position: freezeOptionalVector3Snapshot(
+            snapshot.worldSnapshot.shoreline.authoritativeLocalPlayer.position
+          )
+        }),
+        issuedTraversalIntent:
+          snapshot.worldSnapshot.shoreline.issuedTraversalIntent === null
+            ? null
+            : Object.freeze({
+                boost:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent.boost,
+                inputSequence:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent
+                    .inputSequence,
+                jump:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent.jump,
+                locomotionMode:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent
+                    .locomotionMode,
+                moveAxis:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent
+                    .moveAxis,
+                strafeAxis:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent
+                    .strafeAxis,
+                yawAxis:
+                  snapshot.worldSnapshot.shoreline.issuedTraversalIntent.yawAxis
+              }),
+        local: Object.freeze({
+          autostepHeightMeters:
+            snapshot.worldSnapshot.shoreline.local.autostepHeightMeters,
+          blockerOverlap: snapshot.worldSnapshot.shoreline.local.blockerOverlap,
+          decisionReason: snapshot.worldSnapshot.shoreline.local.decisionReason,
+          locomotionMode:
+            snapshot.worldSnapshot.shoreline.local.locomotionMode,
+          resolvedSupportHeightMeters:
+            snapshot.worldSnapshot.shoreline.local.resolvedSupportHeightMeters,
+          stepSupportedProbeCount:
+            snapshot.worldSnapshot.shoreline.local.stepSupportedProbeCount
+        })
+      }),
       latestSimulationAgeMs: snapshot.worldSnapshot.latestSimulationAgeMs,
       latestSnapshotUpdateRateHz:
         snapshot.worldSnapshot.latestSnapshotUpdateRateHz
@@ -930,7 +1013,7 @@ export class WebGpuMetaverseRuntime {
     }
 
     const authoritativeLocalPlayerSnapshot =
-      this.#remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(
+      this.#remoteWorldRuntime.readFreshAckedSampledAuthoritativeLocalPlayerSnapshot(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 
@@ -1103,6 +1186,72 @@ export class WebGpuMetaverseRuntime {
     });
   }
 
+  #createShorelineTelemetrySnapshot():
+    MetaverseTelemetrySnapshot["worldSnapshot"]["shoreline"] {
+    const issuedTraversalIntent =
+      this.#remoteWorldRuntime.latestPlayerTraversalIntentSnapshot;
+    const authoritativeLocalPlayerSnapshot =
+      this.#remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot(
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+      );
+    const localTraversalPose = this.#traversalRuntime.localTraversalPoseSnapshot;
+    const localLocomotionMode = this.#traversalRuntime.locomotionMode;
+    const authoritativeLocalPlayerCorrectionPlanarMagnitudeMeters =
+      authoritativeLocalPlayerSnapshot !== null && localTraversalPose !== null
+        ? Math.hypot(
+            authoritativeLocalPlayerSnapshot.position.x -
+              localTraversalPose.position.x,
+            authoritativeLocalPlayerSnapshot.position.z -
+              localTraversalPose.position.z
+          )
+        : null;
+    const authoritativeLocalPlayerCorrectionVerticalMagnitudeMeters =
+      authoritativeLocalPlayerSnapshot !== null && localTraversalPose !== null
+        ? Math.abs(
+            authoritativeLocalPlayerSnapshot.position.y -
+              localTraversalPose.position.y
+          )
+        : null;
+
+    return Object.freeze({
+      authoritativeCorrection:
+        this.#traversalRuntime.authoritativeCorrectionTelemetrySnapshot,
+      authoritativeLocalPlayer: Object.freeze({
+        correctionPlanarMagnitudeMeters:
+          authoritativeLocalPlayerCorrectionPlanarMagnitudeMeters,
+        correctionVerticalMagnitudeMeters:
+          authoritativeLocalPlayerCorrectionVerticalMagnitudeMeters,
+        lastProcessedInputSequence:
+          authoritativeLocalPlayerSnapshot?.lastProcessedInputSequence ?? null,
+        locomotionMismatch:
+          authoritativeLocalPlayerSnapshot?.locomotionMode !== undefined &&
+          authoritativeLocalPlayerSnapshot.locomotionMode !== localLocomotionMode,
+        locomotionMode: authoritativeLocalPlayerSnapshot?.locomotionMode ?? null,
+        position:
+          authoritativeLocalPlayerSnapshot === null
+            ? null
+            : Object.freeze({
+                x: authoritativeLocalPlayerSnapshot.position.x,
+                y: authoritativeLocalPlayerSnapshot.position.y,
+                z: authoritativeLocalPlayerSnapshot.position.z
+              })
+      }),
+      issuedTraversalIntent:
+        issuedTraversalIntent === null
+          ? null
+          : Object.freeze({
+              boost: issuedTraversalIntent.boost,
+              inputSequence: issuedTraversalIntent.inputSequence,
+              jump: issuedTraversalIntent.jump,
+              locomotionMode: issuedTraversalIntent.locomotionMode,
+              moveAxis: issuedTraversalIntent.moveAxis,
+              strafeAxis: issuedTraversalIntent.strafeAxis,
+              yawAxis: issuedTraversalIntent.yawAxis
+            }),
+      local: this.#traversalRuntime.shorelineLocalTelemetrySnapshot
+    });
+  }
+
   #createTelemetrySnapshot(): MetaverseHudSnapshot["telemetry"] {
     const renderInfo = this.#renderer?.info?.render;
     const worldSamplingTelemetry =
@@ -1141,6 +1290,7 @@ export class WebGpuMetaverseRuntime {
           worldSamplingTelemetry.extrapolatedFramePercent,
         localReconciliationCorrectionCount:
           this.#traversalRuntime.localReconciliationCorrectionCount,
+        shoreline: this.#createShorelineTelemetrySnapshot(),
         latestSimulationAgeMs: worldSamplingTelemetry.latestSimulationAgeMs,
         latestSnapshotUpdateRateHz:
           worldSamplingTelemetry.latestSnapshotUpdateRateHz

@@ -842,6 +842,97 @@ test("MetaverseWorldClient prefers latest-wins traversal intent datagrams over r
   );
 });
 
+test("MetaverseWorldClient preserves a fast jump tap as an acknowledged edge through latest-wins traversal compression", async () => {
+  const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
+  const playerId = createMetaversePlayerId("harbor-pilot-1");
+
+  assert.notEqual(playerId, null);
+
+  const scheduler = createManualTimerScheduler();
+  const sentDatagrams = [];
+  const initialWorldEvent = createWorldEvent({
+    currentTick: 10,
+    playerId,
+    serverTimeMs: 10_000,
+    snapshotSequence: 1,
+    vehicleX: 8
+  });
+  const client = new MetaverseWorldClient(
+    {
+      defaultCommandIntervalMs: createMilliseconds(50),
+      defaultPollIntervalMs: createMilliseconds(50),
+      maxBufferedSnapshots: 2,
+      serverOrigin: "http://127.0.0.1:3210",
+      worldCommandPath: "/metaverse/world/commands",
+      worldPath: "/metaverse/world"
+    },
+    {
+      latestWinsDatagramTransport: {
+        async sendDriverVehicleControlDatagram() {},
+        async sendPlayerTraversalIntentDatagram(command) {
+          sentDatagrams.push(command);
+        }
+      },
+      transport: {
+        async pollWorldSnapshot() {
+          return initialWorldEvent;
+        },
+        async sendCommand() {
+          return initialWorldEvent;
+        }
+      },
+      clearTimeout: scheduler.clearTimeout,
+      setTimeout: scheduler.setTimeout
+    }
+  );
+
+  await client.ensureConnected(playerId);
+
+  client.syncPlayerTraversalIntent({
+    intent: {
+      boost: false,
+      jump: true,
+      locomotionMode: "grounded",
+      moveAxis: 0,
+      strafeAxis: 0,
+      yawAxis: 0
+    },
+    playerId
+  });
+  client.syncPlayerTraversalIntent({
+    intent: {
+      boost: false,
+      jump: false,
+      locomotionMode: "grounded",
+      moveAxis: 0,
+      strafeAxis: 0,
+      yawAxis: 0
+    },
+    playerId
+  });
+
+  scheduler.runNext(50);
+  await flushAsyncWork();
+
+  assert.equal(sentDatagrams.length, 1);
+  assert.deepEqual(
+    sentDatagrams[0],
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        jumpActionSequence: 1,
+        locomotionMode: "grounded",
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    })
+  );
+});
+
 test("MetaverseWorldClient falls back to reliable commands after a traversal intent datagram send failure and recovers datagram sends after the cooldown", async () => {
   const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
   const playerId = createMetaversePlayerId("harbor-pilot-1");

@@ -1,5 +1,6 @@
 import type {
   MetaversePlayerId,
+  MetaversePlayerTraversalIntentSnapshot,
   MetaverseRealtimePlayerSnapshot,
   MetaverseRealtimeVehicleSnapshot,
   MetaverseRealtimeWorldSnapshot,
@@ -8,6 +9,7 @@ import type {
   MetaverseSyncPlayerTraversalIntentCommandInput,
   MetaverseVehicleId
 } from "@webgpu-metaverse/shared";
+import { createMetaverseRealtimePlayerSnapshot } from "@webgpu-metaverse/shared";
 
 import type {
   AuthoritativeServerClockConfig,
@@ -63,6 +65,9 @@ export interface MetaverseWorldClientRuntime {
   readonly currentPollIntervalMs: number;
   readonly driverVehicleControlDatagramStatusSnapshot: RealtimeDatagramTransportStatusSnapshot;
   readonly latestPlayerInputSequence: number;
+  readonly latestPlayerTraversalIntentSnapshot:
+    | MetaversePlayerTraversalIntentSnapshot
+    | null;
   readonly reliableTransportStatusSnapshot: RealtimeReliableTransportStatusSnapshot;
   readonly statusSnapshot: MetaverseWorldClientStatusSnapshot;
   readonly telemetrySnapshot: MetaverseWorldClientTelemetrySnapshot;
@@ -233,6 +238,19 @@ function sampleRemotePlayerYawRadians(
   }
 
   return lerpWrappedRadians(basePlayer.yawRadians, nextPlayer.yawRadians, alpha);
+}
+
+function readPlayerSnapshotByPlayerId(
+  worldSnapshot: MetaverseRealtimeWorldSnapshot,
+  playerId: MetaversePlayerId
+): MetaverseRealtimePlayerSnapshot | null {
+  for (const playerSnapshot of worldSnapshot.players) {
+    if (playerSnapshot.playerId === playerId) {
+      return playerSnapshot;
+    }
+  }
+
+  return null;
 }
 
 function sampleRemoteVehiclePositionInto(
@@ -573,6 +591,12 @@ export class MetaverseRemoteWorldRuntime {
     );
   }
 
+  get latestPlayerTraversalIntentSnapshot():
+    | MetaversePlayerTraversalIntentSnapshot
+    | null {
+    return this.#metaverseWorldClient?.latestPlayerTraversalIntentSnapshot ?? null;
+  }
+
   get remoteCharacterPresentations(): readonly MetaverseRemoteCharacterPresentationSnapshot[] {
     return this.#remoteCharacterPresentations;
   }
@@ -618,6 +642,75 @@ export class MetaverseRemoteWorldRuntime {
     }
 
     return authoritativeLocalPlayerSnapshot;
+  }
+
+  readFreshAckedSampledAuthoritativeLocalPlayerSnapshot(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): MetaverseRealtimePlayerSnapshot | null {
+    const authoritativeLocalPlayerSnapshot =
+      this.readFreshAckedAuthoritativeLocalPlayerSnapshot(
+        maxAuthoritativeSnapshotAgeMs
+      );
+    const worldSnapshotBuffer = this.#metaverseWorldClient?.worldSnapshotBuffer ?? null;
+
+    if (
+      authoritativeLocalPlayerSnapshot === null ||
+      worldSnapshotBuffer === null ||
+      this.#localPlayerIdentity === null
+    ) {
+      return authoritativeLocalPlayerSnapshot;
+    }
+
+    const sampledWorldFrame = resolveSampledWorldFrame(
+      worldSnapshotBuffer,
+      this.#resolveLocalAuthorityTargetServerTimeMs(worldSnapshotBuffer),
+      this.#samplingConfig.maxExtrapolationMs
+    );
+
+    if (sampledWorldFrame === null) {
+      return authoritativeLocalPlayerSnapshot;
+    }
+
+    const basePlayer = readPlayerSnapshotByPlayerId(
+      sampledWorldFrame.baseSnapshot,
+      this.#localPlayerIdentity.playerId
+    );
+
+    if (basePlayer === null) {
+      return authoritativeLocalPlayerSnapshot;
+    }
+
+    const nextPlayer =
+      sampledWorldFrame.nextSnapshot === null
+        ? null
+        : readPlayerSnapshotByPlayerId(
+            sampledWorldFrame.nextSnapshot,
+            this.#localPlayerIdentity.playerId
+          );
+    const sampledPosition = createMutableVector3();
+
+    sampleRemotePlayerPositionInto(
+      sampledPosition,
+      basePlayer,
+      nextPlayer,
+      sampledWorldFrame.alpha,
+      sampledWorldFrame.extrapolationSeconds
+    );
+
+    return createMetaverseRealtimePlayerSnapshot({
+      ...authoritativeLocalPlayerSnapshot,
+      position: {
+        x: sampledPosition.x,
+        y: sampledPosition.y,
+        z: sampledPosition.z
+      },
+      yawRadians: sampleRemotePlayerYawRadians(
+        basePlayer,
+        nextPlayer,
+        sampledWorldFrame.alpha,
+        sampledWorldFrame.extrapolationSeconds
+      )
+    });
   }
 
   readFreshAuthoritativeVehicleSnapshot(
@@ -1064,6 +1157,28 @@ export class MetaverseRemoteWorldRuntime {
     return this.#authoritativeServerClock.readTargetServerTimeMs(
       localWallClockMs,
       this.#samplingConfig.interpolationDelayMs
+    );
+  }
+
+  #resolveLocalAuthorityTargetServerTimeMs(
+    worldSnapshotBuffer: readonly MetaverseRealtimeWorldSnapshot[]
+  ): number {
+    const latestSnapshot =
+      worldSnapshotBuffer[worldSnapshotBuffer.length - 1] ?? null;
+    const localWallClockMs = this.#readWallClockMs();
+
+    if (latestSnapshot === null) {
+      return localWallClockMs;
+    }
+
+    this.#authoritativeServerClock.observeServerTime(
+      Number(latestSnapshot.tick.emittedAtServerTimeMs),
+      localWallClockMs
+    );
+
+    return this.#authoritativeServerClock.readTargetServerTimeMs(
+      localWallClockMs,
+      0
     );
   }
 

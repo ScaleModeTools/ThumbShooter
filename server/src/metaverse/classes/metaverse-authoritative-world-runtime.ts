@@ -1,7 +1,9 @@
 import {
+  MetaverseMovementAnimationPolicyRuntime,
   createMetaverseSyncDriverVehicleControlCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
+  metaverseWorldAutomaticSurfaceWaterlineThresholdMeters,
   createMetaversePresencePlayerSnapshot,
   createMetaversePresencePoseSnapshot,
   createMetaversePresenceRosterEvent,
@@ -47,9 +49,11 @@ import type { MetaverseAuthoritativeWorldRuntimeConfig } from "../types/metavers
 
 interface MetaversePlayerWorldRuntimeState {
   angularVelocityRadiansPerSecond: number;
+  readonly animationRuntime: MetaverseMovementAnimationPolicyRuntime;
   readonly characterId: string;
   forwardSpeedUnitsPerSecond: number;
   lastProcessedInputSequence: number;
+  lastProcessedJumpActionSequence: number;
   lastGroundedPositionY: number;
   readonly playerId: MetaversePlayerId;
   readonly username: MetaversePresencePlayerSnapshot["username"];
@@ -113,6 +117,7 @@ interface MetaverseDriverVehicleControlRuntimeState {
 interface MetaversePlayerTraversalIntentRuntimeState {
   boost: boolean;
   inputSequence: number;
+  jumpActionSequence: number;
   jump: boolean;
   locomotionMode: MetaversePlayerTraversalIntentLocomotionModeId;
   moveAxis: number;
@@ -158,10 +163,10 @@ const metaverseAuthoritativeGroundedTraversalConfig = Object.freeze({
 
 const metaverseAuthoritativeSwimTraversalConfig = Object.freeze({
   accelerationCurveExponent: 1.15,
-  accelerationUnitsPerSecondSquared: 11,
-  baseSpeedUnitsPerSecond: 4.8,
+  accelerationUnitsPerSecondSquared: 13,
+  baseSpeedUnitsPerSecond: 6.4,
   boostCurveExponent: 1.1,
-  boostMultiplier: 1.35,
+  boostMultiplier: 1.45,
   decelerationUnitsPerSecondSquared: 12,
   dragCurveExponent: 1.35,
   maxTurnSpeedRadiansPerSecond: 3.2,
@@ -180,9 +185,6 @@ const metaverseAuthoritativeGroundedBodyConfig = Object.freeze({
 const metaverseAuthoritativeGroundedGravityUnitsPerSecond = 18;
 const metaverseAuthoritativeGroundedJumpImpulseUnitsPerSecond = 6.8;
 const metaverseAuthoritativeGroundedSnapToleranceMeters = 0.0001;
-const metaverseWalkAnimationSpeedThresholdUnitsPerSecond = 0.75;
-const metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond = 0.35;
-const metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond = -0.35;
 
 function sortPlayerIds(leftPlayerId: MetaversePlayerId, rightPlayerId: MetaversePlayerId): number {
   if (leftPlayerId < rightPlayerId) {
@@ -291,6 +293,13 @@ function clamp01(rawValue: number): number {
   return Math.min(1, Math.max(0, rawValue));
 }
 
+function resolveTraversalInputMagnitude(
+  moveAxis: number,
+  strafeAxis: number
+): number {
+  return Math.hypot(clampAxis(moveAxis), clampAxis(strafeAxis));
+}
+
 function shapeSignedAxis(value: number, exponent: number): number {
   const sanitizedValue = clampAxis(value);
   const magnitude = Math.pow(
@@ -375,35 +384,6 @@ function resolveSurfaceTraversalDragScale(
     0.18,
     Math.pow(normalizedSpeed, Math.max(0.1, config.dragCurveExponent))
   );
-}
-
-function resolvePlayerSurfaceAnimationVocabulary(
-  locomotionMode: MetaversePlayerTraversalIntentLocomotionModeId,
-  planarSpeedUnitsPerSecond: number,
-  grounded = true,
-  verticalSpeedUnitsPerSecond = 0
-): MetaversePresencePoseSnapshot["animationVocabulary"] {
-  if (locomotionMode === "swim") {
-    return planarSpeedUnitsPerSecond >=
-      metaverseWalkAnimationSpeedThresholdUnitsPerSecond
-      ? "swim"
-      : "swim-idle";
-  }
-
-  if (!grounded) {
-    return verticalSpeedUnitsPerSecond >
-      metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond
-      ? "jump-up"
-      : verticalSpeedUnitsPerSecond <
-          metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond
-        ? "jump-down"
-        : "jump-mid";
-  }
-
-  return planarSpeedUnitsPerSecond >=
-    metaverseWalkAnimationSpeedThresholdUnitsPerSecond
-    ? "walk"
-    : "idle";
 }
 
 function isGroundedUnmountedPlayerRuntime(
@@ -520,13 +500,17 @@ export class MetaverseAuthoritativeWorldRuntime {
       playerRuntime.lastGroundedPositionY =
         locomotionDecision.supportHeightMeters;
       playerRuntime.locomotionMode = "grounded";
-      playerRuntime.animationVocabulary = "idle";
+      playerRuntime.animationRuntime.reset("idle");
+      playerRuntime.animationVocabulary =
+        playerRuntime.animationRuntime.animationVocabulary;
       return;
     }
 
     playerRuntime.positionY = metaverseAuthoritativeOceanHeightMeters;
     playerRuntime.locomotionMode = "swim";
-    playerRuntime.animationVocabulary = "swim-idle";
+    playerRuntime.animationRuntime.reset("swim-idle");
+    playerRuntime.animationVocabulary =
+      playerRuntime.animationRuntime.animationVocabulary;
   }
 
   get tickIntervalMs(): number {
@@ -845,6 +829,7 @@ export class MetaverseAuthoritativeWorldRuntime {
     this.#playerTraversalIntentsByPlayerId.set(normalizedCommand.playerId, {
       boost: normalizedCommand.intent.boost,
       inputSequence: normalizedCommand.intent.inputSequence,
+      jumpActionSequence: normalizedCommand.intent.jumpActionSequence,
       jump: normalizedCommand.intent.jump,
       locomotionMode: normalizedCommand.intent.locomotionMode,
       moveAxis: normalizedCommand.intent.moveAxis,
@@ -876,7 +861,9 @@ export class MetaverseAuthoritativeWorldRuntime {
       this.#clearPlayerVehicleOccupancy(playerRuntime.playerId);
       this.#clearDriverVehicleControl(playerRuntime.playerId);
       this.#clearPlayerTraversalIntent(playerRuntime.playerId);
-      playerRuntime.animationVocabulary = "idle";
+      playerRuntime.animationRuntime.reset("idle");
+      playerRuntime.animationVocabulary =
+        playerRuntime.animationRuntime.animationVocabulary;
       playerRuntime.angularVelocityRadiansPerSecond = 0;
       playerRuntime.forwardSpeedUnitsPerSecond = 0;
       playerRuntime.linearVelocityX = 0;
@@ -913,7 +900,9 @@ export class MetaverseAuthoritativeWorldRuntime {
         this.#resolveAuthoritativeSurfaceColliders();
 
       this.#clearDriverVehicleControl(playerRuntime.playerId);
-      playerRuntime.animationVocabulary = "idle";
+      playerRuntime.animationRuntime.reset("idle");
+      playerRuntime.animationVocabulary =
+        playerRuntime.animationRuntime.animationVocabulary;
       playerRuntime.angularVelocityRadiansPerSecond = 0;
       playerRuntime.forwardSpeedUnitsPerSecond = 0;
       playerRuntime.linearVelocityX = 0;
@@ -1030,10 +1019,12 @@ export class MetaverseAuthoritativeWorldRuntime {
   ): MetaversePlayerWorldRuntimeState {
     return {
       angularVelocityRadiansPerSecond: 0,
+      animationRuntime: new MetaverseMovementAnimationPolicyRuntime(),
       animationVocabulary: "idle",
       characterId,
       forwardSpeedUnitsPerSecond: 0,
       lastProcessedInputSequence: 0,
+      lastProcessedJumpActionSequence: 0,
       lastGroundedPositionY: 0,
       lastPoseAtMs: null,
       lastSeenAtMs: nowMs,
@@ -1070,9 +1061,12 @@ export class MetaverseAuthoritativeWorldRuntime {
     this.#clearPlayerVehicleOccupancy(playerRuntime.playerId);
     this.#clearPlayerTraversalIntent(playerRuntime.playerId);
 
-    playerRuntime.animationVocabulary = nextPose.animationVocabulary;
+    playerRuntime.animationRuntime.reset(nextPose.animationVocabulary);
+    playerRuntime.animationVocabulary =
+      playerRuntime.animationRuntime.animationVocabulary;
     playerRuntime.forwardSpeedUnitsPerSecond = 0;
     playerRuntime.lastProcessedInputSequence = nextPose.stateSequence;
+    playerRuntime.lastProcessedJumpActionSequence = 0;
     playerRuntime.lastGroundedPositionY = nextPose.position.y;
     playerRuntime.locomotionMode =
       acceptedMountedOccupancy === null && requestedMountedOccupancy !== null
@@ -1278,10 +1272,24 @@ export class MetaverseAuthoritativeWorldRuntime {
       vehicleRuntime.strafeSpeedUnitsPerSecond;
     playerRuntime.animationVocabulary =
       playerRuntime.mountedOccupancy?.occupancyKind === "seat"
-        ? "seated"
-        : resolvePlayerSurfaceAnimationVocabulary(
-            "grounded",
-            Math.hypot(vehicleRuntime.linearVelocityX, vehicleRuntime.linearVelocityZ)
+        ? (() => {
+            playerRuntime.animationRuntime.reset("seated");
+            return playerRuntime.animationRuntime.animationVocabulary;
+          })()
+        : playerRuntime.animationRuntime.advance(
+            {
+              grounded: true,
+              inputMagnitude: 0,
+              locomotionMode: "grounded",
+              planarSpeedUnitsPerSecond: Math.hypot(
+                vehicleRuntime.linearVelocityX,
+                vehicleRuntime.linearVelocityZ
+              ),
+              verticalSpeedUnitsPerSecond: vehicleRuntime.linearVelocityY
+            },
+            vehicleRuntime.lastPoseAtMs === null || nowMs <= vehicleRuntime.lastPoseAtMs
+              ? 0
+              : (nowMs - vehicleRuntime.lastPoseAtMs) / 1_000
           );
     playerRuntime.lastPoseAtMs = nowMs;
   }
@@ -1699,7 +1707,11 @@ export class MetaverseAuthoritativeWorldRuntime {
             metaverseAuthoritativeGroundedBodyConfig.capsuleHalfHeightMeters * 2 +
             metaverseAuthoritativeGroundedBodyConfig.capsuleRadiusMeters * 2
         );
-      const jumpRequested = traversalIntent?.jump === true && groundedAtStartOfTick;
+      const jumpRequested =
+        traversalIntent !== null &&
+        traversalIntent.jumpActionSequence >
+          playerRuntime.lastProcessedJumpActionSequence &&
+        groundedAtStartOfTick;
 
       if (playerRuntime.locomotionMode !== "grounded") {
         playerRuntime.lastGroundedPositionY = playerRuntime.positionY;
@@ -1747,8 +1759,14 @@ export class MetaverseAuthoritativeWorldRuntime {
       nextPositionX = groundedPlanarPosition.x;
       nextPositionZ = groundedPlanarPosition.z;
 
+      const shouldEnterSwim =
+        nextGroundedLocomotionDecision.locomotionMode === "swim" &&
+        unclampedPositionY <=
+          metaverseAuthoritativeOceanHeightMeters +
+            metaverseWorldAutomaticSurfaceWaterlineThresholdMeters;
+
       if (
-        nextGroundedLocomotionDecision.locomotionMode === "swim" ||
+        shouldEnterSwim ||
         (autostepHeightMeters === null &&
           nextGroundSupportHeightMeters >
             playerRuntime.lastGroundedPositionY +
@@ -1798,11 +1816,24 @@ export class MetaverseAuthoritativeWorldRuntime {
     playerRuntime.locomotionMode = resolvedLocomotionMode;
     playerRuntime.strafeSpeedUnitsPerSecond =
       (deltaX * rightX + deltaZ * rightZ) / deltaSeconds;
-    playerRuntime.animationVocabulary = resolvePlayerSurfaceAnimationVocabulary(
-      resolvedLocomotionMode,
-      Math.hypot(playerRuntime.linearVelocityX, playerRuntime.linearVelocityZ),
-      grounded,
-      playerRuntime.linearVelocityY
+    playerRuntime.animationVocabulary = playerRuntime.animationRuntime.advance(
+      {
+        grounded,
+        inputMagnitude:
+          traversalIntent === null
+            ? 0
+            : resolveTraversalInputMagnitude(
+                traversalIntent.moveAxis,
+                traversalIntent.strafeAxis
+              ),
+        locomotionMode: resolvedLocomotionMode,
+        planarSpeedUnitsPerSecond: Math.hypot(
+          playerRuntime.linearVelocityX,
+          playerRuntime.linearVelocityZ
+        ),
+        verticalSpeedUnitsPerSecond: playerRuntime.linearVelocityY
+      },
+      deltaSeconds
     );
     playerRuntime.lastPoseAtMs = nowMs;
 
@@ -1816,6 +1847,15 @@ export class MetaverseAuthoritativeWorldRuntime {
     ) {
       playerRuntime.lastProcessedInputSequence = traversalIntent.inputSequence;
       playerRuntime.stateSequence = traversalIntent.inputSequence;
+    }
+
+    if (
+      traversalIntent !== null &&
+      traversalIntent.jumpActionSequence >
+        playerRuntime.lastProcessedJumpActionSequence
+    ) {
+      playerRuntime.lastProcessedJumpActionSequence =
+        traversalIntent.jumpActionSequence;
     }
   }
 

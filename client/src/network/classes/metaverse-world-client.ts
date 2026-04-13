@@ -85,6 +85,7 @@ function playerTraversalIntentMatches(
   return (
     leftIntent.boost === (rightIntent.boost === true) &&
     leftIntent.jump === (rightIntent.jump === true) &&
+    leftIntent.jumpActionSequence === (rightIntent.jumpActionSequence ?? 0) &&
     leftIntent.locomotionMode === (rightIntent.locomotionMode ?? "grounded") &&
     leftIntent.moveAxis ===
       (typeof nextMoveAxis === "number" && Number.isFinite(nextMoveAxis)
@@ -196,6 +197,7 @@ export class MetaverseWorldClient {
   #connectPromise: Promise<MetaverseRealtimeWorldSnapshot> | null = null;
   #driverVehicleControlDatagramSendFailureCount = 0;
   #hasSuccessfulLatestWinsDatagramSend = false;
+  #lastJumpPressed = false;
   #lastDriverVehicleControlIntent: MetaverseDriverVehicleControlIntentSnapshot | null =
     null;
   #lastLatestWinsDatagramError: string | null = null;
@@ -203,6 +205,7 @@ export class MetaverseWorldClient {
   #latestAcceptedSnapshotReceivedAtMs: number | null = null;
   #previousAcceptedSnapshotReceivedAtMs: number | null = null;
   #nextDriverVehicleControlSequence = 0;
+  #nextJumpActionSequence = 0;
   #nextPlayerInputSequence = 0;
   #queuedReliableWorldCommandPromise: Promise<void> = Promise.resolve();
   #pendingDriverVehicleControlCommand: PendingDriverVehicleControlCommand | null =
@@ -309,6 +312,12 @@ export class MetaverseWorldClient {
     return this.#nextPlayerInputSequence;
   }
 
+  get latestPlayerTraversalIntentSnapshot():
+    | MetaversePlayerTraversalIntentSnapshot
+    | null {
+    return this.#lastPlayerTraversalIntent;
+  }
+
   get currentPollIntervalMs(): number {
     return this.#resolvePollDelayMs();
   }
@@ -404,6 +413,7 @@ export class MetaverseWorldClient {
     commandInput: MetaverseSyncPlayerTraversalIntentCommandInput | null
   ): void {
     if (commandInput === null) {
+      this.#lastJumpPressed = false;
       this.#lastPlayerTraversalIntent = null;
       this.#pendingPlayerTraversalIntentCommand = null;
       this.#cancelScheduledPlayerTraversalInputSync();
@@ -420,10 +430,22 @@ export class MetaverseWorldClient {
 
     this.#playerId ??= commandInput.playerId;
 
+    const jumpPressed = commandInput.intent.jump === true;
+
+    if (jumpPressed && !this.#lastJumpPressed) {
+      this.#nextJumpActionSequence += 1;
+    }
+
+    this.#lastJumpPressed = jumpPressed;
+    const nextIntent = {
+      ...commandInput.intent,
+      jumpActionSequence: this.#nextJumpActionSequence
+    };
+
     if (
       playerTraversalIntentMatches(
         this.#lastPlayerTraversalIntent,
-        commandInput.intent
+        nextIntent
       )
     ) {
       return;
@@ -434,7 +456,7 @@ export class MetaverseWorldClient {
       createMetaverseSyncPlayerTraversalIntentCommand({
       playerId: commandInput.playerId,
       intent: {
-        ...commandInput.intent,
+        ...nextIntent,
         inputSequence: this.#nextPlayerInputSequence
       }
     });

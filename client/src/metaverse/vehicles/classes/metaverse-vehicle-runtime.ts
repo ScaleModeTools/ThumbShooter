@@ -487,6 +487,13 @@ export class MetaverseVehicleRuntime {
   #syncWaterborneState(): void {
     this.#waterborne = isWaterbornePosition(
       {
+        groundedBody: {
+          capsuleHalfHeightMeters: 0,
+          capsuleRadiusMeters: 0,
+          gravityUnitsPerSecond: 0,
+          jumpImpulseUnitsPerSecond: 0,
+          stepHeightMeters: 0
+        },
         ocean: {
           height: this.#oceanHeightMeters
         }

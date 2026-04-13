@@ -19,6 +19,7 @@ import type {
 
 export interface MetaversePlacedCuboidColliderSnapshot {
   readonly ownerEnvironmentAssetId: string | null;
+  readonly rotationYRadians: number;
   readonly traversalAffordance:
     MetaverseEnvironmentPhysicsColliderProofConfig["traversalAffordance"];
   readonly halfExtents: PhysicsVector3Snapshot;
@@ -147,6 +148,7 @@ export function resolvePlacedCuboidColliders(
             Math.abs(collider.size.z * placement.scale) * 0.5
           ),
           ownerEnvironmentAssetId: environmentAsset.environmentAssetId,
+          rotationYRadians: placement.rotationYRadians,
           rotation: createPlacementQuaternion(placement.rotationYRadians),
           translation: applyPlacementToLocalCenter(collider.center, placement),
           traversalAffordance: collider.traversalAffordance
@@ -189,6 +191,7 @@ export function resolveDynamicEnvironmentCuboidColliders(
           Math.abs(collider.size.z * dynamicPlacement.scale) * 0.5
         ),
         ownerEnvironmentAssetId: environmentAsset.environmentAssetId,
+        rotationYRadians: dynamicPlacement.rotationYRadians,
         rotation: createPlacementQuaternion(dynamicPlacement.rotationYRadians),
         translation: applyPlacementToLocalCenter(
           collider.center,
@@ -268,10 +271,7 @@ export function resolvePlacedCollisionTriMeshes(
   environmentAsset: MetaverseEnvironmentAssetProofConfig,
   collisionScene: Group
 ): readonly MetaverseTriMeshColliderSnapshot[] {
-  if (
-    environmentAsset.placement === "dynamic" ||
-    environmentAsset.physicsColliders !== null
-  ) {
+  if (environmentAsset.placement === "dynamic") {
     return Object.freeze([]);
   }
 

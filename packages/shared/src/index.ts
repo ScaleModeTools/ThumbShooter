@@ -102,6 +102,56 @@ export type {
   ExperienceId
 } from "./metaverse/experience-catalog.js";
 export {
+  MetaverseMovementAnimationPolicyRuntime,
+  metaverseMovementAnimationPolicyConfig
+} from "./metaverse/metaverse-movement-animation-policy.js";
+export type {
+  MetaverseMovementAnimationPolicyConfig,
+  MetaverseMovementAnimationPolicyInput,
+  MetaverseMovementAnimationPolicyModeConfig
+} from "./metaverse/metaverse-movement-animation-policy.js";
+export {
+  metaverseHubCrateEnvironmentAssetId,
+  metaverseHubDockEnvironmentAssetId,
+  metaverseHubDiveBoatEnvironmentAssetId,
+  metaverseHubPushableCrateEnvironmentAssetId,
+  metaverseHubShorelineEnvironmentAssetId,
+  metaverseHubSkiffEnvironmentAssetId,
+  metaverseWorldDynamicSurfaceAssets,
+  metaverseWorldStaticSurfaceAssets,
+  metaverseWorldSurfaceAssets,
+  metaverseWorldSurfacePlacementIds,
+  metaverseWorldSurfaceTraversalAffordanceIds,
+  readMetaverseWorldSurfaceAssetAuthoring,
+  resolveMetaverseWorldDynamicSurfaceColliders,
+  resolveMetaverseWorldPlacedSurfaceColliders
+} from "./metaverse/metaverse-world-surface-authoring.js";
+export type {
+  MetaverseWorldPlacedSurfaceColliderSnapshot,
+  MetaverseWorldSurfaceAssetAuthoring,
+  MetaverseWorldSurfaceColliderAuthoring,
+  MetaverseWorldSurfacePlacementId,
+  MetaverseWorldSurfacePlacementSnapshot,
+  MetaverseWorldSurfaceTraversalAffordanceId,
+  MetaverseWorldSurfaceVector3Snapshot
+} from "./metaverse/metaverse-world-surface-authoring.js";
+export {
+  constrainMetaverseWorldPlanarPositionAgainstBlockers,
+  isMetaverseWorldWaterbornePosition,
+  metaverseWorldAutomaticSurfaceDecisionReasonIds,
+  metaverseWorldAutomaticSurfaceWaterlineThresholdMeters,
+  resolveMetaverseWorldAutomaticSurfaceLocomotion,
+  resolveMetaverseWorldGroundedAutostepHeightMeters,
+  resolveMetaverseWorldSurfaceHeightMeters
+} from "./metaverse/metaverse-world-surface-policy.js";
+export type {
+  MetaverseWorldAutomaticSurfaceLocomotionDebugSnapshot,
+  MetaverseWorldAutomaticSurfaceLocomotionSnapshot,
+  MetaverseWorldAutomaticSurfaceDecisionReasonId,
+  MetaverseWorldSurfaceLocomotionDecision,
+  MetaverseWorldSurfacePolicyConfig
+} from "./metaverse/metaverse-world-surface-policy.js";
+export {
   vehicleRelativeDirectionIds,
   normalizePlanarYawRadians,
   resolveVehicleRelativeYawOffsetRadians

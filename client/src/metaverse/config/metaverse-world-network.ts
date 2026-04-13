@@ -134,7 +134,7 @@ export const metaverseWorldClientConfig = {
 
 export const metaverseRealtimeMigrationConfig = Object.freeze({
   metaverseAuthoritativeCombatRewindEnabled: false,
-  metaverseAuthoritativePlayerMovementEnabled: false,
+  metaverseAuthoritativePlayerMovementEnabled: true,
   metaverseWorldDatagramInputEnabled: true,
   metaverseWorldSnapshotStreamEnabled: true
 });

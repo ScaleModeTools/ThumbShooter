@@ -15,11 +15,8 @@ import type {
   TraversalMountedVehicleSnapshot
 } from "../types/traversal";
 
-const metaverseWalkAnimationSpeedThresholdUnitsPerSecond = 0.75;
-const metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond = 0.35;
-const metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond = -0.35;
-
 interface TraversalCharacterPresentationInput {
+  readonly animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"];
   readonly config: MetaverseRuntimeConfig;
   readonly groundedBodySnapshot: MetaverseGroundedBodySnapshot | null;
   readonly locomotionMode: MetaverseLocomotionModeId;
@@ -30,16 +27,10 @@ interface TraversalCharacterPresentationInput {
 function createCharacterPresentationSnapshot(
   position: PhysicsVector3Snapshot,
   yawRadians: number,
-  planarSpeedUnitsPerSecond: number,
-  movingVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"] = "walk",
-  idleVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"] = "idle"
+  animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"]
 ): MetaverseCharacterPresentationSnapshot {
   return Object.freeze({
-    animationVocabulary:
-      planarSpeedUnitsPerSecond >=
-      metaverseWalkAnimationSpeedThresholdUnitsPerSecond
-        ? movingVocabulary
-        : idleVocabulary,
+    animationVocabulary,
     position: Object.freeze({
       x: position.x,
       y: position.y,
@@ -66,36 +57,22 @@ function createFixedCharacterPresentationSnapshot(
 }
 
 function createGroundedCharacterPresentationSnapshot(
-  bodySnapshot: MetaverseGroundedBodySnapshot
+  bodySnapshot: MetaverseGroundedBodySnapshot,
+  animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"]
 ): MetaverseCharacterPresentationSnapshot {
-  if (!bodySnapshot.grounded) {
-    return createFixedCharacterPresentationSnapshot(
-      bodySnapshot.position,
-      bodySnapshot.yawRadians,
-      bodySnapshot.verticalSpeedUnitsPerSecond >
-        metaverseJumpUpAnimationVerticalSpeedThresholdUnitsPerSecond
-        ? "jump-up"
-        : bodySnapshot.verticalSpeedUnitsPerSecond <
-            metaverseJumpDownAnimationVerticalSpeedThresholdUnitsPerSecond
-          ? "jump-down"
-          : "jump-mid"
-    );
-  }
-
   return createCharacterPresentationSnapshot(
     bodySnapshot.position,
     bodySnapshot.yawRadians,
-    bodySnapshot.planarSpeedUnitsPerSecond
+    animationVocabulary
   );
 }
 
 function createSwimCharacterPresentationSnapshot(
   swimSnapshot: SurfaceLocomotionSnapshot,
+  animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"],
   config: MetaverseRuntimeConfig
 ): MetaverseCharacterPresentationSnapshot {
-  const moving =
-    swimSnapshot.planarSpeedUnitsPerSecond >=
-    metaverseWalkAnimationSpeedThresholdUnitsPerSecond;
+  const moving = animationVocabulary === "swim";
 
   return createCharacterPresentationSnapshot(
     freezeVector3(
@@ -107,13 +84,12 @@ function createSwimCharacterPresentationSnapshot(
       swimSnapshot.position.z
     ),
     swimSnapshot.yawRadians,
-    swimSnapshot.planarSpeedUnitsPerSecond,
-    "swim",
-    "swim-idle"
+    moving ? "swim" : "swim-idle"
   );
 }
 
 export function createTraversalCharacterPresentationSnapshot({
+  animationVocabulary,
   config,
   groundedBodySnapshot,
   locomotionMode,
@@ -139,11 +115,18 @@ export function createTraversalCharacterPresentationSnapshot({
   if (locomotionMode === "grounded") {
     return groundedBodySnapshot === null
       ? null
-      : createGroundedCharacterPresentationSnapshot(groundedBodySnapshot);
+      : createGroundedCharacterPresentationSnapshot(
+          groundedBodySnapshot,
+          animationVocabulary
+        );
   }
 
   if (locomotionMode === "swim") {
-    return createSwimCharacterPresentationSnapshot(swimSnapshot, config);
+    return createSwimCharacterPresentationSnapshot(
+      swimSnapshot,
+      animationVocabulary,
+      config
+    );
   }
 
   return null;

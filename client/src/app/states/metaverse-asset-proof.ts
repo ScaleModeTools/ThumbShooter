@@ -17,6 +17,7 @@ import {
   metaverseHubDockEnvironmentAssetId,
   metaverseHubDiveBoatEnvironmentAssetId,
   metaverseHubPushableCrateEnvironmentAssetId,
+  metaverseHubShorelineEnvironmentAssetId,
   metaverseHubSkiffEnvironmentAssetId
 } from "@/assets/config/environment-prop-manifest";
 import type { AssetLodGroup } from "@/assets/types/asset-lod";
@@ -33,7 +34,8 @@ import type {
   AttachmentSupportPointDescriptor
 } from "@/assets/types/attachment-asset-manifest";
 import {
-  normalizePlanarYawRadians
+  normalizePlanarYawRadians,
+  readMetaverseWorldSurfaceAssetAuthoring
 } from "@webgpu-metaverse/shared";
 import type {
   MetaverseAttachmentProofConfig,
@@ -471,60 +473,55 @@ function resolveEnvironmentLods(
   );
 }
 
-const metaverseHubCratePlacements = Object.freeze([
-  Object.freeze({
-    position: Object.freeze({ x: -9.5, y: 0, z: -10.5 }),
-    rotationYRadians: Math.PI * 0.08,
-    scale: 1
-  }),
-  Object.freeze({
-    position: Object.freeze({ x: -8, y: 0, z: -12.2 }),
-    rotationYRadians: Math.PI * 0.17,
-    scale: 0.96
-  }),
-  Object.freeze({
-    position: Object.freeze({ x: -6.4, y: 0, z: -11 }),
-    rotationYRadians: Math.PI * 0.28,
-    scale: 1.08
-  }),
-  Object.freeze({
-    position: Object.freeze({ x: -7.1, y: 0, z: -8.8 }),
-    rotationYRadians: Math.PI * -0.12,
-    scale: 0.92
-  })
-] satisfies readonly MetaverseEnvironmentPlacementProofConfig[]);
+const metaverseHubCratePlacements = resolveSharedSurfacePlacements(
+  metaverseHubCrateEnvironmentAssetId
+);
 
-const metaverseHubDockPlacements = Object.freeze([
-  Object.freeze({
-    position: Object.freeze({ x: -8.2, y: -0.02, z: -14.8 }),
-    rotationYRadians: Math.PI * 0.06,
-    scale: 1
-  })
-] satisfies readonly MetaverseEnvironmentPlacementProofConfig[]);
+const metaverseHubDockPlacements = resolveSharedSurfacePlacements(
+  metaverseHubDockEnvironmentAssetId
+);
 
-const metaverseHubPushableCratePlacements = Object.freeze([
-  Object.freeze({
-    position: Object.freeze({ x: -3.8, y: 0.46, z: -14.4 }),
-    rotationYRadians: Math.PI * 0.04,
-    scale: 1
-  })
-] satisfies readonly MetaverseEnvironmentPlacementProofConfig[]);
+const metaverseHubShorelinePlacements = resolveSharedSurfacePlacements(
+  metaverseHubShorelineEnvironmentAssetId
+);
 
-const metaverseHubSkiffPlacements = Object.freeze([
-  Object.freeze({
-    position: Object.freeze({ x: 12.2, y: 0.12, z: -13.8 }),
-    rotationYRadians: Math.PI * 0.86,
-    scale: 1
-  })
-] satisfies readonly MetaverseEnvironmentPlacementProofConfig[]);
+const metaverseHubPushableCratePlacements = resolveSharedSurfacePlacements(
+  metaverseHubPushableCrateEnvironmentAssetId
+);
 
-const metaverseHubDiveBoatPlacements = Object.freeze([
-  Object.freeze({
-    position: Object.freeze({ x: 22.4, y: 0.16, z: -16.2 }),
-    rotationYRadians: Math.PI * 0.88,
-    scale: 1
-  })
-] satisfies readonly MetaverseEnvironmentPlacementProofConfig[]);
+const metaverseHubSkiffPlacements = resolveSharedSurfacePlacements(
+  metaverseHubSkiffEnvironmentAssetId
+);
+
+const metaverseHubDiveBoatPlacements = resolveSharedSurfacePlacements(
+  metaverseHubDiveBoatEnvironmentAssetId
+);
+
+function resolveSharedSurfacePlacements(
+  environmentAssetId: string
+): readonly MetaverseEnvironmentPlacementProofConfig[] {
+  const surfaceAsset = readMetaverseWorldSurfaceAssetAuthoring(environmentAssetId);
+
+  if (surfaceAsset === null) {
+    throw new Error(
+      `Metaverse shared surface authoring is missing placements for ${environmentAssetId}.`
+    );
+  }
+
+  return Object.freeze(
+    surfaceAsset.placements.map((placement) =>
+      Object.freeze({
+        position: Object.freeze({
+          x: placement.position.x,
+          y: placement.position.y,
+          z: placement.position.z
+        }),
+        rotationYRadians: placement.rotationYRadians,
+        scale: placement.scale
+      })
+    )
+  );
+}
 
 function resolveEnvironmentCollider(
   collider: EnvironmentBoxColliderDescriptor | null
@@ -695,12 +692,6 @@ function resolveMetaverseEnvironmentAssetProofConfig(
     }
 
     if (environmentDescriptor.traversalAffordance === "mount") {
-      if (environmentDescriptor.collisionPath === null) {
-        throw new Error(
-          `Metaverse dynamic environment asset ${environmentDescriptor.label} requires a collision path.`
-        );
-      }
-
       if (
         environmentDescriptor.physicsColliders === null ||
         environmentDescriptor.physicsColliders.length === 0
@@ -816,6 +807,10 @@ function resolveMetaverseEnvironmentProofConfig(
     {
       assetId: metaverseHubDockEnvironmentAssetId,
       placements: metaverseHubDockPlacements
+    },
+    {
+      assetId: metaverseHubShorelineEnvironmentAssetId,
+      placements: metaverseHubShorelinePlacements
     },
     {
       assetId: metaverseHubCrateEnvironmentAssetId,

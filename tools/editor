@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+world_authoring_path="$repo_root/packages/shared/src/metaverse/metaverse-world-surface-authoring.ts"
+editor_command="${VISUAL:-${EDITOR:-vi}}"
+
+exec "$editor_command" "$world_authoring_path"

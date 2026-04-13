@@ -302,6 +302,11 @@ const forwardTravelInput = Object.freeze({
   yawAxis: 0
 });
 
+const forwardJumpTravelInput = Object.freeze({
+  ...forwardTravelInput,
+  jump: true
+});
+
 function createGroundColliderConfig(config) {
   return {
     halfExtents: freezeVector3(
@@ -323,15 +328,44 @@ async function createTraversalHarness(options = {}) {
     clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
     clientLoader.load("/src/physics/index.ts")
   ]);
-  const config = {
+  const defaultTestConfig = {
     ...metaverseRuntimeConfig,
-    ...options.config
+    camera: {
+      ...metaverseRuntimeConfig.camera,
+      initialYawRadians: 0,
+      spawnPosition: {
+        x: 0,
+        y: 6.5,
+        z: 24
+      }
+    },
+    groundedBody: {
+      ...metaverseRuntimeConfig.groundedBody,
+      spawnPosition: {
+        x: 0,
+        y: 0,
+        z: 24
+      }
+    }
+  };
+  const config = {
+    ...defaultTestConfig,
+    ...options.config,
+    camera: {
+      ...defaultTestConfig.camera,
+      ...(options.config?.camera ?? {})
+    },
+    groundedBody: {
+      ...defaultTestConfig.groundedBody,
+      ...(options.config?.groundedBody ?? {})
+    }
   };
   const surfaceColliderSnapshots = (options.surfaceColliderSnapshots ?? []).map(
     (collider) =>
       Object.freeze({
         traversalAffordance: collider.traversalAffordance ?? "support",
         halfExtents: collider.halfExtents,
+        rotationYRadians: collider.rotationYRadians ?? 0,
         rotation: collider.rotation,
         translation: collider.translation
       })
@@ -464,6 +498,41 @@ async function createTraversalHarness(options = {}) {
     mountableEnvironmentConfigById,
     traversalRuntime
   };
+}
+
+async function createShippedSurfaceColliderSnapshots() {
+  const [{ metaverseEnvironmentProofConfig }, { resolvePlacedCuboidColliders }] =
+    await Promise.all([
+      clientLoader.load("/src/app/states/metaverse-asset-proof.ts"),
+      clientLoader.load("/src/metaverse/states/metaverse-environment-collision.ts")
+    ]);
+
+  return Object.freeze(
+    metaverseEnvironmentProofConfig.assets.flatMap((environmentAsset) =>
+      environmentAsset.placement === "dynamic"
+        ? []
+        : resolvePlacedCuboidColliders(environmentAsset)
+    )
+  );
+}
+
+async function createShippedTraversalHarness() {
+  const [{ metaverseRuntimeConfig }, surfaceColliderSnapshots] = await Promise.all([
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    createShippedSurfaceColliderSnapshots()
+  ]);
+
+  return createTraversalHarness({
+    config: {
+      camera: {
+        ...metaverseRuntimeConfig.camera
+      },
+      groundedBody: {
+        ...metaverseRuntimeConfig.groundedBody
+      }
+    },
+    surfaceColliderSnapshots
+  });
 }
 
 function resolveGroundedEntryFrame(traversalRuntime, maxFrames = 240) {
@@ -1345,6 +1414,227 @@ test("MetaverseTraversalRuntime keeps authoritative airborne grounded correction
         (traversalRuntime.characterPresentationSnapshot?.position.y ?? 0) - 1.2
       ) < 0.0001
     );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime preserves active swim presentation through authoritative swim corrections", async () => {
+  const { groundedBodyRuntime, traversalRuntime } = await createTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+
+    traversalRuntime.syncAuthoritativeLocalPlayerPose({
+      linearVelocity: Object.freeze({
+        x: 0,
+        y: 0,
+        z: -3.2
+      }),
+      locomotionMode: "swim",
+      mountedOccupancy: null,
+      position: Object.freeze({
+        x: 0,
+        y: 0,
+        z: 23.4
+      }),
+      yawRadians: 0
+    });
+
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "swim"
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime routes the shipped dock spawn into water on the hub shoreline slice", async () => {
+  const { groundedBodyRuntime, traversalRuntime } =
+    await createShippedTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+
+    let waterEntryFrame = null;
+
+    for (let frame = 0; frame < 90; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+
+      if (traversalRuntime.locomotionMode === "swim") {
+        waterEntryFrame = frame + 1;
+        break;
+      }
+    }
+
+    assert.notEqual(waterEntryFrame, null);
+    assert.equal(
+      traversalRuntime.shorelineLocalTelemetrySnapshot.decisionReason,
+      "water-entry"
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime holds sustained swim after shipped dock water entry before the shoreline exit lane", async () => {
+  const { groundedBodyRuntime, traversalRuntime } =
+    await createShippedTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+
+    for (let frame = 0; frame < 90; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+
+      if (traversalRuntime.locomotionMode === "swim") {
+        break;
+      }
+    }
+
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+
+    const swimStartZ = traversalRuntime.cameraSnapshot.position.z;
+
+    for (let frame = 0; frame < 24; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+      assert.equal(traversalRuntime.locomotionMode, "swim");
+    }
+
+    assert.ok(traversalRuntime.cameraSnapshot.position.z < swimStartZ - 0.9);
+    assert.equal(
+      traversalRuntime.characterPresentationSnapshot?.animationVocabulary,
+      "swim"
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime keeps a dock jump grounded through the airborne arc before transitioning into the shoreline swim route", async () => {
+  const { config, groundedBodyRuntime, traversalRuntime } =
+    await createShippedTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+
+    let sawAirborneGrounded = false;
+    let enteredSwimAtWaterline = false;
+
+    for (let frame = 0; frame < 120; frame += 1) {
+      traversalRuntime.advance(
+        frame === 0 ? forwardJumpTravelInput : forwardTravelInput,
+        1 / 60
+      );
+
+      if (
+        traversalRuntime.locomotionMode === "grounded" &&
+        !groundedBodyRuntime.snapshot.grounded &&
+        groundedBodyRuntime.snapshot.position.y >
+          config.ocean.height + 0.05
+      ) {
+        sawAirborneGrounded = true;
+        assert.match(
+          traversalRuntime.characterPresentationSnapshot?.animationVocabulary ?? "",
+          /^jump-/
+        );
+      }
+
+      if (traversalRuntime.locomotionMode === "swim") {
+        enteredSwimAtWaterline =
+          groundedBodyRuntime.snapshot.position.y <= config.ocean.height + 0.151;
+        break;
+      }
+    }
+
+    assert.equal(sawAirborneGrounded, true);
+    assert.equal(traversalRuntime.locomotionMode, "swim");
+    assert.equal(enteredSwimAtWaterline, true);
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime exits swim onto the shipped shoreline lane and settles on authored support", async () => {
+  const { config, groundedBodyRuntime, traversalRuntime } =
+    await createShippedTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+
+    let sawSwim = false;
+
+    for (let frame = 0; frame < 240; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+
+      if (traversalRuntime.locomotionMode === "swim") {
+        sawSwim = true;
+        continue;
+      }
+
+      if (sawSwim) {
+        break;
+      }
+    }
+
+    assert.equal(sawSwim, true);
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+    assert.ok(groundedBodyRuntime.snapshot.grounded);
+    assert.ok(
+      groundedBodyRuntime.snapshot.position.y >
+        config.ocean.height + config.groundedBody.stepHeightMeters * 0.5
+    );
+    assert.equal(
+      traversalRuntime.shorelineLocalTelemetrySnapshot.decisionReason,
+      "shoreline-exit-success"
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime does not eject vertically across shipped shoreline support seams", async () => {
+  const { groundedBodyRuntime, traversalRuntime } =
+    await createShippedTraversalHarness();
+
+  try {
+    traversalRuntime.boot();
+
+    let sawSwim = false;
+
+    for (let frame = 0; frame < 240; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+
+      if (traversalRuntime.locomotionMode === "swim") {
+        sawSwim = true;
+        continue;
+      }
+
+      if (sawSwim) {
+        break;
+      }
+    }
+
+    assert.equal(traversalRuntime.locomotionMode, "grounded");
+
+    let maximumVerticalDeltaMeters = 0;
+    let previousY = traversalRuntime.cameraSnapshot.position.y;
+
+    for (let frame = 0; frame < 36; frame += 1) {
+      traversalRuntime.advance(forwardTravelInput, 1 / 60);
+      maximumVerticalDeltaMeters = Math.max(
+        maximumVerticalDeltaMeters,
+        Math.abs(traversalRuntime.cameraSnapshot.position.y - previousY)
+      );
+      previousY = traversalRuntime.cameraSnapshot.position.y;
+      assert.equal(traversalRuntime.locomotionMode, "grounded");
+    }
+
+    assert.ok(maximumVerticalDeltaMeters < 0.18);
   } finally {
     groundedBodyRuntime.dispose();
   }

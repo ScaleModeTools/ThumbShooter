@@ -177,12 +177,14 @@ interface MetaverseEnvironmentLodObjectRuntime {
 
 interface MetaverseEnvironmentStaticPlacementRuntime {
   activeLodIndex: number;
+  lastLodSwitchAtMs: number;
   readonly lods: readonly MetaverseEnvironmentLodObjectRuntime[];
   readonly placement: MetaverseEnvironmentPlacementProofConfig;
 }
 
 interface MetaverseEnvironmentInstancedAssetRuntime {
   activeLodIndex: number;
+  lastLodSwitchAtMs: number;
   readonly lods: readonly MetaverseEnvironmentLodObjectRuntime[];
   readonly placements: readonly MetaverseEnvironmentPlacementProofConfig[];
 }
@@ -311,6 +313,7 @@ const metaverseCharacterScaleBoundsMeters = Object.freeze({
 const metaverseCharacterRenderYawOffsetRadians = Math.PI;
 
 const environmentLodSwitchHysteresisMeters = 1.25;
+const environmentLodSwitchCooldownMs = 180;
 const remoteCharacterInterpolationRatePerSecond = 12;
 const remoteCharacterTeleportSnapDistanceMeters = 3.5;
 const mountedCharacterSeatTransformScratch =
@@ -949,7 +952,9 @@ function resolveEnvironmentLodIndexForDistance(
 function resolveEnvironmentLodIndex(
   lods: readonly MetaverseEnvironmentLodObjectRuntime[],
   activeLodIndex: number,
-  distanceSquared: number
+  distanceSquared: number,
+  nowMs: number,
+  lastLodSwitchAtMs: number
 ): number {
   const resolvedLodIndex = resolveEnvironmentLodIndexForDistance(lods, distanceSquared);
 
@@ -959,6 +964,13 @@ function resolveEnvironmentLodIndex(
     resolvedLodIndex === activeLodIndex
   ) {
     return resolvedLodIndex;
+  }
+
+  if (
+    Number.isFinite(lastLodSwitchAtMs) &&
+    nowMs - lastLodSwitchAtMs < environmentLodSwitchCooldownMs
+  ) {
+    return activeLodIndex;
   }
 
   if (resolvedLodIndex > activeLodIndex) {
@@ -1073,12 +1085,15 @@ function syncEnvironmentProofRuntime(
     const lodIndex = resolveEnvironmentLodIndex(
       staticPlacementRuntime.lods,
       staticPlacementRuntime.activeLodIndex,
-      measurePlacementDistanceSquared(cameraSnapshot, staticPlacementRuntime.placement)
+      measurePlacementDistanceSquared(cameraSnapshot, staticPlacementRuntime.placement),
+      nowMs,
+      staticPlacementRuntime.lastLodSwitchAtMs
     );
 
     if (lodIndex !== staticPlacementRuntime.activeLodIndex) {
       setEnvironmentLodVisibility(staticPlacementRuntime.lods, lodIndex);
       staticPlacementRuntime.activeLodIndex = lodIndex;
+      staticPlacementRuntime.lastLodSwitchAtMs = nowMs;
     }
   }
 
@@ -1096,12 +1111,15 @@ function syncEnvironmentProofRuntime(
     const lodIndex = resolveEnvironmentLodIndex(
       instancedAssetRuntime.lods,
       instancedAssetRuntime.activeLodIndex,
-      nearestDistanceSquared
+      nearestDistanceSquared,
+      nowMs,
+      instancedAssetRuntime.lastLodSwitchAtMs
     );
 
     if (lodIndex !== instancedAssetRuntime.activeLodIndex) {
       setEnvironmentLodVisibility(instancedAssetRuntime.lods, lodIndex);
       instancedAssetRuntime.activeLodIndex = lodIndex;
+      instancedAssetRuntime.lastLodSwitchAtMs = nowMs;
     }
   }
 
@@ -2233,6 +2251,7 @@ async function loadStaticEnvironmentAssetProofRuntime(
 
     return {
       activeLodIndex: -1,
+      lastLodSwitchAtMs: Number.NEGATIVE_INFINITY,
       lods,
       placement
     };
@@ -2310,6 +2329,7 @@ async function loadInstancedEnvironmentAssetProofRuntime(
   return {
     activeLodIndex: -1,
     anchorGroup,
+    lastLodSwitchAtMs: Number.NEGATIVE_INFINITY,
     lods,
     placements: environmentAssetProofConfig.placements
   };

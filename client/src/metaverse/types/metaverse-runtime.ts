@@ -1,6 +1,7 @@
 import type {
   ExperienceId,
-  MetaversePresenceMountedOccupancySnapshot
+  MetaversePresenceMountedOccupancySnapshot,
+  MetaverseWorldAutomaticSurfaceDecisionReasonId
 } from "@webgpu-metaverse/shared";
 
 import type {
@@ -135,6 +136,39 @@ export interface MetaverseTelemetrySnapshot {
     readonly datagramSendFailureCount: number;
     readonly extrapolatedFramePercent: number;
     readonly localReconciliationCorrectionCount: number;
+    readonly shoreline: {
+      readonly authoritativeCorrection: {
+        readonly applied: boolean;
+        readonly locomotionMismatch: boolean;
+        readonly planarMagnitudeMeters: number;
+        readonly verticalMagnitudeMeters: number;
+      };
+      readonly authoritativeLocalPlayer: {
+        readonly correctionPlanarMagnitudeMeters: number | null;
+        readonly correctionVerticalMagnitudeMeters: number | null;
+        readonly lastProcessedInputSequence: number | null;
+        readonly locomotionMismatch: boolean;
+        readonly locomotionMode: MetaverseLocomotionModeId | null;
+        readonly position: MetaverseVector3Snapshot | null;
+      };
+      readonly local: {
+        readonly autostepHeightMeters: number | null;
+        readonly blockerOverlap: boolean;
+        readonly locomotionMode: MetaverseLocomotionModeId;
+        readonly resolvedSupportHeightMeters: number;
+        readonly stepSupportedProbeCount: number;
+        readonly decisionReason: MetaverseWorldAutomaticSurfaceDecisionReasonId;
+      };
+      readonly issuedTraversalIntent: {
+        readonly boost: boolean;
+        readonly inputSequence: number;
+        readonly jump: boolean;
+        readonly locomotionMode: "grounded" | "swim";
+        readonly moveAxis: number;
+        readonly strafeAxis: number;
+        readonly yawAxis: number;
+      } | null;
+    };
     readonly latestSimulationAgeMs: number | null;
     readonly latestSnapshotUpdateRateHz: number | null;
   };
