@@ -5,6 +5,7 @@ import type {
 import {
   createMetaverseRealtimeWorldEvent,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand
 } from "./metaverse-realtime-world-contract.js";
@@ -106,6 +107,8 @@ function normalizeMetaverseRealtimeWorldClientCommand(
       return createMetaverseSyncDriverVehicleControlCommand(command);
     case "sync-mounted-occupancy":
       return createMetaverseSyncMountedOccupancyCommand(command);
+    case "sync-player-look-intent":
+      return createMetaverseSyncPlayerLookIntentCommand(command);
     case "sync-player-traversal-intent":
       return createMetaverseSyncPlayerTraversalIntentCommand(command);
     default: {

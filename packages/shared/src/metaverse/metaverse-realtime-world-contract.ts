@@ -35,6 +35,7 @@ export const metaverseRealtimeWorldServerEventTypes = [
 export const metaverseRealtimeWorldClientCommandTypes = [
   "sync-mounted-occupancy",
   "sync-player-traversal-intent",
+  "sync-player-look-intent",
   "sync-driver-vehicle-control"
 ] as const;
 
@@ -141,12 +142,23 @@ export interface MetaversePlayerTraversalIntentSnapshotInput {
   readonly yawAxis?: number;
 }
 
+export interface MetaverseRealtimePlayerLookSnapshot {
+  readonly pitchRadians: Radians;
+  readonly yawRadians: Radians;
+}
+
+export interface MetaverseRealtimePlayerLookSnapshotInput {
+  readonly pitchRadians?: number;
+  readonly yawRadians?: number;
+}
+
 export interface MetaverseRealtimePlayerSnapshot {
   readonly angularVelocityRadiansPerSecond: number;
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly characterId: string;
   readonly lastProcessedInputSequence: number;
   readonly linearVelocity: MetaverseRealtimeVector3Snapshot;
+  readonly look: MetaverseRealtimePlayerLookSnapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null;
   readonly playerId: MetaversePlayerId;
@@ -162,6 +174,7 @@ export interface MetaverseRealtimePlayerSnapshotInput {
   readonly characterId: string;
   readonly lastProcessedInputSequence?: number;
   readonly linearVelocity: MetaverseRealtimeVector3SnapshotInput;
+  readonly look?: MetaverseRealtimePlayerLookSnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy?: MetaverseRealtimeMountedOccupancySnapshotInput | null;
   readonly playerId: MetaversePlayerId;
@@ -249,9 +262,23 @@ export interface MetaverseSyncPlayerTraversalIntentCommandInput {
   readonly playerId: MetaversePlayerId;
 }
 
+export interface MetaverseSyncPlayerLookIntentCommand {
+  readonly lookIntent: MetaverseRealtimePlayerLookSnapshot;
+  readonly lookSequence: number;
+  readonly playerId: MetaversePlayerId;
+  readonly type: "sync-player-look-intent";
+}
+
+export interface MetaverseSyncPlayerLookIntentCommandInput {
+  readonly lookIntent: MetaverseRealtimePlayerLookSnapshotInput;
+  readonly lookSequence?: number;
+  readonly playerId: MetaversePlayerId;
+}
+
 export type MetaverseRealtimeWorldClientCommand =
   | MetaverseSyncMountedOccupancyCommand
   | MetaverseSyncPlayerTraversalIntentCommand
+  | MetaverseSyncPlayerLookIntentCommand
   | MetaverseSyncDriverVehicleControlCommand;
 
 const metaverseVehicleIdPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -408,6 +435,15 @@ function freezePlayerTraversalIntentSnapshot(
   });
 }
 
+function freezePlayerLookSnapshot(
+  input: MetaverseRealtimePlayerLookSnapshotInput
+): MetaverseRealtimePlayerLookSnapshot {
+  return Object.freeze({
+    pitchRadians: createRadians(input.pitchRadians ?? 0),
+    yawRadians: createRadians(input.yawRadians ?? 0)
+  });
+}
+
 function freezeVehicleSeatSnapshot(
   input: MetaverseRealtimeVehicleSeatSnapshotInput
 ): MetaverseRealtimeVehicleSeatSnapshot {
@@ -456,6 +492,14 @@ function freezePlayerSnapshot(
   input: MetaverseRealtimePlayerSnapshotInput,
   mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null
 ): MetaverseRealtimePlayerSnapshot {
+  const lookSnapshot =
+    input.look === undefined
+      ? freezePlayerLookSnapshot({
+          pitchRadians: 0,
+          yawRadians: input.yawRadians
+        })
+      : freezePlayerLookSnapshot(input.look);
+
   return Object.freeze({
     angularVelocityRadiansPerSecond: normalizeFiniteNumber(
       input.angularVelocityRadiansPerSecond ?? 0
@@ -466,6 +510,7 @@ function freezePlayerSnapshot(
       input.lastProcessedInputSequence ?? input.stateSequence ?? 0
     ),
     linearVelocity: createMetaversePresenceVector3Snapshot(input.linearVelocity),
+    look: lookSnapshot,
     locomotionMode: resolveLocomotionMode(input.locomotionMode),
     mountedOccupancy,
     playerId: input.playerId,
@@ -612,6 +657,12 @@ export function createMetaversePlayerTraversalIntentSnapshot(
   input: MetaversePlayerTraversalIntentSnapshotInput
 ): MetaversePlayerTraversalIntentSnapshot {
   return freezePlayerTraversalIntentSnapshot(input);
+}
+
+export function createMetaverseRealtimePlayerLookSnapshot(
+  input: MetaverseRealtimePlayerLookSnapshotInput
+): MetaverseRealtimePlayerLookSnapshot {
+  return freezePlayerLookSnapshot(input);
 }
 
 export function createMetaverseRealtimeMountedOccupancySnapshot(
@@ -771,5 +822,16 @@ export function createMetaverseSyncPlayerTraversalIntentCommand(
     intent: freezePlayerTraversalIntentSnapshot(input.intent),
     playerId: input.playerId,
     type: "sync-player-traversal-intent"
+  });
+}
+
+export function createMetaverseSyncPlayerLookIntentCommand(
+  input: MetaverseSyncPlayerLookIntentCommandInput
+): MetaverseSyncPlayerLookIntentCommand {
+  return Object.freeze({
+    lookIntent: freezePlayerLookSnapshot(input.lookIntent),
+    lookSequence: normalizeFiniteNonNegativeInteger(input.lookSequence ?? 0),
+    playerId: input.playerId,
+    type: "sync-player-look-intent"
   });
 }

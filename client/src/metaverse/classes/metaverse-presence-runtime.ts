@@ -16,6 +16,7 @@ import type {
 } from "@/network";
 import { createDisabledRealtimeReliableTransportStatusSnapshot } from "@/network";
 import type {
+  MetaverseCameraSnapshot,
   MetaverseCharacterPresentationSnapshot,
   MetaverseHudSnapshot,
   MetaverseRemoteCharacterPresentationSnapshot,
@@ -52,6 +53,8 @@ interface MetaversePresenceRuntimeDependencies {
 
 interface MetaversePresencePoseChangeKey {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
+  readonly lookPitchRadians: number;
+  readonly lookYawRadians: number;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancyChangeKey | null;
   readonly x: number;
@@ -71,6 +74,8 @@ interface MetaversePresenceMountedOccupancyChangeKey {
 interface MetaversePresenceRosterPlayerChangeKey {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
   readonly characterId: string;
+  readonly lookPitchRadians: number;
+  readonly lookYawRadians: number;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancyChangeKey | null;
   readonly playerId: MetaversePlayerId;
@@ -156,11 +161,16 @@ function hasMatchingMountedOccupancyChangeKey(
 
 function createPresencePoseInput(
   characterPresentation: MetaverseCharacterPresentationSnapshot,
+  lookSnapshot: Pick<MetaverseCameraSnapshot, "pitchRadians" | "yawRadians">,
   locomotionMode: MetaverseHudSnapshot["locomotionMode"],
   mountedEnvironment: MountedEnvironmentSnapshot | null
 ): Omit<MetaversePresencePoseSnapshotInput, "stateSequence"> {
   return {
     animationVocabulary: characterPresentation.animationVocabulary,
+    look: {
+      pitchRadians: lookSnapshot.pitchRadians,
+      yawRadians: lookSnapshot.yawRadians
+    },
     locomotionMode,
     mountedOccupancy: createMountedOccupancyInput(mountedEnvironment),
     position: characterPresentation.position,
@@ -170,11 +180,14 @@ function createPresencePoseInput(
 
 function createPresencePoseChangeKey(
   characterPresentation: MetaverseCharacterPresentationSnapshot,
+  lookSnapshot: Pick<MetaverseCameraSnapshot, "pitchRadians" | "yawRadians">,
   locomotionMode: MetaverseHudSnapshot["locomotionMode"],
   mountedEnvironment: MountedEnvironmentSnapshot | null
 ): MetaversePresencePoseChangeKey {
   return {
     animationVocabulary: characterPresentation.animationVocabulary,
+    lookPitchRadians: lookSnapshot.pitchRadians,
+    lookYawRadians: lookSnapshot.yawRadians,
     locomotionMode,
     mountedOccupancy: createMountedOccupancyChangeKey(
       createMountedOccupancyInput(mountedEnvironment)
@@ -201,6 +214,8 @@ function hasMatchingPresencePoseChangeKey(
     current.x === next.x &&
     current.y === next.y &&
     current.z === next.z &&
+    current.lookPitchRadians === next.lookPitchRadians &&
+    current.lookYawRadians === next.lookYawRadians &&
     current.yawRadians === next.yawRadians
   );
 }
@@ -228,6 +243,8 @@ function hasMatchingRosterChangeKey(
       playerChangeKey.username !== playerSnapshot.username ||
       playerChangeKey.animationVocabulary !==
         playerSnapshot.pose.animationVocabulary ||
+      playerChangeKey.lookPitchRadians !== playerSnapshot.pose.look.pitchRadians ||
+      playerChangeKey.lookYawRadians !== playerSnapshot.pose.look.yawRadians ||
       playerChangeKey.locomotionMode !== playerSnapshot.pose.locomotionMode ||
       !hasMatchingMountedOccupancyChangeKey(
         playerChangeKey.mountedOccupancy,
@@ -255,6 +272,8 @@ function createRosterChangeKey(
         Object.freeze({
           animationVocabulary: playerSnapshot.pose.animationVocabulary,
           characterId: playerSnapshot.characterId,
+          lookPitchRadians: playerSnapshot.pose.look.pitchRadians,
+          lookYawRadians: playerSnapshot.pose.look.yawRadians,
           locomotionMode: playerSnapshot.pose.locomotionMode,
           mountedOccupancy: createMountedOccupancyChangeKey(
             playerSnapshot.pose.mountedOccupancy
@@ -315,6 +334,7 @@ export class MetaversePresenceRuntime {
 
   boot(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
+    lookSnapshot: Pick<MetaverseCameraSnapshot, "pitchRadians" | "yawRadians">,
     locomotionMode: MetaverseHudSnapshot["locomotionMode"],
     mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void {
@@ -344,6 +364,7 @@ export class MetaversePresenceRuntime {
 
     const joinRequest = this.#createJoinRequest(
       characterPresentation,
+      lookSnapshot,
       locomotionMode,
       mountedEnvironment
     );
@@ -373,6 +394,7 @@ export class MetaversePresenceRuntime {
 
   syncPresencePose(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
+    lookSnapshot: Pick<MetaverseCameraSnapshot, "pitchRadians" | "yawRadians">,
     locomotionMode: MetaverseHudSnapshot["locomotionMode"],
     mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void {
@@ -389,6 +411,7 @@ export class MetaversePresenceRuntime {
 
     const nextPresencePose = createPresencePoseChangeKey(
       characterPresentation,
+      lookSnapshot,
       locomotionMode,
       mountedEnvironment
     );
@@ -406,6 +429,7 @@ export class MetaversePresenceRuntime {
     metaversePresenceClient.syncPresence(
       createPresencePoseInput(
         characterPresentation,
+        lookSnapshot,
         locomotionMode,
         mountedEnvironment
       )
@@ -477,6 +501,7 @@ export class MetaversePresenceRuntime {
 
   #createJoinRequest(
     characterPresentation: MetaverseCharacterPresentationSnapshot | null,
+    lookSnapshot: Pick<MetaverseCameraSnapshot, "pitchRadians" | "yawRadians">,
     locomotionMode: MetaverseHudSnapshot["locomotionMode"],
     mountedEnvironment: MountedEnvironmentSnapshot | null
   ): MetaversePresenceJoinRequest | null {
@@ -492,6 +517,7 @@ export class MetaversePresenceRuntime {
       playerId: this.#localPlayerIdentity.playerId,
       pose: createPresencePoseInput(
         characterPresentation,
+        lookSnapshot,
         locomotionMode,
         mountedEnvironment
       ),
@@ -517,6 +543,10 @@ export class MetaversePresenceRuntime {
       remoteCharacterPresentations.push(
         Object.freeze({
           characterId: playerSnapshot.characterId,
+          look: Object.freeze({
+            pitchRadians: playerSnapshot.pose.look.pitchRadians,
+            yawRadians: playerSnapshot.pose.look.yawRadians
+          }),
           mountedOccupancy: playerSnapshot.pose.mountedOccupancy,
           playerId: playerSnapshot.playerId,
           poseSyncMode: "scene-arrival-smoothed",

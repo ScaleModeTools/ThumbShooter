@@ -1,7 +1,9 @@
 import type {
   MetaverseWorldPlacedSurfaceColliderSnapshot,
+  MetaverseWorldPlacedWaterRegionSnapshot,
   MetaverseWorldSurfaceVector3Snapshot
 } from "./metaverse-world-surface-authoring.js";
+import { resolveMetaverseWorldWaterSurfaceHeightMeters } from "./metaverse-world-surface-authoring.js";
 
 export interface MetaverseWorldSurfacePolicyConfig {
   readonly capsuleHalfHeightMeters: number;
@@ -215,6 +217,7 @@ function isPlanarPositionBlocked(
 function resolveAutomaticSurfaceProbeSupport(
   config: MetaverseWorldSurfacePolicyConfig,
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[],
   x: number,
   z: number,
   paddingMeters = 0,
@@ -224,6 +227,13 @@ function resolveAutomaticSurfaceProbeSupport(
   let highestSupportHeightMeters: number | null = null;
   const highestStepRiseAboveWaterMeters =
     config.stepHeightMeters + automaticSurfaceStepHeightLeewayMeters;
+  const localWaterSurfaceHeightMeters =
+    resolveMetaverseWorldWaterSurfaceHeightMeters(
+      waterRegionSnapshots,
+      x,
+      z,
+      paddingMeters
+    );
 
   for (const collider of surfaceColliderSnapshots) {
     if (collider.traversalAffordance !== "support") {
@@ -242,28 +252,44 @@ function resolveAutomaticSurfaceProbeSupport(
     }
 
     const surfaceY = collider.translation.y + collider.halfExtents.y;
-    const riseAboveWaterMeters = surfaceY - config.oceanHeightMeters;
+    if (localWaterSurfaceHeightMeters === null) {
+      if (
+        highestSupportHeightMeters === null ||
+        surfaceY > highestSupportHeightMeters
+      ) {
+        highestSupportHeightMeters = surfaceY;
+      }
 
-    if (
-      riseAboveWaterMeters <=
-      metaverseWorldAutomaticSurfaceWaterlineThresholdMeters
-    ) {
+      if (
+        highestStepSupportHeightMeters === null ||
+        surfaceY > highestStepSupportHeightMeters
+      ) {
+        highestStepSupportHeightMeters = surfaceY;
+      }
+
       continue;
     }
 
-    if (
-      highestSupportHeightMeters === null ||
-      surfaceY > highestSupportHeightMeters
-    ) {
-      highestSupportHeightMeters = surfaceY;
-    }
+    const riseAboveWaterMeters = surfaceY - localWaterSurfaceHeightMeters;
 
     if (
-      riseAboveWaterMeters <= highestStepRiseAboveWaterMeters &&
-      (highestStepSupportHeightMeters === null ||
-        surfaceY > highestStepSupportHeightMeters)
+      riseAboveWaterMeters >
+      metaverseWorldAutomaticSurfaceWaterlineThresholdMeters
     ) {
-      highestStepSupportHeightMeters = surfaceY;
+      if (
+        highestSupportHeightMeters === null ||
+        surfaceY > highestSupportHeightMeters
+      ) {
+        highestSupportHeightMeters = surfaceY;
+      }
+
+      if (
+        riseAboveWaterMeters <= highestStepRiseAboveWaterMeters &&
+        (highestStepSupportHeightMeters === null ||
+          surfaceY > highestStepSupportHeightMeters)
+      ) {
+        highestStepSupportHeightMeters = surfaceY;
+      }
     }
   }
 
@@ -288,6 +314,7 @@ function hasBlockingSupport(
 function sampleAutomaticSurfaceSupport(
   config: MetaverseWorldSurfacePolicyConfig,
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[],
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   paddingMeters: number,
@@ -300,6 +327,7 @@ function sampleAutomaticSurfaceSupport(
   const centerProbeSupport = resolveAutomaticSurfaceProbeSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position.x,
     position.z,
     paddingMeters,
@@ -313,6 +341,7 @@ function sampleAutomaticSurfaceSupport(
   const forwardProbeSupport = resolveAutomaticSurfaceProbeSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position.x + forwardProbeOffset.x,
     position.z + forwardProbeOffset.z,
     paddingMeters,
@@ -326,6 +355,7 @@ function sampleAutomaticSurfaceSupport(
   const forwardLeftProbeSupport = resolveAutomaticSurfaceProbeSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position.x + forwardLeftProbeOffset.x,
     position.z + forwardLeftProbeOffset.z,
     paddingMeters,
@@ -339,6 +369,7 @@ function sampleAutomaticSurfaceSupport(
   const forwardRightProbeSupport = resolveAutomaticSurfaceProbeSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position.x + forwardRightProbeOffset.x,
     position.z + forwardRightProbeOffset.z,
     paddingMeters,
@@ -352,6 +383,7 @@ function sampleAutomaticSurfaceSupport(
   const rearProbeSupport = resolveAutomaticSurfaceProbeSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position.x + rearProbeOffset.x,
     position.z + rearProbeOffset.z,
     paddingMeters,
@@ -394,20 +426,33 @@ function sampleAutomaticSurfaceSupport(
 export function resolveMetaverseWorldSurfaceHeightMeters(
   config: MetaverseWorldSurfacePolicyConfig,
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[],
   x: number,
   z: number,
   excludedOwnerEnvironmentAssetId: string | null = null
-): number {
-  return Math.max(
-    config.oceanHeightMeters,
-    resolveSurfaceSupportHeightMeters(
-      surfaceColliderSnapshots,
-      x,
-      z,
-      config.capsuleRadiusMeters,
-      excludedOwnerEnvironmentAssetId
-    ) ?? config.oceanHeightMeters
+): number | null {
+  const supportHeightMeters = resolveSurfaceSupportHeightMeters(
+    surfaceColliderSnapshots,
+    x,
+    z,
+    config.capsuleRadiusMeters,
+    excludedOwnerEnvironmentAssetId
   );
+  const waterSurfaceHeightMeters = resolveMetaverseWorldWaterSurfaceHeightMeters(
+    waterRegionSnapshots,
+    x,
+    z,
+    config.capsuleRadiusMeters
+  );
+
+  if (
+    supportHeightMeters !== null &&
+    waterSurfaceHeightMeters !== null
+  ) {
+    return Math.max(waterSurfaceHeightMeters, supportHeightMeters);
+  }
+
+  return supportHeightMeters ?? waterSurfaceHeightMeters;
 }
 
 export function constrainMetaverseWorldPlanarPositionAgainstBlockers(
@@ -568,6 +613,7 @@ export function resolveMetaverseWorldGroundedAutostepHeightMeters(
 export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
   config: MetaverseWorldSurfacePolicyConfig,
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[],
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   currentLocomotionMode: "grounded" | "swim",
@@ -576,6 +622,7 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
   const supportSnapshot = sampleAutomaticSurfaceSupport(
     config,
     surfaceColliderSnapshots,
+    waterRegionSnapshots,
     position,
     yawRadians,
     currentLocomotionMode === "grounded"
@@ -583,11 +630,21 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
       : 0,
     excludedOwnerEnvironmentAssetId
   );
-  const resolvedSupportHeightMeters = resolveMetaverseWorldSurfaceHeightMeters(
+  const resolvedSupportHeightMeters =
+    resolveMetaverseWorldSurfaceHeightMeters(
+      config,
+      surfaceColliderSnapshots,
+      waterRegionSnapshots,
+      position.x,
+      position.z,
+      excludedOwnerEnvironmentAssetId
+    ) ?? position.y;
+  const waterbornePosition = isMetaverseWorldWaterbornePosition(
     config,
     surfaceColliderSnapshots,
-    position.x,
-    position.z,
+    waterRegionSnapshots,
+    position,
+    0,
     excludedOwnerEnvironmentAssetId
   );
 
@@ -595,7 +652,8 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
     const shouldStayGrounded =
       supportSnapshot.centerStepSupportHeightMeters !== null ||
       supportSnapshot.stepSupportedProbeCount >=
-        automaticSurfaceGroundedHoldProbeCount;
+        automaticSurfaceGroundedHoldProbeCount ||
+      !waterbornePosition;
     const decision = shouldStayGrounded
       ? Object.freeze({
           locomotionMode: "grounded",
@@ -665,10 +723,24 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
 export function isMetaverseWorldWaterbornePosition(
   config: MetaverseWorldSurfacePolicyConfig,
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[],
   position: MetaverseWorldSurfaceVector3Snapshot,
   paddingMeters = 0,
   excludedOwnerEnvironmentAssetId: string | null = null
 ): boolean {
+  const waterSurfaceHeightMeters = resolveMetaverseWorldWaterSurfaceHeightMeters(
+    waterRegionSnapshots,
+    position.x,
+    position.z,
+    paddingMeters
+  );
+
+  if (
+    waterSurfaceHeightMeters === null
+  ) {
+    return false;
+  }
+
   const supportHeight = resolveSurfaceSupportHeightMeters(
     surfaceColliderSnapshots,
     position.x,
@@ -680,7 +752,7 @@ export function isMetaverseWorldWaterbornePosition(
   return (
     supportHeight === null ||
     supportHeight <=
-      config.oceanHeightMeters +
+      waterSurfaceHeightMeters +
         metaverseWorldAutomaticSurfaceWaterlineThresholdMeters
   );
 }

@@ -447,7 +447,7 @@ test("metaverse asset manifests keep stable shipped delivery paths and LOD namin
   }
 });
 
-test("attachment manifests keep explicit grip alignment metadata for socketed tools", async () => {
+test("attachment manifests keep explicit trigger-hand grip alignment metadata for socketed tools", async () => {
   const {
     attachmentModelManifest,
     metaverseServicePistolAttachmentAssetId
@@ -461,14 +461,15 @@ test("attachment manifests keep explicit grip alignment metadata for socketed to
   assert.deepEqual(pistolAttachment.gripAlignment, {
     attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
     attachmentGripMarkerNodeNameBySocketId: {
-      hand_l_socket: "metaverse_service_pistol_grip_left_marker",
-      hand_r_socket: "metaverse_service_pistol_grip_right_marker"
+      hand_l_socket: "metaverse_service_pistol_grip_right_marker",
+      hand_r_socket: "metaverse_service_pistol_grip_left_marker"
     },
     attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
     socketForwardAxis: { x: 1, y: 0, z: 0 },
     socketOffset: { x: 0, y: 0, z: 0 },
-    socketUpAxis: { x: 0, y: -1, z: 0 }
+    socketUpAxis: { x: 0, y: 1, z: 0 }
   });
+  assert.equal(pistolAttachment.offHandSupportPointIdBySocketId, null);
   assert.deepEqual(pistolAttachment.mountedHolster, {
     gripAlignment: {
       attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
@@ -481,6 +482,30 @@ test("attachment manifests keep explicit grip alignment metadata for socketed to
     socketName: "back_socket"
   });
   assert.equal(pistolAttachment.supportPoints, null);
+});
+
+test("pistol proof asset keeps standardized forward, up, and grip-side markers", async () => {
+  const document = await loadMetaverseAssetDocument(
+    "/models/metaverse/attachments/metaverse-service-pistol.gltf"
+  );
+  const nodesByName = collectNamedNodeDescriptors(document);
+
+  assert.deepEqual(
+    nodesByName.get("metaverse_service_pistol_forward_marker")?.translation,
+    [1, 0, 0]
+  );
+  assert.deepEqual(
+    nodesByName.get("metaverse_service_pistol_up_marker")?.translation,
+    [0, 1, 0]
+  );
+  assert.deepEqual(
+    nodesByName.get("metaverse_service_pistol_grip_right_marker")?.translation,
+    [0.04, 0, -0.025]
+  );
+  assert.deepEqual(
+    nodesByName.get("metaverse_service_pistol_grip_left_marker")?.translation,
+    [0.04, 0, 0.025]
+  );
 });
 
 test("current proof-slice gltf assets keep embedded payloads and normalized node scale", async () => {

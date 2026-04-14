@@ -5,7 +5,9 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
   createMilliseconds,
   createUsername
@@ -182,6 +184,60 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards traversal-inten
   assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
   assert.equal(worldSnapshot.players[0]?.position.y, 0);
   assert.ok((worldSnapshot.players[0]?.position.z ?? 24) < 24);
+});
+
+test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards player-look datagrams into authoritative world state", () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(100)
+  });
+  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
+    runtime
+  );
+  const session = adapter.openSession();
+  const playerId = requireValue(
+    createMetaversePlayerId("harbor-pilot-look-datagram"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Harbor Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0.2
+      },
+      username
+    }),
+    0
+  );
+
+  session.receiveClientDatagram(
+    createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram({
+      command: createMetaverseSyncPlayerLookIntentCommand({
+        lookIntent: {
+          pitchRadians: -0.3,
+          yawRadians: 1.1
+        },
+        lookSequence: 2,
+        playerId
+      })
+    }),
+    50
+  );
+
+  const worldSnapshot = runtime.readWorldSnapshot(50, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, -0.3);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, 1.1);
+  assert.equal(worldSnapshot.players[0]?.yawRadians, 0.2);
 });
 
 test("MetaverseRealtimeWorldWebTransportDatagramAdapter binds the session to the first datagram player identity", () => {

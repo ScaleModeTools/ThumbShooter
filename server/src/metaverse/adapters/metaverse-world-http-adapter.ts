@@ -6,6 +6,7 @@ import type {
 import {
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
   metaversePlayerTraversalIntentLocomotionModeIds,
@@ -293,6 +294,27 @@ function parseWorldTraversalIntent(intentBody: Record<string, unknown>) {
   };
 }
 
+function parseWorldLookIntent(lookIntentBody: Record<string, unknown>) {
+  return {
+    ...(lookIntentBody.pitchRadians === undefined
+      ? {}
+      : {
+          pitchRadians: readNumberField(
+            lookIntentBody.pitchRadians,
+            "lookIntent.pitchRadians"
+          )
+        }),
+    ...(lookIntentBody.yawRadians === undefined
+      ? {}
+      : {
+          yawRadians: readNumberField(
+            lookIntentBody.yawRadians,
+            "lookIntent.yawRadians"
+          )
+        })
+  };
+}
+
 function parseWorldCommand(
   body: unknown
 ): MetaverseRealtimeWorldClientCommand {
@@ -314,6 +336,18 @@ function parseWorldCommand(
     case "sync-player-traversal-intent":
       return createMetaverseSyncPlayerTraversalIntentCommand({
         intent: parseWorldTraversalIntent(readRecordField(body.intent, "intent")),
+        playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+      });
+    case "sync-player-look-intent":
+      return createMetaverseSyncPlayerLookIntentCommand({
+        lookIntent: parseWorldLookIntent(
+          readRecordField(body.lookIntent, "lookIntent")
+        ),
+        ...(body.lookSequence === undefined
+          ? {}
+          : {
+              lookSequence: readNumberField(body.lookSequence, "lookSequence")
+            }),
         playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
       });
     case "sync-driver-vehicle-control": {

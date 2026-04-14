@@ -2,9 +2,11 @@ import type { PhysicsVector3Snapshot } from "@/physics";
 import {
   constrainMetaverseWorldPlanarPositionAgainstBlockers,
   isMetaverseWorldWaterbornePosition,
+  metaverseWorldLayout,
   resolveMetaverseWorldAutomaticSurfaceLocomotion,
   resolveMetaverseWorldGroundedAutostepHeightMeters,
   resolveMetaverseWorldSurfaceHeightMeters,
+  resolveMetaverseWorldWaterSurfaceHeightMeters,
   type MetaverseWorldAutomaticSurfaceLocomotionDebugSnapshot,
   type MetaverseWorldAutomaticSurfaceLocomotionSnapshot,
   type MetaverseWorldSurfacePolicyConfig
@@ -21,6 +23,7 @@ const surfacePolicyConfigByRuntimeConfig = new WeakMap<
   MetaverseRuntimeConfig,
   MetaverseWorldSurfacePolicyConfig
 >();
+const metaverseWaterRegionSnapshots = metaverseWorldLayout.waterRegionSnapshots;
 
 function readSurfacePolicyConfig(
   config: MetaverseRuntimeConfig
@@ -56,13 +59,29 @@ export function resolveSurfaceHeightMeters(
   x: number,
   z: number,
   excludedOwnerEnvironmentAssetId: string | null = null
-): number {
+): number | null {
   return resolveMetaverseWorldSurfaceHeightMeters(
     readSurfacePolicyConfig(config),
     surfaceColliderSnapshots,
+    metaverseWaterRegionSnapshots,
     x,
     z,
     excludedOwnerEnvironmentAssetId
+  );
+}
+
+export function resolveWaterSurfaceHeightMeters(
+  config: MetaverseRuntimeConfig,
+  position: Pick<PhysicsVector3Snapshot, "x" | "z">,
+  paddingMeters = 0
+): number | null {
+  void config;
+
+  return resolveMetaverseWorldWaterSurfaceHeightMeters(
+    metaverseWaterRegionSnapshots,
+    position.x,
+    position.z,
+    paddingMeters
   );
 }
 
@@ -147,6 +166,7 @@ export function resolveAutomaticSurfaceLocomotionSnapshot(
   return resolveMetaverseWorldAutomaticSurfaceLocomotion(
     readSurfacePolicyConfig(config),
     surfaceColliderSnapshots,
+    metaverseWaterRegionSnapshots,
     position,
     yawRadians,
     currentLocomotionMode,
@@ -182,6 +202,7 @@ export function isWaterbornePosition(
   return isMetaverseWorldWaterbornePosition(
     readSurfacePolicyConfig(config),
     surfaceColliderSnapshots,
+    metaverseWaterRegionSnapshots,
     position,
     paddingMeters,
     excludedOwnerEnvironmentAssetId

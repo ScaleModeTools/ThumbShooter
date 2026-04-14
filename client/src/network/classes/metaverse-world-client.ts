@@ -2,9 +2,11 @@ import type {
   MetaverseDriverVehicleControlIntentSnapshot,
   MetaversePlayerId,
   MetaversePlayerTraversalIntentSnapshot,
+  MetaverseRealtimePlayerLookSnapshot,
   MetaverseRealtimeWorldEvent,
   MetaverseRealtimeWorldSnapshot,
   MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseSyncPlayerLookIntentCommandInput,
   MetaverseSyncMountedOccupancyCommandInput,
   MetaverseSyncPlayerTraversalIntentCommandInput
 } from "@webgpu-metaverse/shared";
@@ -12,6 +14,7 @@ import {
   createMetaverseDriverVehicleControlIntentSnapshot,
   createMetaversePlayerTraversalIntentSnapshot,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand
 } from "@webgpu-metaverse/shared";
@@ -67,6 +70,9 @@ type PendingDriverVehicleControlCommand = ReturnType<
 type PendingPlayerTraversalIntentCommand = ReturnType<
   typeof createMetaverseSyncPlayerTraversalIntentCommand
 >;
+type PendingPlayerLookIntentCommand = ReturnType<
+  typeof createMetaverseSyncPlayerLookIntentCommand
+>;
 
 const latestWinsDatagramFallbackRecoveryDelayMultiplier = 1;
 
@@ -116,6 +122,28 @@ function driverVehicleControlIntentsMatch(
     leftIntent.moveAxis === rightIntent.moveAxis &&
     leftIntent.strafeAxis === rightIntent.strafeAxis &&
     leftIntent.yawAxis === rightIntent.yawAxis
+  );
+}
+
+function playerLookIntentMatches(
+  leftIntent: MetaverseRealtimePlayerLookSnapshot | null,
+  rightIntent: MetaverseSyncPlayerLookIntentCommandInput["lookIntent"]
+): boolean {
+  if (leftIntent === null) {
+    return false;
+  }
+
+  return (
+    leftIntent.pitchRadians ===
+      (typeof rightIntent.pitchRadians === "number" &&
+      Number.isFinite(rightIntent.pitchRadians)
+        ? rightIntent.pitchRadians
+        : 0) &&
+    leftIntent.yawRadians ===
+      (typeof rightIntent.yawRadians === "number" &&
+      Number.isFinite(rightIntent.yawRadians)
+        ? rightIntent.yawRadians
+        : 0)
   );
 }
 
@@ -201,18 +229,23 @@ export class MetaverseWorldClient {
   #lastDriverVehicleControlIntent: MetaverseDriverVehicleControlIntentSnapshot | null =
     null;
   #lastLatestWinsDatagramError: string | null = null;
+  #lastPlayerLookIntent: MetaverseRealtimePlayerLookSnapshot | null = null;
   #lastPlayerTraversalIntent: MetaversePlayerTraversalIntentSnapshot | null = null;
   #latestAcceptedSnapshotReceivedAtMs: number | null = null;
   #previousAcceptedSnapshotReceivedAtMs: number | null = null;
   #nextDriverVehicleControlSequence = 0;
   #nextJumpActionSequence = 0;
   #nextPlayerInputSequence = 0;
+  #nextPlayerLookSequence = 0;
   #queuedReliableWorldCommandPromise: Promise<void> = Promise.resolve();
   #pendingDriverVehicleControlCommand: PendingDriverVehicleControlCommand | null =
     null;
+  #pendingPlayerLookIntentCommand: PendingPlayerLookIntentCommand | null = null;
   #pendingPlayerTraversalIntentCommand: PendingPlayerTraversalIntentCommand | null =
     null;
   #playerId: MetaversePlayerId | null = null;
+  #playerLookInputSyncHandle: TimeoutHandle | null = null;
+  #playerLookInputSyncInFlight = false;
   #playerTraversalInputDatagramSendFailureCount = 0;
   #playerTraversalInputSyncHandle: TimeoutHandle | null = null;
   #playerTraversalInputSyncInFlight = false;
@@ -468,6 +501,50 @@ export class MetaverseWorldClient {
     }
   }
 
+  syncPlayerLookIntent(
+    commandInput: MetaverseSyncPlayerLookIntentCommandInput | null
+  ): void {
+    if (commandInput === null) {
+      this.#lastPlayerLookIntent = null;
+      this.#pendingPlayerLookIntentCommand = null;
+      this.#cancelScheduledPlayerLookInputSync();
+      return;
+    }
+
+    this.#assertNotDisposed();
+
+    if (this.#playerId !== null && this.#playerId !== commandInput.playerId) {
+      throw new Error(
+        "Metaverse world client already connected with a different player."
+      );
+    }
+
+    this.#playerId ??= commandInput.playerId;
+
+    if (
+      playerLookIntentMatches(
+        this.#lastPlayerLookIntent,
+        commandInput.lookIntent
+      )
+    ) {
+      return;
+    }
+
+    this.#nextPlayerLookSequence += 1;
+    this.#pendingPlayerLookIntentCommand = createMetaverseSyncPlayerLookIntentCommand(
+      {
+        lookIntent: commandInput.lookIntent,
+        lookSequence: this.#nextPlayerLookSequence,
+        playerId: commandInput.playerId
+      }
+    );
+    this.#lastPlayerLookIntent = this.#pendingPlayerLookIntentCommand.lookIntent;
+
+    if (this.#statusSnapshot.connected) {
+      this.#schedulePlayerLookInputSync(this.#resolveCommandDelayMs());
+    }
+  }
+
   syncMountedOccupancy(
     commandInput: MetaverseSyncMountedOccupancyCommandInput
   ): void {
@@ -539,6 +616,7 @@ export class MetaverseWorldClient {
 
     this.#cancelScheduledPoll();
     this.#cancelScheduledCommandSync();
+    this.#cancelScheduledPlayerLookInputSync();
     this.#cancelScheduledPlayerTraversalInputSync();
     this.#cancelScheduledLatestWinsDatagramFallbackRecovery();
     this.#cancelScheduledSnapshotStreamReconnect();
@@ -568,6 +646,9 @@ export class MetaverseWorldClient {
       if (!this.#isDisposed()) {
         if (this.#pendingDriverVehicleControlCommand !== null) {
           this.#scheduleCommandSync(0);
+        }
+        if (this.#pendingPlayerLookIntentCommand !== null) {
+          this.#schedulePlayerLookInputSync(0);
         }
         if (this.#pendingPlayerTraversalIntentCommand !== null) {
           this.#schedulePlayerTraversalInputSync(0);
@@ -843,6 +924,33 @@ export class MetaverseWorldClient {
     this.#commandSyncHandle = null;
   }
 
+  #schedulePlayerLookInputSync(delayMs: number): void {
+    if (
+      this.#statusSnapshot.state === "disposed" ||
+      this.#playerId === null ||
+      !this.#statusSnapshot.connected ||
+      this.#pendingPlayerLookIntentCommand === null ||
+      this.#playerLookInputSyncInFlight ||
+      this.#playerLookInputSyncHandle !== null
+    ) {
+      return;
+    }
+
+    this.#playerLookInputSyncHandle = this.#setTimeout(() => {
+      this.#playerLookInputSyncHandle = null;
+      void this.#flushPlayerLookInputSync();
+    }, Math.max(0, delayMs));
+  }
+
+  #cancelScheduledPlayerLookInputSync(): void {
+    if (this.#playerLookInputSyncHandle === null) {
+      return;
+    }
+
+    this.#clearTimeout(this.#playerLookInputSyncHandle);
+    this.#playerLookInputSyncHandle = null;
+  }
+
   #schedulePlayerTraversalInputSync(delayMs: number): void {
     if (
       this.#statusSnapshot.state === "disposed" ||
@@ -971,6 +1079,45 @@ export class MetaverseWorldClient {
     }
   }
 
+  async #flushPlayerLookInputSync(): Promise<void> {
+    if (
+      this.#playerId === null ||
+      this.#statusSnapshot.state === "disposed" ||
+      !this.#statusSnapshot.connected ||
+      this.#pendingPlayerLookIntentCommand === null
+    ) {
+      return;
+    }
+
+    const pendingCommand = this.#pendingPlayerLookIntentCommand;
+
+    this.#pendingPlayerLookIntentCommand = null;
+    this.#playerLookInputSyncInFlight = true;
+
+    try {
+      const worldEvent = await this.#sendPlayerLookIntentCommand(pendingCommand);
+
+      if (worldEvent !== null) {
+        this.#applyWorldEvent(worldEvent);
+      }
+    } catch (error) {
+      this.#applyWorldAccessError(
+        error,
+        "Metaverse world player look sync failed."
+      );
+    } finally {
+      this.#playerLookInputSyncInFlight = false;
+
+      if (
+        !this.#isDisposed() &&
+        this.#statusSnapshot.connected &&
+        this.#pendingPlayerLookIntentCommand !== null
+      ) {
+        this.#schedulePlayerLookInputSync(0);
+      }
+    }
+  }
+
   async #flushPlayerTraversalInputSync(): Promise<void> {
     if (
       this.#playerId === null ||
@@ -1037,6 +1184,38 @@ export class MetaverseWorldClient {
           : "Metaverse driver vehicle control datagram send failed.";
 
       this.#driverVehicleControlDatagramSendFailureCount += 1;
+      this.#handleLatestWinsDatagramSendFailure(nextError);
+
+      return this.#transport.sendCommand(command);
+    }
+  }
+
+  async #sendPlayerLookIntentCommand(
+    command: PendingPlayerLookIntentCommand
+  ): Promise<MetaverseRealtimeWorldEvent | null> {
+    if (
+      this.#latestWinsDatagramTransport === null ||
+      this.#useReliableLatestWinsDatagramFallback
+    ) {
+      return this.#transport.sendCommand(command);
+    }
+
+    try {
+      await this.#latestWinsDatagramTransport.sendPlayerLookIntentDatagram(
+        command
+      );
+      this.#handleSuccessfulLatestWinsDatagramSend();
+
+      return null;
+    } catch (error) {
+      const nextError =
+        error instanceof Error &&
+        typeof error.message === "string" &&
+        error.message.trim().length > 0
+          ? error.message
+          : "Metaverse player look intent datagram send failed.";
+
+      this.#playerTraversalInputDatagramSendFailureCount += 1;
       this.#handleLatestWinsDatagramSendFailure(nextError);
 
       return this.#transport.sendCommand(command);

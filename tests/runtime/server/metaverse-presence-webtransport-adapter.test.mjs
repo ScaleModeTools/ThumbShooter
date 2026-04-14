@@ -28,6 +28,10 @@ test("MetaversePresenceWebTransportAdapter serves presence commands and roster r
         characterId: "metaverse-mannequin-v1",
         playerId,
         pose: {
+          look: {
+            pitchRadians: -0.1,
+            yawRadians: 0.4
+          },
           position: {
             x: 0,
             y: 1.62,
@@ -49,7 +53,11 @@ test("MetaversePresenceWebTransportAdapter serves presence commands and roster r
 
   assert.equal(joinResponse.type, "presence-server-event");
   assert.equal(joinResponse.event.roster.players[0]?.playerId, "harbor-pilot-1");
+  assert.equal(joinResponse.event.roster.players[0]?.pose.look.pitchRadians, -0.1);
+  assert.equal(joinResponse.event.roster.players[0]?.pose.look.yawRadians, 0.4);
   assert.equal(rosterResponse.type, "presence-server-event");
+  assert.equal(rosterResponse.event.roster.players[0]?.pose.look.pitchRadians, -0.1);
+  assert.equal(rosterResponse.event.roster.players[0]?.pose.look.yawRadians, 0.4);
   assert.equal(rosterResponse.event.roster.snapshotSequence >= 1, true);
 });
 

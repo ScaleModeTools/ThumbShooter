@@ -505,17 +505,34 @@ test("LocaldevWebTransportServer routes reliable frames and datagrams through th
     },
     type: "world-driver-vehicle-control-datagram"
   });
+  await worldSession.sendClientDatagram({
+    command: {
+      lookIntent: {
+        pitchRadians: 0.35,
+        yawRadians: -0.45
+      },
+      lookSequence: 4,
+      playerId: "driver-player",
+      type: "sync-player-look-intent"
+    },
+    type: "world-player-look-intent-datagram"
+  });
   await flushAsyncWork();
 
   assert.equal(recordedPresenceMessages.length, 1);
   assert.equal(recordedPresenceMessages[0]?.type, "presence-roster-request");
   assert.equal(recordedWorldMessages.length, 1);
   assert.equal(recordedWorldMessages[0]?.type, "world-snapshot-request");
-  assert.equal(recordedWorldDatagrams.length, 1);
+  assert.equal(recordedWorldDatagrams.length, 2);
   assert.equal(
     recordedWorldDatagrams[0]?.type,
     "world-driver-vehicle-control-datagram"
   );
+  assert.equal(
+    recordedWorldDatagrams[1]?.type,
+    "world-player-look-intent-datagram"
+  );
+  assert.equal(recordedWorldDatagrams[1]?.command.type, "sync-player-look-intent");
 
   await presenceStream.close();
   await worldStream.close();

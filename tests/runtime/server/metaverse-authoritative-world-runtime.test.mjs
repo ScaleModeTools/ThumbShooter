@@ -5,6 +5,7 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseSyncPresenceCommand,
@@ -247,6 +248,261 @@ test("MetaverseAuthoritativeWorldRuntime includes player turn rate in authoritat
   );
 });
 
+test("MetaverseAuthoritativeWorldRuntime stores explicit player look intent without rewriting authoritative body yaw", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("look-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Look Harbor Pilot"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username, {
+    yawRadians: Math.PI * 0.25
+  });
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerLookIntentCommand({
+      lookIntent: {
+        pitchRadians: -0.35,
+        yawRadians: Math.PI * 0.75
+      },
+      lookSequence: 3,
+      playerId
+    }),
+    100
+  );
+
+  const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, -0.35);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, Math.PI * 0.75);
+  assert.equal(worldSnapshot.players[0]?.yawRadians, Math.PI * 0.25);
+});
+
+test("MetaverseAuthoritativeWorldRuntime preserves explicit mounted passenger look through presence fallback snapshots", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("presence-look-passenger"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Presence Look Passenger"),
+    "username"
+  );
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        animationVocabulary: "seated",
+        look: {
+          pitchRadians: 0.3,
+          yawRadians: 0.5
+        },
+        locomotionMode: "mounted",
+        mountedOccupancy: {
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "passenger",
+          seatId: "port-bench-seat"
+        },
+        position: {
+          x: 0,
+          y: 0.4,
+          z: 24
+        },
+        yawRadians: 0.2
+      },
+      username
+    }),
+    0
+  );
+
+  const presenceSnapshot = runtime.readPresenceRosterSnapshot(0, playerId);
+
+  assert.equal(presenceSnapshot.players[0]?.pose.yawRadians, 0.2);
+  assert.equal(presenceSnapshot.players[0]?.pose.look.pitchRadians, 0.3);
+  assert.equal(presenceSnapshot.players[0]?.pose.look.yawRadians, 0.5);
+});
+
+test("MetaverseAuthoritativeWorldRuntime turns unmounted authoritative body yaw toward explicit look intent", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("look-facing-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Look Facing Pilot"),
+    "username"
+  );
+
+  joinSurfacePlayer(runtime, playerId, username, {
+    yawRadians: 0
+  });
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerLookIntentCommand({
+      lookIntent: {
+        pitchRadians: 0.2,
+        yawRadians: Math.PI * 0.5
+      },
+      lookSequence: 1,
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(100);
+
+  const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.ok(Math.abs((worldSnapshot.players[0]?.yawRadians ?? 0) - 0.36) < 0.000001);
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0.2);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, Math.PI * 0.5);
+});
+
+test("MetaverseAuthoritativeWorldRuntime keeps mounted driver look constrained to mount-facing yaw while preserving explicit pitch", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("driver-look-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Driver Look Pilot"), "username");
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        animationVocabulary: "idle",
+        locomotionMode: "mounted",
+        mountedOccupancy: {
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "driver",
+          seatId: "driver-seat"
+        },
+        position: {
+          x: 0,
+          y: 0.4,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerLookIntentCommand({
+      lookIntent: {
+        pitchRadians: 0.3,
+        yawRadians: 1.2
+      },
+      lookSequence: 1,
+      playerId
+    }),
+    0
+  );
+
+  let worldSnapshot = runtime.readWorldSnapshot(0, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0.3);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, 0);
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncDriverVehicleControlCommand({
+      controlIntent: {
+        boost: false,
+        environmentAssetId: "metaverse-hub-skiff-v1",
+        moveAxis: 0,
+        strafeAxis: 0,
+        yawAxis: 1
+      },
+      controlSequence: 1,
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(100);
+
+  worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+
+  assert.ok(Math.abs((worldSnapshot.players[0]?.yawRadians ?? 0) - 0.095) < 0.000001);
+  assert.ok(
+    Math.abs(
+      (worldSnapshot.players[0]?.look.yawRadians ?? 0) -
+        (worldSnapshot.players[0]?.yawRadians ?? 0)
+    ) < 0.000001
+  );
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0.3);
+});
+
+test("MetaverseAuthoritativeWorldRuntime clamps mounted passenger look arc and pitch separately from body yaw", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("passenger-look-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Passenger Look Pilot"),
+    "username"
+  );
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        animationVocabulary: "idle",
+        locomotionMode: "mounted",
+        mountedOccupancy: {
+          environmentAssetId: "metaverse-hub-skiff-v1",
+          entryId: null,
+          occupancyKind: "seat",
+          occupantRole: "passenger",
+          seatId: "port-bench-seat"
+        },
+        position: {
+          x: 0,
+          y: 0.4,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0
+      },
+      username
+    }),
+    0
+  );
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerLookIntentCommand({
+      lookIntent: {
+        pitchRadians: 1.2,
+        yawRadians: Math.PI
+      },
+      lookSequence: 1,
+      playerId
+    }),
+    0
+  );
+
+  const worldSnapshot = runtime.readWorldSnapshot(0, playerId);
+
+  assert.equal(worldSnapshot.players[0]?.yawRadians, 0);
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0.42);
+  assert.ok(
+    Math.abs(
+      (worldSnapshot.players[0]?.look.yawRadians ?? 0) - Math.PI * 0.45
+    ) < 0.000001
+  );
+});
+
 test("MetaverseAuthoritativeWorldRuntime simulates unmounted grounded and swim traversal from authoritative traversal intent commands", () => {
   const groundedRuntime = new MetaverseAuthoritativeWorldRuntime({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
@@ -366,6 +622,116 @@ test("MetaverseAuthoritativeWorldRuntime simulates unmounted grounded and swim t
   );
   assert.ok((swimWorldSnapshot.players[0]?.linearVelocity.z ?? 0) < 0);
   assert.equal(swimWorldSnapshot.players[0]?.stateSequence, 3);
+});
+
+test("MetaverseAuthoritativeWorldRuntime keeps presence resyncs from overriding realtime world pose authority", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("presence-authority-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Presence Authority Pilot"),
+    "username"
+  );
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "grounded",
+        moveAxis: 1,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+  runtime.advanceToTime(200);
+
+  const authoritativeWorldSnapshot = runtime.readWorldSnapshot(200, playerId);
+  const authoritativePlayerSnapshot = authoritativeWorldSnapshot.players[0];
+
+  assert.notEqual(authoritativePlayerSnapshot, undefined);
+  assert.equal(authoritativePlayerSnapshot?.lastProcessedInputSequence, 2);
+  assert.equal(authoritativePlayerSnapshot?.stateSequence, 2);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseSyncPresenceCommand({
+      playerId,
+      pose: {
+        animationVocabulary: "jump-down",
+        locomotionMode: "fly",
+        look: {
+          pitchRadians: 0.45,
+          yawRadians: 1.1
+        },
+        position: {
+          x: 42,
+          y: 12,
+          z: 96
+        },
+        stateSequence: 99,
+        yawRadians: 1.4
+      }
+    }),
+    200
+  );
+
+  let worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+
+  assert.deepEqual(worldSnapshot.players[0]?.position, authoritativePlayerSnapshot?.position);
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
+
+  let presenceSnapshot = runtime.readPresenceRosterSnapshot(200, playerId);
+
+  assert.deepEqual(
+    presenceSnapshot.players[0]?.pose.position,
+    authoritativePlayerSnapshot?.position
+  );
+  assert.equal(presenceSnapshot.players[0]?.pose.stateSequence, 2);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        animationVocabulary: "swim",
+        locomotionMode: "swim",
+        look: {
+          pitchRadians: -0.25,
+          yawRadians: -1.2
+        },
+        position: {
+          x: -33,
+          y: 4,
+          z: 18
+        },
+        stateSequence: 100,
+        yawRadians: -0.7
+      },
+      username
+    }),
+    200
+  );
+
+  worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+  presenceSnapshot = runtime.readPresenceRosterSnapshot(200, playerId);
+
+  assert.deepEqual(worldSnapshot.players[0]?.position, authoritativePlayerSnapshot?.position);
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+  assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
+  assert.deepEqual(
+    presenceSnapshot.players[0]?.pose.position,
+    authoritativePlayerSnapshot?.position
+  );
+  assert.equal(presenceSnapshot.players[0]?.pose.stateSequence, 2);
 });
 
 test("MetaverseAuthoritativeWorldRuntime routes the shipped dock spawn into water on the shared shoreline slice", () => {

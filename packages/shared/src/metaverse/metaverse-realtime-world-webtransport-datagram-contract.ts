@@ -1,13 +1,16 @@
 import type {
+  MetaverseSyncPlayerLookIntentCommand,
   MetaverseSyncDriverVehicleControlCommand,
   MetaverseSyncPlayerTraversalIntentCommand
 } from "./metaverse-realtime-world-contract.js";
 import {
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncDriverVehicleControlCommand,
   createMetaverseSyncPlayerTraversalIntentCommand
 } from "./metaverse-realtime-world-contract.js";
 
 export const metaverseRealtimeWorldWebTransportClientDatagramTypes = [
+  "world-player-look-intent-datagram",
   "world-player-traversal-intent-datagram",
   "world-driver-vehicle-control-datagram"
 ] as const;
@@ -24,6 +27,15 @@ export interface MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramI
   readonly command: MetaverseSyncDriverVehicleControlCommand;
 }
 
+export interface MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram {
+  readonly command: MetaverseSyncPlayerLookIntentCommand;
+  readonly type: "world-player-look-intent-datagram";
+}
+
+export interface MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagramInput {
+  readonly command: MetaverseSyncPlayerLookIntentCommand;
+}
+
 export interface MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram {
   readonly command: MetaverseSyncPlayerTraversalIntentCommand;
   readonly type: "world-player-traversal-intent-datagram";
@@ -34,8 +46,18 @@ export interface MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram
 }
 
 export type MetaverseRealtimeWorldWebTransportClientDatagram =
+  | MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram
   | MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram
   | MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram;
+
+export function createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram(
+  input: MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagramInput
+): MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram {
+  return Object.freeze({
+    command: createMetaverseSyncPlayerLookIntentCommand(input.command),
+    type: "world-player-look-intent-datagram"
+  });
+}
 
 export function createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram(
   input: MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagramInput

@@ -170,12 +170,13 @@ function createSurfaceCameraPresentationSnapshot(
 export function createTraversalGroundedCameraPresentationSnapshot(
   bodySnapshot: MetaverseGroundedBodySnapshot,
   pitchRadians: number,
-  config: MetaverseRuntimeConfig
+  config: MetaverseRuntimeConfig,
+  yawRadians: number = bodySnapshot.yawRadians
 ): MetaverseCameraSnapshot {
   return createSurfaceCameraPresentationSnapshot(
     bodySnapshot.position,
     bodySnapshot.eyeHeightMeters,
-    bodySnapshot.yawRadians,
+    yawRadians,
     pitchRadians,
     config.bodyPresentation.groundedFirstPersonForwardOffsetMeters
   );
@@ -184,13 +185,14 @@ export function createTraversalGroundedCameraPresentationSnapshot(
 export function createTraversalSwimCameraPresentationSnapshot(
   swimSnapshot: SurfaceLocomotionSnapshot,
   pitchRadians: number,
-  config: MetaverseRuntimeConfig
+  config: MetaverseRuntimeConfig,
+  yawRadians: number = swimSnapshot.yawRadians
 ): MetaverseCameraSnapshot {
   return createSurfaceCameraPresentationSnapshot(
     swimSnapshot.position,
     config.swim.cameraEyeHeightMeters +
       config.bodyPresentation.swimThirdPersonHeightOffsetMeters,
-    swimSnapshot.yawRadians,
+    yawRadians,
     pitchRadians,
     -config.bodyPresentation.swimThirdPersonFollowDistanceMeters
   );

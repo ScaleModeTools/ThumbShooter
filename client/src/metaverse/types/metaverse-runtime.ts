@@ -85,6 +85,11 @@ export interface MetaverseCameraSnapshot {
   readonly yawRadians: number;
 }
 
+export interface MetaverseCharacterLookSnapshot {
+  readonly pitchRadians: number;
+  readonly yawRadians: number;
+}
+
 export interface MetaverseCharacterPresentationSnapshot {
   readonly animationVocabulary: MetaverseCharacterAnimationVocabularyId;
   readonly position: MetaverseVector3Snapshot;
@@ -97,6 +102,7 @@ export type MetaverseRemoteCharacterPoseSyncMode =
 
 export interface MetaverseRemoteCharacterPresentationSnapshot {
   readonly characterId: string;
+  readonly look: MetaverseCharacterLookSnapshot;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
   readonly playerId: string;
   readonly presentation: MetaverseCharacterPresentationSnapshot;
@@ -243,6 +249,8 @@ export type MetaverseAttachmentGripAlignmentConfig =
 
 export const metaverseSyntheticSocketNames = [
   "back_socket",
+  "grip_l_socket",
+  "grip_r_socket",
   "palm_l_socket",
   "palm_r_socket"
 ] as const;
@@ -255,6 +263,7 @@ export type MetaverseAttachmentSocketName =
   | MetaverseSyntheticSocketName;
 
 export interface MetaverseAttachmentMountProofConfig {
+  readonly offHandSupportPointId?: string | null;
   readonly gripAlignment: MetaverseAttachmentGripAlignmentConfig;
   readonly socketName: MetaverseAttachmentSocketName;
 }

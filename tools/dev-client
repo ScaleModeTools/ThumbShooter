@@ -201,7 +201,7 @@ if [[ -n "$running_dev_server_pid" ]]; then
   fi
 fi
 
-npm --workspace client run dev -- --strictPort &
+npm --workspace client run dev -- --strictPort "$@" &
 pids+=($!)
 
 wait -n "${pids[@]}"

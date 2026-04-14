@@ -148,24 +148,24 @@
     {
       "translation": [
         0,
-        0,
-        1
+        1,
+        0
       ],
       "name": "metaverse_service_pistol_up_marker"
     },
     {
       "translation": [
-        0.015,
-        -0.11,
-        0.025
+        0.04,
+        0,
+        -0.025
       ],
       "name": "metaverse_service_pistol_grip_right_marker"
     },
     {
       "translation": [
-        0.015,
-        -0.11,
-        -0.025
+        0.04,
+        0,
+        0.025
       ],
       "name": "metaverse_service_pistol_grip_left_marker"
     },

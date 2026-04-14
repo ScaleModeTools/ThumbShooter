@@ -1,3 +1,12 @@
+import {
+  advanceMetaverseSurfaceTraversalMotion,
+  clamp,
+  constrainMetaverseSurfaceTraversalPositionToWorldRadius,
+  createMetaverseSurfaceTraversalVector3Snapshot as freezeVector3,
+  toFiniteNumber,
+  wrapRadians
+} from "@webgpu-metaverse/shared";
+
 import { RapierPhysicsRuntime } from "./rapier-physics-runtime";
 import type {
   MetaverseGroundedBodyConfig,
@@ -7,112 +16,6 @@ import type {
   RapierCharacterControllerHandle,
   RapierColliderHandle
 } from "../types/metaverse-grounded-body";
-
-function toFiniteNumber(value: number, fallback = 0): number {
-  return Number.isFinite(value) ? value : fallback;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
-  return Math.min(max, Math.max(min, value));
-}
-
-function clamp01(value: number): number {
-  return clamp(value, 0, 1);
-}
-
-function approach(current: number, target: number, maxDelta: number): number {
-  if (maxDelta <= 0) {
-    return current;
-  }
-
-  const delta = target - current;
-
-  if (Math.abs(delta) <= maxDelta) {
-    return target;
-  }
-
-  return current + Math.sign(delta) * maxDelta;
-}
-
-function wrapRadians(rawValue: number): number {
-  if (!Number.isFinite(rawValue)) {
-    return 0;
-  }
-
-  let nextValue = rawValue;
-
-  while (nextValue > Math.PI) {
-    nextValue -= Math.PI * 2;
-  }
-
-  while (nextValue <= -Math.PI) {
-    nextValue += Math.PI * 2;
-  }
-
-  return nextValue;
-}
-
-function freezeVector3(
-  x: number,
-  y: number,
-  z: number
-): PhysicsVector3Snapshot {
-  return Object.freeze({
-    x: toFiniteNumber(x),
-    y: toFiniteNumber(y),
-    z: toFiniteNumber(z)
-  });
-}
-
-function shapeSignedAxis(value: number, exponent: number): number {
-  const sanitizedValue = clamp(value, -1, 1);
-  const magnitude = Math.pow(
-    clamp01(Math.abs(sanitizedValue)),
-    Math.max(0.1, toFiniteNumber(exponent, 1))
-  );
-
-  return Math.sign(sanitizedValue) * magnitude;
-}
-
-function resolveBoostMultiplier(
-  boost: boolean,
-  movementMagnitude: number,
-  boostMultiplier: number,
-  boostCurveExponent: number
-): number {
-  if (!boost) {
-    return 1;
-  }
-
-  const shapedBoostAmount = Math.pow(
-    clamp01(clamp(movementMagnitude, 0, 1)),
-    Math.max(0.1, toFiniteNumber(boostCurveExponent, 1))
-  );
-
-  return 1 + (boostMultiplier - 1) * shapedBoostAmount;
-}
-
-function resolveShapedDragScale(
-  currentSpeedUnitsPerSecond: number,
-  baseSpeedUnitsPerSecond: number,
-  dragCurveExponent: number
-): number {
-  const normalizedSpeed = clamp01(
-    Math.abs(currentSpeedUnitsPerSecond) / Math.max(0.001, baseSpeedUnitsPerSecond)
-  );
-
-  return Math.max(
-    0.18,
-    Math.pow(
-      normalizedSpeed,
-      Math.max(0.1, toFiniteNumber(dragCurveExponent, 1))
-    )
-  );
-}
 
 function sanitizeConfig(
   config: MetaverseGroundedBodyConfig
@@ -378,86 +281,26 @@ export class MetaverseGroundedBodyRuntime {
 
     this.#physicsRuntime.stepSimulation(deltaSeconds);
 
-    const clampedMoveAxis = clamp(
-      toFiniteNumber(intentSnapshot.moveAxis, 0),
-      -1,
-      1
-    );
-    const clampedStrafeAxis = clamp(
-      toFiniteNumber(intentSnapshot.strafeAxis, 0),
-      -1,
-      1
-    );
     const movementDampingFactor =
       this.#snapshot.grounded ? 1 : this.#config.airborneMovementDampingFactor;
-    const movementMagnitude = clamp01(
-      Math.hypot(clampedMoveAxis, clampedStrafeAxis)
+    const motionSnapshot = advanceMetaverseSurfaceTraversalMotion(
+      this.#snapshot.yawRadians,
+      {
+        forwardSpeedUnitsPerSecond: this.#forwardSpeedUnitsPerSecond,
+        strafeSpeedUnitsPerSecond: this.#strafeSpeedUnitsPerSecond
+      },
+      {
+        boost: intentSnapshot.boost,
+        moveAxis: intentSnapshot.moveAxis,
+        strafeAxis: intentSnapshot.strafeAxis,
+        yawAxis: intentSnapshot.turnAxis
+      },
+      this.#config,
+      deltaSeconds,
+      true,
+      movementDampingFactor
     );
-    const yawRadians = wrapRadians(
-      this.#snapshot.yawRadians +
-        clamp(toFiniteNumber(intentSnapshot.turnAxis, 0), -1, 1) *
-          this.#config.maxTurnSpeedRadiansPerSecond *
-          deltaSeconds
-    );
-    const boostScale = resolveBoostMultiplier(
-      intentSnapshot.boost,
-      movementMagnitude,
-      this.#config.boostMultiplier,
-      this.#config.boostCurveExponent
-    );
-    const targetForwardSpeedUnitsPerSecond =
-      this.#config.baseSpeedUnitsPerSecond *
-      shapeSignedAxis(
-        clampedMoveAxis,
-        this.#config.accelerationCurveExponent
-      ) * boostScale;
-    const targetStrafeSpeedUnitsPerSecond =
-      this.#config.baseSpeedUnitsPerSecond *
-      shapeSignedAxis(
-        clampedStrafeAxis,
-        this.#config.accelerationCurveExponent
-      ) * boostScale;
-    const resolveAxisSpeedUnitsPerSecond = (
-      currentSpeedUnitsPerSecond: number,
-      targetSpeedUnitsPerSecond: number,
-      inputAxis: number
-    ): number => {
-      const shapedInputMagnitude = Math.abs(
-        shapeSignedAxis(inputAxis, this.#config.accelerationCurveExponent)
-      );
-
-      return inputAxis === 0
-        ? approach(
-            currentSpeedUnitsPerSecond,
-            0,
-            this.#config.decelerationUnitsPerSecondSquared *
-              resolveShapedDragScale(
-                currentSpeedUnitsPerSecond,
-                this.#config.baseSpeedUnitsPerSecond,
-                this.#config.dragCurveExponent
-              ) *
-              Math.max(0.35, movementDampingFactor) *
-              deltaSeconds
-          )
-        : approach(
-            currentSpeedUnitsPerSecond,
-            targetSpeedUnitsPerSecond,
-            this.#config.accelerationUnitsPerSecondSquared *
-              Math.max(0.2, shapedInputMagnitude) *
-              Math.max(0.25, movementDampingFactor) *
-              deltaSeconds
-          );
-    };
-    const forwardSpeedUnitsPerSecond = resolveAxisSpeedUnitsPerSecond(
-      this.#forwardSpeedUnitsPerSecond,
-      targetForwardSpeedUnitsPerSecond,
-      clampedMoveAxis
-    );
-    const strafeSpeedUnitsPerSecond = resolveAxisSpeedUnitsPerSecond(
-      this.#strafeSpeedUnitsPerSecond,
-      targetStrafeSpeedUnitsPerSecond,
-      clampedStrafeAxis
-    );
+    const yawRadians = motionSnapshot.yawRadians;
     const jumpRequested = intentSnapshot.jump === true && this.#snapshot.jumpReady;
     const verticalSpeedUnitsPerSecond =
       (jumpRequested
@@ -472,13 +315,9 @@ export class MetaverseGroundedBodyRuntime {
     const rightX = Math.cos(yawRadians);
     const rightZ = Math.sin(yawRadians);
     const desiredMovement = this.#physicsRuntime.createVector3(
-      (forwardX * forwardSpeedUnitsPerSecond +
-        rightX * strafeSpeedUnitsPerSecond) *
-        deltaSeconds,
+      motionSnapshot.velocityX * deltaSeconds,
       verticalSpeedUnitsPerSecond * deltaSeconds,
-      (forwardZ * forwardSpeedUnitsPerSecond +
-        rightZ * strafeSpeedUnitsPerSecond) *
-        deltaSeconds
+      motionSnapshot.velocityZ * deltaSeconds
     );
 
     controller.computeColliderMovement(collider, desiredMovement);
@@ -490,19 +329,11 @@ export class MetaverseGroundedBodyRuntime {
       currentTranslation.y + computedMovement.y - this.#standingOffsetMeters,
       currentTranslation.z + computedMovement.z
     );
-    const radialDistance = Math.hypot(
-      unclampedRootPosition.x,
-      unclampedRootPosition.z
-    );
-    const radiusScale =
-      radialDistance <= this.#config.worldRadius
-        ? 1
-        : this.#config.worldRadius / Math.max(1, radialDistance);
-    const clampedRootPosition = freezeVector3(
-      unclampedRootPosition.x * radiusScale,
-      unclampedRootPosition.y,
-      unclampedRootPosition.z * radiusScale
-    );
+    const clampedRootPosition =
+      constrainMetaverseSurfaceTraversalPositionToWorldRadius(
+        unclampedRootPosition,
+        this.#config.worldRadius
+      );
     const appliedDeltaX = clampedRootPosition.x - this.#snapshot.position.x;
     const appliedDeltaY = clampedRootPosition.y - this.#snapshot.position.y;
     const appliedDeltaZ = clampedRootPosition.z - this.#snapshot.position.z;

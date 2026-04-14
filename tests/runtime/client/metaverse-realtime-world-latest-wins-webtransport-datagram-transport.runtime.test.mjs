@@ -4,8 +4,10 @@ import test, { after, before } from "node:test";
 import {
   createMetaversePlayerId,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncPlayerTraversalIntentCommand
 } from "@webgpu-metaverse/shared";
 
@@ -21,7 +23,7 @@ after(async () => {
   await clientLoader?.close();
 });
 
-test("createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport sends driver-control and traversal-intent datagrams", async () => {
+test("createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport sends driver-control, look, and traversal-intent datagrams", async () => {
   const {
     createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport
   } = await clientLoader.load("/src/network/index.ts");
@@ -69,7 +71,16 @@ test("createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport sends 
       },
       playerId
     });
+  const playerLookIntentCommand = createMetaverseSyncPlayerLookIntentCommand({
+    lookIntent: {
+      pitchRadians: -0.25,
+      yawRadians: 1.1
+    },
+    lookSequence: 3,
+    playerId
+  });
   await transport.sendDriverVehicleControlDatagram(driverControlCommand);
+  await transport.sendPlayerLookIntentDatagram(playerLookIntentCommand);
   await transport.sendPlayerTraversalIntentDatagram(playerTraversalIntentCommand);
 
   assert.deepEqual(
@@ -80,6 +91,12 @@ test("createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport sends 
   );
   assert.deepEqual(
     sentDatagrams[1],
+    createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram({
+      command: playerLookIntentCommand
+    })
+  );
+  assert.deepEqual(
+    sentDatagrams[2],
     createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram({
       command: playerTraversalIntentCommand
     })

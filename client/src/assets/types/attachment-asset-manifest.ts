@@ -49,6 +49,10 @@ export interface AttachmentSupportPointDescriptor {
   readonly supportPointId: string;
 }
 
+export type AttachmentOffHandSupportPointIdBySocketId = Partial<
+  Record<SocketId, string | null>
+>;
+
 export interface AttachmentMountedHolsterDescriptor {
   readonly gripAlignment: AttachmentGripAlignmentDescriptor;
   readonly socketName: string;
@@ -66,6 +70,9 @@ export interface AttachmentAssetDescriptor<
   readonly compatibleSkeletons: readonly SkeletonId[];
   readonly gripAlignment: AttachmentGripAlignmentDescriptor;
   readonly mountedHolster: AttachmentMountedHolsterDescriptor | null;
+  readonly offHandSupportPointIdBySocketId?:
+    | AttachmentOffHandSupportPointIdBySocketId
+    | null;
   readonly supportPoints: readonly AttachmentSupportPointDescriptor[] | null;
 }
 

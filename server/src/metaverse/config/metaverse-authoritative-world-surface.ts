@@ -1,7 +1,5 @@
 import {
-  metaverseWorldStaticSurfaceAssets,
-  resolveMetaverseWorldDynamicSurfaceColliders,
-  resolveMetaverseWorldPlacedSurfaceColliders,
+  metaverseWorldLayout,
   type MetaverseWorldPlacedSurfaceColliderSnapshot,
   type MetaverseWorldSurfaceVector3Snapshot
 } from "@webgpu-metaverse/shared";
@@ -14,9 +12,7 @@ const emptyMetaverseAuthoritativeSurfaceColliders = Object.freeze(
 ) as readonly MetaverseAuthoritativeSurfaceColliderSnapshot[];
 
 export const metaverseAuthoritativeStaticSurfaceColliders = Object.freeze(
-  metaverseWorldStaticSurfaceAssets.flatMap((surfaceAsset) =>
-    resolveMetaverseWorldPlacedSurfaceColliders(surfaceAsset)
-  )
+  metaverseWorldLayout.staticSurfaceColliderSnapshots
 ) satisfies readonly MetaverseAuthoritativeSurfaceColliderSnapshot[];
 
 export function resolveMetaverseAuthoritativeDynamicSurfaceColliders(
@@ -26,7 +22,7 @@ export function resolveMetaverseAuthoritativeDynamicSurfaceColliders(
     readonly yawRadians: number;
   }
 ): readonly MetaverseAuthoritativeSurfaceColliderSnapshot[] {
-  const surfaceColliders = resolveMetaverseWorldDynamicSurfaceColliders(
+  const surfaceColliders = metaverseWorldLayout.resolveSurfaceColliderSnapshots(
     environmentAssetId,
     poseSnapshot
   );

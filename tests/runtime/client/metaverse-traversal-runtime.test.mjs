@@ -689,6 +689,96 @@ test("MetaverseTraversalRuntime steers grounded and swim character yaw from look
   }
 });
 
+test("MetaverseTraversalRuntime keeps unmounted local camera yaw client-owned through authoritative corrections", async () => {
+  const groundedHarness = await createTraversalHarness({
+    surfaceColliderSnapshots: [
+      Object.freeze({
+        halfExtents: freezeVector3(4, 0.2, 4),
+        rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+        translation: freezeVector3(0, -0.1, 24)
+      })
+    ]
+  });
+  const swimHarness = await createTraversalHarness();
+  const lookRightInput = Object.freeze({
+    boost: false,
+    jump: false,
+    moveAxis: 0,
+    pitchAxis: 0,
+    primaryAction: false,
+    secondaryAction: false,
+    strafeAxis: 0,
+    yawAxis: 1
+  });
+
+  try {
+    groundedHarness.traversalRuntime.boot();
+    groundedHarness.traversalRuntime.advance(lookRightInput, 1 / 60);
+
+    const groundedCameraYawBeforeCorrection =
+      groundedHarness.traversalRuntime.cameraSnapshot.yawRadians;
+    const groundedTraversalPose =
+      groundedHarness.traversalRuntime.localTraversalPoseSnapshot;
+
+    assert.ok(groundedTraversalPose !== null);
+
+    groundedHarness.traversalRuntime.syncAuthoritativeLocalPlayerPose({
+      linearVelocity: freezeVector3(0, 0, 0),
+      locomotionMode: "grounded",
+      mountedOccupancy: null,
+      position: groundedTraversalPose.position,
+      yawRadians: groundedTraversalPose.yawRadians - 0.3
+    });
+
+    assert.ok(
+      Math.abs(
+        groundedHarness.traversalRuntime.cameraSnapshot.yawRadians -
+          groundedCameraYawBeforeCorrection
+      ) < 0.000001
+    );
+    assert.ok(
+      Math.abs(
+        groundedHarness.groundedBodyRuntime.snapshot.yawRadians -
+          groundedCameraYawBeforeCorrection
+      ) > 0.05
+    );
+
+    swimHarness.traversalRuntime.boot();
+    swimHarness.traversalRuntime.advance(lookRightInput, 1 / 60);
+
+    const swimCameraYawBeforeCorrection =
+      swimHarness.traversalRuntime.cameraSnapshot.yawRadians;
+    const swimTraversalPose = swimHarness.traversalRuntime.localTraversalPoseSnapshot;
+
+    assert.ok(swimTraversalPose !== null);
+    assert.equal(swimTraversalPose.locomotionMode, "swim");
+
+    swimHarness.traversalRuntime.syncAuthoritativeLocalPlayerPose({
+      linearVelocity: freezeVector3(0, 0, -2.2),
+      locomotionMode: "swim",
+      mountedOccupancy: null,
+      position: swimTraversalPose.position,
+      yawRadians: swimTraversalPose.yawRadians - 0.3
+    });
+
+    assert.ok(
+      Math.abs(
+        swimHarness.traversalRuntime.cameraSnapshot.yawRadians -
+          swimCameraYawBeforeCorrection
+      ) < 0.000001
+    );
+    assert.ok(
+      Math.abs(
+        (swimHarness.traversalRuntime.characterPresentationSnapshot?.yawRadians ?? 0) -
+          swimCameraYawBeforeCorrection
+      ) > 0.05
+    );
+  } finally {
+    groundedHarness.groundedBodyRuntime.dispose();
+    swimHarness.groundedBodyRuntime.dispose();
+  }
+});
+
 test("MetaverseTraversalRuntime applies authoritative mounted vehicle poses for passenger occupancy", async () => {
   const { groundedBodyRuntime, traversalRuntime } = await createTraversalHarness({
     dynamicEnvironmentPoses: {

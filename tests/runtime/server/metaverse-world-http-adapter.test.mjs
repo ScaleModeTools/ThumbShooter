@@ -6,6 +6,7 @@ import {
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
   createMetaverseSyncMountedOccupancyCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
   createUsername
 } from "@webgpu-metaverse/shared";
@@ -236,6 +237,70 @@ test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explici
   assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
   assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
   assert.equal(worldSnapshot.players[0]?.stateSequence, 2);
+});
+
+test("MetaverseWorldHttpAdapter accepts explicit player look commands on the explicit command route", async () => {
+  const runtime = new MetaverseAuthoritativeWorldRuntime();
+  const adapter = new MetaverseWorldHttpAdapter(runtime);
+  const playerId = createMetaversePlayerId("look-harbor-pilot-1");
+  const username = createUsername("Look Harbor Pilot");
+
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseJoinPresenceCommand({
+      characterId: "metaverse-mannequin-v1",
+      playerId,
+      pose: {
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 24
+        },
+        stateSequence: 1,
+        yawRadians: 0.25
+      },
+      username
+    }),
+    0
+  );
+
+  const response = createResponseCapture();
+  const commandBody = JSON.stringify(
+    createMetaverseSyncPlayerLookIntentCommand({
+      lookIntent: {
+        pitchRadians: -0.4,
+        yawRadians: 1.2
+      },
+      lookSequence: 2,
+      playerId
+    })
+  );
+  const handled = await adapter.handleRequest(
+    {
+      method: "POST",
+      on(eventName, listener) {
+        if (eventName === "data") {
+          listener(commandBody);
+        }
+
+        if (eventName === "end") {
+          listener();
+        }
+      }
+    },
+    response,
+    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    100
+  );
+
+  assert.equal(handled, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json.type, "world-snapshot");
+  assert.equal(response.json.world.players[0]?.look.pitchRadians, -0.4);
+  assert.equal(response.json.world.players[0]?.look.yawRadians, 1.2);
+  assert.equal(response.json.world.players[0]?.yawRadians, 0.25);
 });
 
 test("MetaverseWorldHttpAdapter accepts reliable mounted occupancy commands on the explicit command route", async () => {

@@ -111,29 +111,45 @@ export type {
   MetaverseMovementAnimationPolicyModeConfig
 } from "./metaverse/metaverse-movement-animation-policy.js";
 export {
+  metaverseWorldLayout
+} from "./metaverse/metaverse-world-layout.js";
+export type {
+  MetaverseWorldRenderPlacementAssetSnapshot
+} from "./metaverse/metaverse-world-layout.js";
+export {
   metaverseHubCrateEnvironmentAssetId,
   metaverseHubDockEnvironmentAssetId,
   metaverseHubDiveBoatEnvironmentAssetId,
   metaverseHubPushableCrateEnvironmentAssetId,
   metaverseHubShorelineEnvironmentAssetId,
   metaverseHubSkiffEnvironmentAssetId,
+  metaverseWorldPlacedWaterRegions,
   metaverseWorldDynamicSurfaceAssets,
   metaverseWorldStaticSurfaceAssets,
   metaverseWorldSurfaceAssets,
   metaverseWorldSurfacePlacementIds,
   metaverseWorldSurfaceTraversalAffordanceIds,
+  metaverseWorldWaterRegions,
   readMetaverseWorldSurfaceAssetAuthoring,
+  readMetaverseWorldPlacedWaterRegionSnapshot,
   resolveMetaverseWorldDynamicSurfaceColliders,
-  resolveMetaverseWorldPlacedSurfaceColliders
+  resolveMetaverseWorldPlacedSurfaceColliders,
+  resolveMetaverseWorldPlacedWaterRegionAtPlanarPosition,
+  resolveMetaverseWorldWaterRegionFloorHeightMeters,
+  resolveMetaverseWorldWaterRegionSurfaceHeightMeters,
+  resolveMetaverseWorldWaterSurfaceHeightMeters
 } from "./metaverse/metaverse-world-surface-authoring.js";
 export type {
   MetaverseWorldPlacedSurfaceColliderSnapshot,
+  MetaverseWorldPlacedWaterRegionSnapshot,
+  MetaverseWorldSurfaceQuaternionSnapshot,
   MetaverseWorldSurfaceAssetAuthoring,
   MetaverseWorldSurfaceColliderAuthoring,
   MetaverseWorldSurfacePlacementId,
   MetaverseWorldSurfacePlacementSnapshot,
   MetaverseWorldSurfaceTraversalAffordanceId,
-  MetaverseWorldSurfaceVector3Snapshot
+  MetaverseWorldSurfaceVector3Snapshot,
+  MetaverseWorldWaterRegionAuthoring
 } from "./metaverse/metaverse-world-surface-authoring.js";
 export {
   constrainMetaverseWorldPlanarPositionAgainstBlockers,
@@ -151,6 +167,24 @@ export type {
   MetaverseWorldSurfaceLocomotionDecision,
   MetaverseWorldSurfacePolicyConfig
 } from "./metaverse/metaverse-world-surface-policy.js";
+export {
+  advanceMetaverseSurfaceTraversalMotion,
+  advanceMetaverseSurfaceTraversalSnapshot,
+  advanceMetaverseYawRadiansTowardTarget,
+  clamp,
+  constrainMetaverseSurfaceTraversalPositionToWorldRadius,
+  createMetaverseSurfaceTraversalSnapshot,
+  createMetaverseSurfaceTraversalVector3Snapshot,
+  toFiniteNumber,
+  wrapRadians
+} from "./metaverse/metaverse-surface-traversal-simulation.js";
+export type {
+  MetaverseSurfaceTraversalConfig,
+  MetaverseSurfaceTraversalInputSnapshot,
+  MetaverseSurfaceTraversalMotionSnapshot,
+  MetaverseSurfaceTraversalSnapshot,
+  MetaverseSurfaceTraversalSpeedSnapshot
+} from "./metaverse/metaverse-surface-traversal-simulation.js";
 export {
   vehicleRelativeDirectionIds,
   normalizePlanarYawRadians,
@@ -173,6 +207,7 @@ export {
   metaverseRealtimeWorldServerEventTypes,
   createMetaverseDriverVehicleControlIntentSnapshot,
   createMetaversePlayerTraversalIntentSnapshot,
+  createMetaverseRealtimePlayerLookSnapshot,
   createMetaverseRealtimeMountedOccupancySnapshot,
   createMetaverseRealtimePlayerSnapshot,
   createMetaverseRealtimeTickSnapshot,
@@ -181,6 +216,7 @@ export {
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldSnapshot,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseVehicleId
@@ -191,6 +227,8 @@ export type {
   MetaversePlayerTraversalIntentLocomotionModeId,
   MetaversePlayerTraversalIntentSnapshot,
   MetaversePlayerTraversalIntentSnapshotInput,
+  MetaverseRealtimePlayerLookSnapshot,
+  MetaverseRealtimePlayerLookSnapshotInput,
   MetaverseRealtimeMountedOccupancySnapshot,
   MetaverseRealtimeMountedOccupancySnapshotInput,
   MetaverseRealtimeWorldClientCommand,
@@ -212,6 +250,8 @@ export type {
   MetaverseRealtimeWorldSnapshotInput,
   MetaverseSyncDriverVehicleControlCommand,
   MetaverseSyncDriverVehicleControlCommandInput,
+  MetaverseSyncPlayerLookIntentCommand,
+  MetaverseSyncPlayerLookIntentCommandInput,
   MetaverseSyncMountedOccupancyCommand,
   MetaverseSyncMountedOccupancyCommandInput,
   MetaverseSyncPlayerTraversalIntentCommand,
@@ -229,6 +269,7 @@ export {
 } from "./metaverse/metaverse-realtime-world-webtransport-contract.js";
 export {
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   metaverseRealtimeWorldWebTransportClientDatagramTypes
 } from "./metaverse/metaverse-realtime-world-webtransport-datagram-contract.js";
@@ -237,6 +278,8 @@ export type {
   MetaverseRealtimeWorldWebTransportClientDatagramType,
   MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
   MetaverseRealtimeWorldWebTransportDriverVehicleControlDatagramInput,
+  MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
+  MetaverseRealtimeWorldWebTransportPlayerLookIntentDatagramInput,
   MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   MetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagramInput
 } from "./metaverse/metaverse-realtime-world-webtransport-datagram-contract.js";
@@ -266,6 +309,7 @@ export {
   createMetaverseJoinPresenceCommand,
   createMetaverseLeavePresenceCommand,
   createMetaversePlayerId,
+  createMetaversePresenceLookSnapshot,
   createMetaversePresenceMountedOccupancySnapshot,
   createMetaversePresencePlayerSnapshot,
   createMetaversePresencePoseSnapshot,
@@ -283,6 +327,8 @@ export type {
   MetaversePresenceAnimationVocabularyId,
   MetaversePresenceCommand,
   MetaversePresenceCommandType,
+  MetaversePresenceLookSnapshot,
+  MetaversePresenceLookSnapshotInput,
   MetaversePresenceLocomotionModeId,
   MetaversePresenceMountedOccupancyKind,
   MetaversePresenceMountedOccupancySnapshot,

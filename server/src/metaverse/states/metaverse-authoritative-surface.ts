@@ -1,9 +1,11 @@
 import {
   constrainMetaverseWorldPlanarPositionAgainstBlockers,
   isMetaverseWorldWaterbornePosition,
+  metaverseWorldLayout,
   resolveMetaverseWorldAutomaticSurfaceLocomotion,
   resolveMetaverseWorldGroundedAutostepHeightMeters,
   resolveMetaverseWorldSurfaceHeightMeters,
+  resolveMetaverseWorldWaterSurfaceHeightMeters,
   type MetaverseWorldSurfaceLocomotionDecision,
   type MetaverseWorldSurfacePolicyConfig,
   type MetaverseWorldSurfaceVector3Snapshot
@@ -23,12 +25,28 @@ export function resolveAuthoritativeSurfaceHeightMeters(
   surfaceColliderSnapshots: readonly MetaverseAuthoritativeSurfaceColliderSnapshot[],
   x: number,
   z: number
-): number {
+): number | null {
   return resolveMetaverseWorldSurfaceHeightMeters(
     config,
     surfaceColliderSnapshots,
+    metaverseWorldLayout.waterRegionSnapshots,
     x,
     z
+  );
+}
+
+export function resolveAuthoritativeWaterSurfaceHeightMeters(
+  config: MetaverseAuthoritativeSurfaceConfig,
+  position: Pick<MetaverseAuthoritativeVector3Snapshot, "x" | "z">,
+  paddingMeters = 0
+): number | null {
+  void config;
+
+  return resolveMetaverseWorldWaterSurfaceHeightMeters(
+    metaverseWorldLayout.waterRegionSnapshots,
+    position.x,
+    position.z,
+    paddingMeters
   );
 }
 
@@ -82,6 +100,7 @@ export function resolveAuthoritativeAutomaticSurfaceLocomotionMode(
   return resolveMetaverseWorldAutomaticSurfaceLocomotion(
     config,
     surfaceColliderSnapshots,
+    metaverseWorldLayout.waterRegionSnapshots,
     position,
     yawRadians,
     currentLocomotionMode
@@ -97,6 +116,7 @@ export function isAuthoritativeWaterbornePosition(
   return isMetaverseWorldWaterbornePosition(
     config,
     surfaceColliderSnapshots,
+    metaverseWorldLayout.waterRegionSnapshots,
     position,
     paddingMeters
   );

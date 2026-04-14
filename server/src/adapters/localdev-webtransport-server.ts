@@ -26,6 +26,7 @@ import {
   createMetaversePresenceWebTransportRosterRequest,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   createMetaverseRealtimeWorldWebTransportErrorMessage,
   createMetaverseRealtimeWorldWebTransportSnapshotRequest,
@@ -387,6 +388,12 @@ function parseMetaverseWorldClientDatagram(
       return createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram({
         command: payload.command as unknown as Parameters<
           typeof createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram
+        >[0]["command"]
+      });
+    case "world-player-look-intent-datagram":
+      return createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram({
+        command: payload.command as unknown as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram
         >[0]["command"]
       });
     case "world-player-traversal-intent-datagram":

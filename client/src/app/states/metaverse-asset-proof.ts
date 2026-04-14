@@ -31,11 +31,12 @@ import type {
 } from "@/assets/types/environment-asset-manifest";
 import type {
   AttachmentGripAlignmentDescriptor,
+  AttachmentOffHandSupportPointIdBySocketId,
   AttachmentSupportPointDescriptor
 } from "@/assets/types/attachment-asset-manifest";
 import {
+  metaverseWorldLayout,
   normalizePlanarYawRadians,
-  readMetaverseWorldSurfaceAssetAuthoring
 } from "@webgpu-metaverse/shared";
 import type {
   MetaverseAttachmentProofConfig,
@@ -79,9 +80,9 @@ function resolveHeldAttachmentSocketName(
   if (skeletonId === "humanoid_v2") {
     switch (socketId) {
       case "hand_l_socket":
-        return "palm_l_socket";
+        return "grip_l_socket";
       case "hand_r_socket":
-        return "palm_r_socket";
+        return "grip_r_socket";
       default:
         return socketId;
     }
@@ -424,10 +425,53 @@ function resolveMetaverseAttachmentProofConfig(
       })
     );
   };
+  const resolveOffHandSupportPointId = (
+    supportPoints: ReturnType<typeof resolveAttachmentSupportPoints>,
+    offHandSupportPointIdBySocketId:
+      | AttachmentOffHandSupportPointIdBySocketId
+      | null
+      | undefined,
+    socketId: typeof attachmentDescriptor.defaultSocketId
+  ) => {
+    const rawSupportPointId = offHandSupportPointIdBySocketId?.[socketId] ?? null;
+
+    if (rawSupportPointId === null || rawSupportPointId === undefined) {
+      return null;
+    }
+
+    const supportPointId = rawSupportPointId.trim();
+
+    if (supportPointId.length === 0) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} requires a non-empty off-hand support point id for ${socketId}.`
+      );
+    }
+
+    if (
+      supportPoints === null ||
+      !supportPoints.some(
+        (supportPoint) => supportPoint.supportPointId === supportPointId
+      )
+    ) {
+      throw new Error(
+        `Metaverse attachment ${attachmentDescriptor.label} maps ${socketId} to unknown off-hand support point ${supportPointId}.`
+      );
+    }
+
+    return supportPointId;
+  };
+  const resolvedSupportPoints = resolveAttachmentSupportPoints(
+    attachmentDescriptor.supportPoints
+  );
 
   return Object.freeze({
     attachmentId: attachmentDescriptor.id,
     heldMount: Object.freeze({
+      offHandSupportPointId: resolveOffHandSupportPointId(
+        resolvedSupportPoints,
+        attachmentDescriptor.offHandSupportPointIdBySocketId,
+        attachmentDescriptor.defaultSocketId
+      ),
       gripAlignment: resolveAttachmentGripAlignment(
         attachmentDescriptor.gripAlignment,
         attachmentDescriptor.defaultSocketId
@@ -449,9 +493,7 @@ function resolveMetaverseAttachmentProofConfig(
             ),
             socketName: attachmentDescriptor.mountedHolster.socketName
           }),
-    supportPoints: resolveAttachmentSupportPoints(
-      attachmentDescriptor.supportPoints
-    )
+    supportPoints: resolvedSupportPoints
   });
 }
 
@@ -500,16 +542,17 @@ const metaverseHubDiveBoatPlacements = resolveSharedSurfacePlacements(
 function resolveSharedSurfacePlacements(
   environmentAssetId: string
 ): readonly MetaverseEnvironmentPlacementProofConfig[] {
-  const surfaceAsset = readMetaverseWorldSurfaceAssetAuthoring(environmentAssetId);
+  const renderPlacementAsset =
+    metaverseWorldLayout.readRenderPlacementAsset(environmentAssetId);
 
-  if (surfaceAsset === null) {
+  if (renderPlacementAsset === null) {
     throw new Error(
       `Metaverse shared surface authoring is missing placements for ${environmentAssetId}.`
     );
   }
 
   return Object.freeze(
-    surfaceAsset.placements.map((placement) =>
+    renderPlacementAsset.placements.map((placement) =>
       Object.freeze({
         position: Object.freeze({
           x: placement.position.x,

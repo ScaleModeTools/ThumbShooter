@@ -26,8 +26,8 @@ export const attachmentModelManifest = defineAttachmentAssetManifest([
     gripAlignment: {
       attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
       attachmentGripMarkerNodeNameBySocketId: {
-        hand_l_socket: "metaverse_service_pistol_grip_left_marker",
-        hand_r_socket: "metaverse_service_pistol_grip_right_marker"
+        hand_l_socket: "metaverse_service_pistol_grip_right_marker",
+        hand_r_socket: "metaverse_service_pistol_grip_left_marker"
       },
       attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
       socketForwardAxis: {
@@ -42,10 +42,11 @@ export const attachmentModelManifest = defineAttachmentAssetManifest([
       },
       socketUpAxis: {
         x: 0,
-        y: -1,
+        y: 1,
         z: 0
       }
     },
+    offHandSupportPointIdBySocketId: null,
     mountedHolster: {
       socketName: "back_socket",
       gripAlignment: {

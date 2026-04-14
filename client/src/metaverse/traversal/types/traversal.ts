@@ -2,6 +2,11 @@ import {
   type MetaverseGroundedBodyRuntime,
   type PhysicsVector3Snapshot
 } from "@/physics";
+import type {
+  MetaverseSurfaceTraversalConfig as SharedMetaverseSurfaceTraversalConfig,
+  MetaverseSurfaceTraversalSnapshot as SharedMetaverseSurfaceTraversalSnapshot,
+  MetaverseSurfaceTraversalSpeedSnapshot as SharedMetaverseSurfaceTraversalSpeedSnapshot
+} from "@webgpu-metaverse/shared";
 
 import type {
   MetaverseEnvironmentAssetProofConfig,
@@ -13,27 +18,14 @@ import type {
   MountedVehicleRuntimeSnapshot
 } from "../../vehicles";
 
-export interface SurfaceLocomotionConfig {
-  readonly accelerationCurveExponent: number;
-  readonly accelerationUnitsPerSecondSquared: number;
-  readonly baseSpeedUnitsPerSecond: number;
-  readonly boostCurveExponent: number;
-  readonly boostMultiplier: number;
-  readonly decelerationUnitsPerSecondSquared: number;
-  readonly dragCurveExponent: number;
-  readonly maxTurnSpeedRadiansPerSecond: number;
-}
+export type SurfaceLocomotionConfig = SharedMetaverseSurfaceTraversalConfig;
 
-export interface SurfaceLocomotionSnapshot {
-  readonly planarSpeedUnitsPerSecond: number;
+export type SurfaceLocomotionSnapshot = SharedMetaverseSurfaceTraversalSnapshot & {
   readonly position: PhysicsVector3Snapshot;
-  readonly yawRadians: number;
-}
+};
 
-export interface SurfaceLocomotionSpeedSnapshot {
-  readonly forwardSpeedUnitsPerSecond: number;
-  readonly strafeSpeedUnitsPerSecond: number;
-}
+export type SurfaceLocomotionSpeedSnapshot =
+  SharedMetaverseSurfaceTraversalSpeedSnapshot;
 
 export interface DynamicEnvironmentPoseSnapshot {
   readonly position: PhysicsVector3Snapshot;

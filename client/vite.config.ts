@@ -62,11 +62,11 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      "/experiences": {
+      "^/experiences(?:/|$)": {
         changeOrigin: true,
         target: "http://127.0.0.1:3210"
       },
-      "/metaverse": {
+      "^/metaverse(?:/|$)": {
         changeOrigin: true,
         target: "http://127.0.0.1:3210"
       }

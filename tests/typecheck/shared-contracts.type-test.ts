@@ -34,6 +34,10 @@ import type {
   MetaversePresenceMountedOccupancySnapshot,
   MetaversePresenceMountedOccupantRoleId,
   MetaversePresencePoseSnapshot,
+  MetaverseSurfaceTraversalConfig,
+  MetaverseSurfaceTraversalMotionSnapshot,
+  MetaverseSurfaceTraversalSnapshot,
+  MetaverseSurfaceTraversalSpeedSnapshot,
   MetaversePresenceWebTransportClientMessage,
   MetaversePresenceWebTransportServerMessage,
   MetaverseDriverVehicleControlIntentSnapshot,
@@ -156,6 +160,12 @@ type MetaversePresencePoseMountedOccupancyMatches = AssertTrue<
     MetaversePresenceMountedOccupancySnapshot | null
   >
 >;
+type MetaversePresencePoseLookPitchUsesRadians = AssertTrue<
+  IsEqual<MetaversePresencePoseSnapshot["look"]["pitchRadians"], Radians>
+>;
+type MetaversePresencePoseLookYawUsesRadians = AssertTrue<
+  IsEqual<MetaversePresencePoseSnapshot["look"]["yawRadians"], Radians>
+>;
 type MetaversePresenceMountedOccupancyKindMatches = AssertTrue<
   IsEqual<
     MetaversePresenceMountedOccupancyKind,
@@ -182,6 +192,21 @@ type MetaverseRealtimeWorldUsesMetaversePlayerId = AssertTrue<
 >;
 type MetaverseRealtimeWorldUsesVehicleId = AssertTrue<
   IsEqual<MetaverseRealtimeWorldSnapshot["vehicles"][number]["vehicleId"], MetaverseVehicleId>
+>;
+type MetaverseSurfaceTraversalConfigUsesTurnSpeed = AssertTrue<
+  IsEqual<MetaverseSurfaceTraversalConfig["maxTurnSpeedRadiansPerSecond"], number>
+>;
+type MetaverseSurfaceTraversalSnapshotUsesNumericPlanarSpeed = AssertTrue<
+  IsEqual<MetaverseSurfaceTraversalSnapshot["planarSpeedUnitsPerSecond"], number>
+>;
+type MetaverseSurfaceTraversalSnapshotUsesVectorPosition = AssertTrue<
+  IsEqual<MetaverseSurfaceTraversalSnapshot["position"]["x"], number>
+>;
+type MetaverseSurfaceTraversalSpeedSnapshotUsesNumericForwardSpeed = AssertTrue<
+  IsEqual<MetaverseSurfaceTraversalSpeedSnapshot["forwardSpeedUnitsPerSecond"], number>
+>;
+type MetaverseSurfaceTraversalMotionSnapshotUsesNumericVelocity = AssertTrue<
+  IsEqual<MetaverseSurfaceTraversalMotionSnapshot["velocityX"], number>
 >;
 type MetaverseRealtimeMountedOccupancyMatches = AssertTrue<
   IsEqual<
@@ -245,7 +270,20 @@ type MetaverseRealtimeWorldCommandTypeMatches = AssertTrue<
     MetaverseRealtimeWorldClientCommand["type"],
     | "sync-driver-vehicle-control"
     | "sync-mounted-occupancy"
+    | "sync-player-look-intent"
     | "sync-player-traversal-intent"
+  >
+>;
+type MetaverseRealtimePlayerLookYawUsesNumber = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshot["players"][number]["look"]["yawRadians"],
+    Radians
+  >
+>;
+type MetaverseRealtimePlayerLookPitchUsesNumber = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshot["players"][number]["look"]["pitchRadians"],
+    Radians
   >
 >;
 type MetaverseRealtimeWorldDriverControlIntentUsesStringAssetId = AssertTrue<
@@ -272,6 +310,7 @@ type MetaverseRealtimeWorldWebTransportDatagramTypeMatches = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldWebTransportClientDatagramType,
     | "world-driver-vehicle-control-datagram"
+    | "world-player-look-intent-datagram"
     | "world-player-traversal-intent-datagram"
   >
 >;
@@ -279,6 +318,7 @@ type MetaverseRealtimeWorldWebTransportDatagramWrapsDriverControl = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldWebTransportClientDatagram["command"]["type"],
     | "sync-driver-vehicle-control"
+    | "sync-player-look-intent"
     | "sync-player-traversal-intent"
   >
 >;

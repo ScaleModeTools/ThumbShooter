@@ -723,6 +723,7 @@ export class WebGpuMetaverseRuntime {
     }
     this.#presenceRuntime.boot(
       this.#readCharacterPresentationSnapshot(),
+      this.#traversalRuntime.cameraSnapshot,
       this.#traversalRuntime.locomotionMode,
       this.#traversalRuntime.mountedEnvironmentSnapshot
     );
@@ -828,6 +829,13 @@ export class WebGpuMetaverseRuntime {
     this.#syncLocalPlayerAuthorityFromWorldSnapshots();
     const cameraSnapshot = this.#traversalRuntime.cameraSnapshot;
     this.#mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
+    this.#presenceRuntime.syncPresencePose(
+      this.#traversalRuntime.characterPresentationSnapshot,
+      cameraSnapshot,
+      this.#traversalRuntime.locomotionMode,
+      this.#mountedEnvironment
+    );
+    this.#remoteWorldRuntime.syncLocalPlayerLook(cameraSnapshot);
     this.#remoteWorldRuntime.syncLocalDriverVehicleControl(
       this.#traversalRuntime.routedDriverVehicleControlIntentSnapshot
     );
@@ -1013,7 +1021,7 @@ export class WebGpuMetaverseRuntime {
     }
 
     const authoritativeLocalPlayerSnapshot =
-      this.#remoteWorldRuntime.readFreshAckedSampledAuthoritativeLocalPlayerSnapshot(
+      this.#remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 

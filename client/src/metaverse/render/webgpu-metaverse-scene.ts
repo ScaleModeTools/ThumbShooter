@@ -36,6 +36,7 @@ import {
   color,
   dot,
   float,
+  min,
   mix,
   normalWorld,
   oneMinus,
@@ -49,6 +50,12 @@ import {
   uv,
   vec3
 } from "three/tsl";
+import {
+  metaverseWorldLayout,
+  resolveMetaverseWorldWaterRegionFloorHeightMeters,
+  resolveMetaverseWorldWaterRegionSurfaceHeightMeters,
+  type MetaverseWorldPlacedWaterRegionSnapshot
+} from "@webgpu-metaverse/shared";
 
 import type {
   MetaverseAttachmentProofConfig,
@@ -141,9 +148,11 @@ interface MetaverseCharacterProofRuntime {
     MetaverseCharacterAnimationVocabularyId,
     AnimationClip
   >;
+  readonly heldWeaponPoseRuntime: HumanoidV2HeldWeaponPoseRuntime | null;
   readonly mixer: AnimationMixer;
   readonly seatSocketNode: Object3D;
   readonly scene: Group;
+  readonly skeletonId: MetaverseCharacterProofConfig["skeletonId"];
 }
 
 interface MetaverseAttachmentMountRuntime {
@@ -156,9 +165,34 @@ interface MetaverseAttachmentMountRuntime {
 interface MetaverseAttachmentProofRuntime {
   activeMountKind: "held" | "mounted-holster" | null;
   readonly attachmentRoot: Group;
+  readonly heldForwardReferenceNode: Object3D | null;
   readonly heldMount: MetaverseAttachmentMountRuntime;
   readonly mountedHolsterMount: MetaverseAttachmentMountRuntime | null;
+  readonly offHandSupportNode: Object3D | null;
   readonly presentationGroup: Group;
+}
+
+interface HumanoidV2HeldWeaponPoseRuntime {
+  readonly drivenBones: readonly {
+    readonly authoredLocalQuaternion: Quaternion;
+    readonly bone: Bone;
+  }[];
+  readonly leftGripSocketNode: Object3D;
+  readonly leftHandBone: Bone;
+  readonly leftLowerarmBone: Bone;
+  readonly leftPalmSocketNode: Object3D;
+  readonly leftSupportChain: readonly HeldWeaponSolveChainLink[];
+  readonly leftUpperarmBone: Bone;
+  readonly rightGripSocketNode: Object3D;
+  readonly rightHandBone: Bone;
+  readonly rightLowerarmBone: Bone;
+  readonly rightAimChain: readonly HeldWeaponSolveChainLink[];
+  readonly rightUpperarmBone: Bone;
+}
+
+interface HeldWeaponSolveChainLink {
+  readonly bone: Bone;
+  readonly solveWeight: number;
 }
 
 interface MetaverseRemoteCharacterPresentationRuntime {
@@ -288,6 +322,8 @@ interface DynamicEnvironmentPoseSnapshot {
 
 const socketDebugMarkerColors = {
   back_socket: [1, 0.72, 0.26],
+  grip_l_socket: [0.18, 0.82, 1],
+  grip_r_socket: [1, 0.52, 0.4],
   hand_l_socket: [0.28, 0.72, 1],
   hand_r_socket: [1, 0.42, 0.34],
   head_socket: [1, 0.92, 0.34],
@@ -316,6 +352,22 @@ const environmentLodSwitchHysteresisMeters = 1.25;
 const environmentLodSwitchCooldownMs = 180;
 const remoteCharacterInterpolationRatePerSecond = 12;
 const remoteCharacterTeleportSnapDistanceMeters = 3.5;
+const heldWeaponAimSolveIterations = 10;
+const heldWeaponCoupledSolvePasses = 5;
+const heldWeaponAimTargetDistanceMeters = 16;
+const heldWeaponClavicleSolveWeight = 0.28;
+const heldWeaponElbowPoleAcrossBias = 0.42;
+const heldWeaponElbowPoleBiasWeight = 0.92;
+const heldWeaponElbowPoleDownBias = 0.7;
+const heldWeaponElbowPoleFinalizeWeight = 0.75;
+const heldWeaponElbowPolePreferenceWeight = 1.4;
+const heldWeaponElbowPoleRefineIterations = 4;
+const heldWeaponForearmSolveWeight = 0.96;
+const heldWeaponHandSolveWeight = 0;
+const heldWeaponSolveDirectionEpsilon = 0.000001;
+const heldWeaponSupportHandPitchRadians = -0.3;
+const heldWeaponSupportHandRollRadians = Math.PI * 0.38;
+const heldWeaponUpperarmSolveWeight = 0.9;
 const mountedCharacterSeatTransformScratch =
   createMountedCharacterSeatTransformSnapshot();
 const dynamicEnvironmentSeatSocketPositionScratch = new Vector3();
@@ -328,6 +380,44 @@ const humanoidV2PalmSocketBlendAlpha = 0.45;
 const humanoidV2BackSocketLowerOffsetMeters = 0.02;
 const humanoidV2BackSocketRearwardScale = 0.7;
 const humanoidV1BackSocketLocalPosition = new Vector3(0, 0.14, -0.08);
+const heldWeaponAttachmentGripWorldPositionScratch = new Vector3();
+const heldWeaponClampedHandTargetWorldPositionScratch = new Vector3();
+const heldWeaponEffectorWorldPositionScratch = new Vector3();
+const heldWeaponTargetWorldPositionScratch = new Vector3();
+const heldWeaponBoneWorldPositionScratch = new Vector3();
+const heldWeaponElbowTargetWorldPositionScratch = new Vector3();
+const heldWeaponEffectorDirectionScratch = new Vector3();
+const heldWeaponTargetDirectionScratch = new Vector3();
+const heldWeaponLookDirectionScratch = new Vector3();
+const heldWeaponGripUpDirectionScratch = new Vector3();
+const heldWeaponGripAcrossDirectionScratch = new Vector3();
+const heldWeaponGripSocketWorldPositionScratch = new Vector3();
+const heldWeaponLeftHandTargetWorldPositionScratch = new Vector3();
+const heldWeaponShoulderWorldPositionScratch = new Vector3();
+const heldWeaponElbowWorldPositionScratch = new Vector3();
+const heldWeaponRightHandTargetWorldPositionScratch = new Vector3();
+const heldWeaponSocketLocalOffsetScratch = new Vector3();
+const heldWeaponWristWorldPositionScratch = new Vector3();
+const heldWeaponArmAxisScratch = new Vector3();
+const heldWeaponCurrentPoleDirectionScratch = new Vector3();
+const heldWeaponPoleDirectionCrossScratch = new Vector3();
+const heldWeaponTargetPoleDirectionScratch = new Vector3();
+const heldWeaponRightElbowPolePreferenceScratch = new Vector3();
+const heldWeaponLeftElbowPolePreferenceScratch = new Vector3();
+const heldWeaponRightElbowPoleTargetScratch = new Vector3();
+const heldWeaponLeftElbowPoleTargetScratch = new Vector3();
+const heldWeaponParentWorldQuaternionScratch = new Quaternion();
+const heldWeaponParentWorldQuaternionInverseScratch = new Quaternion();
+const heldWeaponLocalDeltaQuaternionScratch = new Quaternion();
+const heldWeaponSupportHandPitchWorldQuaternionScratch = new Quaternion();
+const heldWeaponSupportHandTargetWorldQuaternionScratch = new Quaternion();
+const heldWeaponSupportHandWorldRollQuaternionScratch = new Quaternion();
+const heldWeaponWeightedLocalDeltaQuaternionScratch = new Quaternion();
+const heldWeaponTargetWorldQuaternionScratch = new Quaternion();
+const heldWeaponCurrentWorldQuaternionScratch = new Quaternion();
+const heldWeaponWorldDeltaQuaternionScratch = new Quaternion();
+const heldWeaponParentLocalDeltaQuaternionScratch = new Quaternion();
+const heldWeaponGripAlignmentMatrixScratch = new Matrix4();
 
 function createDefaultSceneAssetLoader(): SceneAssetLoader {
   return new GLTFLoader() as SceneAssetLoader;
@@ -497,8 +587,8 @@ function synthesizeHumanoidV2PalmSockets(
 ): void {
   const palmSocketDescriptors = [
     {
-      fingerBaseBoneNames: [
-        "thumb_01_l",
+      gripSocketName: "grip_l_socket",
+      knuckleBaseBoneNames: [
         "index_01_l",
         "middle_01_l",
         "ring_01_l",
@@ -506,11 +596,12 @@ function synthesizeHumanoidV2PalmSockets(
       ] as const,
       parentBoneName: "hand_l",
       sourceSocketName: "hand_l_socket",
+      thumbBaseBoneName: "thumb_01_l",
       synthesizedSocketName: "palm_l_socket"
     },
     {
-      fingerBaseBoneNames: [
-        "thumb_01_r",
+      gripSocketName: "grip_r_socket",
+      knuckleBaseBoneNames: [
         "index_01_r",
         "middle_01_r",
         "ring_01_r",
@@ -518,6 +609,7 @@ function synthesizeHumanoidV2PalmSockets(
       ] as const,
       parentBoneName: "hand_r",
       sourceSocketName: "hand_r_socket",
+      thumbBaseBoneName: "thumb_01_r",
       synthesizedSocketName: "palm_r_socket"
     }
   ] as const;
@@ -532,31 +624,82 @@ function synthesizeHumanoidV2PalmSockets(
       characterScene,
       palmSocketDescriptor.sourceSocketName
     );
-    const fingerBaseCentroid = new Vector3();
+    const knuckleBaseCentroid = new Vector3();
 
-    for (const fingerBaseBoneName of palmSocketDescriptor.fingerBaseBoneNames) {
-      const fingerBaseBone = findBoneNode(
+    for (const knuckleBaseBoneName of palmSocketDescriptor.knuckleBaseBoneNames) {
+      const knuckleBaseBone = findBoneNode(
         characterScene,
-        fingerBaseBoneName,
+        knuckleBaseBoneName,
         "Metaverse humanoid_v2 palm socket synthesis"
       );
 
-      fingerBaseCentroid.add(
-        parentBone.worldToLocal(fingerBaseBone.getWorldPosition(new Vector3()))
+      knuckleBaseCentroid.add(
+        parentBone.worldToLocal(knuckleBaseBone.getWorldPosition(new Vector3()))
       );
     }
 
-    fingerBaseCentroid.multiplyScalar(
-      1 / palmSocketDescriptor.fingerBaseBoneNames.length
+    knuckleBaseCentroid.multiplyScalar(
+      1 / palmSocketDescriptor.knuckleBaseBoneNames.length
     );
+    const thumbBaseLocalPosition = parentBone.worldToLocal(
+      findBoneNode(
+        characterScene,
+        palmSocketDescriptor.thumbBaseBoneName,
+        "Metaverse humanoid_v2 palm socket synthesis"
+      ).getWorldPosition(new Vector3())
+    );
+    const palmForwardAxis = knuckleBaseCentroid.clone().normalize();
+
+    if (palmForwardAxis.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+      throw new Error(
+        `Metaverse humanoid_v2 palm socket synthesis requires ${palmSocketDescriptor.synthesizedSocketName} knuckle bases to stay offset from the hand root.`
+      );
+    }
+
+    const palmUpAxis = thumbBaseLocalPosition.clone().sub(knuckleBaseCentroid);
+
+    palmUpAxis.addScaledVector(
+      palmForwardAxis,
+      -palmUpAxis.dot(palmForwardAxis)
+    );
+
+    if (palmUpAxis.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+      throw new Error(
+        `Metaverse humanoid_v2 palm socket synthesis requires ${palmSocketDescriptor.synthesizedSocketName} thumb basis to stay non-collinear with the knuckle line.`
+      );
+    }
+
+    palmUpAxis.normalize();
+
+    const palmSideAxis = palmForwardAxis.clone().cross(palmUpAxis);
+
+    if (palmSideAxis.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+      throw new Error(
+        `Metaverse humanoid_v2 palm socket synthesis requires ${palmSocketDescriptor.synthesizedSocketName} side basis to stay non-degenerate.`
+      );
+    }
+
+    palmSideAxis.normalize();
+    const correctedPalmUpAxis = palmSideAxis
+      .clone()
+      .cross(palmForwardAxis)
+      .normalize();
 
     // Bias the authored hand socket toward the knuckle line so the palm seam
     // inherits the rig's mirrored finger spread without drifting onto the
-    // fingers. Keep the authored hand socket rotation so attachment grip basis
-    // follows the rig-specific socket orientation.
+    // fingers. Derive a mirrored palm basis from the knuckle line plus thumb
+    // direction so held weapons use one stable semantic orientation across the
+    // whole humanoid_v2 rig instead of socket-specific authored twists.
     const palmLocalPosition = sourceSocketNode.position
       .clone()
-      .lerp(fingerBaseCentroid, humanoidV2PalmSocketBlendAlpha);
+      .lerp(knuckleBaseCentroid, humanoidV2PalmSocketBlendAlpha);
+    const synthesizedHandQuaternion = new Quaternion().setFromRotationMatrix(
+      new Matrix4().makeBasis(
+        palmForwardAxis,
+        correctedPalmUpAxis,
+        palmSideAxis
+      )
+    );
 
     upsertSyntheticSocketNode(
       characterScene,
@@ -564,7 +707,15 @@ function synthesizeHumanoidV2PalmSockets(
       palmSocketDescriptor.synthesizedSocketName,
       palmLocalPosition,
       showSocketDebug,
-      sourceSocketNode.quaternion
+      synthesizedHandQuaternion
+    );
+    upsertSyntheticSocketNode(
+      characterScene,
+      parentBone,
+      palmSocketDescriptor.gripSocketName,
+      knuckleBaseCentroid,
+      showSocketDebug,
+      synthesizedHandQuaternion
     );
   }
 }
@@ -647,6 +798,794 @@ function synthesizeRuntimeSocketNodes(
   }
 
   characterScene.updateMatrixWorld(true);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function createHumanoidV2HeldWeaponPoseRuntime(
+  characterScene: Group
+): HumanoidV2HeldWeaponPoseRuntime {
+  const leftHandBone = findBoneNode(
+    characterScene,
+    "hand_l",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const rightHandBone = findBoneNode(
+    characterScene,
+    "hand_r",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const leftLowerarmBone = findBoneNode(
+    characterScene,
+    "lowerarm_l",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const leftUpperarmBone = findBoneNode(
+    characterScene,
+    "upperarm_l",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const rightLowerarmBone = findBoneNode(
+    characterScene,
+    "lowerarm_r",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const rightUpperarmBone = findBoneNode(
+    characterScene,
+    "upperarm_r",
+    "Metaverse humanoid_v2 held weapon pose"
+  );
+  const createSolveChain = (
+    handBone: Bone,
+    lowerarmBone: Bone,
+    upperarmBone: Bone,
+    clavicleBoneName: string
+  ) =>
+    [
+      {
+        bone: handBone,
+        solveWeight: heldWeaponHandSolveWeight
+      },
+      {
+        bone: lowerarmBone,
+        solveWeight: heldWeaponForearmSolveWeight
+      },
+      {
+        bone: upperarmBone,
+        solveWeight: heldWeaponUpperarmSolveWeight
+      },
+      {
+        bone: findBoneNode(
+          characterScene,
+          clavicleBoneName,
+          "Metaverse humanoid_v2 held weapon pose"
+        ),
+        solveWeight: heldWeaponClavicleSolveWeight
+      }
+    ] as const;
+  const leftSupportChain = createSolveChain(
+    leftHandBone,
+    leftLowerarmBone,
+    leftUpperarmBone,
+    "clavicle_l"
+  );
+  const rightAimChain = createSolveChain(
+    rightHandBone,
+    rightLowerarmBone,
+    rightUpperarmBone,
+    "clavicle_r"
+  );
+  const drivenBonesByName = new Map<string, Bone>();
+
+  for (const bone of [...leftSupportChain, ...rightAimChain]) {
+    if (!drivenBonesByName.has(bone.bone.name)) {
+      drivenBonesByName.set(bone.bone.name, bone.bone);
+    }
+  }
+
+  return {
+    drivenBones: [...drivenBonesByName.values()].map((bone) => ({
+      authoredLocalQuaternion: bone.quaternion.clone(),
+      bone
+    })),
+    leftGripSocketNode: findSocketNode(characterScene, "grip_l_socket"),
+    leftHandBone,
+    leftLowerarmBone,
+    leftPalmSocketNode: findSocketNode(characterScene, "palm_l_socket"),
+    leftSupportChain,
+    leftUpperarmBone,
+    rightGripSocketNode: findSocketNode(characterScene, "grip_r_socket"),
+    rightHandBone,
+    rightLowerarmBone,
+    rightAimChain,
+    rightUpperarmBone
+  };
+}
+
+function restoreHumanoidV2HeldWeaponPoseRuntime(
+  heldWeaponPoseRuntime: HumanoidV2HeldWeaponPoseRuntime
+): void {
+  for (const drivenBone of heldWeaponPoseRuntime.drivenBones) {
+    drivenBone.bone.quaternion.copy(drivenBone.authoredLocalQuaternion);
+  }
+}
+
+function createHeldWeaponPoseRuntime(
+  skeletonId: MetaverseCharacterProofConfig["skeletonId"],
+  characterScene: Group
+): HumanoidV2HeldWeaponPoseRuntime | null {
+  switch (skeletonId) {
+    case "humanoid_v1":
+      return null;
+    case "humanoid_v2":
+      return createHumanoidV2HeldWeaponPoseRuntime(characterScene);
+  }
+}
+
+function solveBoneChainTowardWorldTarget(
+  chainBones: readonly HeldWeaponSolveChainLink[],
+  effectorNode: Object3D,
+  targetWorldPosition: Vector3,
+  iterations: number
+): void {
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    for (const chainLink of chainBones) {
+      const solveWeight = clamp(chainLink.solveWeight, 0, 1);
+
+      if (solveWeight <= heldWeaponSolveDirectionEpsilon) {
+        continue;
+      }
+
+      const bone = chainLink.bone;
+      const parentNode = bone.parent;
+
+      if (parentNode === null) {
+        continue;
+      }
+
+      bone.getWorldPosition(heldWeaponBoneWorldPositionScratch);
+      effectorNode.getWorldPosition(heldWeaponEffectorWorldPositionScratch);
+      heldWeaponEffectorDirectionScratch
+        .copy(heldWeaponEffectorWorldPositionScratch)
+        .sub(heldWeaponBoneWorldPositionScratch);
+      heldWeaponTargetDirectionScratch
+        .copy(targetWorldPosition)
+        .sub(heldWeaponBoneWorldPositionScratch);
+
+      if (
+        heldWeaponEffectorDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon ||
+        heldWeaponTargetDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon
+      ) {
+        continue;
+      }
+
+      heldWeaponParentWorldQuaternionInverseScratch
+        .copy(parentNode.getWorldQuaternion(heldWeaponParentWorldQuaternionScratch))
+        .invert();
+      heldWeaponEffectorDirectionScratch
+        .normalize()
+        .applyQuaternion(heldWeaponParentWorldQuaternionInverseScratch);
+      heldWeaponTargetDirectionScratch
+        .normalize()
+        .applyQuaternion(heldWeaponParentWorldQuaternionInverseScratch);
+
+      const directionDot = clamp(
+        heldWeaponEffectorDirectionScratch.dot(heldWeaponTargetDirectionScratch),
+        -1,
+        1
+      );
+
+      if (directionDot >= 0.999999) {
+        continue;
+      }
+
+      heldWeaponLocalDeltaQuaternionScratch.setFromUnitVectors(
+        heldWeaponEffectorDirectionScratch,
+        heldWeaponTargetDirectionScratch
+      );
+      bone.quaternion.premultiply(
+        solveWeight >= 0.999999
+          ? heldWeaponLocalDeltaQuaternionScratch
+          : heldWeaponWeightedLocalDeltaQuaternionScratch
+              .identity()
+              .slerp(heldWeaponLocalDeltaQuaternionScratch, solveWeight)
+      );
+      bone.updateMatrixWorld(true);
+    }
+  }
+}
+
+function alignBoneTowardEffectorWorldQuaternion(
+  bone: Bone,
+  effectorNode: Object3D,
+  targetWorldQuaternion: Quaternion
+): void {
+  const parentNode = bone.parent;
+
+  if (parentNode === null) {
+    return;
+  }
+
+  effectorNode.updateMatrixWorld(true);
+  heldWeaponCurrentWorldQuaternionScratch.copy(
+    effectorNode.getWorldQuaternion(heldWeaponCurrentWorldQuaternionScratch)
+  );
+
+  if (
+    heldWeaponCurrentWorldQuaternionScratch.angleTo(targetWorldQuaternion) <=
+    heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponWorldDeltaQuaternionScratch
+    .copy(targetWorldQuaternion)
+    .multiply(heldWeaponCurrentWorldQuaternionScratch.invert());
+  heldWeaponParentWorldQuaternionScratch.copy(
+    parentNode.getWorldQuaternion(heldWeaponParentWorldQuaternionScratch)
+  );
+  heldWeaponParentWorldQuaternionInverseScratch
+    .copy(heldWeaponParentWorldQuaternionScratch)
+    .invert();
+  heldWeaponParentLocalDeltaQuaternionScratch
+    .copy(heldWeaponParentWorldQuaternionInverseScratch)
+    .multiply(heldWeaponWorldDeltaQuaternionScratch)
+    .multiply(heldWeaponParentWorldQuaternionScratch);
+  bone.quaternion.premultiply(heldWeaponParentLocalDeltaQuaternionScratch);
+  bone.updateMatrixWorld(true);
+}
+
+function alignBoneTowardWorldPoint(
+  bone: Bone,
+  effectorNode: Object3D,
+  targetWorldPosition: Vector3
+): void {
+  const parentNode = bone.parent;
+
+  if (parentNode === null) {
+    return;
+  }
+
+  bone.getWorldPosition(heldWeaponBoneWorldPositionScratch);
+  effectorNode.getWorldPosition(heldWeaponEffectorWorldPositionScratch);
+  heldWeaponEffectorDirectionScratch
+    .copy(heldWeaponEffectorWorldPositionScratch)
+    .sub(heldWeaponBoneWorldPositionScratch);
+  heldWeaponTargetDirectionScratch
+    .copy(targetWorldPosition)
+    .sub(heldWeaponBoneWorldPositionScratch);
+
+  if (
+    heldWeaponEffectorDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon ||
+    heldWeaponTargetDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponParentWorldQuaternionInverseScratch
+    .copy(parentNode.getWorldQuaternion(heldWeaponParentWorldQuaternionScratch))
+    .invert();
+  heldWeaponEffectorDirectionScratch
+    .normalize()
+    .applyQuaternion(heldWeaponParentWorldQuaternionInverseScratch);
+  heldWeaponTargetDirectionScratch
+    .normalize()
+    .applyQuaternion(heldWeaponParentWorldQuaternionInverseScratch);
+  heldWeaponLocalDeltaQuaternionScratch.setFromUnitVectors(
+    heldWeaponEffectorDirectionScratch,
+    heldWeaponTargetDirectionScratch
+  );
+  bone.quaternion.premultiply(heldWeaponLocalDeltaQuaternionScratch);
+  bone.updateMatrixWorld(true);
+}
+
+function resolveHandWorldTargetPosition(
+  gripSocketNode: Object3D,
+  handTargetWorldQuaternion: Quaternion,
+  gripTargetWorldPosition: Vector3,
+  outputHandWorldPosition: Vector3
+): void {
+  outputHandWorldPosition.copy(gripTargetWorldPosition).sub(
+    heldWeaponSocketLocalOffsetScratch
+      .copy(gripSocketNode.position)
+      .applyQuaternion(handTargetWorldQuaternion)
+  );
+}
+
+function solveTwoBoneArmToHandWorldTarget(
+  upperarmBone: Bone,
+  lowerarmBone: Bone,
+  handBone: Bone,
+  handWorldTargetPosition: Vector3,
+  poleWorldDirection: Vector3
+): void {
+  upperarmBone.getWorldPosition(heldWeaponShoulderWorldPositionScratch);
+  lowerarmBone.getWorldPosition(heldWeaponElbowWorldPositionScratch);
+  handBone.getWorldPosition(heldWeaponWristWorldPositionScratch);
+  const upperarmLength = heldWeaponShoulderWorldPositionScratch.distanceTo(
+    heldWeaponElbowWorldPositionScratch
+  );
+  const lowerarmLength = heldWeaponElbowWorldPositionScratch.distanceTo(
+    heldWeaponWristWorldPositionScratch
+  );
+
+  if (
+    upperarmLength <= heldWeaponSolveDirectionEpsilon ||
+    lowerarmLength <= heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponTargetDirectionScratch
+    .copy(handWorldTargetPosition)
+    .sub(heldWeaponShoulderWorldPositionScratch);
+  const targetDistance = heldWeaponTargetDirectionScratch.length();
+
+  if (targetDistance <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponTargetDirectionScratch.normalize();
+  heldWeaponTargetPoleDirectionScratch.copy(poleWorldDirection);
+  heldWeaponTargetPoleDirectionScratch.addScaledVector(
+    heldWeaponTargetDirectionScratch,
+    -heldWeaponTargetPoleDirectionScratch.dot(heldWeaponTargetDirectionScratch)
+  );
+
+  if (
+    heldWeaponTargetPoleDirectionScratch.lengthSq() <=
+    heldWeaponSolveDirectionEpsilon
+  ) {
+    heldWeaponTargetPoleDirectionScratch
+      .copy(heldWeaponElbowWorldPositionScratch)
+      .sub(heldWeaponShoulderWorldPositionScratch);
+    heldWeaponTargetPoleDirectionScratch.addScaledVector(
+      heldWeaponTargetDirectionScratch,
+      -heldWeaponTargetPoleDirectionScratch.dot(heldWeaponTargetDirectionScratch)
+    );
+  }
+
+  if (
+    heldWeaponTargetPoleDirectionScratch.lengthSq() <=
+    heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponTargetPoleDirectionScratch.normalize();
+  const clampedTargetDistance = clamp(
+    targetDistance,
+    Math.max(
+      heldWeaponSolveDirectionEpsilon,
+      Math.abs(upperarmLength - lowerarmLength) + 0.0001
+    ),
+    Math.max(
+      heldWeaponSolveDirectionEpsilon,
+      upperarmLength + lowerarmLength - 0.0001
+    )
+  );
+  heldWeaponClampedHandTargetWorldPositionScratch
+    .copy(heldWeaponShoulderWorldPositionScratch)
+    .addScaledVector(heldWeaponTargetDirectionScratch, clampedTargetDistance);
+  const elbowProjectionDistance =
+    (upperarmLength * upperarmLength -
+      lowerarmLength * lowerarmLength +
+      clampedTargetDistance * clampedTargetDistance) /
+    (2 * clampedTargetDistance);
+  const elbowHeight = Math.sqrt(
+    Math.max(
+      0,
+      upperarmLength * upperarmLength -
+        elbowProjectionDistance * elbowProjectionDistance
+    )
+  );
+
+  heldWeaponElbowTargetWorldPositionScratch
+    .copy(heldWeaponShoulderWorldPositionScratch)
+    .addScaledVector(heldWeaponTargetDirectionScratch, elbowProjectionDistance)
+    .addScaledVector(heldWeaponTargetPoleDirectionScratch, elbowHeight);
+  alignBoneTowardWorldPoint(
+    upperarmBone,
+    lowerarmBone,
+    heldWeaponElbowTargetWorldPositionScratch
+  );
+  alignBoneTowardWorldPoint(
+    lowerarmBone,
+    handBone,
+    heldWeaponClampedHandTargetWorldPositionScratch
+  );
+}
+
+function resolveElbowPoleDirection(
+  upperarmBone: Bone,
+  lowerarmBone: Bone,
+  handBone: Bone,
+  fallbackWorldDirection: Vector3,
+  outputWorldDirection: Vector3
+): void {
+  upperarmBone.getWorldPosition(heldWeaponShoulderWorldPositionScratch);
+  lowerarmBone.getWorldPosition(heldWeaponElbowWorldPositionScratch);
+  handBone.getWorldPosition(heldWeaponWristWorldPositionScratch);
+  heldWeaponArmAxisScratch
+    .copy(heldWeaponWristWorldPositionScratch)
+    .sub(heldWeaponShoulderWorldPositionScratch);
+
+  if (heldWeaponArmAxisScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    outputWorldDirection.copy(fallbackWorldDirection).normalize();
+
+    return;
+  }
+
+  heldWeaponArmAxisScratch.normalize();
+  outputWorldDirection
+    .copy(heldWeaponElbowWorldPositionScratch)
+    .sub(heldWeaponShoulderWorldPositionScratch);
+  outputWorldDirection.addScaledVector(
+    heldWeaponArmAxisScratch,
+    -outputWorldDirection.dot(heldWeaponArmAxisScratch)
+  );
+
+  if (outputWorldDirection.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    outputWorldDirection.copy(fallbackWorldDirection);
+    outputWorldDirection.addScaledVector(
+      heldWeaponArmAxisScratch,
+      -outputWorldDirection.dot(heldWeaponArmAxisScratch)
+    );
+  }
+
+  if (outputWorldDirection.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    outputWorldDirection.copy(fallbackWorldDirection).normalize();
+
+    return;
+  }
+
+  outputWorldDirection.normalize();
+}
+
+function applyElbowPoleBias(
+  upperarmBone: Bone,
+  lowerarmBone: Bone,
+  handBone: Bone,
+  targetWorldDirection: Vector3,
+  biasWeight: number
+): void {
+  const clampedBiasWeight = clamp(biasWeight, 0, 1);
+
+  if (clampedBiasWeight <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  const parentNode = upperarmBone.parent;
+
+  if (parentNode === null) {
+    return;
+  }
+
+  upperarmBone.getWorldPosition(heldWeaponShoulderWorldPositionScratch);
+  lowerarmBone.getWorldPosition(heldWeaponElbowWorldPositionScratch);
+  handBone.getWorldPosition(heldWeaponWristWorldPositionScratch);
+  heldWeaponArmAxisScratch
+    .copy(heldWeaponWristWorldPositionScratch)
+    .sub(heldWeaponShoulderWorldPositionScratch);
+
+  if (heldWeaponArmAxisScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponArmAxisScratch.normalize();
+  heldWeaponCurrentPoleDirectionScratch
+    .copy(heldWeaponElbowWorldPositionScratch)
+    .sub(heldWeaponShoulderWorldPositionScratch);
+  heldWeaponCurrentPoleDirectionScratch.addScaledVector(
+    heldWeaponArmAxisScratch,
+    -heldWeaponCurrentPoleDirectionScratch.dot(heldWeaponArmAxisScratch)
+  );
+
+  if (
+    heldWeaponCurrentPoleDirectionScratch.lengthSq() <=
+    heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponCurrentPoleDirectionScratch.normalize();
+  heldWeaponTargetPoleDirectionScratch.copy(targetWorldDirection);
+  heldWeaponTargetPoleDirectionScratch.addScaledVector(
+    heldWeaponArmAxisScratch,
+    -heldWeaponTargetPoleDirectionScratch.dot(heldWeaponArmAxisScratch)
+  );
+
+  if (
+    heldWeaponTargetPoleDirectionScratch.lengthSq() <=
+    heldWeaponSolveDirectionEpsilon
+  ) {
+    return;
+  }
+
+  heldWeaponTargetPoleDirectionScratch.normalize();
+  const signedPoleAngle = Math.atan2(
+    heldWeaponArmAxisScratch.dot(
+      heldWeaponPoleDirectionCrossScratch
+        .copy(heldWeaponCurrentPoleDirectionScratch)
+        .cross(heldWeaponTargetPoleDirectionScratch)
+    ),
+    clamp(
+      heldWeaponCurrentPoleDirectionScratch.dot(
+        heldWeaponTargetPoleDirectionScratch
+      ),
+      -1,
+      1
+    )
+  );
+
+  if (Math.abs(signedPoleAngle) <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponWorldDeltaQuaternionScratch.setFromAxisAngle(
+    heldWeaponArmAxisScratch,
+    signedPoleAngle * clampedBiasWeight
+  );
+  heldWeaponParentWorldQuaternionScratch.copy(
+    parentNode.getWorldQuaternion(heldWeaponParentWorldQuaternionScratch)
+  );
+  heldWeaponParentWorldQuaternionInverseScratch
+    .copy(heldWeaponParentWorldQuaternionScratch)
+    .invert();
+  heldWeaponParentLocalDeltaQuaternionScratch
+    .copy(heldWeaponParentWorldQuaternionInverseScratch)
+    .multiply(heldWeaponWorldDeltaQuaternionScratch)
+    .multiply(heldWeaponParentWorldQuaternionScratch);
+  upperarmBone.quaternion.premultiply(heldWeaponParentLocalDeltaQuaternionScratch);
+  upperarmBone.updateMatrixWorld(true);
+}
+
+function syncHumanoidV2HeldWeaponPose(
+  characterProofRuntime: MetaverseCharacterProofRuntime,
+  heldWeaponPoseRuntime: HumanoidV2HeldWeaponPoseRuntime,
+  attachmentRuntime: MetaverseAttachmentProofRuntime,
+  cameraSnapshot: MetaverseCameraSnapshot
+): void {
+  const heldForwardReferenceNode = attachmentRuntime.heldForwardReferenceNode;
+
+  if (heldForwardReferenceNode === null) {
+    return;
+  }
+
+  heldWeaponLookDirectionScratch.set(
+    cameraSnapshot.lookDirection.x,
+    cameraSnapshot.lookDirection.y,
+    cameraSnapshot.lookDirection.z
+  );
+
+  if (heldWeaponLookDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponLookDirectionScratch.normalize();
+  heldWeaponGripUpDirectionScratch.set(0, 1, 0);
+  heldWeaponGripUpDirectionScratch.addScaledVector(
+    heldWeaponLookDirectionScratch,
+    -heldWeaponGripUpDirectionScratch.dot(heldWeaponLookDirectionScratch)
+  );
+
+  if (heldWeaponGripUpDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    heldWeaponGripUpDirectionScratch.set(0, 0, 1);
+    heldWeaponGripUpDirectionScratch.addScaledVector(
+      heldWeaponLookDirectionScratch,
+      -heldWeaponGripUpDirectionScratch.dot(heldWeaponLookDirectionScratch)
+    );
+  }
+
+  if (heldWeaponGripUpDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponGripUpDirectionScratch.normalize();
+  heldWeaponGripAcrossDirectionScratch
+    .copy(heldWeaponLookDirectionScratch)
+    .cross(heldWeaponGripUpDirectionScratch);
+
+  if (heldWeaponGripAcrossDirectionScratch.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    return;
+  }
+
+  heldWeaponGripAcrossDirectionScratch.normalize();
+  heldWeaponGripUpDirectionScratch
+    .copy(heldWeaponGripAcrossDirectionScratch)
+    .cross(heldWeaponLookDirectionScratch)
+    .normalize();
+  heldWeaponTargetWorldQuaternionScratch.setFromRotationMatrix(
+    heldWeaponGripAlignmentMatrixScratch.makeBasis(
+      heldWeaponLookDirectionScratch,
+      heldWeaponGripUpDirectionScratch,
+      heldWeaponGripAcrossDirectionScratch
+    )
+  );
+  heldWeaponSupportHandTargetWorldQuaternionScratch
+    .copy(
+      heldWeaponSupportHandPitchWorldQuaternionScratch.setFromAxisAngle(
+        heldWeaponGripAcrossDirectionScratch,
+        heldWeaponSupportHandPitchRadians
+      )
+    )
+    .multiply(
+      heldWeaponSupportHandWorldRollQuaternionScratch.setFromAxisAngle(
+        heldWeaponLookDirectionScratch,
+        heldWeaponSupportHandRollRadians
+      )
+    )
+    .multiply(heldWeaponTargetWorldQuaternionScratch);
+  heldWeaponRightElbowPolePreferenceScratch
+    .copy(heldWeaponGripAcrossDirectionScratch)
+    .multiplyScalar(heldWeaponElbowPoleAcrossBias)
+    .addScaledVector(
+      heldWeaponGripUpDirectionScratch,
+      -heldWeaponElbowPoleDownBias
+    )
+    .normalize();
+  heldWeaponLeftElbowPolePreferenceScratch
+    .copy(heldWeaponGripAcrossDirectionScratch)
+    .multiplyScalar(-heldWeaponElbowPoleAcrossBias)
+    .addScaledVector(
+      heldWeaponGripUpDirectionScratch,
+      -heldWeaponElbowPoleDownBias
+    )
+    .normalize();
+  resolveElbowPoleDirection(
+    heldWeaponPoseRuntime.rightUpperarmBone,
+    heldWeaponPoseRuntime.rightLowerarmBone,
+    heldWeaponPoseRuntime.rightHandBone,
+    heldWeaponRightElbowPolePreferenceScratch,
+    heldWeaponRightElbowPoleTargetScratch
+  );
+  heldWeaponRightElbowPoleTargetScratch.addScaledVector(
+    heldWeaponRightElbowPolePreferenceScratch,
+    heldWeaponElbowPolePreferenceWeight
+  );
+  heldWeaponRightElbowPoleTargetScratch.normalize();
+  resolveElbowPoleDirection(
+    heldWeaponPoseRuntime.leftUpperarmBone,
+    heldWeaponPoseRuntime.leftLowerarmBone,
+    heldWeaponPoseRuntime.leftHandBone,
+    heldWeaponLeftElbowPolePreferenceScratch,
+    heldWeaponLeftElbowPoleTargetScratch
+  );
+  heldWeaponLeftElbowPoleTargetScratch.addScaledVector(
+    heldWeaponLeftElbowPolePreferenceScratch,
+    heldWeaponElbowPolePreferenceWeight
+  );
+  heldWeaponLeftElbowPoleTargetScratch.normalize();
+  attachmentRuntime.attachmentRoot.getWorldPosition(
+    heldWeaponAttachmentGripWorldPositionScratch
+  );
+  heldWeaponTargetWorldPositionScratch
+    .copy(heldWeaponAttachmentGripWorldPositionScratch)
+    .addScaledVector(
+      heldWeaponLookDirectionScratch,
+      heldWeaponAimTargetDistanceMeters
+    );
+
+  solveBoneChainTowardWorldTarget(
+    heldWeaponPoseRuntime.rightAimChain,
+    heldForwardReferenceNode,
+    heldWeaponTargetWorldPositionScratch,
+    heldWeaponAimSolveIterations
+  );
+  alignBoneTowardEffectorWorldQuaternion(
+    heldWeaponPoseRuntime.rightHandBone,
+    heldWeaponPoseRuntime.rightGripSocketNode,
+    heldWeaponTargetWorldQuaternionScratch
+  );
+  heldWeaponPoseRuntime.rightGripSocketNode.getWorldPosition(
+    heldWeaponGripSocketWorldPositionScratch
+  );
+  resolveHandWorldTargetPosition(
+    heldWeaponPoseRuntime.rightGripSocketNode,
+    heldWeaponTargetWorldQuaternionScratch,
+    heldWeaponGripSocketWorldPositionScratch,
+    heldWeaponRightHandTargetWorldPositionScratch
+  );
+  solveTwoBoneArmToHandWorldTarget(
+    heldWeaponPoseRuntime.rightUpperarmBone,
+    heldWeaponPoseRuntime.rightLowerarmBone,
+    heldWeaponPoseRuntime.rightHandBone,
+    heldWeaponRightHandTargetWorldPositionScratch,
+    heldWeaponRightElbowPoleTargetScratch
+  );
+  alignBoneTowardEffectorWorldQuaternion(
+    heldWeaponPoseRuntime.rightHandBone,
+    heldWeaponPoseRuntime.rightGripSocketNode,
+    heldWeaponTargetWorldQuaternionScratch
+  );
+  characterProofRuntime.anchorGroup.updateMatrixWorld(true);
+
+  if (attachmentRuntime.offHandSupportNode === null) {
+    return;
+  }
+
+  for (
+    let solvePass = 0;
+    solvePass < heldWeaponCoupledSolvePasses;
+    solvePass += 1
+  ) {
+    attachmentRuntime.offHandSupportNode.getWorldPosition(
+      heldWeaponGripSocketWorldPositionScratch
+    );
+    solveBoneChainTowardWorldTarget(
+      heldWeaponPoseRuntime.leftSupportChain,
+      heldWeaponPoseRuntime.leftGripSocketNode,
+      heldWeaponGripSocketWorldPositionScratch,
+      heldWeaponAimSolveIterations
+    );
+    alignBoneTowardEffectorWorldQuaternion(
+      heldWeaponPoseRuntime.leftHandBone,
+      heldWeaponPoseRuntime.leftGripSocketNode,
+      heldWeaponSupportHandTargetWorldQuaternionScratch
+    );
+    resolveHandWorldTargetPosition(
+      heldWeaponPoseRuntime.leftGripSocketNode,
+      heldWeaponSupportHandTargetWorldQuaternionScratch,
+      heldWeaponGripSocketWorldPositionScratch,
+      heldWeaponLeftHandTargetWorldPositionScratch
+    );
+    solveTwoBoneArmToHandWorldTarget(
+      heldWeaponPoseRuntime.leftUpperarmBone,
+      heldWeaponPoseRuntime.leftLowerarmBone,
+      heldWeaponPoseRuntime.leftHandBone,
+      heldWeaponLeftHandTargetWorldPositionScratch,
+      heldWeaponLeftElbowPoleTargetScratch
+    );
+    alignBoneTowardEffectorWorldQuaternion(
+      heldWeaponPoseRuntime.leftHandBone,
+      heldWeaponPoseRuntime.leftGripSocketNode,
+      heldWeaponSupportHandTargetWorldQuaternionScratch
+    );
+    attachmentRuntime.attachmentRoot.getWorldPosition(
+      heldWeaponAttachmentGripWorldPositionScratch
+    );
+    heldWeaponTargetWorldPositionScratch
+      .copy(heldWeaponAttachmentGripWorldPositionScratch)
+      .addScaledVector(
+        heldWeaponLookDirectionScratch,
+        heldWeaponAimTargetDistanceMeters
+      );
+    solveBoneChainTowardWorldTarget(
+      heldWeaponPoseRuntime.rightAimChain,
+      heldForwardReferenceNode,
+      heldWeaponTargetWorldPositionScratch,
+      heldWeaponAimSolveIterations
+    );
+    alignBoneTowardEffectorWorldQuaternion(
+      heldWeaponPoseRuntime.rightHandBone,
+      heldWeaponPoseRuntime.rightGripSocketNode,
+      heldWeaponTargetWorldQuaternionScratch
+    );
+    heldWeaponPoseRuntime.rightGripSocketNode.getWorldPosition(
+      heldWeaponGripSocketWorldPositionScratch
+    );
+    resolveHandWorldTargetPosition(
+      heldWeaponPoseRuntime.rightGripSocketNode,
+      heldWeaponTargetWorldQuaternionScratch,
+      heldWeaponGripSocketWorldPositionScratch,
+      heldWeaponRightHandTargetWorldPositionScratch
+    );
+    solveTwoBoneArmToHandWorldTarget(
+      heldWeaponPoseRuntime.rightUpperarmBone,
+      heldWeaponPoseRuntime.rightLowerarmBone,
+      heldWeaponPoseRuntime.rightHandBone,
+      heldWeaponRightHandTargetWorldPositionScratch,
+      heldWeaponRightElbowPoleTargetScratch
+    );
+    alignBoneTowardEffectorWorldQuaternion(
+      heldWeaponPoseRuntime.rightHandBone,
+      heldWeaponPoseRuntime.rightGripSocketNode,
+      heldWeaponTargetWorldQuaternionScratch
+    );
+    characterProofRuntime.anchorGroup.updateMatrixWorld(true);
+  }
 }
 
 function resolveAttachmentAlignmentQuaternion(
@@ -763,6 +1702,37 @@ function resolveAttachmentGripMarkerTranslation(
   }
 
   return gripMarkerOffset.multiplyScalar(-1);
+}
+
+function createHeldForwardReferenceNode(
+  gripAlignment: MetaverseAttachmentProofConfig["heldMount"]["gripAlignment"],
+  attachmentScene: Group
+): Object3D | null {
+  if ("attachmentForwardAxis" in gripAlignment) {
+    const forwardAxis = new Vector3(
+      gripAlignment.attachmentForwardAxis.x,
+      gripAlignment.attachmentForwardAxis.y,
+      gripAlignment.attachmentForwardAxis.z
+    );
+
+    if (forwardAxis.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+      return null;
+    }
+
+    const forwardReferenceNode = new Group();
+
+    forwardReferenceNode.name = "metaverse_attachment_forward_reference";
+    forwardReferenceNode.position.copy(forwardAxis.normalize());
+    attachmentScene.add(forwardReferenceNode);
+
+    return forwardReferenceNode;
+  }
+
+  return findNamedNode(
+    attachmentScene,
+    gripAlignment.attachmentForwardMarkerNodeName,
+    "Metaverse attachment grip alignment"
+  );
 }
 
 function createAttachmentMountRuntime(
@@ -1231,6 +2201,7 @@ function resolveFocusedMountableEnvironmentRuntime(
   readonly distanceFromCamera: number;
   readonly environmentAsset: MetaverseMountableEnvironmentDynamicAssetRuntime;
 } | null {
+  const mountableFocusHeightLeewayMeters = 0.12;
   let nearestEnvironmentAsset:
     | {
         readonly distanceFromCamera: number;
@@ -1251,7 +2222,8 @@ function resolveFocusedMountableEnvironmentRuntime(
       )
     );
     const halfExtentX = environmentAsset.collider.size.x * 0.5;
-    const halfExtentY = environmentAsset.collider.size.y * 0.5;
+    const halfExtentY =
+      environmentAsset.collider.size.y * 0.5 + mountableFocusHeightLeewayMeters;
     const halfExtentZ = environmentAsset.collider.size.z * 0.5;
     let focusLocalPosition = localCameraPosition;
     let offsetX = Math.abs(
@@ -1648,6 +2620,26 @@ function syncCharacterPresentation(
   characterProofRuntime.anchorGroup.updateMatrixWorld(true);
 }
 
+function resolveHeldCharacterAnimationVocabulary(
+  characterProofRuntime: MetaverseCharacterProofRuntime,
+  attachmentRuntime: MetaverseAttachmentProofRuntime | null,
+  targetVocabulary: MetaverseCharacterAnimationVocabularyId,
+  mountedCharacterRuntime: MountedCharacterRuntime | null
+): MetaverseCharacterAnimationVocabularyId {
+  if (
+    mountedCharacterRuntime !== null ||
+    attachmentRuntime === null ||
+    attachmentRuntime.activeMountKind !== "held" ||
+    characterProofRuntime.skeletonId !== "humanoid_v2" ||
+    targetVocabulary !== "idle" ||
+    !characterProofRuntime.actionsByVocabulary.has("aim")
+  ) {
+    return targetVocabulary;
+  }
+
+  return "aim";
+}
+
 function syncCharacterAnimation(
   characterProofRuntime: MetaverseCharacterProofRuntime,
   targetVocabulary: MetaverseCharacterAnimationVocabularyId
@@ -1721,6 +2713,7 @@ function syncCharacterAnimation(
 
 function createCharacterProofRuntime(
   characterId: string,
+  skeletonId: MetaverseCharacterProofConfig["skeletonId"],
   characterScene: Group,
   clipsByVocabulary: ReadonlyMap<
     MetaverseCharacterAnimationVocabularyId,
@@ -1765,9 +2758,11 @@ function createCharacterProofRuntime(
     anchorGroup,
     characterId,
     clipsByVocabulary,
+    heldWeaponPoseRuntime: createHeldWeaponPoseRuntime(skeletonId, characterScene),
     mixer,
     seatSocketNode,
-    scene: characterScene
+    scene: characterScene,
+    skeletonId
   };
 }
 
@@ -1777,6 +2772,7 @@ function cloneMetaverseCharacterProofRuntime(
 ): MetaverseCharacterProofRuntime {
   const clonedRuntime = createCharacterProofRuntime(
     sourceRuntime.characterId,
+    sourceRuntime.skeletonId,
     cloneCharacterScene(sourceRuntime.scene),
     sourceRuntime.clipsByVocabulary
   );
@@ -2127,6 +3123,7 @@ async function loadMetaverseCharacterProofRuntime(
 
   return createCharacterProofRuntime(
     characterProofConfig.characterId,
+    characterProofConfig.skeletonId,
     characterAsset.scene,
     clipsByVocabulary
   );
@@ -2145,6 +3142,10 @@ async function loadMetaverseAttachmentProofRuntime(
     attachmentProofConfig.heldMount,
     attachmentAsset.scene
   );
+  const heldForwardReferenceNode = createHeldForwardReferenceNode(
+    attachmentProofConfig.heldMount.gripAlignment,
+    attachmentAsset.scene
+  );
   const mountedHolsterMount =
     attachmentProofConfig.mountedHolsterMount === null
       ? null
@@ -2152,6 +3153,9 @@ async function loadMetaverseAttachmentProofRuntime(
           attachmentProofConfig.mountedHolsterMount,
           attachmentAsset.scene
         );
+  const heldOffHandSupportPointId =
+    attachmentProofConfig.heldMount.offHandSupportPointId ?? null;
+  let offHandSupportNode: Object3D | null = null;
 
   attachmentRoot.name = `metaverse_attachment/${attachmentProofConfig.attachmentId}`;
   attachmentPresentationGroup.name = `${attachmentRoot.name}/presentation`;
@@ -2170,14 +3174,26 @@ async function loadMetaverseAttachmentProofRuntime(
       supportPoint.localPosition.z
     );
     attachmentPresentationGroup.add(supportPointAnchor);
+
+    if (heldOffHandSupportPointId === supportPoint.supportPointId) {
+      offHandSupportNode = supportPointAnchor;
+    }
   }
   attachmentRoot.add(attachmentPresentationGroup);
+
+  if (heldOffHandSupportPointId !== null && offHandSupportNode === null) {
+    throw new Error(
+      `Metaverse attachment ${attachmentProofConfig.attachmentId} is missing held off-hand support point ${heldOffHandSupportPointId}.`
+    );
+  }
 
   const attachmentRuntime: MetaverseAttachmentProofRuntime = {
     activeMountKind: null,
     attachmentRoot,
+    heldForwardReferenceNode,
     heldMount,
     mountedHolsterMount,
+    offHandSupportNode,
     presentationGroup: attachmentPresentationGroup
   };
 
@@ -2630,10 +3646,58 @@ function createSkyMesh(config: MetaverseRuntimeConfig): Mesh {
   );
 }
 
-function createOceanMesh(config: MetaverseRuntimeConfig): Mesh {
-  const oceanMaterial = new MeshStandardNodeMaterial({
+function createWaterRegionFloorMesh(
+  waterRegion: MetaverseWorldPlacedWaterRegionSnapshot
+): Mesh {
+  const floorMaterial = new MeshStandardNodeMaterial({
     side: DoubleSide
   });
+  const floorEdgeBlend = smoothstep(
+    0.02,
+    0.16,
+    min(min(uv().x, oneMinus(uv().x)), min(uv().y, oneMinus(uv().y)))
+  );
+
+  floorMaterial.colorNode = mix(
+    color(0.58, 0.54, 0.42),
+    color(0.36, 0.39, 0.35),
+    floorEdgeBlend
+  );
+  floorMaterial.emissiveNode = color(0.03, 0.09, 0.12).mul(
+    oneMinus(floorEdgeBlend).mul(0.28)
+  );
+  floorMaterial.roughnessNode = float(0.96);
+  floorMaterial.metalnessNode = float(0.02);
+
+  const floorMesh = new Mesh(
+    new PlaneGeometry(waterRegion.halfExtents.x * 2, waterRegion.halfExtents.z * 2),
+    floorMaterial
+  );
+
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.rotation.y = waterRegion.rotationYRadians;
+  floorMesh.position.set(
+    waterRegion.translation.x,
+    resolveMetaverseWorldWaterRegionFloorHeightMeters(waterRegion),
+    waterRegion.translation.z
+  );
+
+  return floorMesh;
+}
+
+function createWaterRegionSurfaceMesh(
+  config: MetaverseRuntimeConfig,
+  waterRegion: MetaverseWorldPlacedWaterRegionSnapshot
+): Mesh {
+  const oceanMaterial = new MeshStandardNodeMaterial({
+    side: DoubleSide,
+    transparent: true
+  });
+  const shorelineBlend = smoothstep(
+    0.015,
+    0.12,
+    min(min(uv().x, oneMinus(uv().x)), min(uv().y, oneMinus(uv().y)))
+  );
   const wavePrimary = sin(
     positionLocal.x
       .mul(config.ocean.waveFrequencies.primary)
@@ -2656,6 +3720,11 @@ function createOceanMesh(config: MetaverseRuntimeConfig): Mesh {
     .add(waveRipple.mul(0.18))
     .mul(config.ocean.waveAmplitude);
   const depthBlend = smoothstep(0.08, 1, uv().y);
+  const waterDepthBlend = smoothstep(
+    0.8,
+    6,
+    float(waterRegion.halfExtents.y * 2)
+  );
   const viewDirection = cameraPosition.sub(positionWorld).normalize();
   const fresnel = pow(oneMinus(abs(dot(normalWorld, viewDirection))), 3);
 
@@ -2663,18 +3732,19 @@ function createOceanMesh(config: MetaverseRuntimeConfig): Mesh {
   oceanMaterial.colorNode = mix(
     color(...config.ocean.nearColor),
     color(...config.ocean.farColor),
-    depthBlend
+    depthBlend.mul(0.58).add(waterDepthBlend.mul(0.42))
   ).add(color(...config.environment.sunColor).mul(fresnel.mul(0.12)));
   oceanMaterial.emissiveNode = color(...config.ocean.emissiveColor).mul(
-    fresnel.mul(0.48).add(abs(waveRipple).mul(0.03))
+    fresnel.mul(0.48).add(abs(waveRipple).mul(0.03)).mul(shorelineBlend)
   );
+  oceanMaterial.opacityNode = float(0.86).mul(shorelineBlend);
   oceanMaterial.roughnessNode = float(config.ocean.roughness);
   oceanMaterial.metalnessNode = float(0.02);
 
   const oceanMesh = new Mesh(
     new PlaneGeometry(
-      config.ocean.planeWidth,
-      config.ocean.planeDepth,
+      waterRegion.halfExtents.x * 2,
+      waterRegion.halfExtents.z * 2,
       config.ocean.segmentCount,
       config.ocean.segmentCount
     ),
@@ -2682,9 +3752,25 @@ function createOceanMesh(config: MetaverseRuntimeConfig): Mesh {
   );
 
   oceanMesh.rotation.x = -Math.PI / 2;
-  oceanMesh.position.y = config.ocean.height;
+  oceanMesh.rotation.y = waterRegion.rotationYRadians;
+  oceanMesh.position.set(
+    waterRegion.translation.x,
+    resolveMetaverseWorldWaterRegionSurfaceHeightMeters(waterRegion),
+    waterRegion.translation.z
+  );
 
   return oceanMesh;
+}
+
+function createOceanMesh(config: MetaverseRuntimeConfig): Group {
+  const oceanGroup = new Group();
+
+  for (const waterRegion of metaverseWorldLayout.waterRegionSnapshots) {
+    oceanGroup.add(createWaterRegionFloorMesh(waterRegion));
+    oceanGroup.add(createWaterRegionSurfaceMesh(config, waterRegion));
+  }
+
+  return oceanGroup;
 }
 
 function createPortalSharedRenderResources(): PortalSharedRenderResources {
@@ -3211,9 +4297,19 @@ export function createMetaverseScene(
     ) {
       syncCamera(camera, cameraSnapshot);
       if (characterProofRuntime !== null) {
+        if (characterProofRuntime.heldWeaponPoseRuntime !== null) {
+          restoreHumanoidV2HeldWeaponPoseRuntime(
+            characterProofRuntime.heldWeaponPoseRuntime
+          );
+        }
         syncCharacterAnimation(
           characterProofRuntime,
-          characterPresentation?.animationVocabulary ?? "idle"
+          resolveHeldCharacterAnimationVocabulary(
+            characterProofRuntime,
+            attachmentProofRuntime,
+            characterPresentation?.animationVocabulary ?? "idle",
+            mountedCharacterRuntime
+          )
         );
         characterProofRuntime.mixer.update(deltaSeconds);
       }
@@ -3247,6 +4343,21 @@ export function createMetaverseScene(
         applyCharacterMountedAnchorTransform(
           characterProofRuntime,
           mountedCharacterRuntime
+        );
+      }
+      if (
+        characterProofRuntime !== null &&
+        attachmentProofRuntime !== null &&
+        characterProofRuntime.heldWeaponPoseRuntime !== null &&
+        attachmentProofRuntime.activeMountKind === "held" &&
+        characterPresentation !== null &&
+        mountedCharacterRuntime === null
+      ) {
+        syncHumanoidV2HeldWeaponPose(
+          characterProofRuntime,
+          characterProofRuntime.heldWeaponPoseRuntime,
+          attachmentProofRuntime,
+          cameraSnapshot
         );
       }
       syncRemoteCharacterPresentations(

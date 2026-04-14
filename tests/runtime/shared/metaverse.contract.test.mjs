@@ -19,6 +19,7 @@ import {
   createMetaversePresenceWebTransportCommandRequest,
   createMetaversePresenceWebTransportRosterRequest,
   createMetaversePresenceWebTransportServerEventMessage,
+  createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncDriverVehicleControlCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerTraversalIntentCommand,
@@ -26,6 +27,7 @@ import {
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
+  createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
   createMetaverseRealtimeWorldWebTransportServerEventMessage,
   createMetaverseRealtimeWorldWebTransportSnapshotRequest,
@@ -98,6 +100,10 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
       playerId,
       pose: {
         animationVocabulary: "walk",
+        look: {
+          pitchRadians: -0.25,
+          yawRadians: 0.75
+        },
         locomotionMode: "swim",
         mountedOccupancy: {
           environmentAssetId: " metaverse-hub-skiff-v1 ",
@@ -148,6 +154,8 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
   assert.equal(rosterSnapshot.players.length, 1);
   assert.equal(rosterSnapshot.players[0]?.characterId, "metaverse-mannequin-v1");
   assert.equal(rosterSnapshot.players[0]?.pose.stateSequence, 3);
+  assert.equal(rosterSnapshot.players[0]?.pose.look.pitchRadians, -0.25);
+  assert.equal(rosterSnapshot.players[0]?.pose.look.yawRadians, 0.75);
   assert.equal(rosterSnapshot.players[0]?.pose.yawRadians, Math.PI * 3);
   assert.equal(
     rosterSnapshot.players[0]?.pose.mountedOccupancy?.environmentAssetId,
@@ -163,6 +171,8 @@ test("metaverse presence contracts freeze roster and normalize ids", () => {
   assert.ok(Object.isFrozen(rosterSnapshot.players[0]?.pose.mountedOccupancy));
   assert.equal(joinCommand.playerId, "harbor-pilot-1");
   assert.equal(joinCommand.pose.animationVocabulary, "idle");
+  assert.equal(joinCommand.pose.look.pitchRadians, 0);
+  assert.equal(joinCommand.pose.look.yawRadians, Math.PI * 3);
   assert.equal(joinCommand.pose.locomotionMode, "grounded");
   assert.equal(joinCommand.pose.mountedOccupancy?.occupancyKind, "seat");
 });
@@ -254,6 +264,8 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
     "driver"
   );
   assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 7);
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, Math.PI * 3);
   assert.equal(
     worldSnapshot.vehicles[0]?.seats[0]?.occupantPlayerId,
     playerId
@@ -403,6 +415,33 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
     "sync-player-traversal-intent"
   );
   assert.equal(webTransportRequest.command.intent.inputSequence, 4);
+});
+
+test("metaverse realtime world look intent commands normalize explicit transport inputs", () => {
+  const playerId = createMetaversePlayerId(" harbor-pilot-1 ");
+
+  assert.notEqual(playerId, null);
+
+  const command = createMetaverseSyncPlayerLookIntentCommand({
+    lookIntent: {
+      pitchRadians: Math.PI * 4.5,
+      yawRadians: -Math.PI * 3.25
+    },
+    lookSequence: 6.8,
+    playerId
+  });
+  const webTransportRequest =
+    createMetaverseRealtimeWorldWebTransportCommandRequest({
+      command
+    });
+
+  assert.equal(command.type, "sync-player-look-intent");
+  assert.equal(command.lookSequence, 6);
+  assert.equal(command.lookIntent.pitchRadians, Math.PI * 4.5);
+  assert.equal(command.lookIntent.yawRadians, -Math.PI * 3.25);
+  assert.equal(webTransportRequest.type, "world-command-request");
+  assert.equal(webTransportRequest.command.type, "sync-player-look-intent");
+  assert.equal(webTransportRequest.command.lookSequence, 6);
 });
 
 test("metaverse realtime world mounted occupancy commands normalize explicit reliable transitions", () => {
@@ -641,6 +680,17 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
         playerId: metaversePlayerId
       })
     });
+  const playerLookIntentDatagram =
+    createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram({
+      command: createMetaverseSyncPlayerLookIntentCommand({
+        lookIntent: {
+          pitchRadians: 0.45,
+          yawRadians: -1.2
+        },
+        lookSequence: 9.4,
+        playerId: metaversePlayerId
+      })
+    });
   const playerPresenceDatagram =
     createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram({
       command: createCoopSyncPlayerPresenceCommand({
@@ -695,6 +745,18 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
   );
   assert.equal(playerTraversalIntentDatagram.command.intent.moveAxis, 1);
   assert.ok(Object.isFrozen(playerTraversalIntentDatagram));
+  assert.equal(
+    playerLookIntentDatagram.type,
+    "world-player-look-intent-datagram"
+  );
+  assert.equal(
+    playerLookIntentDatagram.command.type,
+    "sync-player-look-intent"
+  );
+  assert.equal(playerLookIntentDatagram.command.lookSequence, 9);
+  assert.equal(playerLookIntentDatagram.command.lookIntent.pitchRadians, 0.45);
+  assert.equal(playerLookIntentDatagram.command.lookIntent.yawRadians, -1.2);
+  assert.ok(Object.isFrozen(playerLookIntentDatagram));
 
   assert.equal(
     playerPresenceDatagram.type,

@@ -115,6 +115,10 @@ function parsePresencePose(poseBody: Record<string, unknown>) {
     poseBody.locomotionMode === undefined
       ? undefined
       : readStringField(poseBody.locomotionMode, "locomotionMode");
+  const look =
+    poseBody.look === undefined
+      ? undefined
+      : readRecordField(poseBody.look, "look");
 
   if (
     animationVocabulary !== undefined &&
@@ -183,6 +187,14 @@ function parsePresencePose(poseBody: Record<string, unknown>) {
       : {
           locomotionMode:
             locomotionMode as typeof metaversePresenceLocomotionModeIds[number]
+        }),
+    ...(look === undefined
+      ? {}
+      : {
+          look: {
+            pitchRadians: readNumberField(look.pitchRadians, "look.pitchRadians"),
+            yawRadians: readNumberField(look.yawRadians, "look.yawRadians")
+          }
         }),
     ...(mountedOccupancy === undefined
       ? {}

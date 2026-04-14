@@ -348,6 +348,8 @@ terminate_existing_processes() {
   local label="$1"
   shift
   local target_pids=("$@")
+  local lingering_pids=()
+  local target_pid=""
 
   if (( ${#target_pids[@]} == 0 )); then
     return 0
@@ -356,7 +358,7 @@ terminate_existing_processes() {
   echo "Stopping $label (${target_pids[*]})."
 
   for target_pid in "${target_pids[@]}"; do
-    kill "$target_pid" 2>/dev/null || true
+    kill -TERM "$target_pid" 2>/dev/null || true
   done
 
   for target_pid in "${target_pids[@]}"; do
@@ -369,7 +371,31 @@ terminate_existing_processes() {
     done
 
     if kill -0 "$target_pid" 2>/dev/null; then
-      echo "$label process $target_pid did not exit cleanly."
+      lingering_pids+=("$target_pid")
+    fi
+  done
+
+  if (( ${#lingering_pids[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "$label process ${lingering_pids[*]} did not exit after SIGTERM. Sending SIGKILL."
+
+  for target_pid in "${lingering_pids[@]}"; do
+    kill -KILL "$target_pid" 2>/dev/null || true
+  done
+
+  for target_pid in "${lingering_pids[@]}"; do
+    for _ in {1..20}; do
+      if ! kill -0 "$target_pid" 2>/dev/null; then
+        break
+      fi
+
+      sleep 0.1
+    done
+
+    if kill -0 "$target_pid" 2>/dev/null; then
+      echo "$label process $target_pid did not exit cleanly after SIGKILL."
       exit 1
     fi
   done

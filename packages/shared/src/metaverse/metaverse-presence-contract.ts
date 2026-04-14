@@ -90,8 +90,19 @@ export interface MetaversePresenceMountedOccupancySnapshotInput {
   readonly seatId: string | null;
 }
 
+export interface MetaversePresenceLookSnapshot {
+  readonly pitchRadians: Radians;
+  readonly yawRadians: Radians;
+}
+
+export interface MetaversePresenceLookSnapshotInput {
+  readonly pitchRadians?: number;
+  readonly yawRadians?: number;
+}
+
 export interface MetaversePresencePoseSnapshot {
   readonly animationVocabulary: MetaversePresenceAnimationVocabularyId;
+  readonly look: MetaversePresenceLookSnapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
   readonly position: MetaversePresenceVector3Snapshot;
@@ -101,6 +112,7 @@ export interface MetaversePresencePoseSnapshot {
 
 export interface MetaversePresencePoseSnapshotInput {
   readonly animationVocabulary?: MetaversePresenceAnimationVocabularyId;
+  readonly look?: MetaversePresenceLookSnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy?: MetaversePresenceMountedOccupancySnapshotInput | null;
   readonly position: MetaversePresenceVector3SnapshotInput;
@@ -340,8 +352,19 @@ export function createMetaversePresenceMountedOccupancySnapshot({
   });
 }
 
+export function createMetaversePresenceLookSnapshot({
+  pitchRadians = 0,
+  yawRadians = 0
+}: MetaversePresenceLookSnapshotInput): MetaversePresenceLookSnapshot {
+  return Object.freeze({
+    pitchRadians: createRadians(pitchRadians),
+    yawRadians: createRadians(yawRadians)
+  });
+}
+
 export function createMetaversePresencePoseSnapshot({
   animationVocabulary,
+  look,
   locomotionMode,
   mountedOccupancy = null,
   position,
@@ -350,6 +373,10 @@ export function createMetaversePresencePoseSnapshot({
 }: MetaversePresencePoseSnapshotInput): MetaversePresencePoseSnapshot {
   return Object.freeze({
     animationVocabulary: resolveAnimationVocabulary(animationVocabulary),
+    look: createMetaversePresenceLookSnapshot({
+      pitchRadians: look?.pitchRadians ?? 0,
+      yawRadians: look?.yawRadians ?? yawRadians
+    }),
     locomotionMode: resolveLocomotionMode(locomotionMode),
     mountedOccupancy:
       mountedOccupancy === null

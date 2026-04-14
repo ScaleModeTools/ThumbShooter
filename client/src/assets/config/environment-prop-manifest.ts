@@ -12,11 +12,11 @@ import {
   metaverseHubPushableCrateEnvironmentAssetId as sharedMetaverseHubPushableCrateEnvironmentAssetId,
   metaverseHubShorelineEnvironmentAssetId as sharedMetaverseHubShorelineEnvironmentAssetId,
   metaverseHubSkiffEnvironmentAssetId as sharedMetaverseHubSkiffEnvironmentAssetId,
-  readMetaverseWorldSurfaceAssetAuthoring
+  metaverseWorldLayout
 } from "@webgpu-metaverse/shared";
 
 function resolveSurfaceColliders(environmentAssetId: string) {
-  const surfaceAsset = readMetaverseWorldSurfaceAssetAuthoring(environmentAssetId);
+  const surfaceAsset = metaverseWorldLayout.readSurfaceAsset(environmentAssetId);
 
   if (surfaceAsset === null) {
     return null;

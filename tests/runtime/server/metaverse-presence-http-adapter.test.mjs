@@ -63,6 +63,10 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
     playerId,
       pose: {
         animationVocabulary: "idle",
+        look: {
+          pitchRadians: -0.15,
+          yawRadians: 0.25
+        },
         locomotionMode: "grounded",
         mountedOccupancy: null,
         position: {
@@ -90,6 +94,8 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(joinResponse.statusCode, 200);
   assert.equal(joinResponse.json.type, "presence-roster");
   assert.equal(joinResponse.json.roster.players[0]?.playerId, "harbor-pilot-1");
+  assert.equal(joinResponse.json.roster.players[0]?.pose.look.pitchRadians, -0.15);
+  assert.equal(joinResponse.json.roster.players[0]?.pose.look.yawRadians, 0.25);
   assert.equal(joinResponse.json.roster.players[0]?.pose.position.x, 0);
   assert.equal(joinResponse.json.roster.players[0]?.pose.stateSequence, 0);
 
@@ -99,6 +105,10 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
       playerId,
       pose: {
         animationVocabulary: "walk",
+        look: {
+          pitchRadians: 0.3,
+          yawRadians: 1.1
+        },
         locomotionMode: "mounted",
         mountedOccupancy: {
           environmentAssetId: "metaverse-hub-skiff-v1",
@@ -133,6 +143,8 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(syncResponse.statusCode, 200);
   assert.equal(syncResponse.json.roster.players[0]?.pose.position.x, 2.5);
   assert.equal(syncResponse.json.roster.players[0]?.pose.stateSequence, 1);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.look.pitchRadians, 0.3);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.look.yawRadians, 0.6);
   assert.equal(syncResponse.json.roster.players[0]?.pose.locomotionMode, "mounted");
   assert.equal(
     syncResponse.json.roster.players[0]?.pose.mountedOccupancy?.seatId,
@@ -151,6 +163,8 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(pollResponse.statusCode, 200);
   assert.equal(pollResponse.json.type, "presence-roster");
   assert.equal(pollResponse.json.roster.players.length, 1);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.look.pitchRadians, 0.3);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.look.yawRadians, 0.6);
   assert.equal(pollResponse.json.roster.players[0]?.pose.position.x, 2.5);
   assert.equal(
     pollResponse.json.roster.players[0]?.pose.mountedOccupancy?.environmentAssetId,
