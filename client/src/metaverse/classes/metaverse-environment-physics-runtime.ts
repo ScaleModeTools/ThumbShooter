@@ -1,7 +1,9 @@
 import type { Object3D, Scene } from "three/webgpu";
 import {
+  createMetaverseTraversalColliderMetadataSnapshot,
+  shouldConsiderMetaverseWaterborneTraversalCollider,
   type MetaverseWorldPlacedSurfaceColliderSnapshot
-} from "@webgpu-metaverse/shared";
+} from "@webgpu-metaverse/shared/metaverse";
 
 import {
   MetaverseDynamicCuboidBodyRuntime,
@@ -324,14 +326,9 @@ export class MetaverseEnvironmentPhysicsRuntime {
       if (colliderMetadata === undefined) {
         return true;
       }
-
-      if (colliderMetadata.traversalAffordance === "support") {
-        return false;
-      }
-
-      return (
-        excludedOwnerEnvironmentAssetId === null ||
-        colliderMetadata.ownerEnvironmentAssetId !== excludedOwnerEnvironmentAssetId
+      return shouldConsiderMetaverseWaterborneTraversalCollider(
+        colliderMetadata,
+        excludedOwnerEnvironmentAssetId
       );
     };
   }
@@ -496,10 +493,7 @@ export class MetaverseEnvironmentPhysicsRuntime {
         this.#remoteCharacterBlockerHandles.add(blockerCollider);
         this.#surfaceColliderMetadataByHandle.set(
           blockerCollider,
-          Object.freeze({
-            ownerEnvironmentAssetId: blockerSnapshot.ownerEnvironmentAssetId,
-            traversalAffordance: blockerSnapshot.traversalAffordance
-          })
+          createMetaverseTraversalColliderMetadataSnapshot(blockerSnapshot)
         );
       } else {
         existingCollider.setTranslation(blockerSnapshot.translation);
@@ -546,10 +540,7 @@ export class MetaverseEnvironmentPhysicsRuntime {
       this.#environmentColliders.push(environmentCollider);
       this.#surfaceColliderMetadataByHandle.set(
         environmentCollider,
-        Object.freeze({
-          ownerEnvironmentAssetId: collider.ownerEnvironmentAssetId,
-          traversalAffordance: collider.traversalAffordance
-        })
+        createMetaverseTraversalColliderMetadataSnapshot(collider)
       );
     }
   }
@@ -682,10 +673,7 @@ export class MetaverseEnvironmentPhysicsRuntime {
 
       this.#surfaceColliderMetadataByHandle.set(
         collider,
-        Object.freeze({
-          ownerEnvironmentAssetId: colliderSnapshot.ownerEnvironmentAssetId,
-          traversalAffordance: colliderSnapshot.traversalAffordance
-        })
+        createMetaverseTraversalColliderMetadataSnapshot(colliderSnapshot)
       );
     }
   }

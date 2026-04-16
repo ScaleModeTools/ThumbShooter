@@ -305,6 +305,53 @@ test("canonical humanoid rig definitions keep stable bone and socket parentage",
   assert.deepEqual(skeletonSocketParentById.humanoid_v2, humanoidV2SocketParentById);
 });
 
+test("humanoid_v2 rig metadata keeps arm-only aim layering and head anchors explicit", async () => {
+  const {
+    humanoidV2HeadAnchorNodeNames,
+    humanoidV2PistolAimOverlayTrackPrefixes,
+    isHumanoidV2PistolAimOverlayTrack
+  } = await clientLoader.load("/src/metaverse/render/humanoid-v2-rig.ts");
+  const humanoidDocument = await loadMetaverseAssetDocument(
+    "/models/metaverse/characters/mesh2motion-humanoid.glb"
+  );
+  const reachableNodeNames = collectReachableNamedNodeNames(humanoidDocument);
+
+  assert.deepEqual(humanoidV2HeadAnchorNodeNames, {
+    head: "head",
+    headLeaf: "head_leaf",
+    headSocket: "head_socket",
+    neck: "neck_01"
+  });
+  assert.deepEqual(humanoidV2PistolAimOverlayTrackPrefixes, [
+    "clavicle_l",
+    "upperarm_l",
+    "lowerarm_l",
+    "hand_l",
+    "clavicle_r",
+    "upperarm_r",
+    "lowerarm_r",
+    "hand_r",
+    "thumb_",
+    "index_",
+    "middle_",
+    "ring_",
+    "pinky_"
+  ]);
+  assert.equal(isHumanoidV2PistolAimOverlayTrack("upperarm_l.quaternion"), true);
+  assert.equal(isHumanoidV2PistolAimOverlayTrack("index_02_r.rotation"), true);
+  assert.equal(isHumanoidV2PistolAimOverlayTrack("spine_03.quaternion"), false);
+  assert.equal(isHumanoidV2PistolAimOverlayTrack("head.quaternion"), false);
+  assert.equal(isHumanoidV2PistolAimOverlayTrack("thigh_r.quaternion"), false);
+
+  for (const nodeName of Object.values(humanoidV2HeadAnchorNodeNames)) {
+    assert.equal(
+      reachableNodeNames.has(nodeName),
+      true,
+      `Expected humanoid_v2 head anchor node ${nodeName} to stay reachable in the delivered GLB.`
+    );
+  }
+});
+
 test("character manifests expose dual humanoid skeletons on the same vocabulary", async () => {
   const [
     {
@@ -447,7 +494,7 @@ test("metaverse asset manifests keep stable shipped delivery paths and LOD namin
   }
 });
 
-test("attachment manifests keep explicit trigger-hand grip alignment metadata for socketed tools", async () => {
+test("attachment manifests keep explicit attachment socket ownership for held and holstered tools", async () => {
   const {
     attachmentModelManifest,
     metaverseServicePistolAttachmentAssetId
@@ -458,29 +505,17 @@ test("attachment manifests keep explicit trigger-hand grip alignment metadata fo
 
   assert.ok(pistolAttachment);
   assert.equal(pistolAttachment.defaultSocketId, "hand_r_socket");
-  assert.deepEqual(pistolAttachment.gripAlignment, {
-    attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
-    attachmentGripMarkerNodeNameBySocketId: {
-      hand_l_socket: "metaverse_service_pistol_grip_right_marker",
-      hand_r_socket: "metaverse_service_pistol_grip_left_marker"
-    },
-    attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
-    socketForwardAxis: { x: 1, y: 0, z: 0 },
-    socketOffset: { x: 0, y: 0.03, z: 0 },
-    socketUpAxis: { x: 0, y: 1, z: 0 }
+  assert.deepEqual(pistolAttachment.heldMount, {
+    attachmentSocketNodeNameBySocketId: {
+      hand_l_socket: "metaverse_service_pistol_trigger_hand_l_socket",
+      hand_r_socket: "metaverse_service_pistol_trigger_hand_r_socket"
+    }
   });
   assert.deepEqual(pistolAttachment.offHandSupportPointIdBySocketId, {
     hand_r_socket: "grip-support-right"
   });
   assert.deepEqual(pistolAttachment.mountedHolster, {
-    gripAlignment: {
-      attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
-      attachmentGripMarkerNodeName: "metaverse_service_pistol_holster_marker",
-      attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
-      socketForwardAxis: { x: 0, y: -1, z: 0 },
-      socketOffset: { x: 0.16, y: -0.02, z: -0.04 },
-      socketUpAxis: { x: 0, y: 0, z: -1 }
-    },
+    attachmentSocketNodeName: "metaverse_service_pistol_back_socket",
     socketName: "back_socket"
   });
   assert.deepEqual(pistolAttachment.supportPoints, [
@@ -491,27 +526,27 @@ test("attachment manifests keep explicit trigger-hand grip alignment metadata fo
   ]);
 });
 
-test("pistol proof asset keeps standardized forward, up, and grip-side markers", async () => {
+test("pistol proof asset keeps explicit trigger-hand and holster socket nodes", async () => {
   const document = await loadMetaverseAssetDocument(
     "/models/metaverse/attachments/metaverse-service-pistol.gltf"
   );
   const nodesByName = collectNamedNodeDescriptors(document);
 
   assert.deepEqual(
-    nodesByName.get("metaverse_service_pistol_forward_marker")?.translation,
-    [1, 0, 0]
+    nodesByName.get("metaverse_service_pistol_trigger_hand_l_socket")?.translation,
+    [0.04, -0.045, -0.025]
   );
   assert.deepEqual(
-    nodesByName.get("metaverse_service_pistol_up_marker")?.translation,
-    [0, 1, 0]
+    nodesByName.get("metaverse_service_pistol_trigger_hand_r_socket")?.translation,
+    [0.04, -0.045, 0.025]
   );
   assert.deepEqual(
-    nodesByName.get("metaverse_service_pistol_grip_right_marker")?.translation,
-    [0.04, 0, -0.025]
+    nodesByName.get("metaverse_service_pistol_back_socket")?.translation,
+    [0.16, -0.04, -0.02]
   );
   assert.deepEqual(
-    nodesByName.get("metaverse_service_pistol_grip_left_marker")?.translation,
-    [0.04, 0, 0.025]
+    nodesByName.get("metaverse_service_pistol_back_socket")?.rotation,
+    [0, 0.7071067811865475, -0.7071067811865476, 0]
   );
 });
 

@@ -72,7 +72,8 @@ function createMetaverseSyncPlayerTraversalIntentCommand(input) {
       },
       facing: normalizedFacing,
       inputSequence: nextIntent.inputSequence,
-      locomotionMode: nextIntent.locomotionMode
+      locomotionMode: nextIntent.locomotionMode,
+      orientationSequence: nextIntent.orientationSequence
     }
   });
 }
@@ -118,7 +119,8 @@ function createTraversalIntentInput(input) {
         0
     },
     inputSequence: input.inputSequence,
-    locomotionMode: input.locomotionMode
+    locomotionMode: input.locomotionMode,
+    orientationSequence: input.orientationSequence
   };
 }
 
@@ -186,6 +188,7 @@ function createWorldEvent({
   snapshotSequence,
   currentTick,
   lastProcessedInputSequence = snapshotSequence,
+  lastProcessedTraversalOrientationSequence = lastProcessedInputSequence,
   authoritativeJumpActionSequence = 0,
   lastProcessedLookSequence = 0,
   serverTimeMs,
@@ -222,6 +225,7 @@ function createWorldEvent({
         },
         lastProcessedInputSequence,
         lastProcessedLookSequence,
+        lastProcessedTraversalOrientationSequence,
         stateSequence: snapshotSequence,
         username: "Harbor Pilot",
           yawRadians: 0
@@ -952,6 +956,7 @@ test("MetaverseWorldClient prefers latest-wins traversal intent datagrams over r
         jump: false,
         locomotionMode: "grounded",
         moveAxis: 1,
+        orientationSequence: 2,
         strafeAxis: 0,
         yawAxis: 0.5
       },
@@ -972,6 +977,7 @@ test("MetaverseWorldClient flushes traversal intent changes immediately and rese
 
   const scheduler = createManualTimerScheduler();
   const sentDatagrams = [];
+  let wallClockMs = 10_000;
   const initialWorldEvent = createWorldEvent({
     currentTick: 10,
     lastProcessedInputSequence: 0,
@@ -1008,6 +1014,7 @@ test("MetaverseWorldClient flushes traversal intent changes immediately and rese
         }
       },
       clearTimeout: scheduler.clearTimeout,
+      readWallClockMs: () => wallClockMs,
       setTimeout: scheduler.setTimeout
     }
   );
@@ -1051,6 +1058,7 @@ test("MetaverseWorldClient keeps pure facing turns on the traversal lane without
 
   const scheduler = createManualTimerScheduler();
   const sentDatagrams = [];
+  let wallClockMs = 10_000;
   const initialWorldEvent = createWorldEvent({
     currentTick: 10,
     lastProcessedInputSequence: 0,
@@ -1087,6 +1095,7 @@ test("MetaverseWorldClient keeps pure facing turns on the traversal lane without
         }
       },
       clearTimeout: scheduler.clearTimeout,
+      readWallClockMs: () => wallClockMs,
       setTimeout: scheduler.setTimeout
     }
   );
@@ -1105,6 +1114,7 @@ test("MetaverseWorldClient keeps pure facing turns on the traversal lane without
     }),
     playerId
   });
+  wallClockMs += 16;
   client.syncPlayerTraversalIntent({
     intent: createTraversalIntentInput({
       boost: false,
@@ -1119,7 +1129,12 @@ test("MetaverseWorldClient keeps pure facing turns on the traversal lane without
   });
 
   assert.equal(client.latestPlayerInputSequence, 1);
+  assert.equal(client.latestPlayerTraversalOrientationSequence, 2);
   assert.equal(client.latestPlayerTraversalIntentSnapshot?.inputSequence, 1);
+  assert.equal(
+    client.latestPlayerTraversalIntentSnapshot?.orientationSequence,
+    2
+  );
   assert.equal(
     client.latestPlayerTraversalIntentSnapshot?.facing.yawRadians,
     Math.PI * 0.5
@@ -1130,8 +1145,146 @@ test("MetaverseWorldClient keeps pure facing turns on the traversal lane without
 
   assert.equal(sentDatagrams.length, 1);
   assert.equal(sentDatagrams[0]?.intent.inputSequence, 1);
+  assert.equal(sentDatagrams[0]?.intent.orientationSequence, 2);
   assert.equal(sentDatagrams[0]?.intent.bodyControl.turnAxis, 0.25);
   assert.equal(sentDatagrams[0]?.intent.facing.yawRadians, Math.PI * 0.5);
+});
+
+test("MetaverseWorldClient keeps resending stationary traversal facing refreshes until orientation ack catches up", async () => {
+  const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
+  const playerId = createMetaversePlayerId("stationary-facing-ack-harbor-pilot-1");
+
+  assert.notEqual(playerId, null);
+
+  const scheduler = createManualTimerScheduler();
+  const sentDatagrams = [];
+  let snapshotStreamHandlers = null;
+  const initialWorldEvent = createWorldEvent({
+    currentTick: 10,
+    lastProcessedInputSequence: 0,
+    lastProcessedTraversalOrientationSequence: 0,
+    playerId,
+    serverTimeMs: 10_000,
+    snapshotSequence: 1,
+    vehicleX: 8
+  });
+  const client = new MetaverseWorldClient(
+    {
+      defaultCommandIntervalMs: createMilliseconds(50),
+      defaultPollIntervalMs: createMilliseconds(50),
+      maxBufferedSnapshots: 2,
+      serverOrigin: "http://127.0.0.1:3210",
+      worldCommandPath: "/metaverse/world/commands",
+      worldPath: "/metaverse/world"
+    },
+    {
+      latestWinsDatagramTransport: {
+        async sendDriverVehicleControlDatagram() {},
+        async sendPlayerTraversalIntentDatagram(command) {
+          sentDatagrams.push(command);
+        }
+      },
+      snapshotStreamTransport: {
+        subscribeWorldSnapshots(_playerId, handlers) {
+          snapshotStreamHandlers = handlers;
+          handlers.onWorldEvent(initialWorldEvent);
+          return Object.freeze({
+            close() {}
+          });
+        }
+      },
+      transport: {
+        async pollWorldSnapshot() {
+          return initialWorldEvent;
+        },
+        async sendCommand() {
+          return initialWorldEvent;
+        }
+      },
+      clearTimeout: scheduler.clearTimeout,
+      setTimeout: scheduler.setTimeout
+    }
+  );
+
+  await client.ensureConnected(playerId);
+
+  client.syncPlayerTraversalIntent({
+    intent: createTraversalIntentInput({
+      boost: false,
+      jump: false,
+      locomotionMode: "grounded",
+      moveAxis: 0,
+      strafeAxis: 0,
+      yawAxis: 0,
+      yawRadians: 0
+    }),
+    playerId
+  });
+
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentDatagrams.length, 1);
+  assert.equal(sentDatagrams[0]?.intent.inputSequence, 1);
+  assert.equal(sentDatagrams[0]?.intent.orientationSequence, 1);
+
+  snapshotStreamHandlers?.onWorldEvent(
+    createWorldEvent({
+      currentTick: 11,
+      lastProcessedInputSequence: 1,
+      lastProcessedTraversalOrientationSequence: 1,
+      playerId,
+      serverTimeMs: 10_050,
+      snapshotSequence: 2,
+      vehicleX: 8
+    })
+  );
+
+  client.syncPlayerTraversalIntent({
+    intent: createTraversalIntentInput({
+      boost: false,
+      jump: false,
+      locomotionMode: "grounded",
+      moveAxis: 0,
+      strafeAxis: 0,
+      yawAxis: 0.4,
+      yawRadians: Math.PI * 0.5
+    }),
+    playerId
+  });
+
+  assert.equal(client.latestPlayerInputSequence, 1);
+  assert.equal(client.latestPlayerTraversalOrientationSequence, 2);
+  assert.equal(scheduler.pendingTasks.at(-1)?.delay, 0);
+
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentDatagrams.length, 2);
+  assert.equal(sentDatagrams[1]?.intent.inputSequence, 1);
+  assert.equal(sentDatagrams[1]?.intent.orientationSequence, 2);
+  assert.equal(scheduler.pendingTasks.at(-1)?.delay, 50);
+
+  scheduler.runNext(50);
+  await flushAsyncWork();
+
+  assert.equal(sentDatagrams.length, 3);
+  assert.equal(sentDatagrams[2]?.intent.inputSequence, 1);
+  assert.equal(sentDatagrams[2]?.intent.orientationSequence, 2);
+
+  snapshotStreamHandlers?.onWorldEvent(
+    createWorldEvent({
+      currentTick: 12,
+      lastProcessedInputSequence: 1,
+      lastProcessedTraversalOrientationSequence: 2,
+      playerId,
+      serverTimeMs: 10_100,
+      snapshotSequence: 3,
+      vehicleX: 8
+    })
+  );
+
+  assert.equal(scheduler.pendingTasks.length, 0);
 });
 
 test("MetaverseWorldClient prefers latest-wins player look datagrams over reliable commands when available", async () => {
@@ -1522,6 +1675,7 @@ test("MetaverseWorldClient preserves a fast jump tap as an acknowledged edge thr
         jumpActionSequence: 1,
         locomotionMode: "grounded",
         moveAxis: 0,
+        orientationSequence: 1,
         strafeAxis: 0,
         yawAxis: 0
       },

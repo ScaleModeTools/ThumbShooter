@@ -2863,17 +2863,6 @@ export class MetaverseTraversalRuntime {
         ),
         this.#config.camera.initialYawRadians
       );
-    const presentationSwimSnapshot =
-      this.#locomotionMode === "swim"
-        ? createSurfaceLocomotionSnapshot(
-            freezeVector3(
-              swimSnapshot.position.x,
-              swimSnapshot.position.y,
-              swimSnapshot.position.z
-            ),
-            this.#unmountedLookYawRadians
-          )
-        : swimSnapshot;
 
     this.#characterPresentationSnapshot = createTraversalCharacterPresentationSnapshot({
       animationVocabulary: this.#resolveLocalAnimationVocabulary(deltaSeconds),
@@ -2887,11 +2876,13 @@ export class MetaverseTraversalRuntime {
       locomotionMode: this.#locomotionMode,
       mountedVehicleSnapshot:
         this.#mountedVehicleRuntime?.snapshot ?? null,
+      presentationYawRadians:
+        this.#mountedVehicleRuntime === null ? this.#unmountedLookYawRadians : null,
       swimPresentationPosition:
         this.#locomotionMode === "swim"
           ? this.#resolveSwimPresentationPosition(swimSnapshot)
-          : presentationSwimSnapshot.position,
-      swimSnapshot: presentationSwimSnapshot
+          : swimSnapshot.position,
+      swimSnapshot
     });
   }
 }

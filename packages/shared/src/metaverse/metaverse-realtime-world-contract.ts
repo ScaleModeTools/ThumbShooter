@@ -186,6 +186,7 @@ export interface MetaversePlayerTraversalIntentSnapshot {
   readonly facing: MetaversePlayerTraversalFacingSnapshot;
   readonly inputSequence: number;
   readonly locomotionMode: MetaversePlayerTraversalIntentLocomotionModeId;
+  readonly orientationSequence: number;
 }
 
 export interface MetaversePlayerTraversalIntentSnapshotInput {
@@ -194,6 +195,7 @@ export interface MetaversePlayerTraversalIntentSnapshotInput {
   readonly facing?: MetaversePlayerTraversalFacingSnapshotInput;
   readonly inputSequence?: number;
   readonly locomotionMode?: MetaversePlayerTraversalIntentLocomotionModeId;
+  readonly orientationSequence?: number;
 }
 
 export function doMetaversePlayerTraversalSequencedInputsMatch(
@@ -231,6 +233,16 @@ export interface MetaverseRealtimePlayerLookSnapshotInput {
   readonly yawRadians?: number;
 }
 
+export interface MetaverseRealtimePlayerObservedTraversalSnapshot {
+  readonly bodyControl: MetaversePlayerTraversalBodyControlSnapshot;
+  readonly facing: MetaversePlayerTraversalFacingSnapshot;
+}
+
+export interface MetaverseRealtimePlayerObservedTraversalSnapshotInput {
+  readonly bodyControl?: MetaversePlayerTraversalBodyControlSnapshotInput;
+  readonly facing?: MetaversePlayerTraversalFacingSnapshotInput;
+}
+
 export interface MetaverseRealtimePlayerJumpDebugSnapshot {
   readonly groundedBodyJumpReady: boolean;
   readonly pendingJumpActionSequence: number;
@@ -263,10 +275,12 @@ export interface MetaverseRealtimePlayerSnapshot {
   readonly jumpAuthorityState: MetaverseRealtimePlayerJumpAuthorityStateId;
   readonly lastProcessedInputSequence: number;
   readonly lastProcessedLookSequence: number;
+  readonly lastProcessedTraversalOrientationSequence: number;
   readonly linearVelocity: MetaverseRealtimeVector3Snapshot;
   readonly look: MetaverseRealtimePlayerLookSnapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null;
+  readonly observedTraversal: MetaverseRealtimePlayerObservedTraversalSnapshot;
   readonly playerId: MetaversePlayerId;
   readonly position: MetaverseRealtimeVector3Snapshot;
   readonly stateSequence: number;
@@ -282,10 +296,12 @@ export interface MetaverseRealtimePlayerSnapshotInput {
   readonly jumpAuthorityState?: MetaverseRealtimePlayerJumpAuthorityStateId;
   readonly lastProcessedInputSequence?: number;
   readonly lastProcessedLookSequence?: number;
+  readonly lastProcessedTraversalOrientationSequence?: number;
   readonly linearVelocity: MetaverseRealtimeVector3SnapshotInput;
   readonly look?: MetaverseRealtimePlayerLookSnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy?: MetaverseRealtimeMountedOccupancySnapshotInput | null;
+  readonly observedTraversal?: MetaverseRealtimePlayerObservedTraversalSnapshotInput;
   readonly playerId: MetaversePlayerId;
   readonly position: MetaverseRealtimeVector3SnapshotInput;
   readonly stateSequence?: number;
@@ -556,6 +572,9 @@ function freezePlayerTraversalIntentSnapshot(
   input: MetaversePlayerTraversalIntentSnapshotInput
 ): MetaversePlayerTraversalIntentSnapshot {
   const inputSequence = normalizeFiniteNonNegativeInteger(input.inputSequence ?? 0);
+  const orientationSequence = normalizeFiniteNonNegativeInteger(
+    input.orientationSequence ?? 0
+  );
 
   return Object.freeze({
     actionIntent: createMetaverseTraversalActionIntentSnapshot(
@@ -565,7 +584,8 @@ function freezePlayerTraversalIntentSnapshot(
     bodyControl: createMetaverseTraversalBodyControlSnapshot(input.bodyControl),
     facing: createMetaverseTraversalFacingSnapshot(input.facing),
     inputSequence,
-    locomotionMode: resolveTraversalIntentLocomotionMode(input.locomotionMode)
+    locomotionMode: resolveTraversalIntentLocomotionMode(input.locomotionMode),
+    orientationSequence
   });
 }
 
@@ -575,6 +595,21 @@ function freezePlayerLookSnapshot(
   return Object.freeze({
     pitchRadians: createRadians(input.pitchRadians ?? 0),
     yawRadians: createRadians(input.yawRadians ?? 0)
+  });
+}
+
+function freezePlayerObservedTraversalSnapshot(
+  input: MetaverseRealtimePlayerObservedTraversalSnapshotInput | undefined,
+  lookSnapshot: MetaverseRealtimePlayerLookSnapshot
+): MetaverseRealtimePlayerObservedTraversalSnapshot {
+  return Object.freeze({
+    bodyControl: createMetaverseTraversalBodyControlSnapshot(input?.bodyControl),
+    facing: createMetaverseTraversalFacingSnapshot(
+      input?.facing ?? {
+        pitchRadians: lookSnapshot.pitchRadians,
+        yawRadians: lookSnapshot.yawRadians
+      }
+    )
   });
 }
 
@@ -661,6 +696,10 @@ function freezePlayerSnapshot(
           yawRadians: input.yawRadians
         })
       : freezePlayerLookSnapshot(input.look);
+  const observedTraversal = freezePlayerObservedTraversalSnapshot(
+    input.observedTraversal,
+    lookSnapshot
+  );
   const linearVelocity =
     createMetaversePresenceVector3Snapshot(input.linearVelocity);
   const jumpDebug = freezePlayerJumpDebugSnapshot(input.jumpDebug);
@@ -699,10 +738,14 @@ function freezePlayerSnapshot(
     lastProcessedLookSequence: normalizeFiniteNonNegativeInteger(
       input.lastProcessedLookSequence ?? 0
     ),
+    lastProcessedTraversalOrientationSequence: normalizeFiniteNonNegativeInteger(
+      input.lastProcessedTraversalOrientationSequence ?? 0
+    ),
     linearVelocity,
     look: lookSnapshot,
     locomotionMode,
     mountedOccupancy,
+    observedTraversal,
     playerId: input.playerId,
     position: createMetaversePresenceVector3Snapshot(input.position),
     stateSequence: normalizeFiniteNonNegativeInteger(input.stateSequence ?? 0),

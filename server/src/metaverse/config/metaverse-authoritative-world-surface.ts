@@ -6,11 +6,16 @@ import {
   resolveMetaverseWorldPlacedSurfaceColliders,
   type MetaverseWorldPlacedSurfaceColliderSnapshot,
   type MetaverseWorldSurfaceVector3Snapshot
-} from "@webgpu-metaverse/shared";
+} from "@webgpu-metaverse/shared/metaverse";
 import { metaverseDebugSimpleSpawnSupportCollider } from "./metaverse-debug-simple-spawn-support.js";
 
 export type MetaverseAuthoritativeSurfaceColliderSnapshot =
   MetaverseWorldPlacedSurfaceColliderSnapshot;
+export interface MetaverseAuthoritativeDynamicSurfaceSeedSnapshot {
+  readonly environmentAssetId: string;
+  readonly position: MetaverseWorldSurfaceVector3Snapshot;
+  readonly yawRadians: number;
+}
 
 const emptyMetaverseAuthoritativeSurfaceColliders = Object.freeze(
   []
@@ -63,6 +68,28 @@ if (shouldUseSimpleSpawnSupportOverride()) {
 export const metaverseAuthoritativeStaticSurfaceColliders = Object.freeze(
   authoritativeStaticSurfaceColliders
 ) satisfies readonly MetaverseAuthoritativeSurfaceColliderSnapshot[];
+
+export const metaverseAuthoritativeDynamicSurfaceSeedSnapshots = Object.freeze(
+  metaverseWorldSurfaceAssets.flatMap((surfaceAsset) => {
+    if (
+      surfaceAsset.placement !== "dynamic" ||
+      surfaceAsset.surfaceColliders.length === 0 ||
+      surfaceAsset.placements.length === 0
+    ) {
+      return [];
+    }
+
+    const authoredPlacement = surfaceAsset.placements[0]!;
+
+    return [
+      Object.freeze({
+        environmentAssetId: surfaceAsset.environmentAssetId,
+        position: authoredPlacement.position,
+        yawRadians: authoredPlacement.rotationYRadians
+      } satisfies MetaverseAuthoritativeDynamicSurfaceSeedSnapshot)
+    ];
+  })
+) satisfies readonly MetaverseAuthoritativeDynamicSurfaceSeedSnapshot[];
 
 export const metaverseAuthoritativeWaterRegionSnapshots =
   metaverseWorldPlacedWaterRegions;

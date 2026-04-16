@@ -35,9 +35,14 @@ import {
   createMetaverseVehicleId,
   createPortalLaunchSelectionSnapshot,
   createUsername,
+  defaultMetaverseMountedLookLimitPolicyId,
   experienceCatalog,
+  metaverseMountedLookLimitPolicyIds,
+  metaverseUnmountedPlayerLookConstraintBounds,
   readExperienceCatalogEntry,
-  readExperienceTickOwner
+  readExperienceTickOwner,
+  resolveMetaverseMountedLookConstraintBounds,
+  resolveMetaverseMountedOccupantRoleLookConstraintBounds
 } from "@webgpu-metaverse/shared";
 
 function createMetaverseSyncPlayerTraversalIntentCommand(input) {
@@ -80,7 +85,8 @@ function createMetaverseSyncPlayerTraversalIntentCommand(input) {
       },
       facing: normalizedFacing,
       inputSequence: nextIntent.inputSequence,
-      locomotionMode: nextIntent.locomotionMode
+      locomotionMode: nextIntent.locomotionMode,
+      orientationSequence: nextIntent.orientationSequence
     }
   });
 }
@@ -130,6 +136,40 @@ test("createMetaverseSessionSnapshot freezes the available experience ids", () =
 
   assert.deepEqual(sessionSnapshot.availableExperienceIds, ["duck-hunt"]);
   assert.ok(Object.isFrozen(sessionSnapshot.availableExperienceIds));
+});
+
+test("shared metaverse look constraint policy keeps mounted look limits aligned across client and server owners", () => {
+  assert.deepEqual(metaverseMountedLookLimitPolicyIds, [
+    "driver-forward",
+    "passenger-bench",
+    "turret-arc"
+  ]);
+  assert.equal(defaultMetaverseMountedLookLimitPolicyId, "driver-forward");
+  assert.deepEqual(metaverseUnmountedPlayerLookConstraintBounds, {
+    maxPitchRadians: 0.6,
+    maxYawOffsetRadians: null,
+    minPitchRadians: -0.6
+  });
+  assert.deepEqual(
+    resolveMetaverseMountedLookConstraintBounds("driver-forward"),
+    {
+      maxPitchRadians: 0.6,
+      maxYawOffsetRadians: 0,
+      minPitchRadians: -0.6
+    }
+  );
+  assert.deepEqual(
+    resolveMetaverseMountedLookConstraintBounds("passenger-bench"),
+    resolveMetaverseMountedOccupantRoleLookConstraintBounds("passenger")
+  );
+  assert.deepEqual(
+    resolveMetaverseMountedLookConstraintBounds("turret-arc"),
+    resolveMetaverseMountedOccupantRoleLookConstraintBounds("turret")
+  );
+  assert.deepEqual(
+    resolveMetaverseMountedLookConstraintBounds("driver-forward"),
+    resolveMetaverseMountedOccupantRoleLookConstraintBounds("driver")
+  );
 });
 
 test("metaverse presence contracts freeze roster and normalize ids", () => {
@@ -235,6 +275,7 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
     {
       angularVelocityRadiansPerSecond: 1.25,
       characterId: " metaverse-mannequin-v1 ",
+      lastProcessedTraversalOrientationSequence: 9.3,
       linearVelocity: {
         x: 0,
         y: 0,
@@ -297,6 +338,10 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
   assert.equal(worldSnapshot.players.length, 1);
   assert.equal(worldSnapshot.players[0]?.characterId, "metaverse-mannequin-v1");
   assert.equal(worldSnapshot.players[0]?.angularVelocityRadiansPerSecond, 1.25);
+  assert.equal(
+    worldSnapshot.players[0]?.lastProcessedTraversalOrientationSequence,
+    9
+  );
   assert.equal(worldSnapshot.players[0]?.stateSequence, 7);
   assert.equal(worldSnapshot.players[0]?.mountedOccupancy?.vehicleId, vehicleId);
   assert.equal(
@@ -328,6 +373,22 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
   );
   assert.equal(worldSnapshot.players[0]?.look.pitchRadians, 0);
   assert.equal(worldSnapshot.players[0]?.look.yawRadians, Math.PI * 3);
+  assert.equal(
+    worldSnapshot.players[0]?.observedTraversal.bodyControl.moveAxis,
+    0
+  );
+  assert.equal(
+    worldSnapshot.players[0]?.observedTraversal.bodyControl.strafeAxis,
+    0
+  );
+  assert.equal(
+    worldSnapshot.players[0]?.observedTraversal.facing.pitchRadians,
+    0
+  );
+  assert.equal(
+    worldSnapshot.players[0]?.observedTraversal.facing.yawRadians,
+    Math.PI * 3
+  );
   assert.equal(
     worldSnapshot.vehicles[0]?.seats[0]?.occupantPlayerId,
     playerId
@@ -578,6 +639,7 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
       jump: true,
       locomotionMode: "swim",
       moveAxis: 2.4,
+      orientationSequence: 8.2,
       strafeAxis: -4,
       yawAxis: 0.5
     },
@@ -591,6 +653,7 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
   assert.equal(command.type, "sync-player-traversal-intent");
   assert.equal(command.intent.inputSequence, 4);
   assert.equal(command.intent.locomotionMode, "swim");
+  assert.equal(command.intent.orientationSequence, 8);
   assert.equal(command.intent.bodyControl.moveAxis, 1);
   assert.equal(command.intent.bodyControl.strafeAxis, -1);
   assert.equal(command.intent.actionIntent.kind, "jump");
@@ -859,6 +922,7 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
           jump: false,
           locomotionMode: "grounded",
           moveAxis: 1.5,
+          orientationSequence: 11.7,
           strafeAxis: -0.25,
           yawAxis: 0.8
         },
@@ -924,6 +988,10 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
     "sync-player-traversal-intent"
   );
   assert.equal(playerTraversalIntentDatagram.command.intent.inputSequence, 7);
+  assert.equal(
+    playerTraversalIntentDatagram.command.intent.orientationSequence,
+    11
+  );
   assert.equal(
     playerTraversalIntentDatagram.command.intent.locomotionMode,
     "grounded"

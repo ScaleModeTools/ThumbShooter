@@ -258,6 +258,7 @@ function createRemoteCharacterPresentations(
 
     remoteCharacterPresentations.push(
       Object.freeze({
+        aimCamera: null,
         characterId: playerSnapshot.characterId,
         look: Object.freeze({
           pitchRadians: playerSnapshot.pose.look.pitchRadians,

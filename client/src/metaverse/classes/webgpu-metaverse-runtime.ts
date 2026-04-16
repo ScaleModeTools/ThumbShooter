@@ -35,9 +35,6 @@ import {
 import {
   resolveMetaverseBootCinematicPresentationSnapshot
 } from "../states/metaverse-boot-cinematic";
-import {
-  shouldPreferAckedTraversalReplay
-} from "../states/local-authority-reconciliation";
 import { resolveAutomaticSurfaceLocomotionSnapshot } from "../traversal/policies/surface-routing";
 import type { MetaverseControlModeId } from "../types/metaverse-control-mode";
 import type { MetaverseBootCinematicConfig } from "../types/metaverse-boot-cinematic";
@@ -801,6 +798,7 @@ export class WebGpuMetaverseRuntime {
       onRemoteWorldUpdate: () => {
         this.#publishRuntimeHudSnapshot(false);
       },
+      presentationConfig: config,
       readWallClockMs: this.#readWallClockMs,
       samplingConfig: metaverseRemoteWorldSamplingConfig
     });
@@ -1372,46 +1370,17 @@ export class WebGpuMetaverseRuntime {
       latestTraversalIntent?.actionIntent?.kind === "jump"
         ? latestTraversalIntent.actionIntent.sequence
         : 0;
-    const latestAckedAuthoritativeLocalPlayerSnapshot =
-      this.#remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(
+    const authoritativeLocalPlayerPose =
+      this.#remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerPose(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 
-    if (
-      !shouldPreferAckedTraversalReplay(
-        latestTraversalIntent,
-        latestAckedAuthoritativeLocalPlayerSnapshot
-      )
-    ) {
-      const authoritativeLocalPlayerPose =
-        this.#remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerPoseForReconciliation(
-          metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
-        );
-
-      if (authoritativeLocalPlayerPose === null) {
-        return;
-      }
-
-      this.#traversalRuntime.syncAuthoritativeLocalPlayerPose(
-        authoritativeLocalPlayerPose,
-        latestIssuedJumpActionSequence
-      );
+    if (authoritativeLocalPlayerPose === null) {
       return;
     }
 
-    const authoritativeLocalPlayerReconciliationSample =
-      this.#remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerReconciliationSample(
-        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
-      );
-
-    if (authoritativeLocalPlayerReconciliationSample === null) {
-      return;
-    }
-
-    this.#traversalRuntime.reconcileAckedAuthoritativeLocalPlayerPose(
-      authoritativeLocalPlayerReconciliationSample.authoritativePlayerSnapshot,
-      authoritativeLocalPlayerReconciliationSample.extrapolationSeconds,
-      latestTraversalIntent,
+    this.#traversalRuntime.syncAuthoritativeLocalPlayerPose(
+      authoritativeLocalPlayerPose,
       latestIssuedJumpActionSequence
     );
   }

@@ -1,4 +1,7 @@
 import {
+  resolveMetaverseMountedLookConstraintBounds
+} from "@webgpu-metaverse/shared";
+import {
   type MetaverseGroundedBodySnapshot,
   type PhysicsVector3Snapshot
 } from "@/physics";
@@ -38,38 +41,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function resolveMountedLookLimitBounds(
-  lookLimitPolicyId: NonNullable<
-    TraversalMountedVehicleSnapshot["occupancy"]
-  >["lookLimitPolicyId"],
-  config: MetaverseRuntimeConfig
-): {
-  readonly maxYawOffsetRadians: number;
-  readonly maxPitchRadians: number;
-  readonly minPitchRadians: number;
-} {
-  switch (lookLimitPolicyId) {
-    case "driver-forward":
-      return Object.freeze({
-        maxYawOffsetRadians: 0,
-        maxPitchRadians: config.orientation.maxPitchRadians,
-        minPitchRadians: config.orientation.minPitchRadians
-      });
-    case "passenger-bench":
-      return Object.freeze({
-        maxYawOffsetRadians: Math.PI * 0.45,
-        maxPitchRadians: 0.42,
-        minPitchRadians: -0.42
-      });
-    case "turret-arc":
-      return Object.freeze({
-        maxYawOffsetRadians: Math.PI * 0.6,
-        maxPitchRadians: 0.55,
-        minPitchRadians: -0.5
-      });
-  }
-}
-
 function createMountedAnchorCameraPresentationSnapshot(
   anchorSnapshot: MountedEnvironmentAnchorSnapshot,
   eyeHeightMeters: number,
@@ -77,7 +48,7 @@ function createMountedAnchorCameraPresentationSnapshot(
   pitchRadians: number,
   followDistanceMeters: number
 ): MetaverseCameraSnapshot {
-  return createSurfaceCameraPresentationSnapshot(
+  return createTraversalSurfaceCameraPresentationSnapshot(
     anchorSnapshot.position,
     eyeHeightMeters,
     yawRadians,
@@ -103,9 +74,8 @@ export function advanceTraversalMountedOccupancyLookYawRadians(
     return 0;
   }
 
-  const lookLimitBounds = resolveMountedLookLimitBounds(
-    occupancy.lookLimitPolicyId,
-    config
+  const lookLimitBounds = resolveMetaverseMountedLookConstraintBounds(
+    occupancy.lookLimitPolicyId
   );
   const nextYawOffsetRadians = advanceMetaverseYawRadians(
     yawOffsetRadians,
@@ -126,15 +96,15 @@ export function clampTraversalMountedOccupancyPitchRadians(
   mountedVehicleSnapshot: TraversalMountedVehicleSnapshot,
   config: MetaverseRuntimeConfig
 ): number {
+  void config;
   const occupancy = mountedVehicleSnapshot.occupancy;
 
   if (occupancy === null) {
     return pitchRadians;
   }
 
-  const lookLimitBounds = resolveMountedLookLimitBounds(
-    occupancy.lookLimitPolicyId,
-    config
+  const lookLimitBounds = resolveMetaverseMountedLookConstraintBounds(
+    occupancy.lookLimitPolicyId
   );
 
   return clamp(
@@ -144,7 +114,7 @@ export function clampTraversalMountedOccupancyPitchRadians(
   );
 }
 
-function createSurfaceCameraPresentationSnapshot(
+export function createTraversalSurfaceCameraPresentationSnapshot(
   position: PhysicsVector3Snapshot,
   eyeHeightMeters: number,
   yawRadians: number,
@@ -174,7 +144,7 @@ export function createTraversalGroundedCameraPresentationSnapshot(
   yawRadians: number = bodySnapshot.yawRadians,
   position: PhysicsVector3Snapshot = bodySnapshot.position
 ): MetaverseCameraSnapshot {
-  return createSurfaceCameraPresentationSnapshot(
+  return createTraversalSurfaceCameraPresentationSnapshot(
     position,
     bodySnapshot.eyeHeightMeters,
     yawRadians,
@@ -190,7 +160,7 @@ export function createTraversalSwimCameraPresentationSnapshot(
   yawRadians: number = swimSnapshot.yawRadians,
   position: PhysicsVector3Snapshot = swimSnapshot.position
 ): MetaverseCameraSnapshot {
-  return createSurfaceCameraPresentationSnapshot(
+  return createTraversalSurfaceCameraPresentationSnapshot(
     position,
     config.swim.cameraEyeHeightMeters +
       config.bodyPresentation.swimThirdPersonHeightOffsetMeters,
@@ -223,7 +193,7 @@ export function createTraversalMountedVehicleCameraPresentationSnapshot(
     );
   }
 
-  return createSurfaceCameraPresentationSnapshot(
+  return createTraversalSurfaceCameraPresentationSnapshot(
     mountedVehicleSnapshot.position,
     config.skiff.cameraEyeHeightMeters + config.skiff.cameraHeightOffsetMeters,
     mountedVehicleSnapshot.yawRadians,

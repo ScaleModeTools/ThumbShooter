@@ -260,6 +260,14 @@ function parseWorldTraversalIntent(intentBody: Record<string, unknown>) {
           locomotionMode:
             locomotionMode as MetaversePlayerTraversalIntentLocomotionModeId
         }),
+    ...(intentBody.orientationSequence === undefined
+      ? {}
+      : {
+          orientationSequence: readNumberField(
+            intentBody.orientationSequence,
+            "intent.orientationSequence"
+          )
+        }),
     ...(intentBody.bodyControl === undefined
       ? {}
       : {

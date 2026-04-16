@@ -13,10 +13,25 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./metaverse": {
+      "types": "./dist/metaverse/index.d.ts",
+      "import": "./dist/metaverse/index.js",
+      "default": "./dist/metaverse/index.js"
+    },
+    "./experiences": {
+      "types": "./dist/experiences/index.d.ts",
+      "import": "./dist/experiences/index.js",
+      "default": "./dist/experiences/index.js"
+    },
+    "./experiences/duck-hunt": {
+      "types": "./dist/experiences/duck-hunt/index.d.ts",
+      "import": "./dist/experiences/duck-hunt/index.js",
+      "default": "./dist/experiences/duck-hunt/index.js"
     }
   },
   "scripts": {
-    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
+    "clean": "node --input-type=module --eval \"import { rmSync, readdirSync } from 'node:fs'; import { join } from 'node:path'; rmSync('dist', { recursive: true, force: true }); const removeGeneratedSourceArtifacts = (rootPath) => { for (const entry of readdirSync(rootPath, { withFileTypes: true })) { const absolutePath = join(rootPath, entry.name); if (entry.isDirectory()) { removeGeneratedSourceArtifacts(absolutePath); continue; } if (/\\.(?:d\\.ts|d\\.ts\\.map|js|js\\.map)$/.test(entry.name)) { rmSync(absolutePath, { force: true }); } } }; removeGeneratedSourceArtifacts('src');\"",
     "build": "npm run clean && tsc -p tsconfig.json",
     "watch:build": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -108,6 +108,7 @@ export type MetaverseRemoteCharacterPoseSyncMode =
   | "runtime-server-sampled";
 
 export interface MetaverseRemoteCharacterPresentationSnapshot {
+  readonly aimCamera: MetaverseCameraSnapshot | null;
   readonly characterId: string;
   readonly look: MetaverseCharacterLookSnapshot;
   readonly mountedOccupancy: MetaversePresenceMountedOccupancySnapshot | null;
@@ -331,29 +332,6 @@ export interface MetaverseCharacterProofConfig {
   readonly socketNames: readonly MetaverseCanonicalSocketName[];
 }
 
-interface MetaverseAttachmentSocketGripAlignmentConfig {
-  readonly attachmentGripMarkerNodeName: string | null;
-  readonly socketForwardAxis: MetaverseVector3Snapshot;
-  readonly socketOffset: MetaverseVector3Snapshot;
-  readonly socketUpAxis: MetaverseVector3Snapshot;
-}
-
-export interface MetaverseAttachmentGripAlignmentAxisConfig
-  extends MetaverseAttachmentSocketGripAlignmentConfig {
-  readonly attachmentForwardAxis: MetaverseVector3Snapshot;
-  readonly attachmentUpAxis: MetaverseVector3Snapshot;
-}
-
-export interface MetaverseAttachmentGripAlignmentMarkerConfig
-  extends MetaverseAttachmentSocketGripAlignmentConfig {
-  readonly attachmentForwardMarkerNodeName: string;
-  readonly attachmentUpMarkerNodeName: string;
-}
-
-export type MetaverseAttachmentGripAlignmentConfig =
-  | MetaverseAttachmentGripAlignmentAxisConfig
-  | MetaverseAttachmentGripAlignmentMarkerConfig;
-
 export const metaverseSyntheticSocketNames = [
   "back_socket",
   "grip_l_socket",
@@ -370,8 +348,8 @@ export type MetaverseAttachmentSocketName =
   | MetaverseSyntheticSocketName;
 
 export interface MetaverseAttachmentMountProofConfig {
+  readonly attachmentSocketNodeName: string;
   readonly offHandSupportPointId?: string | null;
-  readonly gripAlignment: MetaverseAttachmentGripAlignmentConfig;
   readonly socketName: MetaverseAttachmentSocketName;
 }
 
@@ -550,6 +528,8 @@ export interface MetaverseRuntimeConfig {
     readonly spawnPosition: MetaverseVector3Snapshot;
   };
   readonly bodyPresentation: {
+    readonly groundedFirstPersonHeadClearanceMeters: number;
+    readonly groundedFirstPersonHeadOcclusionRadiusMeters: number;
     readonly groundedFirstPersonForwardOffsetMeters: number;
     readonly swimIdleBodySubmersionDepthMeters: number;
     readonly swimMovingBodySubmersionDepthMeters: number;

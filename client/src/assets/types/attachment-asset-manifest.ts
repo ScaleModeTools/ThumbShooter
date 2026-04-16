@@ -18,31 +18,12 @@ export interface AttachmentVector3Descriptor {
   readonly z: number;
 }
 
-interface AttachmentSocketGripAlignmentDescriptor {
-  readonly attachmentGripMarkerNodeName?: string | null;
-  readonly attachmentGripMarkerNodeNameBySocketId?: Partial<
+export interface AttachmentMountSocketDescriptor {
+  readonly attachmentSocketNodeName?: string | null;
+  readonly attachmentSocketNodeNameBySocketId?: Partial<
     Record<SocketId, string | null>
   >;
-  readonly socketForwardAxis: AttachmentVector3Descriptor;
-  readonly socketOffset: AttachmentVector3Descriptor;
-  readonly socketUpAxis: AttachmentVector3Descriptor;
 }
-
-export interface AttachmentGripAlignmentAxisDescriptor
-  extends AttachmentSocketGripAlignmentDescriptor {
-  readonly attachmentForwardAxis: AttachmentVector3Descriptor;
-  readonly attachmentUpAxis: AttachmentVector3Descriptor;
-}
-
-export interface AttachmentGripAlignmentMarkerDescriptor
-  extends AttachmentSocketGripAlignmentDescriptor {
-  readonly attachmentForwardMarkerNodeName: string;
-  readonly attachmentUpMarkerNodeName: string;
-}
-
-export type AttachmentGripAlignmentDescriptor =
-  | AttachmentGripAlignmentAxisDescriptor
-  | AttachmentGripAlignmentMarkerDescriptor;
 
 export interface AttachmentSupportPointDescriptor {
   readonly localPosition: AttachmentVector3Descriptor;
@@ -54,7 +35,7 @@ export type AttachmentOffHandSupportPointIdBySocketId = Partial<
 >;
 
 export interface AttachmentMountedHolsterDescriptor {
-  readonly gripAlignment: AttachmentGripAlignmentDescriptor;
+  readonly attachmentSocketNodeName: string;
   readonly socketName: string;
 }
 
@@ -68,7 +49,7 @@ export interface AttachmentAssetDescriptor<
   readonly defaultSocketId: SocketId;
   readonly allowedSocketIds: readonly SocketId[];
   readonly compatibleSkeletons: readonly SkeletonId[];
-  readonly gripAlignment: AttachmentGripAlignmentDescriptor;
+  readonly heldMount: AttachmentMountSocketDescriptor;
   readonly mountedHolster: AttachmentMountedHolsterDescriptor | null;
   readonly offHandSupportPointIdBySocketId?:
     | AttachmentOffHandSupportPointIdBySocketId

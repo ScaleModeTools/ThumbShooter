@@ -36,6 +36,11 @@ export interface FreshAckedAuthoritativeLocalPlayerSnapshotForReconciliation {
   readonly playerSnapshot: AckedAuthoritativeLocalPlayerSnapshotForReconciliation;
 }
 
+export type AckedAuthoritativeLocalPlayerPose =
+  AckedAuthoritativeLocalPlayerPoseForReconciliation;
+export type FreshAckedAuthoritativeLocalPlayerSnapshot =
+  FreshAckedAuthoritativeLocalPlayerSnapshotForReconciliation;
+
 export interface AckedAuthoritativeLocalPlayerReconciliationSample {
   readonly authoritativePlayerSnapshot: AckedAuthoritativeLocalPlayerPoseForReconciliation;
   readonly extrapolationSeconds: number;
@@ -189,6 +194,14 @@ export function createAckedAuthoritativeLocalPlayerReconciliationDeliveryKey(
   ].join("|");
 }
 
+export function createAckedAuthoritativeLocalPlayerDeliveryKey(
+  freshAckedLocalPlayerSnapshot: FreshAckedAuthoritativeLocalPlayerSnapshot
+): string {
+  return createAckedAuthoritativeLocalPlayerReconciliationDeliveryKey(
+    freshAckedLocalPlayerSnapshot
+  );
+}
+
 export function readAckedAuthoritativeLocalPlayerRawPoseForReconciliation(
   playerSnapshot: AckedAuthoritativeLocalPlayerSnapshotForReconciliation
 ): AckedAuthoritativeLocalPlayerPoseForReconciliation {
@@ -201,6 +214,14 @@ export function readAckedAuthoritativeLocalPlayerRawPoseForReconciliation(
     traversalAuthority: playerSnapshot.traversalAuthority,
     yawRadians: playerSnapshot.yawRadians
   };
+}
+
+export function readAckedAuthoritativeLocalPlayerPose(
+  playerSnapshot: AckedAuthoritativeLocalPlayerSnapshotForReconciliation
+): AckedAuthoritativeLocalPlayerPose {
+  return readAckedAuthoritativeLocalPlayerRawPoseForReconciliation(
+    playerSnapshot
+  );
 }
 
 export function projectAckedAuthoritativeLocalPlayerPoseForReconciliation(

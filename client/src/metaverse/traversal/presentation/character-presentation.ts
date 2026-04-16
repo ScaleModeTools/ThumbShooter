@@ -22,6 +22,7 @@ interface TraversalCharacterPresentationInput {
   readonly groundedPresentationPosition?: PhysicsVector3Snapshot | null;
   readonly locomotionMode: MetaverseLocomotionModeId;
   readonly mountedVehicleSnapshot: TraversalMountedVehicleSnapshot | null;
+  readonly presentationYawRadians?: number | null;
   readonly swimSnapshot: SurfaceLocomotionSnapshot;
   readonly swimPresentationPosition?: PhysicsVector3Snapshot | null;
 }
@@ -61,19 +62,17 @@ function createFixedCharacterPresentationSnapshot(
 function createGroundedCharacterPresentationSnapshot(
   bodySnapshot: MetaverseGroundedBodySnapshot,
   animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"],
+  yawRadians: number = bodySnapshot.yawRadians,
   position: PhysicsVector3Snapshot = bodySnapshot.position
 ): MetaverseCharacterPresentationSnapshot {
-  return createCharacterPresentationSnapshot(
-    position,
-    bodySnapshot.yawRadians,
-    animationVocabulary
-  );
+  return createCharacterPresentationSnapshot(position, yawRadians, animationVocabulary);
 }
 
 function createSwimCharacterPresentationSnapshot(
   swimSnapshot: SurfaceLocomotionSnapshot,
   animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"],
   config: MetaverseRuntimeConfig,
+  yawRadians: number = swimSnapshot.yawRadians,
   position: PhysicsVector3Snapshot = swimSnapshot.position
 ): MetaverseCharacterPresentationSnapshot {
   const moving = animationVocabulary === "swim";
@@ -87,7 +86,7 @@ function createSwimCharacterPresentationSnapshot(
           : config.bodyPresentation.swimIdleBodySubmersionDepthMeters),
       position.z
     ),
-    swimSnapshot.yawRadians,
+    yawRadians,
     moving ? "swim" : "swim-idle"
   );
 }
@@ -99,6 +98,7 @@ export function createTraversalCharacterPresentationSnapshot({
   groundedPresentationPosition,
   locomotionMode,
   mountedVehicleSnapshot,
+  presentationYawRadians,
   swimSnapshot,
   swimPresentationPosition
 }: TraversalCharacterPresentationInput): MetaverseCharacterPresentationSnapshot | null {
@@ -124,6 +124,7 @@ export function createTraversalCharacterPresentationSnapshot({
       : createGroundedCharacterPresentationSnapshot(
           groundedBodySnapshot,
           animationVocabulary,
+          presentationYawRadians ?? groundedBodySnapshot.yawRadians,
           groundedPresentationPosition ?? groundedBodySnapshot.position
         );
   }
@@ -133,6 +134,7 @@ export function createTraversalCharacterPresentationSnapshot({
       swimSnapshot,
       animationVocabulary,
       config,
+      presentationYawRadians ?? swimSnapshot.yawRadians,
       swimPresentationPosition ?? swimSnapshot.position
     );
   }

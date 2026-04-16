@@ -21,8 +21,17 @@
       "@mediapipe/tasks-vision": [
         "../node_modules/@mediapipe/tasks-vision/vision.d.ts"
       ],
+      "@webgpu-metaverse/shared/experiences/duck-hunt": [
+        "../packages/shared/src/experiences/duck-hunt/index.ts"
+      ],
+      "@webgpu-metaverse/shared/experiences": [
+        "../packages/shared/src/experiences/index.ts"
+      ],
+      "@webgpu-metaverse/shared/metaverse": [
+        "../packages/shared/src/metaverse/index.ts"
+      ],
       "@webgpu-metaverse/shared": [
-        "../packages/shared/src/index.ts"
+        "../packages/shared/src"
       ]
     },
     "useDefineForClassFields": true,

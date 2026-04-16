@@ -689,6 +689,7 @@ function createRealtimeWorldSnapshot({
   localLastProcessedInputSequence,
   localLastProcessedJumpActionSequence = 0,
   localLastProcessedLookSequence,
+  localLastProcessedTraversalOrientationSequence,
   localLinearVelocity = {
     x: 0,
     y: 0,
@@ -698,19 +699,32 @@ function createRealtimeWorldSnapshot({
   localMountedOccupancy = null,
   localLookPitchRadians = 0,
   localLookYawRadians,
+  localObservedMoveAxis = 0,
+  localObservedStrafeAxis = 0,
   localPlayerId,
   localPlayerX = 0,
   localPlayerY = 1.62,
   localPlayerZ = 24,
   localUsername,
   localYawRadians = 0,
+  remoteAnimationVocabulary,
   remoteLastProcessedInputSequence,
   remoteLastProcessedLookSequence,
+  remoteLastProcessedTraversalOrientationSequence,
+  remoteLinearVelocity,
+  remoteLocomotionMode,
   remoteLookPitchRadians = 0,
   remoteLookYawRadians,
+  remoteMountedOccupancy = null,
+  remoteObservedMoveAxis = 0,
+  remoteObservedStrafeAxis = 0,
+  remoteObservedFacingPitchRadians,
+  remoteObservedFacingYawRadians,
   remotePlayerAngularVelocityRadiansPerSecond = 0,
   remotePlayerId,
   remotePlayerX,
+  remotePlayerY,
+  remotePlayerZ = 18,
   remoteUsername,
   serverTimeMs,
   snapshotSequence,
@@ -731,10 +745,50 @@ function createRealtimeWorldSnapshot({
     remoteLastProcessedInputSequence ?? snapshotSequence;
   const resolvedLocalLastProcessedLookSequence =
     localLastProcessedLookSequence ?? resolvedLocalLastProcessedInputSequence;
+  const resolvedLocalLastProcessedTraversalOrientationSequence =
+    localLastProcessedTraversalOrientationSequence ??
+    resolvedLocalLastProcessedInputSequence;
   const resolvedRemoteLastProcessedLookSequence =
     remoteLastProcessedLookSequence ?? resolvedRemoteLastProcessedInputSequence;
+  const resolvedRemoteLastProcessedTraversalOrientationSequence =
+    remoteLastProcessedTraversalOrientationSequence ??
+    resolvedRemoteLastProcessedInputSequence;
   const resolvedLocalLookYawRadians = localLookYawRadians ?? localYawRadians;
   const resolvedRemoteLookYawRadians = remoteLookYawRadians ?? yawRadians;
+  const resolvedRemoteObservedFacingPitchRadians =
+    remoteObservedFacingPitchRadians ?? remoteLookPitchRadians;
+  const resolvedRemoteObservedFacingYawRadians =
+    remoteObservedFacingYawRadians ?? resolvedRemoteLookYawRadians;
+  const hasRemoteCanonicalSeatOccupancy =
+    includeVehicle && vehicleSeatOccupantPlayerId === remotePlayerId;
+  const resolvedRemoteLocomotionMode =
+    remoteLocomotionMode ??
+    (remoteMountedOccupancy !== null || hasRemoteCanonicalSeatOccupancy
+      ? "mounted"
+      : "grounded");
+  const resolvedRemoteAnimationVocabulary =
+    remoteAnimationVocabulary ??
+    (resolvedRemoteLocomotionMode === "mounted"
+      ? "seated"
+      : resolvedRemoteLocomotionMode === "swim"
+        ? "swim-idle"
+        : "idle");
+  const resolvedRemoteLinearVelocity =
+    remoteLinearVelocity ??
+    (resolvedRemoteLocomotionMode === "mounted"
+      ? {
+          x: 20,
+          y: 0,
+          z: 0
+        }
+      : {
+          x: 0,
+          y: 0,
+          z: 0
+        });
+  const resolvedRemotePlayerY =
+    remotePlayerY ??
+    (resolvedRemoteLocomotionMode === "mounted" ? 0.75 : 1.62);
   const derivedLocalResolvedJumpActionSequence =
     localLastProcessedJumpActionSequence > localLastAcceptedJumpActionSequence
       ? localLastProcessedJumpActionSequence
@@ -776,6 +830,18 @@ function createRealtimeWorldSnapshot({
         },
         locomotionMode:
           localMountedOccupancy === null ? localLocomotionMode : "mounted",
+        observedTraversal: {
+          bodyControl: {
+            boost: false,
+            moveAxis: localObservedMoveAxis,
+            strafeAxis: localObservedStrafeAxis,
+            turnAxis: 0
+          },
+          facing: {
+            pitchRadians: localLookPitchRadians,
+            yawRadians: resolvedLocalLookYawRadians
+          }
+        },
         mountedOccupancy:
           localMountedOccupancy === null
             ? null
@@ -791,6 +857,8 @@ function createRealtimeWorldSnapshot({
         },
         lastProcessedInputSequence: resolvedLocalLastProcessedInputSequence,
         lastProcessedLookSequence: resolvedLocalLastProcessedLookSequence,
+        lastProcessedTraversalOrientationSequence:
+          resolvedLocalLastProcessedTraversalOrientationSequence,
         stateSequence: snapshotSequence,
         username: localUsername,
         yawRadians: localYawRadians
@@ -800,26 +868,44 @@ function createRealtimeWorldSnapshot({
             {
               angularVelocityRadiansPerSecond:
                 remotePlayerAngularVelocityRadiansPerSecond,
-              animationVocabulary: "seated",
+              animationVocabulary: resolvedRemoteAnimationVocabulary,
               characterId: "metaverse-mannequin-v1",
-              linearVelocity: {
-                x: 20,
-                y: 0,
-                z: 0
-              },
+              linearVelocity: resolvedRemoteLinearVelocity,
               look: {
                 pitchRadians: remoteLookPitchRadians,
                 yawRadians: resolvedRemoteLookYawRadians
               },
-              locomotionMode: "mounted",
+              locomotionMode: resolvedRemoteLocomotionMode,
+              observedTraversal: {
+                bodyControl: {
+                  boost: false,
+                  moveAxis: remoteObservedMoveAxis,
+                  strafeAxis: remoteObservedStrafeAxis,
+                  turnAxis: 0
+                },
+                facing: {
+                  pitchRadians: resolvedRemoteObservedFacingPitchRadians,
+                  yawRadians: resolvedRemoteObservedFacingYawRadians
+                }
+              },
+              ...(remoteMountedOccupancy === null
+                ? {}
+                : {
+                    mountedOccupancy: {
+                      ...remoteMountedOccupancy,
+                      vehicleId
+                    }
+                  }),
               playerId: remotePlayerId,
               position: {
                 x: remotePlayerX,
-                y: 0.75,
-                z: 18
+                y: resolvedRemotePlayerY,
+                z: remotePlayerZ
               },
               lastProcessedInputSequence: resolvedRemoteLastProcessedInputSequence,
               lastProcessedLookSequence: resolvedRemoteLastProcessedLookSequence,
+              lastProcessedTraversalOrientationSequence:
+                resolvedRemoteLastProcessedTraversalOrientationSequence,
               stateSequence: snapshotSequence,
               username: remoteUsername,
               yawRadians
@@ -919,6 +1005,7 @@ class FakeMetaverseWorldClient {
     this.lastPlayerTraversalIntentRequestKey = null;
     this.latestPlayerInputSequence = 0;
     this.latestPlayerLookSequence = 0;
+    this.latestPlayerTraversalOrientationSequence = 0;
     this.latestPlayerLookIntentSnapshot = null;
     this.latestPlayerTraversalIntentSnapshot = null;
     this.mountedOccupancyRequests = [];
@@ -1028,9 +1115,21 @@ class FakeMetaverseWorldClient {
         this.latestPlayerTraversalIntentSnapshot,
         nextTraversalIntentSnapshot
       );
+    const orientationInputChanged =
+      this.latestPlayerTraversalIntentSnapshot === null ||
+      this.latestPlayerTraversalIntentSnapshot.bodyControl.turnAxis !==
+        nextTraversalIntentSnapshot.bodyControl.turnAxis ||
+      this.latestPlayerTraversalIntentSnapshot.facing.pitchRadians !==
+        nextTraversalIntentSnapshot.facing.pitchRadians ||
+      this.latestPlayerTraversalIntentSnapshot.facing.yawRadians !==
+        nextTraversalIntentSnapshot.facing.yawRadians;
 
     if (sequencedInputChanged) {
       this.latestPlayerInputSequence += 1;
+    }
+
+    if (orientationInputChanged) {
+      this.latestPlayerTraversalOrientationSequence += 1;
     }
 
     this.lastPlayerTraversalIntentRequestKey =
@@ -1044,6 +1143,7 @@ class FakeMetaverseWorldClient {
     this.latestPlayerTraversalIntentSnapshot = Object.freeze({
       ...nextTraversalIntentSnapshot,
       inputSequence: this.latestPlayerInputSequence,
+      orientationSequence: this.latestPlayerTraversalOrientationSequence,
       actionIntent: Object.freeze({
         ...nextTraversalIntentSnapshot.actionIntent,
         kind:
@@ -1124,10 +1224,21 @@ class FakeMetaverseWorldClient {
       )
         ? this.latestPlayerInputSequence + 1
         : this.latestPlayerInputSequence;
+    const nextOrientationSequence =
+      this.latestPlayerTraversalIntentSnapshot === null ||
+      this.latestPlayerTraversalIntentSnapshot.bodyControl.turnAxis !==
+        normalizedTraversalIntentSnapshot.bodyControl.turnAxis ||
+      this.latestPlayerTraversalIntentSnapshot.facing.pitchRadians !==
+        normalizedTraversalIntentSnapshot.facing.pitchRadians ||
+      this.latestPlayerTraversalIntentSnapshot.facing.yawRadians !==
+        normalizedTraversalIntentSnapshot.facing.yawRadians
+        ? this.latestPlayerTraversalOrientationSequence + 1
+        : this.latestPlayerTraversalOrientationSequence;
 
     return Object.freeze({
       ...normalizedTraversalIntentSnapshot,
-      inputSequence: nextInputSequence
+      inputSequence: nextInputSequence,
+      orientationSequence: nextOrientationSequence
     });
   }
 
@@ -1738,22 +1849,19 @@ async function createHeldWeaponProofSlice() {
     new BoxGeometry(0.28, 0.08, 0.08),
     new MeshStandardMaterial({ color: 0x4b5563 })
   );
+  const triggerHandSocket = new Group();
 
   attachmentMesh.position.x = 0.14;
   attachmentScene.name = "metaverse_service_pistol_root";
-  attachmentScene.add(attachmentMesh);
+  triggerHandSocket.name = "metaverse_service_pistol_trigger_hand_r_socket";
+  triggerHandSocket.position.set(-0.01, 0.02, -0.03);
+  attachmentScene.add(attachmentMesh, triggerHandSocket);
 
   return {
     attachmentProofConfig: {
       attachmentId: "metaverse-service-pistol-v1",
       heldMount: {
-        gripAlignment: {
-          attachmentForwardAxis: { x: 1, y: 0, z: 0 },
-          attachmentUpAxis: { x: 0, y: 1, z: 0 },
-          socketForwardAxis: { x: 1, y: 0, z: 0 },
-          socketOffset: { x: 0.01, y: -0.02, z: 0.03 },
-          socketUpAxis: { x: 0, y: 1, z: 0 }
-        },
+        attachmentSocketNodeName: "metaverse_service_pistol_trigger_hand_r_socket",
         socketName: "hand_r_socket"
       },
       label: "Metaverse service pistol",
@@ -3103,6 +3211,195 @@ test("MetaverseRemoteWorldRuntime samples buffered authoritative world snapshots
   assert.equal(fakeWorldClient.disposeCalls, 1);
 });
 
+test("MetaverseRemoteWorldRuntime derives remote grounded walk pose from server-observed traversal input instead of waiting for high planar speed", async () => {
+  const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-dock-runner-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Dock Runner");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  function createRemoteWorldRuntime(remoteObservedMoveAxis) {
+    const fakeWorldClient = new FakeMetaverseWorldClient([
+      createRealtimeWorldSnapshot({
+        currentTick: 10,
+        includeVehicle: false,
+        localPlayerId,
+        localUsername,
+        remoteLinearVelocity: {
+          x: 0.1,
+          y: 0,
+          z: 0
+        },
+        remoteLocomotionMode: "grounded",
+        remoteObservedMoveAxis,
+        remotePlayerId,
+        remotePlayerX: 8,
+        remoteUsername,
+        serverTimeMs: 1_000,
+        snapshotSequence: 1,
+        vehicleSeatOccupantPlayerId: null,
+        vehicleX: 8,
+        yawRadians: 0
+      })
+    ]);
+    const remoteWorldRuntime = new MetaverseRemoteWorldRuntime({
+      createMetaverseWorldClient: () => fakeWorldClient,
+      localPlayerIdentity: {
+        characterId: "metaverse-mannequin-v1",
+        playerId: localPlayerId,
+        username: localUsername
+      },
+      onRemoteWorldUpdate() {},
+      readWallClockMs: () => 1_000,
+      samplingConfig: {
+        clockOffsetCorrectionAlpha: 1,
+        clockOffsetMaxStepMs: 1_000,
+        interpolationDelayMs: 20,
+        maxExtrapolationMs: 120
+      }
+    });
+
+    remoteWorldRuntime.boot();
+    remoteWorldRuntime.sampleRemoteWorld();
+
+    return {
+      fakeWorldClient,
+      remoteWorldRuntime
+    };
+  }
+
+  const idlePresentation = createRemoteWorldRuntime(0);
+
+  assert.equal(
+    idlePresentation.remoteWorldRuntime.remoteCharacterPresentations[0]?.presentation
+      .animationVocabulary,
+    "idle"
+  );
+
+  idlePresentation.remoteWorldRuntime.dispose();
+  assert.equal(idlePresentation.fakeWorldClient.disposeCalls, 1);
+
+  const walkPresentation = createRemoteWorldRuntime(1);
+
+  assert.equal(
+    walkPresentation.remoteWorldRuntime.remoteCharacterPresentations[0]?.presentation
+      .animationVocabulary,
+    "walk"
+  );
+
+  walkPresentation.remoteWorldRuntime.dispose();
+  assert.equal(walkPresentation.fakeWorldClient.disposeCalls, 1);
+});
+
+test("MetaverseRemoteWorldRuntime orients unmounted remote character presentation from authoritative observed facing even while movement body yaw stays idle", async () => {
+  const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-lookout-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Remote Lookout");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const fakeWorldClient = new FakeMetaverseWorldClient([
+    createRealtimeWorldSnapshot({
+      currentTick: 10,
+      includeVehicle: false,
+      localPlayerId,
+      localUsername,
+      remoteLinearVelocity: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      remoteLocomotionMode: "grounded",
+      remoteLookPitchRadians: 0,
+      remoteLookYawRadians: 0,
+      remoteObservedFacingPitchRadians: -0.35,
+      remoteObservedFacingYawRadians: Math.PI * 0.5,
+      remotePlayerId,
+      remotePlayerX: 8,
+      remoteUsername,
+      serverTimeMs: 1_000,
+      snapshotSequence: 1,
+      vehicleSeatOccupantPlayerId: null,
+      vehicleX: 8,
+      yawRadians: 0
+    })
+  ]);
+  const remoteWorldRuntime = new MetaverseRemoteWorldRuntime({
+    createMetaverseWorldClient: () => fakeWorldClient,
+    localPlayerIdentity: {
+      characterId: "metaverse-mannequin-v1",
+      playerId: localPlayerId,
+      username: localUsername
+    },
+    onRemoteWorldUpdate() {},
+    readWallClockMs: () => 1_000,
+    samplingConfig: {
+      clockOffsetCorrectionAlpha: 1,
+      clockOffsetMaxStepMs: 1_000,
+      interpolationDelayMs: 20,
+      maxExtrapolationMs: 120
+    }
+  });
+
+  remoteWorldRuntime.boot();
+  remoteWorldRuntime.sampleRemoteWorld();
+
+  assert.equal(remoteWorldRuntime.remoteCharacterPresentations.length, 1);
+  assert.ok(
+    Math.abs(
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.presentation
+        .yawRadians ?? 0) -
+        Math.PI * 0.5
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.look.pitchRadians ?? 0) +
+        0.35
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.look.yawRadians ?? 0) -
+        Math.PI * 0.5
+    ) < 0.000001
+  );
+  assert.ok(remoteWorldRuntime.remoteCharacterPresentations[0]?.aimCamera);
+  assert.ok(
+    Math.abs(
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.aimCamera?.lookDirection
+        .x ?? 0) - Math.cos(0.35)
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.aimCamera?.lookDirection
+        .y ?? 0) + Math.sin(0.35)
+    ) < 0.000001
+  );
+  assert.ok(
+    (remoteWorldRuntime.remoteCharacterPresentations[0]?.aimCamera?.position.y ?? 0) >
+      (remoteWorldRuntime.remoteCharacterPresentations[0]?.presentation.position.y ?? 0)
+  );
+
+  remoteWorldRuntime.dispose();
+  assert.equal(fakeWorldClient.disposeCalls, 1);
+});
+
 test("MetaverseRemoteWorldRuntime derives remote jump presentation from authoritative jump state on the nearest authoritative snapshot", async () => {
   const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
     "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
@@ -3920,7 +4217,7 @@ test("MetaverseRemoteWorldRuntime preserves the latest authoritative local proce
   remoteWorldRuntime.dispose();
 });
 
-test("MetaverseRemoteWorldRuntime exposes local authoritative corrections once the authoritative input ack catches up", async () => {
+test("MetaverseRemoteWorldRuntime exposes local authoritative validation once the authoritative input ack catches up", async () => {
   const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
     "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
   );
@@ -3983,13 +4280,7 @@ test("MetaverseRemoteWorldRuntime exposes local authoritative corrections once t
     6
   );
   assert.notEqual(
-    remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerPoseForReconciliation(
-      120
-    ),
-    null
-  );
-  assert.equal(
-    remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerReconciliationSample(
+    remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerPose(
       120
     ),
     null
@@ -4001,6 +4292,81 @@ test("MetaverseRemoteWorldRuntime exposes local authoritative corrections once t
     remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(120)
       ?.lastProcessedLookSequence,
     4
+  );
+
+  remoteWorldRuntime.dispose();
+});
+
+test("MetaverseRemoteWorldRuntime waits for traversal orientation ack before exposing local authoritative validation", async () => {
+  const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Remote Sailor");
+  let currentWallClockMs = 1_100;
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const fakeWorldClient = new FakeMetaverseWorldClient([
+    createRealtimeWorldSnapshot({
+      currentTick: 10,
+      localLastProcessedInputSequence: 6,
+      localLastProcessedTraversalOrientationSequence: 1,
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remotePlayerX: 10,
+      remoteUsername,
+      serverTimeMs: 1_000,
+      snapshotSequence: 1,
+      vehicleX: 10,
+      yawRadians: 0.2
+    })
+  ]);
+  fakeWorldClient.latestPlayerInputSequence = 6;
+  fakeWorldClient.latestPlayerTraversalOrientationSequence = 2;
+
+  const remoteWorldRuntime = new MetaverseRemoteWorldRuntime({
+    createMetaverseWorldClient: () => fakeWorldClient,
+    localPlayerIdentity: {
+      characterId: "metaverse-mannequin-v1",
+      playerId: localPlayerId,
+      username: localUsername
+    },
+    onRemoteWorldUpdate() {},
+    readWallClockMs: () => currentWallClockMs,
+    samplingConfig: {
+      clockOffsetCorrectionAlpha: 1,
+      clockOffsetMaxStepMs: 1_000,
+      interpolationDelayMs: 225,
+      maxExtrapolationMs: 120
+    }
+  });
+
+  remoteWorldRuntime.boot();
+
+  assert.equal(
+    remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(120),
+    null
+  );
+  assert.equal(
+    remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerPose(
+      120
+    ),
+    null
+  );
+
+  fakeWorldClient.latestPlayerTraversalOrientationSequence = 1;
+
+  assert.equal(
+    remoteWorldRuntime.readFreshAckedAuthoritativeLocalPlayerSnapshot(120)
+      ?.lastProcessedTraversalOrientationSequence,
+    1
   );
 
   remoteWorldRuntime.dispose();
@@ -4636,65 +5002,6 @@ test("MetaverseRemoteWorldRuntime exposes raw acked local authority plus replay 
   );
 
   remoteWorldRuntime.dispose();
-});
-
-test("local authority reconciliation prefers replay for held traversal even after the current input is acknowledged", async () => {
-  const { shouldPreferAckedTraversalReplay } = await clientLoader.load(
-    "/src/metaverse/states/local-authority-reconciliation.ts"
-  );
-  const heldTraversalIntent = Object.freeze({
-    actionIntent: Object.freeze({
-      kind: "none",
-      pressed: false,
-      sequence: 0
-    }),
-    bodyControl: Object.freeze({
-      boost: false,
-      moveAxis: 1,
-      strafeAxis: 0,
-      turnAxis: 0
-    }),
-    facing: Object.freeze({
-      pitchRadians: 0,
-      yawRadians: 0.4
-    }),
-    inputSequence: 6,
-    locomotionMode: "swim"
-  });
-  const acknowledgedAuthority = Object.freeze({
-    lastProcessedInputSequence: 6,
-    traversalAuthority: Object.freeze({
-      currentActionKind: null,
-      currentActionPhase: null,
-      currentActionSequence: null,
-      lastConsumedActionKind: null,
-      lastConsumedActionSequence: null,
-      lastRejectedActionKind: null,
-      lastRejectedActionSequence: null,
-      phaseStartedAtTick: null
-    })
-  });
-
-  assert.equal(
-    shouldPreferAckedTraversalReplay(
-      heldTraversalIntent,
-      acknowledgedAuthority
-    ),
-    true
-  );
-  assert.equal(
-    shouldPreferAckedTraversalReplay(
-      Object.freeze({
-        ...heldTraversalIntent,
-        bodyControl: Object.freeze({
-          ...heldTraversalIntent.bodyControl,
-          moveAxis: 0
-        })
-      }),
-      acknowledgedAuthority
-    ),
-    false
-  );
 });
 
 test("MetaverseRemoteWorldRuntime adds and removes remote entity presentations from authoritative world snapshots", async () => {
@@ -8094,23 +8401,12 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
     metaverseAttachmentProofConfig.heldMount.offHandSupportPointId,
     "grip-support-right"
   );
-  assert.deepEqual(metaverseAttachmentProofConfig.heldMount.gripAlignment, {
-    attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
-    attachmentGripMarkerNodeName: "metaverse_service_pistol_grip_left_marker",
-    attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
-    socketForwardAxis: { x: 1, y: 0, z: 0 },
-    socketOffset: { x: 0, y: 0.03, z: 0 },
-    socketUpAxis: { x: 0, y: 1, z: 0 }
-  });
+  assert.equal(
+    metaverseAttachmentProofConfig.heldMount.attachmentSocketNodeName,
+    "metaverse_service_pistol_trigger_hand_r_socket"
+  );
   assert.deepEqual(metaverseAttachmentProofConfig.mountedHolsterMount, {
-    gripAlignment: {
-      attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
-      attachmentGripMarkerNodeName: "metaverse_service_pistol_holster_marker",
-      attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
-      socketForwardAxis: { x: 0, y: -1, z: 0 },
-      socketOffset: { x: 0.16, y: -0.02, z: -0.04 },
-      socketUpAxis: { x: 0, y: 0, z: -1 }
-    },
+    attachmentSocketNodeName: "metaverse_service_pistol_back_socket",
     socketName: "back_socket"
   });
   assert.deepEqual(metaverseAttachmentProofConfig.supportPoints, [
@@ -8836,35 +9132,30 @@ test("createMetaverseScene boots one manifest-driven character and hand socket a
     new BoxGeometry(0.28, 0.08, 0.08),
     new MeshStandardMaterial({ color: 0x4b5563 })
   );
+  const triggerHandSocket = new Group();
+  const backSocket = new Group();
 
   attachmentScene.name = "metaverse_service_pistol_root";
   attachmentMesh.position.x = 0.14;
-  attachmentScene.add(attachmentMesh);
+  triggerHandSocket.name = "metaverse_service_pistol_trigger_hand_r_socket";
+  triggerHandSocket.position.set(-0.01, 0.02, -0.03);
+  backSocket.name = "metaverse_service_pistol_back_socket";
+  backSocket.position.set(0.12, -0.04, 0.03);
+  backSocket.quaternion.set(0, 0.7071067811865475, -0.7071067811865476, 0);
+  attachmentScene.add(attachmentMesh, triggerHandSocket, backSocket);
 
   const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
     attachmentProofConfig: {
       attachmentId: "metaverse-service-pistol-v1",
       heldMount: {
+        attachmentSocketNodeName: "metaverse_service_pistol_trigger_hand_r_socket",
         offHandSupportPointId: "hand_l_support",
-        gripAlignment: {
-          attachmentForwardAxis: { x: 1, y: 0, z: 0 },
-          attachmentUpAxis: { x: 0, y: 1, z: 0 },
-          socketForwardAxis: { x: 1, y: 0, z: 0 },
-          socketOffset: { x: 0.01, y: -0.02, z: 0.03 },
-          socketUpAxis: { x: 0, y: 1, z: 0 }
-        },
         socketName: "hand_r_socket"
       },
       label: "Metaverse service pistol",
       modelPath: "/models/metaverse/attachments/metaverse-service-pistol.gltf",
       mountedHolsterMount: {
-        gripAlignment: {
-          attachmentForwardAxis: { x: 1, y: 0, z: 0 },
-          attachmentUpAxis: { x: 0, y: 1, z: 0 },
-          socketForwardAxis: { x: 0, y: -1, z: 0 },
-          socketOffset: { x: 0.12, y: 0.03, z: -0.04 },
-          socketUpAxis: { x: 0, y: 0, z: -1 }
-        },
+        attachmentSocketNodeName: "metaverse_service_pistol_back_socket",
         socketName: "back_socket"
       },
       supportPoints: [
@@ -9466,22 +9757,19 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     new BoxGeometry(0.28, 0.08, 0.08),
     new MeshStandardMaterial({ color: 0x4b5563 })
   );
+  const triggerHandSocket = new Group();
 
   attachmentMesh.position.x = 0.14;
   attachmentScene.name = "metaverse_service_pistol_root";
-  attachmentScene.add(attachmentMesh);
+  triggerHandSocket.name = "metaverse_service_pistol_trigger_hand_r_socket";
+  triggerHandSocket.position.set(0.04, -0.045, 0.025);
+  attachmentScene.add(attachmentMesh, triggerHandSocket);
 
   const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
     attachmentProofConfig: {
       attachmentId: "metaverse-service-pistol-v1",
       heldMount: {
-        gripAlignment: {
-          attachmentForwardAxis: { x: 1, y: 0, z: 0 },
-          attachmentUpAxis: { x: 0, y: 1, z: 0 },
-          socketForwardAxis: { x: 1, y: 0, z: 0 },
-          socketOffset: { x: 0, y: 0, z: 0 },
-          socketUpAxis: { x: 0, y: 1, z: 0 }
-        },
+        attachmentSocketNodeName: "metaverse_service_pistol_trigger_hand_r_socket",
         socketName: "grip_r_socket"
       },
       label: "Metaverse service pistol",
@@ -9552,6 +9840,7 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     "metaverse_attachment/metaverse-service-pistol-v1"
   );
   const resolveExpectedPalmBasis = (
+    sourceSocketLocalPosition,
     thumbBaseLocalPosition,
     indexBaseLocalPosition,
     middleBaseLocalPosition,
@@ -9572,11 +9861,18 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
 
     return {
       forwardAxis,
+      gripLocalPosition: sourceSocketLocalPosition
+        .clone()
+        .lerp(knuckleCentroid, 0.72),
       knuckleCentroid,
+      palmLocalPosition: sourceSocketLocalPosition
+        .clone()
+        .lerp(knuckleCentroid, 0.45),
       upAxis
     };
   };
   const leftExpectedPalmBasis = resolveExpectedPalmBasis(
+    new Vector3(-0.05, 0, 0),
     new Vector3(-0.04, -0.02, 0.06),
     new Vector3(-0.1, 0, 0.03),
     new Vector3(-0.11, 0, 0),
@@ -9584,6 +9880,7 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     new Vector3(-0.08, 0, -0.05)
   );
   const rightExpectedPalmBasis = resolveExpectedPalmBasis(
+    new Vector3(0.05, 0, 0),
     new Vector3(0.04, -0.02, 0.06),
     new Vector3(0.1, 0, 0.03),
     new Vector3(0.11, 0, 0),
@@ -9608,14 +9905,14 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
   assert.equal(palmSocket.parent?.name, "hand_r");
   assert.equal(attachmentRoot.parent?.name, "grip_r_socket");
   assert.ok(
-    leftGripSocket.position.distanceTo(leftExpectedPalmBasis.knuckleCentroid) <
+    leftGripSocket.position.distanceTo(leftExpectedPalmBasis.gripLocalPosition) <
       0.000001,
-    "Synthesized humanoid_v2 left grip socket should sit on the knuckle centroid"
+    "Synthesized humanoid_v2 left grip socket should sit on the palm-to-knuckle grip seam"
   );
   assert.ok(
-    gripSocket.position.distanceTo(rightExpectedPalmBasis.knuckleCentroid) <
+    gripSocket.position.distanceTo(rightExpectedPalmBasis.gripLocalPosition) <
       0.000001,
-    "Synthesized humanoid_v2 right grip socket should sit on the knuckle centroid"
+    "Synthesized humanoid_v2 right grip socket should sit on the palm-to-knuckle grip seam"
   );
   assert.ok(
     resolveSocketForwardAxis(leftPalmSocket).angleTo(
@@ -9857,16 +10154,16 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   ]);
   const pistolAimDownClip = new AnimationClip("Pistol_Aim_Down", 1, [
     createStaticQuaternionTrack(
-      "head.quaternion",
+      "clavicle_r.quaternion",
       new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), -0.18)
     )
   ]);
   const pistolAimNeutralClip = new AnimationClip("Pistol_Aim_Neutral", 1, [
-    createStaticQuaternionTrack("head.quaternion", new Quaternion())
+    createStaticQuaternionTrack("clavicle_r.quaternion", new Quaternion())
   ]);
   const pistolAimUpClip = new AnimationClip("Pistol_Aim_Up", 1, [
     createStaticQuaternionTrack(
-      "head.quaternion",
+      "clavicle_r.quaternion",
       new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), 0.18)
     )
   ]);
@@ -9875,42 +10172,20 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
     new BoxGeometry(0.28, 0.08, 0.08),
     new MeshStandardMaterial({ color: 0x4b5563 })
   );
-  const forwardMarker = new Group();
-  const upMarker = new Group();
-  const gripRightMarker = new Group();
-  const gripLeftMarker = new Group();
+  const triggerHandSocket = new Group();
 
   attachmentMesh.position.set(0.16, 0, 0);
   attachmentScene.name = "metaverse_service_pistol_root";
-  forwardMarker.name = "metaverse_service_pistol_forward_marker";
-  forwardMarker.position.set(1, 0, 0);
-  upMarker.name = "metaverse_service_pistol_up_marker";
-  upMarker.position.set(0, 1, 0);
-  gripRightMarker.name = "metaverse_service_pistol_grip_right_marker";
-  gripRightMarker.position.set(0.04, 0, -0.025);
-  gripLeftMarker.name = "metaverse_service_pistol_grip_left_marker";
-  gripLeftMarker.position.set(0.04, 0, 0.025);
-  attachmentScene.add(
-    attachmentMesh,
-    forwardMarker,
-    upMarker,
-    gripRightMarker,
-    gripLeftMarker
-  );
+  triggerHandSocket.name = "metaverse_service_pistol_trigger_hand_r_socket";
+  triggerHandSocket.position.set(0.04, -0.045, 0.025);
+  attachmentScene.add(attachmentMesh, triggerHandSocket);
 
   const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
     attachmentProofConfig: {
       attachmentId: "metaverse-service-pistol-v1",
       heldMount: {
+        attachmentSocketNodeName: "metaverse_service_pistol_trigger_hand_r_socket",
         offHandSupportPointId: null,
-        gripAlignment: {
-          attachmentForwardMarkerNodeName: "metaverse_service_pistol_forward_marker",
-          attachmentGripMarkerNodeName: "metaverse_service_pistol_grip_left_marker",
-          attachmentUpMarkerNodeName: "metaverse_service_pistol_up_marker",
-          socketForwardAxis: { x: 1, y: 0, z: 0 },
-          socketOffset: { x: 0, y: 0, z: 0 },
-          socketUpAxis: { x: 0, y: 1, z: 0 }
-        },
         socketName: "grip_r_socket"
       },
       label: "Metaverse service pistol",
@@ -10034,8 +10309,8 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   const attachmentRoot = sceneRuntime.scene.getObjectByName(
     "metaverse_attachment/metaverse-service-pistol-v1"
   );
-  const forwardMarkerNode = sceneRuntime.scene.getObjectByName(
-    "metaverse_service_pistol_forward_marker"
+  const triggerHandSocketNode = sceneRuntime.scene.getObjectByName(
+    "metaverse_service_pistol_trigger_hand_r_socket"
   );
   const leftSupportPointNode = sceneRuntime.scene.getObjectByName(
     "metaverse_attachment_support_point/metaverse-service-pistol-v1/hand_l_support"
@@ -10053,7 +10328,7 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   ].map((boneName) => sceneRuntime.scene.getObjectByName(boneName));
 
   assert.ok(attachmentRoot);
-  assert.ok(forwardMarkerNode);
+  assert.ok(triggerHandSocketNode);
   assert.equal(leftSupportPointNode, undefined);
   assert.equal(rightSupportPointNode, undefined);
   assert.ok(leftGripSocketNode);
@@ -10062,9 +10337,8 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
     assert.ok(knuckleNode);
   }
 
-  const initialWeaponForward = forwardMarkerNode
-    .getWorldPosition(new Vector3())
-    .sub(attachmentRoot.getWorldPosition(new Vector3()))
+  const initialWeaponForward = new Vector3(1, 0, 0)
+    .applyQuaternion(attachmentRoot.getWorldQuaternion(new Quaternion()))
     .normalize();
   const renderedCameraPosition = sceneRuntime.camera.position.clone();
   const traversalCameraPosition = new Vector3(
@@ -10088,9 +10362,7 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
     .applyQuaternion(rightGripSocketNode.getWorldQuaternion(new Quaternion()))
     .normalize();
   const resolveAttachmentAssetLocalPoint = (node) =>
-    attachmentRoot
-      .worldToLocal(node.getWorldPosition(new Vector3()))
-      .add(gripLeftMarker.position);
+    attachmentRoot.worldToLocal(node.getWorldPosition(new Vector3()));
   const resolveKnuckleCentroid = (nodes) =>
     nodes
       .reduce(
@@ -10100,7 +10372,9 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
       )
       .multiplyScalar(1 / nodes.length);
   const rightKnuckleCentroid = resolveKnuckleCentroid(rightKnuckleNodes);
-  const expectedRightGripEdge = new Vector3(0.04, 0, 0.025);
+  const expectedRightGripEdge = attachmentRoot.worldToLocal(
+    triggerHandSocketNode.getWorldPosition(new Vector3())
+  );
   const initialLeftGripLocalPosition = attachmentRoot.worldToLocal(
     leftGripSocketNode.getWorldPosition(new Vector3())
   );
@@ -10119,11 +10393,17 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   );
   assert.ok(
     rightKnuckleCentroid.distanceTo(expectedRightGripEdge) < 0.015,
-    `Expected right-hand knuckles ${rightKnuckleCentroid.toArray()} to land on the pistol front-right grip edge ${expectedRightGripEdge.toArray()}.`
+    `Expected right-hand knuckles ${rightKnuckleCentroid.toArray()} to land on the authored trigger-hand socket ${expectedRightGripEdge.toArray()}.`
   );
   assert.ok(
     rightKnuckleCentroid.z > 0.01,
-    `Expected right-hand knuckles ${rightKnuckleCentroid.toArray()} to stay on the trigger-hand side selected by the held grip marker.`
+    `Expected right-hand knuckles ${rightKnuckleCentroid.toArray()} to stay on the trigger-hand side selected by the authored weapon socket.`
+  );
+  assert.ok(
+    triggerHandSocketNode
+      .getWorldPosition(new Vector3())
+      .distanceTo(rightGripSocketNode.getWorldPosition(new Vector3())) < 0.000001,
+    "Expected the authored trigger-hand socket to align exactly with the character grip socket."
   );
   assert.ok(
     renderedCameraPosition.distanceTo(traversalCameraPosition) < 0.000001,
@@ -10155,9 +10435,8 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
 
   sceneRuntime.scene.updateMatrixWorld(true);
 
-  const repeatedWeaponForward = forwardMarkerNode
-    .getWorldPosition(new Vector3())
-    .sub(attachmentRoot.getWorldPosition(new Vector3()))
+  const repeatedWeaponForward = new Vector3(1, 0, 0)
+    .applyQuaternion(attachmentRoot.getWorldQuaternion(new Quaternion()))
     .normalize();
 
   assert.ok(
@@ -10195,7 +10474,47 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
     `Expected left-hand grip ${pitchedLeftGripLocalPosition.toArray()} to stay locked near ${initialLeftGripLocalPosition.toArray()} across pitch changes.`
   );
 
+  const createRemoteAimCameraSnapshot = (position, pitchRadians, yawRadians) => {
+    const lookDirection = new Vector3(
+      Math.sin(yawRadians) * Math.cos(pitchRadians),
+      Math.sin(pitchRadians),
+      -Math.cos(yawRadians) * Math.cos(pitchRadians)
+    ).normalize();
+
+    return Object.freeze({
+      lookDirection: Object.freeze({
+        x: lookDirection.x,
+        y: lookDirection.y,
+        z: lookDirection.z
+      }),
+      pitchRadians,
+      position: Object.freeze({
+        x:
+          position.x +
+          Math.sin(yawRadians) *
+            metaverseRuntimeConfig.bodyPresentation
+              .groundedFirstPersonForwardOffsetMeters,
+        y:
+          position.y + metaverseRuntimeConfig.groundedBody.eyeHeightMeters,
+        z:
+          position.z -
+          Math.cos(yawRadians) *
+            metaverseRuntimeConfig.bodyPresentation
+              .groundedFirstPersonForwardOffsetMeters
+      }),
+      yawRadians
+    });
+  };
   const remotePitchUpPresentation = Object.freeze({
+    aimCamera: createRemoteAimCameraSnapshot(
+      Object.freeze({
+        x: 1.5,
+        y: 0,
+        z: -1
+      }),
+      0.45,
+      0
+    ),
     characterId: "mesh2motion-humanoid-v1",
     look: Object.freeze({
       pitchRadians: 0.45,
@@ -10228,12 +10547,29 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   const remoteCharacterRoot = sceneRuntime.scene.getObjectByName(
     "metaverse_character/mesh2motion-humanoid-v1/remote-aimer"
   );
+  const remoteAttachmentRoot =
+    remoteCharacterRoot?.getObjectByName(
+      "metaverse_attachment/metaverse-service-pistol-v1"
+    ) ?? null;
+  const remoteClavicleBone =
+    remoteCharacterRoot?.getObjectByName("clavicle_r") ?? null;
   const remoteHeadBone = remoteCharacterRoot?.getObjectByName("head") ?? null;
+  const remotePitchUpLookDirection = new Vector3(
+    0,
+    Math.sin(0.45),
+    -Math.cos(0.45)
+  ).normalize();
 
   assert.ok(remoteCharacterRoot);
+  assert.ok(remoteAttachmentRoot);
+  assert.ok(remoteClavicleBone);
   assert.ok(remoteHeadBone);
 
-  const remotePitchUpQuaternion = remoteHeadBone.quaternion.clone();
+  const remoteHeadNeutralQuaternion = remoteHeadBone.quaternion.clone();
+  const remoteClaviclePitchUpQuaternion = remoteClavicleBone.quaternion.clone();
+  const remoteWeaponPitchUpForward = new Vector3(1, 0, 0)
+    .applyQuaternion(remoteAttachmentRoot.getWorldQuaternion(new Quaternion()))
+    .normalize();
 
   sceneRuntime.syncPresentation(
     cameraSnapshot,
@@ -10244,6 +10580,11 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
     [
       Object.freeze({
         ...remotePitchUpPresentation,
+        aimCamera: createRemoteAimCameraSnapshot(
+          remotePitchUpPresentation.presentation.position,
+          -0.45,
+          0
+        ),
         look: Object.freeze({
           pitchRadians: -0.45,
           yawRadians: 0
@@ -10253,11 +10594,125 @@ test("createMetaverseScene layers humanoid_v2 pistol pitch over walk locally and
   );
   sceneRuntime.scene.updateMatrixWorld(true);
 
-  const remotePitchDownQuaternion = remoteHeadBone.quaternion.clone();
+  const remoteClaviclePitchDownQuaternion = remoteClavicleBone.quaternion.clone();
+  const remoteHeadPitchedQuaternion = remoteHeadBone.quaternion.clone();
+  const remotePitchDownLookDirection = new Vector3(
+    0,
+    Math.sin(-0.45),
+    -Math.cos(-0.45)
+  ).normalize();
+  const remoteWeaponPitchDownForward = new Vector3(1, 0, 0)
+    .applyQuaternion(remoteAttachmentRoot.getWorldQuaternion(new Quaternion()))
+    .normalize();
 
   assert.ok(
-    remotePitchUpQuaternion.angleTo(remotePitchDownQuaternion) > 0.08,
-    `Expected remote humanoid_v2 head pitch to respond to replicated look pitch, but delta was ${remotePitchUpQuaternion.angleTo(remotePitchDownQuaternion).toFixed(4)} radians.`
+    remoteClaviclePitchUpQuaternion.angleTo(remoteClaviclePitchDownQuaternion) > 0.08,
+    `Expected remote humanoid_v2 clavicle pitch to respond to replicated look pitch, but delta was ${remoteClaviclePitchUpQuaternion.angleTo(remoteClaviclePitchDownQuaternion).toFixed(4)} radians.`
+  );
+  assert.ok(
+    remoteHeadNeutralQuaternion.angleTo(remoteHeadPitchedQuaternion) < 0.001,
+    `Expected remote humanoid_v2 head pitch to stay out of pistol aim layering, but delta was ${remoteHeadNeutralQuaternion.angleTo(remoteHeadPitchedQuaternion).toFixed(4)} radians.`
+  );
+  assert.ok(
+    remoteWeaponPitchUpForward.angleTo(remotePitchUpLookDirection) < 0.32,
+    `Expected remote weapon forward ${remoteWeaponPitchUpForward.toArray()} to track replicated up-look ${remotePitchUpLookDirection.toArray()}.`
+  );
+  assert.ok(
+    remoteWeaponPitchDownForward.angleTo(remotePitchDownLookDirection) < 0.32,
+    `Expected remote weapon forward ${remoteWeaponPitchDownForward.toArray()} to track replicated down-look ${remotePitchDownLookDirection.toArray()}.`
+  );
+  assert.ok(
+    remoteWeaponPitchUpForward.angleTo(remoteWeaponPitchDownForward) > 0.2,
+    `Expected remote weapon forward to change with replicated pitch, but delta was ${remoteWeaponPitchUpForward.angleTo(remoteWeaponPitchDownForward).toFixed(4)} radians.`
+  );
+});
+
+test("createMetaverseScene keeps the local grounded first-person camera in front of the animated head socket", async () => {
+  const [{ Quaternion, Vector3 }, { createMetaverseScene }, { metaverseRuntimeConfig }] =
+    await Promise.all([
+      import("three/webgpu"),
+      clientLoader.load("/src/metaverse/render/webgpu-metaverse-scene.ts"),
+      clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
+    ]);
+  const {
+    attachmentProofConfig,
+    characterProofConfig,
+    createSceneAssetLoader
+  } = await createHeldWeaponProofSlice();
+  const sceneRuntime = createMetaverseScene(metaverseRuntimeConfig, {
+    attachmentProofConfig,
+    characterProofConfig,
+    createSceneAssetLoader,
+    warn() {}
+  });
+
+  await sceneRuntime.boot();
+
+  const rawCameraSnapshot = Object.freeze({
+    lookDirection: Object.freeze({
+      x: 0,
+      y: 0,
+      z: -1
+    }),
+    pitchRadians: 0,
+    position: Object.freeze({
+      x: 0,
+      y: 1.62,
+      z: -0.02
+    }),
+    yawRadians: 0
+  });
+  const characterPresentation = Object.freeze({
+    animationVocabulary: "walk",
+    position: Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    yawRadians: 0
+  });
+
+  sceneRuntime.syncPresentation(
+    rawCameraSnapshot,
+    null,
+    16,
+    1 / 60,
+    characterPresentation,
+    []
+  );
+  sceneRuntime.scene.updateMatrixWorld(true);
+
+  const headSocketNode = sceneRuntime.scene.getObjectByName("head_socket");
+
+  assert.ok(headSocketNode);
+  assert.ok(
+    sceneRuntime.camera.position.z <
+      rawCameraSnapshot.position.z -
+        metaverseRuntimeConfig.bodyPresentation
+          .groundedFirstPersonHeadClearanceMeters *
+          0.5,
+    `Expected rendered camera z ${sceneRuntime.camera.position.z.toFixed(4)} to move ahead of raw traversal z ${rawCameraSnapshot.position.z.toFixed(4)} when the head intrudes.`
+  );
+
+  const renderedLookDirection = new Vector3(0, 0, -1).applyQuaternion(
+    sceneRuntime.camera.quaternion.clone()
+  );
+  const renderedCameraPosition = sceneRuntime.camera.position.clone();
+  const headForwardDistanceMeters = headSocketNode
+    .getWorldPosition(new Vector3())
+    .sub(renderedCameraPosition)
+    .dot(renderedLookDirection);
+
+  assert.ok(
+    headForwardDistanceMeters <=
+      -metaverseRuntimeConfig.bodyPresentation
+        .groundedFirstPersonHeadClearanceMeters +
+        0.000001,
+    `Expected rendered camera to stay at least ${metaverseRuntimeConfig.bodyPresentation.groundedFirstPersonHeadClearanceMeters.toFixed(3)}m ahead of the head socket, but forward distance was ${headForwardDistanceMeters.toFixed(4)}.`
+  );
+  assert.ok(
+    sceneRuntime.camera.quaternion.angleTo(new Quaternion()) < 0.000001,
+    "Expected first-person head clearance to preserve camera orientation."
   );
 });
 

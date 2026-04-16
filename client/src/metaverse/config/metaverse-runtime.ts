@@ -1,6 +1,7 @@
 import {
   metaverseGroundedBodyTraversalCoreConfig,
   metaverseGroundedSurfaceTraversalConfig,
+  metaverseUnmountedPlayerLookConstraintBounds,
   metaverseSwimSurfaceTraversalConfig,
   metaverseTraversalWorldRadius,
   metaverseVehicleSurfaceTraversalConfig
@@ -8,6 +9,9 @@ import {
 import type { MetaverseRuntimeConfig } from "../types/metaverse-runtime";
 
 const metaverseSpawnDockSupportHeightMeters = 0.6;
+const metaverseGroundedFirstPersonFaceClearanceMeters = 0.12;
+const metaverseGroundedFirstPersonHeadClearanceMeters = 0.05;
+const metaverseGroundedFirstPersonHeadOcclusionRadiusMeters = 0.18;
 
 export const metaverseRuntimeConfig = {
   camera: {
@@ -23,7 +27,12 @@ export const metaverseRuntimeConfig = {
     }
   },
   bodyPresentation: {
-    groundedFirstPersonForwardOffsetMeters: 0,
+    groundedFirstPersonHeadClearanceMeters:
+      metaverseGroundedFirstPersonHeadClearanceMeters,
+    groundedFirstPersonHeadOcclusionRadiusMeters:
+      metaverseGroundedFirstPersonHeadOcclusionRadiusMeters,
+    groundedFirstPersonForwardOffsetMeters:
+      metaverseGroundedFirstPersonFaceClearanceMeters,
     swimIdleBodySubmersionDepthMeters: 1.02,
     swimMovingBodySubmersionDepthMeters: 0.94,
     swimThirdPersonFollowDistanceMeters: 2.8,
@@ -59,9 +68,10 @@ export const metaverseRuntimeConfig = {
     }
   },
   orientation: {
-    maxPitchRadians: 0.6,
-    maxTurnSpeedRadiansPerSecond: 3.6,
-    minPitchRadians: -0.6,
+    maxPitchRadians: metaverseUnmountedPlayerLookConstraintBounds.maxPitchRadians,
+    maxTurnSpeedRadiansPerSecond:
+      metaverseGroundedBodyTraversalCoreConfig.maxTurnSpeedRadiansPerSecond,
+    minPitchRadians: metaverseUnmountedPlayerLookConstraintBounds.minPitchRadians,
     mouseEdgeTurn: {
       deadZoneViewportFraction: 0.2,
       responseExponent: 1.55

@@ -30,15 +30,20 @@ import type {
   MetaverseHudSnapshot,
   MountedEnvironmentSnapshot,
   MetaverseRemoteCharacterPresentationSnapshot,
-  MetaverseRemoteVehiclePresentationSnapshot
+  MetaverseRemoteVehiclePresentationSnapshot,
+  MetaverseRuntimeConfig
 } from "../types/metaverse-runtime";
+import { metaverseRuntimeConfig } from "../config/metaverse-runtime";
 import type { MetaverseLocalPlayerIdentity } from "./metaverse-presence-runtime";
 import type { RoutedDriverVehicleControlIntentSnapshot } from "../traversal/types/traversal";
 import { MetaverseRemoteCharacterPresentationOwner } from "../traversal/presentation/remote-character-presentation";
 import { MetaverseRemoteVehiclePresentationOwner } from "../traversal/presentation/remote-vehicle-presentation";
 import {
+  type AckedAuthoritativeLocalPlayerPose,
+  createAckedAuthoritativeLocalPlayerDeliveryKey,
   createAckedAuthoritativeLocalPlayerReconciliationDeliveryKey,
   projectAckedAuthoritativeLocalPlayerPoseForReconciliation,
+  readAckedAuthoritativeLocalPlayerPose,
   readAckedAuthoritativeLocalPlayerRawPoseForReconciliation,
   type AckedAuthoritativeLocalPlayerPoseForReconciliation,
   type AckedAuthoritativeLocalPlayerReconciliationSample
@@ -56,6 +61,7 @@ export interface MetaverseWorldClientRuntime {
   readonly driverVehicleControlDatagramStatusSnapshot: RealtimeDatagramTransportStatusSnapshot;
   readonly latestPlayerInputSequence: number;
   readonly latestPlayerLookSequence: number;
+  readonly latestPlayerTraversalOrientationSequence: number;
   readonly latestPlayerTraversalIntentSnapshot:
     | MetaversePlayerTraversalIntentSnapshot
     | null;
@@ -98,6 +104,10 @@ interface MetaverseRemoteWorldRuntimeDependencies {
   readonly localPlayerIdentity: MetaverseLocalPlayerIdentity | null;
   readonly maxAckedReplayHorizonMs?: number;
   readonly onRemoteWorldUpdate: () => void;
+  readonly presentationConfig?: Pick<
+    MetaverseRuntimeConfig,
+    "bodyPresentation" | "groundedBody"
+  >;
   readonly readWallClockMs?: () => number;
   readonly samplingConfig: MetaverseRemoteWorldSamplingConfig;
 }
@@ -142,6 +152,10 @@ export class MetaverseRemoteWorldRuntime {
   readonly #localPlayerIdentity: MetaverseLocalPlayerIdentity | null;
   readonly #maxAckedReplayHorizonMs: number;
   readonly #onRemoteWorldUpdate: () => void;
+  readonly #presentationConfig: Pick<
+    MetaverseRuntimeConfig,
+    "bodyPresentation" | "groundedBody"
+  >;
   readonly #readWallClockMs: () => number;
   readonly #samplingConfig: MetaverseRemoteWorldSamplingConfig;
   readonly #authoritativeServerClock: AuthoritativeServerClock;
@@ -178,6 +192,7 @@ export class MetaverseRemoteWorldRuntime {
   #extrapolatedFrameCount = 0;
   #lastSampledAtMs: number | null = null;
   #lastSampledExtrapolationMs = 0;
+  #lastConsumedAckedLocalPlayerPoseDeliveryKey: string | null = null;
   #lastConsumedAckedLocalPlayerReconciliationDeliveryKey: string | null = null;
   #latestIndexedWorldSnapshot: MetaverseRealtimeWorldSnapshot | null = null;
   #sampleEpoch = 0;
@@ -190,6 +205,7 @@ export class MetaverseRemoteWorldRuntime {
     localPlayerIdentity,
     maxAckedReplayHorizonMs,
     onRemoteWorldUpdate,
+    presentationConfig,
     readWallClockMs,
     samplingConfig
   }: MetaverseRemoteWorldRuntimeDependencies) {
@@ -198,6 +214,7 @@ export class MetaverseRemoteWorldRuntime {
     this.#maxAckedReplayHorizonMs =
       maxAckedReplayHorizonMs ?? samplingConfig.maxExtrapolationMs;
     this.#onRemoteWorldUpdate = onRemoteWorldUpdate;
+    this.#presentationConfig = presentationConfig ?? metaverseRuntimeConfig;
     this.#readWallClockMs = readWallClockMs ?? Date.now;
     this.#samplingConfig = samplingConfig;
     this.#authoritativeServerClock = new AuthoritativeServerClock({
@@ -318,6 +335,49 @@ export class MetaverseRemoteWorldRuntime {
   ): MetaverseRealtimePlayerSnapshot | null {
     return this.#readFreshAckedLocalPlayerSnapshot(maxAuthoritativeSnapshotAgeMs)
       ?.playerSnapshot ?? null;
+  }
+
+  readFreshAckedAuthoritativeLocalPlayerPose(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): AckedAuthoritativeLocalPlayerPose | null {
+    const freshAckedLocalPlayerSnapshot = this.#readFreshAckedLocalPlayerSnapshot(
+      maxAuthoritativeSnapshotAgeMs
+    );
+
+    if (freshAckedLocalPlayerSnapshot === null) {
+      return null;
+    }
+
+    return readAckedAuthoritativeLocalPlayerPose(
+      freshAckedLocalPlayerSnapshot.playerSnapshot
+    );
+  }
+
+  consumeFreshAckedAuthoritativeLocalPlayerPose(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): AckedAuthoritativeLocalPlayerPose | null {
+    const freshAckedLocalPlayerSnapshot = this.#readFreshAckedLocalPlayerSnapshot(
+      maxAuthoritativeSnapshotAgeMs
+    );
+    const poseDeliveryKey =
+      freshAckedLocalPlayerSnapshot === null
+        ? null
+        : createAckedAuthoritativeLocalPlayerDeliveryKey(
+            freshAckedLocalPlayerSnapshot
+          );
+
+    if (
+      freshAckedLocalPlayerSnapshot === null ||
+      poseDeliveryKey === this.#lastConsumedAckedLocalPlayerPoseDeliveryKey
+    ) {
+      return null;
+    }
+
+    this.#lastConsumedAckedLocalPlayerPoseDeliveryKey = poseDeliveryKey;
+
+    return readAckedAuthoritativeLocalPlayerPose(
+      freshAckedLocalPlayerSnapshot.playerSnapshot
+    );
   }
 
   readFreshAckedAuthoritativeLocalPlayerPoseForReconciliation(
@@ -457,6 +517,7 @@ export class MetaverseRemoteWorldRuntime {
     this.#extrapolatedFrameCount = 0;
     this.#lastSampledAtMs = null;
     this.#lastSampledExtrapolationMs = 0;
+    this.#lastConsumedAckedLocalPlayerPoseDeliveryKey = null;
     this.#lastConsumedAckedLocalPlayerReconciliationDeliveryKey = null;
     this.#latestIndexedWorldSnapshot = null;
     this.#sampleEpoch = 0;
@@ -563,7 +624,10 @@ export class MetaverseRemoteWorldRuntime {
 
       if (remoteCharacterPresentation === undefined) {
         remoteCharacterPresentation =
-          new MetaverseRemoteCharacterPresentationOwner(basePlayer);
+          new MetaverseRemoteCharacterPresentationOwner(
+            basePlayer,
+            this.#presentationConfig
+          );
         this.#remoteCharacterPresentationsByPlayerId.set(
           basePlayer.playerId,
           remoteCharacterPresentation
@@ -921,11 +985,16 @@ export class MetaverseRemoteWorldRuntime {
     );
     const latestPlayerInputSequence =
       this.#metaverseWorldClient?.latestPlayerInputSequence ?? 0;
+    const latestPlayerTraversalOrientationSequence =
+      this.#metaverseWorldClient?.latestPlayerTraversalOrientationSequence ?? 0;
 
     if (
       freshLocalPlayerSnapshot === null ||
       freshLocalPlayerSnapshot.playerSnapshot.lastProcessedInputSequence <
-        latestPlayerInputSequence
+        latestPlayerInputSequence ||
+      freshLocalPlayerSnapshot.playerSnapshot
+        .lastProcessedTraversalOrientationSequence <
+        latestPlayerTraversalOrientationSequence
     ) {
       return null;
     }

@@ -3,6 +3,7 @@ import test, { after, before } from "node:test";
 
 import {
   metaverseRealtimeWorldCadenceConfig,
+  shouldConsiderMetaverseWaterborneTraversalCollider,
   resolveMetaverseTraversalAuthoritySnapshotInput
 } from "@webgpu-metaverse/shared";
 
@@ -832,15 +833,9 @@ async function createTraversalHarness(options = {}) {
         if (colliderMetadata === undefined) {
           return true;
         }
-
-        if (colliderMetadata.traversalAffordance === "support") {
-          return false;
-        }
-
-        return (
-          excludedOwnerEnvironmentAssetId === null ||
-          colliderMetadata.ownerEnvironmentAssetId !==
-            excludedOwnerEnvironmentAssetId
+        return shouldConsiderMetaverseWaterborneTraversalCollider(
+          colliderMetadata,
+          excludedOwnerEnvironmentAssetId
         );
       };
     },
@@ -1035,6 +1030,9 @@ test("MetaverseTraversalRuntime anchors the grounded first-person camera at caps
     traversalRuntime.advance(forwardTravelInput, 1 / 60);
 
     assert.ok(
+      config.bodyPresentation.groundedFirstPersonForwardOffsetMeters > 0.04
+    );
+    assert.ok(
       Math.abs(
         traversalRuntime.cameraSnapshot.position.x -
           groundedBodyRuntime.snapshot.position.x
@@ -1053,6 +1051,10 @@ test("MetaverseTraversalRuntime anchors the grounded first-person camera at caps
           (groundedBodyRuntime.snapshot.position.z -
             config.bodyPresentation.groundedFirstPersonForwardOffsetMeters)
       ) < 0.000001
+    );
+    assert.ok(
+      traversalRuntime.cameraSnapshot.position.z <
+        groundedBodyRuntime.snapshot.position.z
     );
   } finally {
     groundedBodyRuntime.dispose();
@@ -1115,6 +1117,60 @@ test("MetaverseTraversalRuntime steers grounded and swim character yaw from look
   } finally {
     groundedHarness.groundedBodyRuntime.dispose();
     swimHarness.groundedBodyRuntime.dispose();
+  }
+});
+
+test("MetaverseTraversalRuntime keeps grounded character yaw reticle-aligned between authoritative fixed steps", async () => {
+  const groundedHarness = await createTraversalHarness({
+    surfaceColliderSnapshots: [
+      Object.freeze({
+        halfExtents: freezeVector3(4, 0.2, 4),
+        rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+        translation: freezeVector3(0, -0.1, 24)
+      })
+    ]
+  });
+  const lookRightInput = Object.freeze({
+    boost: false,
+    jump: false,
+    moveAxis: 0,
+    pitchAxis: 0,
+    primaryAction: false,
+    secondaryAction: false,
+    strafeAxis: 0,
+    yawAxis: 1
+  });
+
+  try {
+    groundedHarness.traversalRuntime.boot();
+    assert.equal(groundedHarness.traversalRuntime.locomotionMode, "grounded");
+
+    const groundedBodyYawBeforeTurn =
+      groundedHarness.groundedBodyRuntime.snapshot.yawRadians;
+
+    groundedHarness.traversalRuntime.advance(
+      lookRightInput,
+      groundedFixedStepSeconds * 0.5
+    );
+
+    assert.ok(
+      Math.abs(
+        groundedHarness.groundedBodyRuntime.snapshot.yawRadians -
+          groundedBodyYawBeforeTurn
+      ) < 0.000001
+    );
+    assert.equal(
+      groundedHarness.traversalRuntime.characterPresentationSnapshot?.yawRadians,
+      groundedHarness.traversalRuntime.cameraSnapshot.yawRadians
+    );
+    assert.ok(
+      Math.abs(
+        groundedHarness.traversalRuntime.characterPresentationSnapshot.yawRadians -
+          groundedBodyYawBeforeTurn
+      ) > 0.000001
+    );
+  } finally {
+    groundedHarness.groundedBodyRuntime.dispose();
   }
 });
 

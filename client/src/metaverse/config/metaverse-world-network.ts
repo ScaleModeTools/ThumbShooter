@@ -1,7 +1,9 @@
 import {
   createMilliseconds,
-  metaverseRealtimeWorldCadenceConfig
 } from "@webgpu-metaverse/shared";
+import {
+  metaverseRealtimeWorldCadenceConfig
+} from "@webgpu-metaverse/shared/metaverse";
 
 import {
   MetaverseWorldClient,

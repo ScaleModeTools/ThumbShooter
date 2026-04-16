@@ -29,7 +29,11 @@ import type {
   GameplaySessionMode,
   GameplayTickOwner,
   Milliseconds,
+  MetaverseMountedLookConstraintBounds,
+  MetaverseMountedLookLimitPolicyId,
   MetaversePlayerId,
+  MetaversePlayerLookConstraintBounds,
+  MetaversePlayerTraversalIntentSnapshot,
   MetaversePresenceMountedOccupancyKind,
   MetaversePresenceMountedOccupancySnapshot,
   MetaversePresenceMountedOccupantRoleId,
@@ -65,6 +69,11 @@ import type {
   VehicleOrientationDescriptor,
   Username
 } from "@webgpu-metaverse/shared";
+import type {
+  MetaversePlayerLookConstraintBounds as MetaversePlayerLookConstraintBoundsFromMetaverseDomain,
+  MetaverseRealtimeWorldSnapshot as MetaverseRealtimeWorldSnapshotFromMetaverseDomain
+} from "@webgpu-metaverse/shared/metaverse";
+import type { CoopRoomSnapshot as CoopRoomSnapshotFromDuckHuntDomain } from "@webgpu-metaverse/shared/experiences/duck-hunt";
 import {
   affineAimTransformFitQualities,
   coopBirdBehaviorStates,
@@ -75,7 +84,9 @@ import {
   createDegrees,
   createMilliseconds,
   createRadians,
-  createUsername
+  createUsername,
+  defaultMetaverseMountedLookLimitPolicyId,
+  metaverseMountedLookLimitPolicyIds
 } from "@webgpu-metaverse/shared";
 import type { AssertTrue, IsEqual } from "./type-assertions";
 
@@ -112,6 +123,10 @@ type ExpectedMetaversePresenceMountedOccupantRoleId =
   | "driver"
   | "passenger"
   | "turret";
+type ExpectedMetaverseMountedLookLimitPolicyId =
+  | "driver-forward"
+  | "passenger-bench"
+  | "turret-arc";
 type ExpectedCoopRoomClientCommandType =
   | "join-room"
   | "set-player-ready"
@@ -178,6 +193,30 @@ type MetaversePresenceMountedOccupantRoleMatches = AssertTrue<
     ExpectedMetaversePresenceMountedOccupantRoleId
   >
 >;
+type MetaverseMountedLookLimitPolicyMatches = AssertTrue<
+  IsEqual<
+    MetaverseMountedLookLimitPolicyId,
+    ExpectedMetaverseMountedLookLimitPolicyId
+  >
+>;
+type MetaversePlayerLookConstraintBoundsUseNullableYawOffset = AssertTrue<
+  IsEqual<MetaversePlayerLookConstraintBounds["maxYawOffsetRadians"], number | null>
+>;
+type MetaverseMountedLookConstraintBoundsUseNumericYawOffset = AssertTrue<
+  IsEqual<MetaverseMountedLookConstraintBounds["maxYawOffsetRadians"], number>
+>;
+type DefaultMetaverseMountedLookLimitPolicyMatches = AssertTrue<
+  IsEqual<
+    typeof defaultMetaverseMountedLookLimitPolicyId,
+    "driver-forward"
+  >
+>;
+type MountedLookLimitPolicyIdsMatch = AssertTrue<
+  IsEqual<
+    (typeof metaverseMountedLookLimitPolicyIds)[number],
+    ExpectedMetaverseMountedLookLimitPolicyId
+  >
+>;
 type MetaversePresenceMountedEnvironmentAssetIdIsString = AssertTrue<
   IsEqual<MetaversePresenceMountedOccupancySnapshot["environmentAssetId"], string>
 >;
@@ -186,6 +225,21 @@ type MetaverseRealtimeWorldEventTypeMatches = AssertTrue<
 >;
 type MetaverseRealtimeWorldServerEventTypeMatches = AssertTrue<
   IsEqual<MetaverseRealtimeWorldServerEventType, "world-snapshot">
+>;
+type MetaverseRealtimeWorldSubpathExportMatches = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshotFromMetaverseDomain,
+    MetaverseRealtimeWorldSnapshot
+  >
+>;
+type MetaversePlayerLookConstraintSubpathExportMatches = AssertTrue<
+  IsEqual<
+    MetaversePlayerLookConstraintBoundsFromMetaverseDomain,
+    MetaversePlayerLookConstraintBounds
+  >
+>;
+type DuckHuntCoopRoomSubpathExportMatches = AssertTrue<
+  IsEqual<CoopRoomSnapshotFromDuckHuntDomain, CoopRoomSnapshot>
 >;
 type MetaverseRealtimeWorldUsesMetaversePlayerId = AssertTrue<
   IsEqual<MetaverseRealtimeWorldSnapshot["players"][number]["playerId"], MetaversePlayerId>
@@ -294,6 +348,15 @@ type MetaverseRealtimeWorldDriverControlIntentUsesStringAssetId = AssertTrue<
 >;
 type MetaverseRealtimePlayerSnapshotAckUsesNumber = AssertTrue<
   IsEqual<MetaverseRealtimeWorldSnapshot["players"][number]["lastProcessedInputSequence"], number>
+>;
+type MetaverseRealtimePlayerOrientationAckUsesNumber = AssertTrue<
+  IsEqual<
+    MetaverseRealtimeWorldSnapshot["players"][number]["lastProcessedTraversalOrientationSequence"],
+    number
+  >
+>;
+type MetaversePlayerTraversalIntentOrientationSequenceUsesNumber = AssertTrue<
+  IsEqual<MetaversePlayerTraversalIntentSnapshot["orientationSequence"], number>
 >;
 type MetaverseRealtimeWorldWebTransportServerMessageWrapsWorldEvent = AssertTrue<
   IsEqual<

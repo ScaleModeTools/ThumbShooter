@@ -283,3 +283,20 @@ test("collectRepoVerificationErrors reports explicit any in typed source without
 
   assert.ok(!errors.some((error) => error.includes("client/src/lib/plain-text.ts")));
 });
+
+test("collectRepoVerificationErrors reports generated shared artifacts inside packages/shared/src", () => {
+  const repoRoot = createFixtureRepo({
+    "packages/shared/src/index.js": "export const shared = 'generated';\n",
+    "packages/shared/src/index.js.map": "{}\n"
+  });
+
+  const errors = collectRepoVerificationErrors({ repoRoot, trackedFiles: [] });
+
+  assert.ok(
+    errors.some((error) =>
+      error.includes(
+        "Generated shared source artifact found in packages/shared/src/index.js; packages/shared/src must stay source-only."
+      )
+    )
+  );
+});

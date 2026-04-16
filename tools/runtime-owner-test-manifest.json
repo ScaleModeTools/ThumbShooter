@@ -309,6 +309,12 @@
       ]
     },
     {
+      "ownerPath": "server/src/metaverse/classes/metaverse-authoritative-dynamic-surface-collider-runtime.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-authoritative-world-runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/metaverse/adapters/metaverse-session-http-adapter.ts",
       "testPaths": [
         "tests/runtime/server/metaverse-session-http-adapter.test.mjs"

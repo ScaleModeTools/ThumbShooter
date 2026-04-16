@@ -53,7 +53,7 @@ export default defineConfig({
       ),
       "@strudel/web/web.mjs": strudelBrowserEntrypoint,
       "@webgpu-metaverse/shared": fileURLToPath(
-        new URL("../packages/shared/src/index.ts", import.meta.url)
+        new URL("../packages/shared/src", import.meta.url)
       )
     },
     dedupe: ["react", "react-dom"]

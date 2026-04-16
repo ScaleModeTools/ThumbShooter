@@ -56,6 +56,8 @@ import {
   resolveMetaverseWorldWaterRegionSurfaceHeightMeters,
   type MetaverseWorldPlacedWaterRegionSnapshot
 } from "@webgpu-metaverse/shared";
+import { resolveFirstPersonHeadClearanceCameraSnapshot } from "./first-person-camera-clearance";
+import { isHumanoidV2PistolAimOverlayTrack } from "./humanoid-v2-rig";
 
 import type {
   MetaverseAttachmentProofConfig,
@@ -151,6 +153,7 @@ interface MetaverseCharacterProofRuntime {
     MetaverseCharacterAnimationVocabularyId,
     AnimationClip
   >;
+  readonly firstPersonHeadAnchorNodes: readonly Object3D[];
   readonly heldWeaponPoseRuntime: HumanoidV2HeldWeaponPoseRuntime | null;
   readonly humanoidV2PistolLowerBodyActionsByVocabulary: ReadonlyMap<
     MetaverseCharacterAnimationVocabularyId,
@@ -164,10 +167,9 @@ interface MetaverseCharacterProofRuntime {
 }
 
 interface MetaverseAttachmentMountRuntime {
-  readonly gripMarkerTranslation: Vector3 | null;
   readonly localQuaternion: Quaternion;
+  readonly localPosition: Vector3;
   readonly socketName: MetaverseAttachmentProofConfig["heldMount"]["socketName"];
-  readonly socketOffset: Vector3;
 }
 
 interface MetaverseAttachmentProofRuntime {
@@ -175,6 +177,7 @@ interface MetaverseAttachmentProofRuntime {
   readonly attachmentRoot: Group;
   readonly heldForwardReferenceNode: Object3D | null;
   readonly heldMount: MetaverseAttachmentMountRuntime;
+  readonly heldTriggerHandSocketNode: Object3D;
   implicitOffHandGripLocalPosition: Vector3 | null;
   implicitOffHandGripLocalQuaternion: Quaternion | null;
   readonly mountedHolsterMount: MetaverseAttachmentMountRuntime | null;
@@ -217,12 +220,18 @@ interface HeldWeaponSolveChainLink {
 }
 
 interface MetaverseRemoteCharacterPresentationRuntime {
+  attachmentRuntime: MetaverseAttachmentProofRuntime | null;
   readonly characterRuntime: MetaverseCharacterProofRuntime;
   mountedCharacterRuntime: MountedCharacterRuntime | null;
   targetMountedOccupancy:
     MetaverseRemoteCharacterPresentationSnapshot["mountedOccupancy"];
   targetPresentation: MetaverseCharacterPresentationSnapshot;
 }
+
+type MountedAttachmentOccupancySnapshot = Pick<
+  MountedEnvironmentSnapshot,
+  "occupancyKind" | "occupantRole"
+>;
 
 interface MetaverseEnvironmentLodObjectRuntime {
   readonly maxDistanceMeters: number | null;
@@ -397,17 +406,10 @@ const dynamicEnvironmentSeatSocketScaleScratch = new Vector3();
 const mountedEnvironmentAnchorForwardScratch = new Vector3();
 const mountedEnvironmentAnchorPositionScratch = new Vector3();
 const mountedEnvironmentAnchorQuaternionScratch = new Quaternion();
+const humanoidV2GripSocketBlendAlpha = 0.72;
 const humanoidV2PalmSocketBlendAlpha = 0.45;
 const humanoidV2BackSocketLowerOffsetMeters = 0.02;
 const humanoidV2BackSocketRearwardScale = 0.7;
-const humanoidV2PistolOverlayExcludedTrackPrefixes = Object.freeze([
-  "root",
-  "pelvis",
-  "thigh_",
-  "calf_",
-  "foot_",
-  "ball_"
-] as const);
 const humanoidV2PistolLowerBodyVocabularyIds = Object.freeze([
   "idle",
   "walk"
@@ -730,6 +732,9 @@ function synthesizeHumanoidV2PalmSockets(
     const palmLocalPosition = sourceSocketNode.position
       .clone()
       .lerp(knuckleBaseCentroid, humanoidV2PalmSocketBlendAlpha);
+    const gripLocalPosition = sourceSocketNode.position
+      .clone()
+      .lerp(knuckleBaseCentroid, humanoidV2GripSocketBlendAlpha);
     const synthesizedHandQuaternion = new Quaternion().setFromRotationMatrix(
       new Matrix4().makeBasis(
         palmForwardAxis,
@@ -750,7 +755,7 @@ function synthesizeHumanoidV2PalmSockets(
       characterScene,
       parentBone,
       palmSocketDescriptor.gripSocketName,
-      knuckleBaseCentroid,
+      gripLocalPosition,
       showSocketDebug,
       synthesizedHandQuaternion
     );
@@ -1519,7 +1524,7 @@ function syncHumanoidV2HeldWeaponPose(
     heldWeaponPoseRuntime.rightGripSocketNode,
     heldWeaponTargetWorldQuaternionScratch
   );
-  heldWeaponPoseRuntime.rightGripSocketNode.getWorldPosition(
+  attachmentRuntime.heldTriggerHandSocketNode.getWorldPosition(
     heldWeaponGripSocketWorldPositionScratch
   );
   resolveHandWorldTargetPosition(
@@ -1656,7 +1661,7 @@ function syncHumanoidV2HeldWeaponPose(
       heldWeaponPoseRuntime.rightGripSocketNode,
       heldWeaponTargetWorldQuaternionScratch
     );
-    heldWeaponPoseRuntime.rightGripSocketNode.getWorldPosition(
+    attachmentRuntime.heldTriggerHandSocketNode.getWorldPosition(
       heldWeaponGripSocketWorldPositionScratch
     );
     resolveHandWorldTargetPosition(
@@ -1681,172 +1686,76 @@ function syncHumanoidV2HeldWeaponPose(
   }
 }
 
-function resolveAttachmentAlignmentQuaternion(
-  gripAlignment: MetaverseAttachmentProofConfig["heldMount"]["gripAlignment"],
-  attachmentScene: Group
-): Quaternion {
-  const resolveAlignmentAxisVector = (axis: MetaverseVector3Snapshot) =>
-    new Vector3(axis.x, axis.y, axis.z).normalize();
-  const resolveAttachmentMarkerOffset = (
-    markerNodeName: string,
-    label: string
-  ) => {
-    const markerNode = findNamedNode(
-      attachmentScene,
-      markerNodeName,
-      "Metaverse attachment grip alignment"
-    );
-    const markerOffset = attachmentScene.worldToLocal(
-      markerNode.getWorldPosition(new Vector3())
-    );
-
-    if (markerOffset.lengthSq() <= 0.000001) {
-      throw new Error(
-        `Metaverse attachment grip alignment requires ${label} to stay offset from the attachment root.`
-      );
-    }
-
-    return markerOffset;
-  };
-  const resolveAttachmentMarkerAxis = (
-    markerNodeName: string,
-    label: string
-  ) =>
-    resolveAttachmentMarkerOffset(
-      markerNodeName,
-      label
-    ).normalize();
-  const createBasisQuaternion = (
-    forwardAxis: Vector3,
-    upAxis: Vector3
-  ) => {
-    const forward = forwardAxis.clone().normalize();
-    const provisionalUp = upAxis.clone().normalize();
-    const right = new Vector3().crossVectors(provisionalUp, forward);
-
-    if (right.lengthSq() <= 0.000001) {
-      throw new Error(
-        "Metaverse attachment grip alignment requires non-collinear forward and up axes."
-      );
-    }
-
-    right.normalize();
-
-    const correctedUp = new Vector3().crossVectors(forward, right).normalize();
-
-    return new Quaternion().setFromRotationMatrix(
-      new Matrix4().makeBasis(right, correctedUp, forward)
-    );
-  };
-  attachmentScene.updateMatrixWorld(true);
-
-  const attachmentForwardAxis =
-    "attachmentForwardAxis" in gripAlignment
-      ? resolveAlignmentAxisVector(gripAlignment.attachmentForwardAxis)
-      : resolveAttachmentMarkerAxis(
-          gripAlignment.attachmentForwardMarkerNodeName,
-          "attachment forward marker"
-        );
-  const attachmentUpAxis =
-    "attachmentForwardAxis" in gripAlignment
-      ? resolveAlignmentAxisVector(gripAlignment.attachmentUpAxis)
-      : resolveAttachmentMarkerAxis(
-          gripAlignment.attachmentUpMarkerNodeName,
-          "attachment up marker"
-        );
-  const attachmentBasisQuaternion = createBasisQuaternion(
-    attachmentForwardAxis,
-    attachmentUpAxis
-  );
-  const socketBasisQuaternion = createBasisQuaternion(
-    resolveAlignmentAxisVector(gripAlignment.socketForwardAxis),
-    resolveAlignmentAxisVector(gripAlignment.socketUpAxis)
-  );
-
-  return socketBasisQuaternion.multiply(attachmentBasisQuaternion.invert());
-}
-
-function resolveAttachmentGripMarkerTranslation(
-  gripAlignment: MetaverseAttachmentProofConfig["heldMount"]["gripAlignment"],
-  attachmentScene: Group
-): Vector3 | null {
-  const gripMarkerNodeName =
-    gripAlignment.attachmentGripMarkerNodeName ?? null;
-
-  if (gripMarkerNodeName === null) {
-    return null;
-  }
-
-  attachmentScene.updateMatrixWorld(true);
-
-  const gripMarkerNode = findNamedNode(
-    attachmentScene,
-    gripMarkerNodeName,
-    "Metaverse attachment grip alignment"
-  );
-  const gripMarkerOffset = attachmentScene.worldToLocal(
-    gripMarkerNode.getWorldPosition(new Vector3())
-  );
-
-  if (gripMarkerOffset.lengthSq() <= 0.000001) {
-    throw new Error(
-      "Metaverse attachment grip alignment requires attachment grip marker to stay offset from the attachment root."
-    );
-  }
-
-  return gripMarkerOffset.multiplyScalar(-1);
-}
-
 function createHeldForwardReferenceNode(
-  gripAlignment: MetaverseAttachmentProofConfig["heldMount"]["gripAlignment"],
+  attachmentSocketNodeName: MetaverseAttachmentProofConfig["heldMount"]["attachmentSocketNodeName"],
   attachmentScene: Group
-): Object3D | null {
-  if ("attachmentForwardAxis" in gripAlignment) {
-    const forwardAxis = new Vector3(
-      gripAlignment.attachmentForwardAxis.x,
-      gripAlignment.attachmentForwardAxis.y,
-      gripAlignment.attachmentForwardAxis.z
+): Object3D {
+  const attachmentSocketNode = findNamedNode(
+    attachmentScene,
+    attachmentSocketNodeName,
+    "Metaverse attachment mount"
+  );
+  const forwardReferenceNode = new Group();
+
+  forwardReferenceNode.name = "metaverse_attachment_forward_reference";
+  forwardReferenceNode.position.set(1, 0, 0);
+  attachmentSocketNode.add(forwardReferenceNode);
+
+  return forwardReferenceNode;
+}
+
+function resolveAttachmentSocketLocalTransform(
+  attachmentSocketNodeName: MetaverseAttachmentProofConfig["heldMount"]["attachmentSocketNodeName"],
+  attachmentScene: Group
+): {
+  readonly localPosition: Vector3;
+  readonly localQuaternion: Quaternion;
+} {
+  attachmentScene.updateMatrixWorld(true);
+
+  const attachmentSocketNode = findNamedNode(
+    attachmentScene,
+    attachmentSocketNodeName,
+    "Metaverse attachment mount"
+  );
+  const sceneWorldQuaternion = attachmentScene.getWorldQuaternion(new Quaternion());
+  const localPosition = attachmentScene.worldToLocal(
+    attachmentSocketNode.getWorldPosition(new Vector3())
+  );
+  const localQuaternion = sceneWorldQuaternion
+    .invert()
+    .multiply(attachmentSocketNode.getWorldQuaternion(new Quaternion()))
+    .normalize();
+
+  if (localPosition.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
+    throw new Error(
+      `Metaverse attachment mount requires ${attachmentSocketNodeName} to stay offset from the attachment root.`
     );
-
-    if (forwardAxis.lengthSq() <= heldWeaponSolveDirectionEpsilon) {
-      return null;
-    }
-
-    const forwardReferenceNode = new Group();
-
-    forwardReferenceNode.name = "metaverse_attachment_forward_reference";
-    forwardReferenceNode.position.copy(forwardAxis.normalize());
-    attachmentScene.add(forwardReferenceNode);
-
-    return forwardReferenceNode;
   }
 
-  return findNamedNode(
-    attachmentScene,
-    gripAlignment.attachmentForwardMarkerNodeName,
-    "Metaverse attachment grip alignment"
-  );
+  return {
+    localPosition,
+    localQuaternion
+  };
 }
 
 function createAttachmentMountRuntime(
   mountConfig: MetaverseAttachmentProofConfig["heldMount"],
   attachmentScene: Group
 ): MetaverseAttachmentMountRuntime {
+  const attachmentSocketTransform = resolveAttachmentSocketLocalTransform(
+    mountConfig.attachmentSocketNodeName,
+    attachmentScene
+  );
+  const localQuaternion = attachmentSocketTransform.localQuaternion.clone().invert();
+
   return {
-    gripMarkerTranslation: resolveAttachmentGripMarkerTranslation(
-      mountConfig.gripAlignment,
-      attachmentScene
-    ),
-    localQuaternion: resolveAttachmentAlignmentQuaternion(
-      mountConfig.gripAlignment,
-      attachmentScene
-    ),
+    localPosition: attachmentSocketTransform.localPosition
+      .clone()
+      .applyQuaternion(localQuaternion)
+      .multiplyScalar(-1),
+    localQuaternion,
     socketName: mountConfig.socketName,
-    socketOffset: new Vector3(
-      mountConfig.gripAlignment.socketOffset.x,
-      mountConfig.gripAlignment.socketOffset.y,
-      mountConfig.gripAlignment.socketOffset.z
-    )
   };
 }
 
@@ -1862,22 +1771,16 @@ function applyAttachmentMountRuntime(
     socketNode.add(attachmentRuntime.attachmentRoot);
   }
 
-  attachmentRuntime.attachmentRoot.position.copy(mountRuntime.socketOffset);
+  attachmentRuntime.attachmentRoot.position.copy(mountRuntime.localPosition);
   attachmentRuntime.attachmentRoot.quaternion.copy(mountRuntime.localQuaternion);
-  if (mountRuntime.gripMarkerTranslation === null) {
-    attachmentRuntime.presentationGroup.position.set(0, 0, 0);
-  } else {
-    attachmentRuntime.presentationGroup.position.copy(
-      mountRuntime.gripMarkerTranslation
-    );
-  }
+  attachmentRuntime.presentationGroup.position.set(0, 0, 0);
   attachmentRuntime.attachmentRoot.updateMatrixWorld(true);
 }
 
 function syncAttachmentProofRuntimeMount(
   attachmentRuntime: MetaverseAttachmentProofRuntime,
   characterProofRuntime: MetaverseCharacterProofRuntime,
-  mountedEnvironment: MountedEnvironmentSnapshot | null
+  mountedEnvironment: MountedAttachmentOccupancySnapshot | null
 ): void {
   const nextMountKind =
     shouldHolsterHeldAttachmentWhileMounted(mountedEnvironment) &&
@@ -1904,6 +1807,24 @@ function findNamedNode(scene: Group, nodeName: string, label: string): Object3D 
 
   if (node === undefined) {
     throw new Error(`${label} is missing required node ${nodeName}.`);
+  }
+
+  return node;
+}
+
+function findOptionalNode(scene: Group, nodeName: string): Object3D | null {
+  return scene.getObjectByName(nodeName) ?? null;
+}
+
+function isGroupNode(node: Object3D | undefined): node is Group {
+  return node !== undefined && "isGroup" in node && node.isGroup === true;
+}
+
+function findGroupNode(scene: Group, nodeName: string, label: string): Group {
+  const node = scene.getObjectByName(nodeName);
+
+  if (!isGroupNode(node)) {
+    throw new Error(`${label} is missing required group ${nodeName}.`);
   }
 
   return node;
@@ -2848,21 +2769,8 @@ function syncCharacterAnimation(
   characterProofRuntime.activeAnimationVocabulary = nextVocabulary;
 }
 
-function matchesAnimationTrackPrefix(
-  trackName: string,
-  prefix: string
-): boolean {
-  return (
-    trackName === prefix ||
-    trackName.startsWith(prefix) ||
-    trackName.includes(`[${prefix}`)
-  );
-}
-
 function isHumanoidV2PistolOverlayTrack(trackName: string): boolean {
-  return !humanoidV2PistolOverlayExcludedTrackPrefixes.some((prefix) =>
-    matchesAnimationTrackPrefix(trackName, prefix)
-  );
+  return isHumanoidV2PistolAimOverlayTrack(trackName);
 }
 
 function createHumanoidV2LowerBodyLocomotionClip(
@@ -3044,6 +2952,21 @@ function createCharacterProofRuntime(
     | null
 ): MetaverseCharacterProofRuntime {
   const anchorGroup = new Group();
+  const firstPersonHeadAnchorNodes = Object.freeze(
+    (
+      skeletonId === "humanoid_v2"
+        ? [
+            findSocketNode(characterScene, "head_socket"),
+            findOptionalNode(characterScene, "head"),
+            findOptionalNode(characterScene, "head_leaf"),
+            findOptionalNode(characterScene, "neck_01")
+          ]
+        : [
+            findSocketNode(characterScene, "head_socket"),
+            findOptionalNode(characterScene, "neck")
+          ]
+    ).filter((node): node is Object3D => node !== null)
+  );
   const seatSocketNode = findSocketNode(characterScene, "seat_socket");
   const mixer = new AnimationMixer(characterScene);
   const actionsByVocabulary = new Map<
@@ -3089,6 +3012,7 @@ function createCharacterProofRuntime(
     anchorGroup,
     characterId,
     clipsByVocabulary,
+    firstPersonHeadAnchorNodes,
     heldWeaponPoseRuntime: createHeldWeaponPoseRuntime(skeletonId, characterScene),
     humanoidV2PistolLowerBodyActionsByVocabulary,
     humanoidV2PistolPoseRuntime:
@@ -3120,6 +3044,65 @@ function cloneMetaverseCharacterProofRuntime(
   clonedRuntime.anchorGroup.name = `metaverse_character/${sourceRuntime.characterId}/${playerId}`;
 
   return clonedRuntime;
+}
+
+function cloneMetaverseAttachmentMountRuntime(
+  sourceRuntime: MetaverseAttachmentMountRuntime
+): MetaverseAttachmentMountRuntime {
+  return {
+    localPosition: sourceRuntime.localPosition.clone(),
+    localQuaternion: sourceRuntime.localQuaternion.clone(),
+    socketName: sourceRuntime.socketName,
+  };
+}
+
+function cloneMetaverseAttachmentProofRuntime(
+  sourceRuntime: MetaverseAttachmentProofRuntime,
+  characterProofRuntime: MetaverseCharacterProofRuntime
+): MetaverseAttachmentProofRuntime {
+  const cloneLabel = "Metaverse attachment proof clone";
+
+  return {
+    activeMountKind: null,
+    attachmentRoot: findGroupNode(
+      characterProofRuntime.scene,
+      sourceRuntime.attachmentRoot.name,
+      cloneLabel
+    ),
+    heldForwardReferenceNode:
+      sourceRuntime.heldForwardReferenceNode === null
+        ? null
+        : findNamedNode(
+            characterProofRuntime.scene,
+            sourceRuntime.heldForwardReferenceNode.name,
+            cloneLabel
+          ),
+    heldMount: cloneMetaverseAttachmentMountRuntime(sourceRuntime.heldMount),
+    heldTriggerHandSocketNode: findNamedNode(
+      characterProofRuntime.scene,
+      sourceRuntime.heldTriggerHandSocketNode.name,
+      cloneLabel
+    ),
+    implicitOffHandGripLocalPosition: null,
+    implicitOffHandGripLocalQuaternion: null,
+    mountedHolsterMount:
+      sourceRuntime.mountedHolsterMount === null
+        ? null
+        : cloneMetaverseAttachmentMountRuntime(sourceRuntime.mountedHolsterMount),
+    offHandSupportNode:
+      sourceRuntime.offHandSupportNode === null
+        ? null
+        : findNamedNode(
+            characterProofRuntime.scene,
+            sourceRuntime.offHandSupportNode.name,
+            cloneLabel
+          ),
+    presentationGroup: findGroupNode(
+      characterProofRuntime.scene,
+      sourceRuntime.presentationGroup.name,
+      cloneLabel
+    )
+  };
 }
 
 function resolveRemoteCharacterInterpolationAlpha(deltaSeconds: number): number {
@@ -3190,10 +3173,8 @@ function syncInterpolatedRemoteCharacterPresentation(
 function syncRemoteCharacterPresentations(
   scene: Scene,
   sourceCharacterRuntime: MetaverseCharacterProofRuntime | null,
-  orientation: Pick<
-    MetaverseRuntimeConfig["orientation"],
-    "maxPitchRadians" | "minPitchRadians"
-  >,
+  sourceAttachmentRuntime: MetaverseAttachmentProofRuntime | null,
+  config: Pick<MetaverseRuntimeConfig, "orientation">,
   resolveMountedEnvironmentRuntime: (
     environmentAssetId: string
   ) => MetaverseMountableEnvironmentDynamicAssetRuntime | null,
@@ -3231,6 +3212,13 @@ function syncRemoteCharacterPresentations(
         remoteCharacterPresentation.playerId
       );
       remoteCharacterRuntime = {
+        attachmentRuntime:
+          sourceAttachmentRuntime === null
+            ? null
+            : cloneMetaverseAttachmentProofRuntime(
+                sourceAttachmentRuntime,
+                characterRuntime
+              ),
         characterRuntime,
         mountedCharacterRuntime: null,
         targetMountedOccupancy: remoteCharacterPresentation.mountedOccupancy ?? null,
@@ -3252,6 +3240,16 @@ function syncRemoteCharacterPresentations(
         remoteCharacterPresentation.mountedOccupancy ?? null;
       existingRemoteCharacterRuntime.targetPresentation =
         remoteCharacterPresentation.presentation;
+      if (
+        existingRemoteCharacterRuntime.attachmentRuntime === null &&
+        sourceAttachmentRuntime !== null
+      ) {
+        existingRemoteCharacterRuntime.attachmentRuntime =
+          cloneMetaverseAttachmentProofRuntime(
+            sourceAttachmentRuntime,
+            existingRemoteCharacterRuntime.characterRuntime
+          );
+      }
     }
 
     if (remoteCharacterRuntime === undefined) {
@@ -3265,13 +3263,27 @@ function syncRemoteCharacterPresentations(
         remoteCharacterRuntime.targetMountedOccupancy,
         resolveMountedEnvironmentRuntime
       );
+    if (remoteCharacterRuntime.attachmentRuntime !== null) {
+      syncAttachmentProofRuntimeMount(
+        remoteCharacterRuntime.attachmentRuntime,
+        remoteCharacterRuntime.characterRuntime,
+        remoteCharacterRuntime.targetMountedOccupancy
+      );
+    }
     const useHumanoidV2PistolLayering =
+      remoteCharacterRuntime.attachmentRuntime !== null &&
+      remoteCharacterRuntime.attachmentRuntime.activeMountKind === "held" &&
       remoteCharacterRuntime.mountedCharacterRuntime === null &&
       remoteCharacterRuntime.characterRuntime.humanoidV2PistolPoseRuntime !== null;
 
     syncCharacterAnimation(
       remoteCharacterRuntime.characterRuntime,
-      remoteCharacterPresentation.presentation.animationVocabulary,
+      resolveHeldCharacterAnimationVocabulary(
+        remoteCharacterRuntime.characterRuntime,
+        remoteCharacterRuntime.attachmentRuntime,
+        remoteCharacterPresentation.presentation.animationVocabulary,
+        remoteCharacterRuntime.mountedCharacterRuntime
+      ),
       useHumanoidV2PistolLayering
     );
     if (remoteCharacterRuntime.characterRuntime.humanoidV2PistolPoseRuntime !== null) {
@@ -3279,7 +3291,7 @@ function syncRemoteCharacterPresentations(
         syncHumanoidV2PistolPoseWeights(
           remoteCharacterRuntime.characterRuntime.humanoidV2PistolPoseRuntime,
           remoteCharacterPresentation.look.pitchRadians,
-          orientation
+          config.orientation
         );
       } else {
         clearHumanoidV2PistolPoseWeights(
@@ -3308,18 +3320,38 @@ function syncRemoteCharacterPresentations(
         remoteCharacterPresentation.presentation,
         null
       );
-      continue;
-    }
+    } else {
+      if (remoteCharacterRuntimeCreated) {
+        syncCharacterPresentation(
+          remoteCharacterRuntime.characterRuntime,
+          remoteCharacterPresentation.presentation,
+          null
+        );
+      }
 
-    if (remoteCharacterRuntimeCreated) {
-      syncCharacterPresentation(
-        remoteCharacterRuntime.characterRuntime,
-        remoteCharacterPresentation.presentation,
-        null
+      syncInterpolatedRemoteCharacterPresentation(
+        remoteCharacterRuntime,
+        deltaSeconds
       );
     }
 
-    syncInterpolatedRemoteCharacterPresentation(remoteCharacterRuntime, deltaSeconds);
+    if (
+      remoteCharacterRuntime.attachmentRuntime !== null &&
+      remoteCharacterRuntime.characterRuntime.heldWeaponPoseRuntime !== null &&
+      remoteCharacterRuntime.attachmentRuntime.activeMountKind === "held" &&
+      remoteCharacterPresentation.aimCamera !== null
+    ) {
+      restoreHumanoidV2HeldWeaponPoseRuntime(
+        remoteCharacterRuntime.characterRuntime.heldWeaponPoseRuntime
+      );
+      remoteCharacterRuntime.characterRuntime.anchorGroup.updateMatrixWorld(true);
+      syncHumanoidV2HeldWeaponPose(
+        remoteCharacterRuntime.characterRuntime,
+        remoteCharacterRuntime.characterRuntime.heldWeaponPoseRuntime,
+        remoteCharacterRuntime.attachmentRuntime,
+        remoteCharacterPresentation.aimCamera
+      );
+    }
   }
 
   for (const [playerId, remoteCharacterRuntime] of remoteCharacterRuntimesByPlayerId) {
@@ -3564,8 +3596,13 @@ async function loadMetaverseAttachmentProofRuntime(
     attachmentProofConfig.heldMount,
     attachmentAsset.scene
   );
+  const heldTriggerHandSocketNode = findNamedNode(
+    attachmentAsset.scene,
+    attachmentProofConfig.heldMount.attachmentSocketNodeName,
+    "Metaverse attachment mount"
+  );
   const heldForwardReferenceNode = createHeldForwardReferenceNode(
-    attachmentProofConfig.heldMount.gripAlignment,
+    attachmentProofConfig.heldMount.attachmentSocketNodeName,
     attachmentAsset.scene
   );
   const mountedHolsterMount =
@@ -3614,6 +3651,7 @@ async function loadMetaverseAttachmentProofRuntime(
     attachmentRoot,
     heldForwardReferenceNode,
     heldMount,
+    heldTriggerHandSocketNode,
     implicitOffHandGripLocalPosition: null,
     implicitOffHandGripLocalQuaternion: null,
     mountedHolsterMount,
@@ -4719,7 +4757,6 @@ export function createMetaverseScene(
       remoteCharacterPresentations = [],
       mountedEnvironment = null
     ) {
-      syncCamera(camera, cameraSnapshot);
       if (characterProofRuntime !== null) {
         const useHumanoidV2PistolLayering =
           attachmentProofRuntime !== null &&
@@ -4753,14 +4790,6 @@ export function createMetaverseScene(
         }
         characterProofRuntime.mixer.update(deltaSeconds);
       }
-      if (environmentProofRuntime !== null) {
-        syncEnvironmentProofRuntime(
-          environmentProofRuntime,
-          cameraSnapshot,
-          nowMs,
-          dynamicEnvironmentPoseOverrides
-        );
-      }
       syncMountedCharacterRuntimeFromSnapshot(mountedEnvironment);
       if (
         attachmentProofRuntime !== null &&
@@ -4785,6 +4814,23 @@ export function createMetaverseScene(
           mountedCharacterRuntime
         );
       }
+      const presentedCameraSnapshot =
+        characterProofRuntime === null || mountedCharacterRuntime !== null
+          ? cameraSnapshot
+          : resolveFirstPersonHeadClearanceCameraSnapshot(
+              cameraSnapshot,
+              characterPresentation,
+              characterProofRuntime.firstPersonHeadAnchorNodes,
+              config.bodyPresentation
+            );
+      if (environmentProofRuntime !== null) {
+        syncEnvironmentProofRuntime(
+          environmentProofRuntime,
+          presentedCameraSnapshot,
+          nowMs,
+          dynamicEnvironmentPoseOverrides
+        );
+      }
       if (
         characterProofRuntime !== null &&
         attachmentProofRuntime !== null &&
@@ -4801,13 +4847,15 @@ export function createMetaverseScene(
           characterProofRuntime,
           characterProofRuntime.heldWeaponPoseRuntime,
           attachmentProofRuntime,
-          cameraSnapshot
+          presentedCameraSnapshot
         );
       }
+      syncCamera(camera, presentedCameraSnapshot);
       syncRemoteCharacterPresentations(
         scene,
         characterProofRuntime,
-        config.orientation,
+        attachmentProofRuntime,
+        config,
         resolveMountedEnvironmentRuntime,
         remoteCharacterRuntimesByPlayerId,
         remoteCharacterPresentations,
@@ -4818,7 +4866,10 @@ export function createMetaverseScene(
         syncPortalPresentation(portalMesh, focusedPortal, nowMs);
       }
 
-      return syncSceneInteractionSnapshot(cameraSnapshot, mountedEnvironment);
+      return syncSceneInteractionSnapshot(
+        presentedCameraSnapshot,
+        mountedEnvironment
+      );
     },
     readDynamicEnvironmentPose(environmentAssetId) {
       if (environmentProofRuntime === null) {

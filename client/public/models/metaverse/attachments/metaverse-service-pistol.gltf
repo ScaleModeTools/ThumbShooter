@@ -24,7 +24,10 @@
         7,
         8,
         9,
-        10
+        10,
+        11,
+        12,
+        13
       ]
     },
     {
@@ -176,6 +179,36 @@
         0
       ],
       "name": "metaverse_service_pistol_holster_marker"
+    },
+    {
+      "translation": [
+        0.04,
+        -0.045,
+        -0.025
+      ],
+      "name": "metaverse_service_pistol_trigger_hand_l_socket"
+    },
+    {
+      "translation": [
+        0.04,
+        -0.045,
+        0.025
+      ],
+      "name": "metaverse_service_pistol_trigger_hand_r_socket"
+    },
+    {
+      "translation": [
+        0.16,
+        -0.04,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0.7071067811865475,
+        -0.7071067811865476,
+        0
+      ],
+      "name": "metaverse_service_pistol_back_socket"
     }
   ],
   "bufferViews": [

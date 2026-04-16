@@ -1,11 +1,17 @@
-export const mountedVehicleSeatRoleIds = [
-  "driver",
-  "passenger",
-  "turret"
-] as const;
+import {
+  defaultMetaverseMountedLookLimitPolicyId,
+  metaverseMountedLookLimitPolicyIds,
+  metaversePresenceMountedOccupantRoleIds
+} from "@webgpu-metaverse/shared";
+import type {
+  MetaverseMountedLookLimitPolicyId,
+  MetaversePresenceMountedOccupantRoleId
+} from "@webgpu-metaverse/shared";
 
-export type MountedVehicleSeatRoleId =
-  (typeof mountedVehicleSeatRoleIds)[number];
+export const mountedVehicleSeatRoleIds =
+  metaversePresenceMountedOccupantRoleIds;
+
+export type MountedVehicleSeatRoleId = MetaversePresenceMountedOccupantRoleId;
 
 export const mountedVehicleControlRoutingPolicyIds = [
   "vehicle-surface-drive",
@@ -25,14 +31,10 @@ export const mountedVehicleCameraPolicyIds = [
 export type MountedVehicleCameraPolicyId =
   (typeof mountedVehicleCameraPolicyIds)[number];
 
-export const mountedVehicleLookLimitPolicyIds = [
-  "driver-forward",
-  "passenger-bench",
-  "turret-arc"
-] as const;
+export const mountedVehicleLookLimitPolicyIds =
+  metaverseMountedLookLimitPolicyIds;
 
-export type MountedVehicleLookLimitPolicyId =
-  (typeof mountedVehicleLookLimitPolicyIds)[number];
+export type MountedVehicleLookLimitPolicyId = MetaverseMountedLookLimitPolicyId;
 
 export const mountedVehicleOccupancyAnimationIds = [
   "seated",
@@ -50,6 +52,6 @@ export const defaultMountedVehicleControlRoutingPolicyId =
 export const defaultMountedVehicleCameraPolicyId =
   "vehicle-follow" satisfies MountedVehicleCameraPolicyId;
 export const defaultMountedVehicleLookLimitPolicyId =
-  "driver-forward" satisfies MountedVehicleLookLimitPolicyId;
+  defaultMetaverseMountedLookLimitPolicyId;
 export const defaultMountedVehicleOccupancyAnimationId =
   "seated" satisfies MountedVehicleOccupancyAnimationId;

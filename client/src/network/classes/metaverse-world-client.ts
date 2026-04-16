@@ -130,7 +130,29 @@ function playerTraversalIntentMatches(
       normalizedRightIntent.bodyControl.turnAxis &&
     leftIntent.facing.pitchRadians === normalizedRightIntent.facing.pitchRadians &&
     leftIntent.facing.yawRadians === normalizedRightIntent.facing.yawRadians &&
-    leftIntent.locomotionMode === normalizedRightIntent.locomotionMode
+    leftIntent.locomotionMode === normalizedRightIntent.locomotionMode &&
+    leftIntent.orientationSequence === normalizedRightIntent.orientationSequence
+  );
+}
+
+function doPlayerTraversalOrientationInputsMatch(
+  leftIntent: Pick<
+    MetaversePlayerTraversalIntentSnapshot,
+    "bodyControl" | "facing"
+  > | null,
+  rightIntent: Pick<
+    MetaversePlayerTraversalIntentSnapshot,
+    "bodyControl" | "facing"
+  >
+): boolean {
+  if (leftIntent === null) {
+    return false;
+  }
+
+  return (
+    leftIntent.bodyControl.turnAxis === rightIntent.bodyControl.turnAxis &&
+    leftIntent.facing.pitchRadians === rightIntent.facing.pitchRadians &&
+    leftIntent.facing.yawRadians === rightIntent.facing.yawRadians
   );
 }
 
@@ -268,14 +290,13 @@ export class MetaverseWorldClient {
   #nextJumpActionSequence = 0;
   #nextPlayerInputSequence = 0;
   #nextPlayerLookSequence = 0;
+  #nextPlayerTraversalOrientationSequence = 0;
   #queuedReliableWorldCommandPromise: Promise<void> = Promise.resolve();
   #pendingDriverVehicleControlCommand: PendingDriverVehicleControlCommand | null =
     null;
   #pendingPlayerLookIntentCommand: PendingPlayerLookIntentCommand | null = null;
   #pendingPlayerTraversalIntentCommand: PendingPlayerTraversalIntentCommand | null =
     null;
-  readonly #playerTraversalYawCompressionState =
-    createTimedYawAxisCompressionState();
   #playerId: MetaversePlayerId | null = null;
   #playerLookInputSyncHandle: TimeoutHandle | null = null;
   #playerLookInputSyncInFlight = false;
@@ -381,6 +402,10 @@ export class MetaverseWorldClient {
 
   get latestPlayerLookSequence(): number {
     return this.#nextPlayerLookSequence;
+  }
+
+  get latestPlayerTraversalOrientationSequence(): number {
+    return this.#nextPlayerTraversalOrientationSequence;
   }
 
   get latestPlayerTraversalIntentSnapshot():
@@ -520,9 +545,6 @@ export class MetaverseWorldClient {
       this.#lastPlayerTraversalIntentCommand = null;
       this.#lastPlayerTraversalIntent = null;
       this.#pendingPlayerTraversalIntentCommand = null;
-      this.#resetTimedYawAxisCompressionState(
-        this.#playerTraversalYawCompressionState
-      );
       this.#cancelScheduledPlayerTraversalInputSync();
       return null;
     }
@@ -548,16 +570,6 @@ export class MetaverseWorldClient {
       return intentSnapshot;
     }
 
-    if (this.#pendingPlayerTraversalIntentCommand === null) {
-      this.#resetTimedYawAxisCompressionState(
-        this.#playerTraversalYawCompressionState
-      );
-    }
-
-    this.#captureTimedYawAxisSample(
-      this.#playerTraversalYawCompressionState,
-      intentSnapshot.bodyControl.turnAxis
-    );
     this.#nextJumpActionSequence = Math.max(
       this.#nextJumpActionSequence,
       intentSnapshot.actionIntent.kind === "jump"
@@ -565,6 +577,8 @@ export class MetaverseWorldClient {
         : 0
     );
     this.#nextPlayerInputSequence = intentSnapshot.inputSequence;
+    this.#nextPlayerTraversalOrientationSequence =
+      intentSnapshot.orientationSequence;
     this.#pendingPlayerTraversalIntentCommand =
       createMetaverseSyncPlayerTraversalIntentCommand({
         playerId: commandInput.playerId,
@@ -800,27 +814,39 @@ export class MetaverseWorldClient {
         sequence: nextActionKind === "jump" ? nextJumpActionSequence : 0
       }
     };
-    const normalizedNextIntent = createMetaversePlayerTraversalIntentSnapshot({
-      ...nextIntent,
-      inputSequence: this.#lastPlayerTraversalIntent?.inputSequence ?? 0
-    });
-    const traversalIntentChanged = !playerTraversalIntentMatches(
-      this.#lastPlayerTraversalIntent,
-      normalizedNextIntent
-    );
+    const normalizedOrientationIntent =
+      createMetaversePlayerTraversalIntentSnapshot({
+        ...nextIntent,
+        inputSequence: this.#lastPlayerTraversalIntent?.inputSequence ?? 0,
+        orientationSequence:
+          this.#lastPlayerTraversalIntent?.orientationSequence ?? 0
+      });
     const sequencedInputChanged = !doMetaversePlayerTraversalSequencedInputsMatch(
       this.#lastPlayerTraversalIntent,
-      normalizedNextIntent
+      normalizedOrientationIntent
+    );
+    const orientationInputChanged = !doPlayerTraversalOrientationInputsMatch(
+      this.#lastPlayerTraversalIntent,
+      normalizedOrientationIntent
     );
     const inputSequence = sequencedInputChanged
       ? this.#nextPlayerInputSequence + 1
       : this.#lastPlayerTraversalIntent?.inputSequence ?? 0;
+    const orientationSequence = orientationInputChanged
+      ? this.#nextPlayerTraversalOrientationSequence + 1
+      : this.#lastPlayerTraversalIntent?.orientationSequence ?? 0;
+    const nextIntentSnapshot = createMetaversePlayerTraversalIntentSnapshot({
+      ...nextIntent,
+      inputSequence,
+      orientationSequence
+    });
+    const traversalIntentChanged = !playerTraversalIntentMatches(
+      this.#lastPlayerTraversalIntent,
+      nextIntentSnapshot
+    );
 
     return Object.freeze({
-      intentSnapshot: createMetaversePlayerTraversalIntentSnapshot({
-        ...nextIntent,
-        inputSequence
-      }),
+      intentSnapshot: nextIntentSnapshot,
       jumpPressed,
       traversalIntentChanged
     });
@@ -1151,12 +1177,17 @@ export class MetaverseWorldClient {
   #syncPlayerTraversalInputSchedule(): void {
     const latestProcessedInputSequence =
       this.#readLatestLocalPlayerLastProcessedInputSequence();
+    const latestProcessedTraversalOrientationSequence =
+      this.#readLatestLocalPlayerLastProcessedTraversalOrientationSequence();
 
     if (
       this.#pendingPlayerTraversalIntentCommand !== null &&
       latestProcessedInputSequence !== null &&
+      latestProcessedTraversalOrientationSequence !== null &&
       latestProcessedInputSequence >=
-        this.#pendingPlayerTraversalIntentCommand.intent.inputSequence
+        this.#pendingPlayerTraversalIntentCommand.intent.inputSequence &&
+      latestProcessedTraversalOrientationSequence >=
+        this.#pendingPlayerTraversalIntentCommand.intent.orientationSequence
     ) {
       this.#pendingPlayerTraversalIntentCommand = null;
     }
@@ -1435,19 +1466,9 @@ export class MetaverseWorldClient {
   #createCompressedPlayerTraversalIntentCommand(
     command: PendingPlayerTraversalIntentCommand
   ): PendingPlayerTraversalIntentCommand {
-    return createMetaverseSyncPlayerTraversalIntentCommand({
-      intent: {
-        ...command.intent,
-        bodyControl: {
-          ...command.intent.bodyControl,
-          turnAxis: this.#consumeTimedYawAxisAverage(
-            this.#playerTraversalYawCompressionState,
-            command.intent.bodyControl.turnAxis
-          )
-        }
-      },
-      playerId: command.playerId
-    });
+    // Traversal facing is already explicit latest-wins truth, so averaging
+    // turnAxis here only smears fresh turn input behind older samples.
+    return command;
   }
 
   async #sendDriverVehicleControlCommand(
@@ -1625,6 +1646,15 @@ export class MetaverseWorldClient {
     return this.#readLatestLocalPlayerSnapshot()?.lastProcessedInputSequence ?? null;
   }
 
+  #readLatestLocalPlayerLastProcessedTraversalOrientationSequence():
+    | number
+    | null {
+    return (
+      this.#readLatestLocalPlayerSnapshot()
+        ?.lastProcessedTraversalOrientationSequence ?? null
+    );
+  }
+
   #readLatestLocalPlayerLastProcessedLookSequence(): number | null {
     return this.#readLatestLocalPlayerSnapshot()?.lastProcessedLookSequence ?? null;
   }
@@ -1668,27 +1698,39 @@ export class MetaverseWorldClient {
   #rebaseTraversalCommandSequences(
     localPlayerSnapshot: Pick<
       LocalPlayerWorldSnapshot,
-      "lastProcessedInputSequence" | "playerId" | "traversalAuthority"
+      | "lastProcessedInputSequence"
+      | "lastProcessedTraversalOrientationSequence"
+      | "playerId"
+      | "traversalAuthority"
     >
   ): void {
     const authoritativeInputSequence =
       localPlayerSnapshot.lastProcessedInputSequence;
+    const authoritativeOrientationSequence =
+      localPlayerSnapshot.lastProcessedTraversalOrientationSequence;
     const authoritativeJumpActionSequence =
       readMetaverseTraversalAuthorityLatestJumpActionSequence(
         localPlayerSnapshot.traversalAuthority
       );
     const inputSequenceRaised =
       authoritativeInputSequence > this.#nextPlayerInputSequence;
+    const orientationSequenceRaised =
+      authoritativeOrientationSequence >
+      this.#nextPlayerTraversalOrientationSequence;
     const jumpSequenceRaised =
       authoritativeJumpActionSequence > this.#nextJumpActionSequence;
 
-    if (!inputSequenceRaised && !jumpSequenceRaised) {
+    if (!inputSequenceRaised && !jumpSequenceRaised && !orientationSequenceRaised) {
       return;
     }
 
     this.#nextPlayerInputSequence = Math.max(
       this.#nextPlayerInputSequence,
       authoritativeInputSequence
+    );
+    this.#nextPlayerTraversalOrientationSequence = Math.max(
+      this.#nextPlayerTraversalOrientationSequence,
+      authoritativeOrientationSequence
     );
     this.#nextJumpActionSequence = Math.max(
       this.#nextJumpActionSequence,
@@ -1709,6 +1751,11 @@ export class MetaverseWorldClient {
         pendingCommand.intent.inputSequence <= authoritativeInputSequence
           ? this.#nextPlayerInputSequence + 1
           : pendingCommand.intent.inputSequence;
+      const nextOrientationSequence =
+        pendingCommand.intent.orientationSequence <=
+        authoritativeOrientationSequence
+          ? this.#nextPlayerTraversalOrientationSequence + 1
+          : pendingCommand.intent.orientationSequence;
 
       this.#nextJumpActionSequence = Math.max(
         this.#nextJumpActionSequence,
@@ -1717,6 +1764,10 @@ export class MetaverseWorldClient {
       this.#nextPlayerInputSequence = Math.max(
         this.#nextPlayerInputSequence,
         nextInputSequence
+      );
+      this.#nextPlayerTraversalOrientationSequence = Math.max(
+        this.#nextPlayerTraversalOrientationSequence,
+        nextOrientationSequence
       );
       this.#pendingPlayerTraversalIntentCommand =
         createMetaverseSyncPlayerTraversalIntentCommand({
@@ -1740,6 +1791,7 @@ export class MetaverseWorldClient {
             facing: pendingCommand.intent.facing,
             inputSequence: this.#nextPlayerInputSequence,
             locomotionMode: pendingCommand.intent.locomotionMode,
+            orientationSequence: this.#nextPlayerTraversalOrientationSequence
           },
           playerId: pendingCommand.playerId
         });
@@ -1797,11 +1849,16 @@ export class MetaverseWorldClient {
 
     const latestProcessedInputSequence =
       this.#readLatestLocalPlayerLastProcessedInputSequence();
+    const latestProcessedTraversalOrientationSequence =
+      this.#readLatestLocalPlayerLastProcessedTraversalOrientationSequence();
 
     return (
       latestProcessedInputSequence === null ||
+      latestProcessedTraversalOrientationSequence === null ||
       latestProcessedInputSequence <
-        this.#lastPlayerTraversalIntentCommand.intent.inputSequence
+        this.#lastPlayerTraversalIntentCommand.intent.inputSequence ||
+      latestProcessedTraversalOrientationSequence <
+        this.#lastPlayerTraversalIntentCommand.intent.orientationSequence
     );
   }
 

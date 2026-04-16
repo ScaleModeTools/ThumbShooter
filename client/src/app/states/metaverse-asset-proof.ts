@@ -34,7 +34,7 @@ import type {
   EnvironmentSeatDescriptor
 } from "@/assets/types/environment-asset-manifest";
 import type {
-  AttachmentGripAlignmentDescriptor,
+  AttachmentMountSocketDescriptor,
   AttachmentOffHandSupportPointIdBySocketId,
   AttachmentSupportPointDescriptor
 } from "@/assets/types/attachment-asset-manifest";
@@ -261,30 +261,7 @@ function resolveMetaverseAttachmentProofConfig(
       z: vector.z
     });
   };
-  const resolveNormalizedAttachmentAxis = (
-    vector: { readonly x: number; readonly y: number; readonly z: number },
-    label: string
-  ) => {
-    const resolvedVector = resolveAttachmentVector3(vector, label);
-    const magnitude = Math.hypot(
-      resolvedVector.x,
-      resolvedVector.y,
-      resolvedVector.z
-    );
-
-    if (magnitude <= 0.000001) {
-      throw new Error(
-        `Metaverse attachment ${attachmentDescriptor.label} requires non-zero ${label}.`
-      );
-    }
-
-    return Object.freeze({
-      x: resolvedVector.x / magnitude,
-      y: resolvedVector.y / magnitude,
-      z: resolvedVector.z / magnitude
-    });
-  };
-  const resolveAttachmentMarkerNodeName = (nodeName: string, label: string) => {
+  const resolveAttachmentNodeName = (nodeName: string, label: string) => {
     const trimmedNodeName = nodeName.trim();
 
     if (trimmedNodeName.length === 0) {
@@ -295,117 +272,29 @@ function resolveMetaverseAttachmentProofConfig(
 
     return trimmedNodeName;
   };
-  const resolveOptionalAttachmentMarkerNodeName = (
-    nodeName: string | null | undefined,
-    label: string
-  ) => {
-    if (nodeName === null || nodeName === undefined) {
-      return null;
-    }
-
-    return resolveAttachmentMarkerNodeName(nodeName, label);
-  };
-  const resolveAttachmentGripAlignment = (
-    gripAlignment: AttachmentGripAlignmentDescriptor,
+  const resolveAttachmentSocketNodeName = (
+    mountDescriptor: AttachmentMountSocketDescriptor,
     socketName: string
   ) => {
-    const attachmentGripMarkerNodeNameBySocketName =
-      gripAlignment.attachmentGripMarkerNodeNameBySocketId as
+    const attachmentSocketNodeNameBySocketName =
+      mountDescriptor.attachmentSocketNodeNameBySocketId as
         | Readonly<Record<string, string | null | undefined>>
         | undefined;
-    const attachmentGripMarkerNodeName =
-      attachmentGripMarkerNodeNameBySocketName?.[socketName] ??
-      gripAlignment.attachmentGripMarkerNodeName ??
+    const attachmentSocketNodeName =
+      attachmentSocketNodeNameBySocketName?.[socketName] ??
+      mountDescriptor.attachmentSocketNodeName ??
       null;
-    const socketForwardAxis = resolveNormalizedAttachmentAxis(
-      gripAlignment.socketForwardAxis,
-      "socket forward axis"
-    );
-    const socketUpAxis = resolveNormalizedAttachmentAxis(
-      gripAlignment.socketUpAxis,
-      "socket up axis"
-    );
-    const socketOffset = resolveAttachmentVector3(
-      gripAlignment.socketOffset,
-      "socket offset"
-    );
 
-    if ("attachmentForwardAxis" in gripAlignment) {
-      const attachmentForwardAxis = resolveNormalizedAttachmentAxis(
-        gripAlignment.attachmentForwardAxis,
-        "attachment forward axis"
-      );
-      const attachmentUpAxis = resolveNormalizedAttachmentAxis(
-        gripAlignment.attachmentUpAxis,
-        "attachment up axis"
-      );
-
-      if (
-        Math.abs(
-          attachmentForwardAxis.x * attachmentUpAxis.x +
-            attachmentForwardAxis.y * attachmentUpAxis.y +
-            attachmentForwardAxis.z * attachmentUpAxis.z
-        ) > 0.999
-      ) {
-        throw new Error(
-          `Metaverse attachment ${attachmentDescriptor.label} requires attachment forward and up axes to stay non-collinear.`
-        );
-      }
-
-      if (
-        Math.abs(
-          socketForwardAxis.x * socketUpAxis.x +
-            socketForwardAxis.y * socketUpAxis.y +
-            socketForwardAxis.z * socketUpAxis.z
-        ) > 0.999
-      ) {
-        throw new Error(
-          `Metaverse attachment ${attachmentDescriptor.label} requires socket forward and up axes to stay non-collinear.`
-        );
-      }
-
-      return Object.freeze({
-        attachmentForwardAxis,
-        attachmentUpAxis,
-        attachmentGripMarkerNodeName: resolveOptionalAttachmentMarkerNodeName(
-          attachmentGripMarkerNodeName,
-          `attachment grip marker node name for ${socketName}`
-        ),
-        socketForwardAxis,
-        socketOffset,
-        socketUpAxis
-      });
-    }
-
-    if (
-      Math.abs(
-        socketForwardAxis.x * socketUpAxis.x +
-          socketForwardAxis.y * socketUpAxis.y +
-          socketForwardAxis.z * socketUpAxis.z
-      ) > 0.999
-    ) {
+    if (attachmentSocketNodeName === null) {
       throw new Error(
-        `Metaverse attachment ${attachmentDescriptor.label} requires socket forward and up axes to stay non-collinear.`
+        `Metaverse attachment ${attachmentDescriptor.label} requires an attachment socket node name for ${socketName}.`
       );
     }
 
-    return Object.freeze({
-      attachmentForwardMarkerNodeName: resolveAttachmentMarkerNodeName(
-        gripAlignment.attachmentForwardMarkerNodeName,
-        "attachment forward marker node name"
-      ),
-      attachmentGripMarkerNodeName: resolveOptionalAttachmentMarkerNodeName(
-        attachmentGripMarkerNodeName,
-        `attachment grip marker node name for ${socketName}`
-      ),
-      attachmentUpMarkerNodeName: resolveAttachmentMarkerNodeName(
-        gripAlignment.attachmentUpMarkerNodeName,
-        "attachment up marker node name"
-      ),
-      socketForwardAxis,
-      socketOffset,
-      socketUpAxis
-    });
+    return resolveAttachmentNodeName(
+      attachmentSocketNodeName,
+      `attachment socket node name for ${socketName}`
+    );
   };
   const resolveAttachmentSupportPoints = (
     supportPoints: readonly AttachmentSupportPointDescriptor[] | null
@@ -478,13 +367,13 @@ function resolveMetaverseAttachmentProofConfig(
   return Object.freeze({
     attachmentId: attachmentDescriptor.id,
     heldMount: Object.freeze({
+      attachmentSocketNodeName: resolveAttachmentSocketNodeName(
+        attachmentDescriptor.heldMount,
+        attachmentDescriptor.defaultSocketId
+      ),
       offHandSupportPointId: resolveOffHandSupportPointId(
         resolvedSupportPoints,
         attachmentDescriptor.offHandSupportPointIdBySocketId,
-        attachmentDescriptor.defaultSocketId
-      ),
-      gripAlignment: resolveAttachmentGripAlignment(
-        attachmentDescriptor.gripAlignment,
         attachmentDescriptor.defaultSocketId
       ),
       socketName: resolveHeldAttachmentSocketName(
@@ -498,8 +387,8 @@ function resolveMetaverseAttachmentProofConfig(
       attachmentDescriptor.mountedHolster === null
         ? null
         : Object.freeze({
-            gripAlignment: resolveAttachmentGripAlignment(
-              attachmentDescriptor.mountedHolster.gripAlignment,
+            attachmentSocketNodeName: resolveAttachmentSocketNodeName(
+              attachmentDescriptor.mountedHolster,
               attachmentDescriptor.mountedHolster.socketName
             ),
             socketName: attachmentDescriptor.mountedHolster.socketName

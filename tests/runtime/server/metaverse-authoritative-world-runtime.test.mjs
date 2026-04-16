@@ -10,6 +10,7 @@ import {
   createMetaverseSyncPlayerTraversalIntentCommand as createRawMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseSyncPresenceCommand,
   createMilliseconds,
+  metaverseGroundedBodyTraversalCoreConfig,
   createUsername
 } from "@webgpu-metaverse/shared";
 
@@ -20,6 +21,34 @@ const shippedDockSupportHeightMeters = 0.6;
 function requireValue(value, label) {
   assert.notEqual(value, null, `${label} should resolve`);
   return value;
+}
+
+function offsetLocalPlanarPosition(
+  position,
+  rotationYRadians,
+  localX,
+  localZ
+) {
+  const sine = Math.sin(rotationYRadians);
+  const cosine = Math.cos(rotationYRadians);
+
+  return Object.freeze({
+    x: position.x + localX * cosine + localZ * sine,
+    y: position.y,
+    z: position.z - localX * sine + localZ * cosine
+  });
+}
+
+function resolveLocalPlanarOffset(position, origin, rotationYRadians) {
+  const deltaX = position.x - origin.x;
+  const deltaZ = position.z - origin.z;
+  const sine = Math.sin(-rotationYRadians);
+  const cosine = Math.cos(-rotationYRadians);
+
+  return Object.freeze({
+    x: deltaX * cosine + deltaZ * sine,
+    z: -deltaX * sine + deltaZ * cosine
+  });
 }
 
 function createAuthoritativeRuntime() {
@@ -468,7 +497,8 @@ test("MetaverseAuthoritativeWorldRuntime accepts same-sequence unmounted facing 
           yawRadians: 0
         },
         inputSequence: 1,
-        locomotionMode: "grounded"
+        locomotionMode: "grounded",
+        orientationSequence: 1
       },
       playerId
     }),
@@ -494,7 +524,8 @@ test("MetaverseAuthoritativeWorldRuntime accepts same-sequence unmounted facing 
           yawRadians: Math.PI * 0.5
         },
         inputSequence: 1,
-        locomotionMode: "grounded"
+        locomotionMode: "grounded",
+        orientationSequence: 2
       },
       playerId
     }),
@@ -504,6 +535,10 @@ test("MetaverseAuthoritativeWorldRuntime accepts same-sequence unmounted facing 
   const preTickSnapshot = runtime.readWorldSnapshot(100, playerId);
 
   assert.equal(preTickSnapshot.players[0]?.lastProcessedInputSequence, 1);
+  assert.equal(
+    preTickSnapshot.players[0]?.lastProcessedTraversalOrientationSequence,
+    1
+  );
   assert.equal(preTickSnapshot.players[0]?.stateSequence, 1);
   assert.equal(preTickSnapshot.players[0]?.look.pitchRadians, -0.2);
   assert.equal(preTickSnapshot.players[0]?.look.yawRadians, Math.PI * 0.5);
@@ -514,10 +549,68 @@ test("MetaverseAuthoritativeWorldRuntime accepts same-sequence unmounted facing 
   const postTickSnapshot = runtime.readWorldSnapshot(200, playerId);
 
   assert.equal(postTickSnapshot.players[0]?.lastProcessedInputSequence, 1);
+  assert.equal(
+    postTickSnapshot.players[0]?.lastProcessedTraversalOrientationSequence,
+    2
+  );
   assert.equal(postTickSnapshot.players[0]?.stateSequence, 1);
   assert.equal(postTickSnapshot.players[0]?.yawRadians, Math.PI * 0.5);
   assert.equal(postTickSnapshot.players[0]?.look.pitchRadians, -0.2);
   assert.equal(postTickSnapshot.players[0]?.look.yawRadians, Math.PI * 0.5);
+});
+
+test("MetaverseAuthoritativeWorldRuntime republishes server-observed traversal control and facing for remote pose consumers", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("observed-traversal-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Observed Traversal Pilot"),
+    "username"
+  );
+
+  joinSurfacePlayer(runtime, playerId, username);
+  runtime.advanceToTime(100);
+
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        actionIntent: {
+          kind: "none",
+          pressed: false
+        },
+        bodyControl: {
+          boost: true,
+          moveAxis: 1,
+          strafeAxis: -0.25,
+          turnAxis: 0.4
+        },
+        facing: {
+          pitchRadians: -0.2,
+          yawRadians: Math.PI * 0.5
+        },
+        inputSequence: 2,
+        locomotionMode: "grounded"
+      },
+      playerId
+    }),
+    100
+  );
+
+  const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+  const observedTraversal = worldSnapshot.players[0]?.observedTraversal;
+
+  assert.deepEqual(observedTraversal?.bodyControl, {
+    boost: true,
+    moveAxis: 1,
+    strafeAxis: -0.25,
+    turnAxis: 0.4
+  });
+  assert.equal(observedTraversal?.facing.pitchRadians, -0.2);
+  assert.equal(observedTraversal?.facing.yawRadians, Math.PI * 0.5);
+  assert.equal(worldSnapshot.players[0]?.look.pitchRadians, -0.2);
+  assert.equal(worldSnapshot.players[0]?.look.yawRadians, Math.PI * 0.5);
 });
 
 test("MetaverseAuthoritativeWorldRuntime keeps mounted driver look constrained to mount-facing yaw while preserving explicit pitch", () => {
@@ -983,6 +1076,76 @@ test("MetaverseAuthoritativeWorldRuntime holds sustained swim after dock entry b
   assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
   assert.equal(worldSnapshot.players[0]?.position.y, 0);
   assert.ok((worldSnapshot.players[0]?.position.z ?? 0) < -20);
+});
+
+test("MetaverseAuthoritativeWorldRuntime keeps idle dynamic skiff collision authoritative for swimmers before any mount claim exists", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("idle-skiff-swim-collision-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Idle Skiff Swimmer"), "username");
+  const skiffCenterPosition = Object.freeze({
+    x: 12.2,
+    y: 0,
+    z: -13.8
+  });
+  const skiffYawRadians = Math.PI * 0.86;
+  const swimStartPosition = offsetLocalPlanarPosition(
+    skiffCenterPosition,
+    skiffYawRadians,
+    0,
+    3.2
+  );
+  const swimYawRadians = -skiffYawRadians;
+
+  joinSurfacePlayer(runtime, playerId, username, {
+    locomotionMode: "swim",
+    position: swimStartPosition,
+    yawRadians: swimYawRadians
+  });
+  runtime.acceptWorldCommand(
+    createMetaverseSyncPlayerTraversalIntentCommand({
+      intent: {
+        boost: false,
+        inputSequence: 2,
+        jump: false,
+        locomotionMode: "swim",
+        moveAxis: 1,
+        yawRadians: swimYawRadians,
+        strafeAxis: 0,
+        yawAxis: 0
+      },
+      playerId
+    }),
+    0
+  );
+
+  for (let timeMs = 100; timeMs <= 1_000; timeMs += 100) {
+    runtime.advanceToTime(timeMs);
+  }
+
+  const worldSnapshot = runtime.readWorldSnapshot(1_000, playerId);
+  const swimmerPosition = worldSnapshot.players[0]?.position;
+
+  assert.notEqual(swimmerPosition, undefined);
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
+  assert.equal(worldSnapshot.players[0]?.lastProcessedInputSequence, 2);
+
+  const swimmerLocalOffset = resolveLocalPlanarOffset(
+    swimmerPosition,
+    skiffCenterPosition,
+    skiffYawRadians
+  );
+  const expectedSkiffBeamClearanceMeters =
+    metaverseGroundedBodyTraversalCoreConfig.capsuleRadiusMeters +
+    metaverseGroundedBodyTraversalCoreConfig.controllerOffsetMeters +
+    1.3;
+
+  assert.ok(
+    swimmerLocalOffset.z > expectedSkiffBeamClearanceMeters - 0.04,
+    `expected swimmer to remain outside the idle skiff hull beam, received local offset ${JSON.stringify(swimmerLocalOffset)}`
+  );
 });
 
 test("MetaverseAuthoritativeWorldRuntime keeps a dock jump airborne before Rapier shoreline support settles it back to grounded", () => {

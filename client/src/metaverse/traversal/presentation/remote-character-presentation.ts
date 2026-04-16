@@ -1,15 +1,21 @@
 import {
   isMetaverseTraversalAuthorityJumpAirborne,
   isMetaverseTraversalAuthorityJumpPendingOrActive,
+  type MetaverseRealtimePlayerObservedTraversalSnapshot,
   type MetaverseRealtimePlayerSnapshot
 } from "@webgpu-metaverse/shared";
 
 import type {
+  MetaverseCameraSnapshot,
+  MetaverseRuntimeConfig,
   MetaverseRemoteCharacterPresentationSnapshot
 } from "../../types/metaverse-runtime";
 import {
   MetaverseMovementAnimationPolicyRuntime
 } from "./metaverse-movement-animation-policy";
+import {
+  createTraversalSurfaceCameraPresentationSnapshot
+} from "./camera-presentation";
 
 interface MutableVector3Snapshot {
   x: number;
@@ -18,6 +24,7 @@ interface MutableVector3Snapshot {
 }
 
 interface MutableRemoteCharacterPresentationSnapshot {
+  aimCamera: MetaverseCameraSnapshot | null;
   characterId: string;
   look: {
     pitchRadians: number;
@@ -42,6 +49,11 @@ export interface RemoteCharacterPresentationAuthoritativeSample {
   readonly nextPlayer: MetaverseRealtimePlayerSnapshot | null;
   readonly sampleEpoch: number;
 }
+
+type RemoteCharacterAimPresentationConfig = Pick<
+  MetaverseRuntimeConfig,
+  "bodyPresentation" | "groundedBody"
+>;
 
 function createMutableVector3(): MutableVector3Snapshot {
   return {
@@ -145,16 +157,43 @@ function sampleRemotePlayerYawRadians(
   return lerpWrappedRadians(basePlayer.yawRadians, nextPlayer.yawRadians, alpha);
 }
 
-function sampleRemotePlayerLookPitchRadians(
+function sampleRemotePlayerObservedTraversalFacingYawRadians(
   basePlayer: MetaverseRealtimePlayerSnapshot,
   nextPlayer: MetaverseRealtimePlayerSnapshot | null,
   alpha: number
 ): number {
   if (nextPlayer === null) {
-    return basePlayer.look.pitchRadians;
+    return basePlayer.observedTraversal.facing.yawRadians;
   }
 
-  return lerp(basePlayer.look.pitchRadians, nextPlayer.look.pitchRadians, alpha);
+  return lerpWrappedRadians(
+    basePlayer.observedTraversal.facing.yawRadians,
+    nextPlayer.observedTraversal.facing.yawRadians,
+    alpha
+  );
+}
+
+function sampleRemotePlayerLookPitchRadians(
+  basePlayer: MetaverseRealtimePlayerSnapshot,
+  nextPlayer: MetaverseRealtimePlayerSnapshot | null,
+  alpha: number
+): number {
+  const readPresentationPitchRadians = (
+    playerSnapshot: MetaverseRealtimePlayerSnapshot
+  ): number =>
+    playerSnapshot.mountedOccupancy === null
+      ? playerSnapshot.observedTraversal.facing.pitchRadians
+      : playerSnapshot.look.pitchRadians;
+
+  if (nextPlayer === null) {
+    return readPresentationPitchRadians(basePlayer);
+  }
+
+  return lerp(
+    readPresentationPitchRadians(basePlayer),
+    readPresentationPitchRadians(nextPlayer),
+    alpha
+  );
 }
 
 function sampleRemotePlayerLookYawRadians(
@@ -162,14 +201,46 @@ function sampleRemotePlayerLookYawRadians(
   nextPlayer: MetaverseRealtimePlayerSnapshot | null,
   alpha: number
 ): number {
+  const readPresentationYawRadians = (
+    playerSnapshot: MetaverseRealtimePlayerSnapshot
+  ): number =>
+    playerSnapshot.mountedOccupancy === null
+      ? playerSnapshot.observedTraversal.facing.yawRadians
+      : playerSnapshot.look.yawRadians;
+
   if (nextPlayer === null) {
-    return basePlayer.look.yawRadians;
+    return readPresentationYawRadians(basePlayer);
   }
 
   return lerpWrappedRadians(
-    basePlayer.look.yawRadians,
-    nextPlayer.look.yawRadians,
+    readPresentationYawRadians(basePlayer),
+    readPresentationYawRadians(nextPlayer),
     alpha
+  );
+}
+
+function resolveRemoteCharacterAimCameraSnapshot(
+  position: MutableVector3Snapshot,
+  look: MutableRemoteCharacterPresentationSnapshot["look"],
+  playerSnapshot: Pick<
+    MetaverseRealtimePlayerSnapshot,
+    "locomotionMode" | "mountedOccupancy"
+  >,
+  config: RemoteCharacterAimPresentationConfig
+): MetaverseCameraSnapshot | null {
+  if (
+    playerSnapshot.mountedOccupancy !== null ||
+    playerSnapshot.locomotionMode !== "grounded"
+  ) {
+    return null;
+  }
+
+  return createTraversalSurfaceCameraPresentationSnapshot(
+    position,
+    config.groundedBody.eyeHeightMeters,
+    look.yawRadians,
+    look.pitchRadians,
+    config.bodyPresentation.groundedFirstPersonForwardOffsetMeters
   );
 }
 
@@ -185,6 +256,41 @@ function selectSampledRemotePlayerSnapshot(
   return alpha < 0.5 ? basePlayer : nextPlayer;
 }
 
+function resolveObservedTraversalInputMagnitude(
+  observedTraversal: MetaverseRealtimePlayerObservedTraversalSnapshot
+): number {
+  return Math.min(
+    1,
+    Math.hypot(
+      observedTraversal.bodyControl.moveAxis,
+      observedTraversal.bodyControl.strafeAxis
+    )
+  );
+}
+
+function sampleRemotePlayerObservedTraversalInputMagnitude(
+  basePlayer: MetaverseRealtimePlayerSnapshot,
+  nextPlayer: MetaverseRealtimePlayerSnapshot | null,
+  alpha: number
+): number {
+  if (nextPlayer === null) {
+    return resolveObservedTraversalInputMagnitude(basePlayer.observedTraversal);
+  }
+
+  const moveAxis = lerp(
+    basePlayer.observedTraversal.bodyControl.moveAxis,
+    nextPlayer.observedTraversal.bodyControl.moveAxis,
+    alpha
+  );
+  const strafeAxis = lerp(
+    basePlayer.observedTraversal.bodyControl.strafeAxis,
+    nextPlayer.observedTraversal.bodyControl.strafeAxis,
+    alpha
+  );
+
+  return Math.min(1, Math.hypot(moveAxis, strafeAxis));
+}
+
 function resolveRemoteCharacterAnimationVocabulary(
   animationRuntime: MetaverseMovementAnimationPolicyRuntime,
   playerSnapshot: Pick<
@@ -192,8 +298,10 @@ function resolveRemoteCharacterAnimationVocabulary(
     | "linearVelocity"
     | "locomotionMode"
     | "mountedOccupancy"
+    | "observedTraversal"
     | "traversalAuthority"
   >,
+  inputMagnitude: number,
   deltaSeconds: number
 ): MetaverseRemoteCharacterPresentationSnapshot["presentation"]["animationVocabulary"] {
   if (playerSnapshot.mountedOccupancy?.occupancyKind === "seat") {
@@ -212,7 +320,7 @@ function resolveRemoteCharacterAnimationVocabulary(
           !isMetaverseTraversalAuthorityJumpAirborne(
             playerSnapshot.traversalAuthority
           )),
-      inputMagnitude: 0,
+      inputMagnitude,
       locomotionMode:
         playerSnapshot.mountedOccupancy !== null
           ? "grounded"
@@ -231,12 +339,18 @@ function resolveRemoteCharacterAnimationVocabulary(
 
 export class MetaverseRemoteCharacterPresentationOwner {
   readonly #animationRuntime = new MetaverseMovementAnimationPolicyRuntime();
+  readonly #config: RemoteCharacterAimPresentationConfig;
   readonly #snapshot: MutableRemoteCharacterPresentationSnapshot;
 
   #sampleEpoch = 0;
 
-  constructor(playerSnapshot: MetaverseRealtimePlayerSnapshot) {
+  constructor(
+    playerSnapshot: MetaverseRealtimePlayerSnapshot,
+    config: RemoteCharacterAimPresentationConfig
+  ) {
+    this.#config = config;
     this.#snapshot = {
+      aimCamera: null,
       characterId: playerSnapshot.characterId,
       look: {
         pitchRadians: playerSnapshot.look.pitchRadians,
@@ -247,7 +361,12 @@ export class MetaverseRemoteCharacterPresentationOwner {
       poseSyncMode: "runtime-server-sampled",
       presentation: {
         animationVocabulary: "idle",
-        position: createMutableVector3(),
+        position: writeMutableVector3(
+          createMutableVector3(),
+          playerSnapshot.position.x,
+          playerSnapshot.position.y,
+          playerSnapshot.position.z
+        ),
         yawRadians: playerSnapshot.yawRadians
       }
     };
@@ -292,6 +411,11 @@ export class MetaverseRemoteCharacterPresentationOwner {
       resolveRemoteCharacterAnimationVocabulary(
         this.#animationRuntime,
         sampledDiscretePlayerSnapshot,
+        sampleRemotePlayerObservedTraversalInputMagnitude(
+          basePlayer,
+          nextPlayer,
+          alpha
+        ),
         deltaSeconds
       );
     sampleRemotePlayerPositionInto(
@@ -301,11 +425,24 @@ export class MetaverseRemoteCharacterPresentationOwner {
       alpha,
       extrapolationSeconds
     );
-    this.#snapshot.presentation.yawRadians = sampleRemotePlayerYawRadians(
-      basePlayer,
-      nextPlayer,
-      alpha,
-      extrapolationSeconds
+    this.#snapshot.presentation.yawRadians =
+      sampledDiscretePlayerSnapshot.mountedOccupancy === null
+        ? sampleRemotePlayerObservedTraversalFacingYawRadians(
+            basePlayer,
+            nextPlayer,
+            alpha
+          )
+        : sampleRemotePlayerYawRadians(
+            basePlayer,
+            nextPlayer,
+            alpha,
+            extrapolationSeconds
+          );
+    this.#snapshot.aimCamera = resolveRemoteCharacterAimCameraSnapshot(
+      this.#snapshot.presentation.position,
+      this.#snapshot.look,
+      sampledDiscretePlayerSnapshot,
+      this.#config
     );
     this.#sampleEpoch = sampleEpoch;
   }

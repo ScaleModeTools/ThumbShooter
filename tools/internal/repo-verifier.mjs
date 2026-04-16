@@ -417,6 +417,24 @@ function verifySharedDist(repoRoot, errors) {
   }
 }
 
+function verifySharedSourceArtifacts(repoRoot, errors) {
+  const sharedSourceArtifacts = listFiles(join(repoRoot, "packages/shared/src")).filter(
+    (filePath) =>
+      filePath.endsWith(".js") ||
+      filePath.endsWith(".js.map") ||
+      filePath.endsWith(".d.ts") ||
+      filePath.endsWith(".d.ts.map")
+  );
+
+  for (const filePath of sharedSourceArtifacts) {
+    errors.push(
+      `Generated shared source artifact found in ${toRepoPath(
+        relative(repoRoot, filePath)
+      )}; packages/shared/src must stay source-only.`
+    );
+  }
+}
+
 function verifyWorkspaceDependency(repoRoot, errors) {
   const clientPackage = readPackageJson(repoRoot, "client/package.json");
 
@@ -841,6 +859,7 @@ export function collectRepoVerificationErrors({
 
   verifyProductImports(repoRoot, sourceFiles, errors);
   verifyClientSourceExtensions(repoRoot, errors);
+  verifySharedSourceArtifacts(repoRoot, errors);
   verifySharedDist(repoRoot, errors);
   verifyWorkspaceDependency(repoRoot, errors);
   verifyTrackedPrivacy(nextTrackedFiles, errors);
