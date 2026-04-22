@@ -542,7 +542,6 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
     worldSnapshot.players[0]?.mountedOccupancy?.occupantRole,
     "driver"
   );
-  assert.equal(worldSnapshot.observerPlayer?.lastProcessedTraversalSequence, 7);
   assert.equal(
     worldSnapshot.players[0]?.traversalAuthority.currentActionKind,
     "none"
@@ -1104,7 +1103,6 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
   const command = createMetaverseSyncPlayerTraversalIntentCommand({
     intent: {
       boost: true,
-      sequence: 4.9,
       jump: true,
       locomotionMode: "swim",
       moveAxis: 2.4,
@@ -1117,10 +1115,9 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
   const webTransportRequest =
     createMetaverseRealtimeWorldWebTransportCommandRequest({
       command
-    });
+  });
 
   assert.equal(command.type, "sync-player-traversal-intent");
-  assert.equal(command.intent.sequence, 4);
   assert.equal(command.intent.locomotionMode, "swim");
   assert.equal(command.intent.sequence, 8);
   assert.equal(command.intent.bodyControl.moveAxis, 1);
@@ -1131,7 +1128,7 @@ test("metaverse realtime world traversal intent commands normalize explicit tran
     webTransportRequest.command.type,
     "sync-player-traversal-intent"
   );
-  assert.equal(webTransportRequest.command.intent.sequence, 4);
+  assert.equal(webTransportRequest.command.intent.sequence, 8);
 });
 
 test("metaverse realtime world traversal intent commands normalize explicit pending intent samples without traversal timestamps", () => {
@@ -1142,7 +1139,6 @@ test("metaverse realtime world traversal intent commands normalize explicit pend
   const command = createMetaverseSyncPlayerTraversalIntentCommand({
     intent: {
       boost: false,
-      sequence: 3,
       jump: false,
       locomotionMode: "grounded",
       moveAxis: 0,
@@ -1166,7 +1162,6 @@ test("metaverse realtime world traversal intent commands normalize explicit pend
           pitchRadians: 0,
           yawRadians: 0
         },
-        sequence: 1,
         locomotionMode: "grounded",
         sequence: 1
       }
@@ -1192,8 +1187,7 @@ test("metaverse realtime world traversal intent commands normalize explicit pend
         yawRadians: 0
       },
       locomotionMode: "grounded",
-      sequence: 1,
-      sequence: 0
+      sequence: 1
     }
   ]);
 });
@@ -1559,7 +1553,6 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
       command: createMetaverseSyncPlayerTraversalIntentCommand({
         intent: {
           boost: true,
-          sequence: 7.2,
           jump: false,
           locomotionMode: "grounded",
           moveAxis: 1.5,
@@ -1628,7 +1621,6 @@ test("webtransport datagram shared contracts wrap latest-wins channels with expl
     playerTraversalIntentDatagram.command.type,
     "sync-player-traversal-intent"
   );
-  assert.equal(playerTraversalIntentDatagram.command.intent.sequence, 7);
   assert.equal(
     playerTraversalIntentDatagram.command.intent.sequence,
     11

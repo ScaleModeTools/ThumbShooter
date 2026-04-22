@@ -41,8 +41,6 @@ async function createAuthoritativeSnapshotHarness({
   latestAcceptedSnapshotReceivedAtMs = null,
   latestPlayerTraversalSequence = 0,
   latestPlayerLookSequence = 0,
-  latestPlayerTraversalSampleId = 0,
-  latestPlayerTraversalSequence = 0,
   latestPlayerWeaponSequence = 0,
   localPlayerId,
   readWallClockMs,
@@ -56,14 +54,6 @@ async function createAuthoritativeSnapshotHarness({
 
   fakeWorldClient.latestPlayerTraversalSequence = latestPlayerTraversalSequence;
   fakeWorldClient.latestPlayerLookSequence = latestPlayerLookSequence;
-  fakeWorldClient.latestPlayerIssuedTraversalIntentSnapshot =
-    latestPlayerTraversalSampleId > 0
-      ? Object.freeze({
-          sequence: latestPlayerTraversalSampleId
-        })
-      : null;
-  fakeWorldClient.latestPlayerTraversalSequence =
-    latestPlayerTraversalSequence;
   fakeWorldClient.latestPlayerWeaponSequence = latestPlayerWeaponSequence;
 
   return {
@@ -72,9 +62,6 @@ async function createAuthoritativeSnapshotHarness({
         authoritativeServerClock: new FakeAuthoritativeServerClock(),
         readLatestAcceptedSnapshotReceivedAtMs: () =>
           latestAcceptedSnapshotReceivedAtMs,
-        readLatestPlayerInputSequence: () => fakeWorldClient.latestPlayerTraversalSequence,
-        readLatestPlayerTraversalSampleId: () =>
-          fakeWorldClient.latestPlayerIssuedTraversalIntentSnapshot?.sequence ?? 0,
         readLatestPlayerTraversalSequence: () =>
           fakeWorldClient.latestPlayerTraversalSequence,
         readLocalPlayerId: () => localPlayerId,
@@ -308,9 +295,8 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ignores look-sequence drift
 
   const { authoritativeSnapshotState, fakeWorldClient } =
     await createAuthoritativeSnapshotHarness({
-      latestPlayerTraversalSequence: 6,
+      latestPlayerTraversalSequence: 7,
       latestPlayerLookSequence: 5,
-      latestPlayerTraversalSequence: 2,
       localPlayerId,
       readWallClockMs: () => currentWallClockMs,
       worldSnapshots: [
@@ -318,7 +304,6 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ignores look-sequence drift
           currentTick: 10,
           localLastProcessedTraversalSequence: 6,
           localLastProcessedLookSequence: 4,
-          localLastProcessedTraversalSequence: 1,
           localPlayerId,
           localUsername,
           remotePlayerId,
@@ -346,7 +331,7 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ignores look-sequence drift
     null
   );
 
-  fakeWorldClient.latestPlayerTraversalSequence = 1;
+  fakeWorldClient.latestPlayerTraversalSequence = 6;
 
   assert.equal(
     authoritativeSnapshotState.readFreshAckedAuthoritativeLocalPlayerSnapshot(120)
@@ -367,7 +352,7 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ignores look-sequence drift
   );
 });
 
-test("MetaverseRemoteWorldAuthoritativeSnapshotState waits for traversal sample-id ack before exposing acked local authority", async () => {
+test("MetaverseRemoteWorldAuthoritativeSnapshotState waits for traversal sequence ack before exposing acked local authority", async () => {
   const localPlayerId = createMetaversePlayerId("harbor-pilot-sample-ack-1");
   const remotePlayerId = createMetaversePlayerId("remote-sailor-sample-ack-2");
   const localUsername = createUsername("Harbor Pilot");
@@ -381,17 +366,13 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState waits for traversal sample-
 
   const { authoritativeSnapshotState, fakeWorldClient } =
     await createAuthoritativeSnapshotHarness({
-      latestPlayerTraversalSequence: 6,
-      latestPlayerTraversalSampleId: 7,
-      latestPlayerTraversalSequence: 2,
+      latestPlayerTraversalSequence: 7,
       localPlayerId,
       readWallClockMs: () => currentWallClockMs,
       worldSnapshots: [
         createRealtimeWorldSnapshot({
           currentTick: 10,
           localLastProcessedTraversalSequence: 6,
-          localLastProcessedTraversalSequence: 6,
-          localLastProcessedTraversalSequence: 2,
           localPlayerId,
           localUsername,
           remotePlayerId,
@@ -417,9 +398,7 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState waits for traversal sample-
   fakeWorldClient.publishWorldSnapshotBuffer([
     createRealtimeWorldSnapshot({
       currentTick: 11,
-      localLastProcessedTraversalSequence: 6,
       localLastProcessedTraversalSequence: 7,
-      localLastProcessedTraversalSequence: 2,
       localPlayerId,
       localUsername,
       remotePlayerId,
@@ -927,7 +906,6 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState keeps pose reconciliation a
     currentTick: 11,
     localJumpAuthorityState: "grounded",
     localLastProcessedTraversalSequence: 6,
-    localLastProcessedTraversalSequence: 6,
     localLastProcessedWeaponSequence: 0,
     localLinearVelocity: {
       x: 0,
@@ -977,8 +955,6 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ages acked local authority 
   const baselineSnapshot = createRealtimeWorldSnapshot({
     currentTick: 10,
     localLastProcessedTraversalSequence: 6,
-    localLastProcessedTraversalSequence: 6,
-    localLastProcessedTraversalSequence: 6,
     localPlayerId,
     localUsername,
     remotePlayerId,
@@ -1000,8 +976,6 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState ages acked local authority 
   const { authoritativeSnapshotState } =
     await createAuthoritativeSnapshotHarness({
       latestAcceptedSnapshotReceivedAtMs: 1_200,
-      latestPlayerTraversalSequence: 6,
-      latestPlayerTraversalSampleId: 6,
       latestPlayerTraversalSequence: 6,
       localPlayerId,
       readWallClockMs: () => currentWallClockMs,

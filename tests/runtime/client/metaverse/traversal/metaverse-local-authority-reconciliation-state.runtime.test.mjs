@@ -266,7 +266,6 @@ test("MetaverseLocalAuthorityReconciliationState force-snaps a locally predicted
         strafeAxis: 0,
         turnAxis: 0
       }),
-      sequence: 4,
       locomotionMode: "grounded",
       sequence: 9
     }),
@@ -344,7 +343,6 @@ test("MetaverseLocalAuthorityReconciliationState ignores a stale rejected jump s
         strafeAxis: 0,
         turnAxis: 0
       }),
-      sequence: 8,
       locomotionMode: "grounded",
       sequence: 10
     }),

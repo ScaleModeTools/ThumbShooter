@@ -492,7 +492,6 @@ test("MetaverseWorldPlayerTraversalIntentSync bundles unacked traversal samples 
           yawRadians: 0
         }),
         locomotionMode: "grounded",
-        sequence: 1,
         sequence: 1
       }),
       Object.freeze({
@@ -512,7 +511,6 @@ test("MetaverseWorldPlayerTraversalIntentSync bundles unacked traversal samples 
           yawRadians: 0
         }),
         locomotionMode: "grounded",
-        sequence: 2,
         sequence: 2
       })
     ])
@@ -801,7 +799,6 @@ test("MetaverseWorldPlayerTraversalIntentSync emits explicit pending traversal s
         yawRadians: 0
       }),
       locomotionMode: "grounded",
-      sequence: 1,
       sequence: 1
     })
   ]);

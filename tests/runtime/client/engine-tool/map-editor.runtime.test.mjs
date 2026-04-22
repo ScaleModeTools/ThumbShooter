@@ -127,11 +127,13 @@ test("metaverse runtime config chooses the authored home-team spawn for the loca
   try {
     const blueConfig = createMetaverseRuntimeConfig(
       previewBundleId,
-      requirePlayerIdForTeam("client-blue", "blue")
+      requirePlayerIdForTeam("client-blue", "blue"),
+      "blue"
     );
     const redConfig = createMetaverseRuntimeConfig(
       previewBundleId,
-      requirePlayerIdForTeam("client-red", "red")
+      requirePlayerIdForTeam("client-red", "red"),
+      "red"
     );
 
     assert.equal(blueConfig.groundedBody.spawnPosition.x, -24);

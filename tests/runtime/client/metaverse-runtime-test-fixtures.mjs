@@ -73,8 +73,10 @@ export async function createStartedWebGpuMetaverseRuntimeHarness({
   };
 
   try {
+    const resolvedRuntimeConfig =
+      buildRuntimeConfig?.(metaverseRuntimeConfig) ?? metaverseRuntimeConfig;
     const runtime = new WebGpuMetaverseRuntime(
-      buildRuntimeConfig?.(metaverseRuntimeConfig),
+      resolvedRuntimeConfig,
       {
         ...(authoritativePlayerMovementEnabled === undefined
           ? {}
@@ -123,8 +125,8 @@ export async function createStartedWebGpuMetaverseRuntimeHarness({
 
     let disposed = false;
 
-    return {
-      dispose() {
+      return {
+        dispose() {
         if (disposed) {
           return;
         }
@@ -132,11 +134,11 @@ export async function createStartedWebGpuMetaverseRuntimeHarness({
         disposed = true;
         runtime.dispose();
         restoreGlobals();
-      },
-      metaverseRuntimeConfig,
-      renderer,
-      runtime,
-      windowHarness
+        },
+        metaverseRuntimeConfig: resolvedRuntimeConfig,
+        renderer,
+        runtime,
+        windowHarness
     };
   } catch (error) {
     restoreGlobals();
