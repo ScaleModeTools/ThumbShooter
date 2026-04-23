@@ -338,6 +338,8 @@ export class WebGpuMetaverseRuntime {
       environmentPhysicsRuntime,
       initialControlMode: this.#controlMode,
       presenceRuntime,
+      readLocalHeldWeaponGripTelemetrySnapshot: (nowMs) =>
+        sceneRuntime.readLocalHeldWeaponGripTelemetrySnapshot(nowMs),
       readNowMs: readNowMsImpl,
       remoteWorldRuntime,
       traversalRuntime,

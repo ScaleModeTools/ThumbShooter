@@ -653,14 +653,11 @@ export class MetaverseWorldHttpAdapter {
 
       const command = parseWorldCommand(await readJsonBody(request));
 
+      this.#roomDirectory.acceptWorldCommand(commandRoomId, command, nowMs);
       writeJson(
         response,
         200,
-        this.#roomDirectory.acceptWorldCommand(
-          commandRoomId,
-          command,
-          nowMs
-        )
+        this.#roomDirectory.readWorldEvent(commandRoomId, nowMs, command.playerId)
       );
     } catch (error) {
       writeJson(

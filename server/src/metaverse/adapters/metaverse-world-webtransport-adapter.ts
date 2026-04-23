@@ -92,11 +92,16 @@ export class MetaverseWorldWebTransportSession {
               "Metaverse world snapshot subscriptions require a persistent WebTransport stream."
           });
         case "world-command-request":
+          this.#roomDirectory.acceptWorldCommand(
+            message.roomId,
+            message.command,
+            nowMs
+          );
           return createMetaverseRealtimeWorldWebTransportServerEventMessage({
-            event: this.#roomDirectory.acceptWorldCommand(
+            event: this.#roomDirectory.readWorldEvent(
               message.roomId,
-              message.command,
-              nowMs
+              nowMs,
+              message.command.playerId
             )
           });
         default: {

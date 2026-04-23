@@ -46,6 +46,9 @@ interface MetaverseRuntimeHudTelemetryStateDependencies {
   readonly config: MetaverseRuntimeConfig;
   readonly devicePixelRatio: number;
   readonly environmentPhysicsRuntime: MetaverseEnvironmentPhysicsRuntime;
+  readonly readLocalHeldWeaponGripTelemetrySnapshot: (
+    nowMs: number
+  ) => MetaverseTelemetrySnapshot["localHeldWeaponGrip"];
   readonly remoteWorldRuntime: MetaverseRemoteWorldRuntime;
   readonly traversalRuntime: MetaverseTraversalRuntime;
 }
@@ -205,6 +208,53 @@ function freezeRendererTelemetrySnapshot(
     drawCallCount: snapshot.drawCallCount,
     label: snapshot.label,
     triangleCount: snapshot.triangleCount
+  });
+}
+
+function freezeLocalHeldWeaponGripTelemetrySnapshot(
+  snapshot: MetaverseTelemetrySnapshot["localHeldWeaponGrip"]
+): MetaverseTelemetrySnapshot["localHeldWeaponGrip"] {
+  return Object.freeze({
+    adsBlend: snapshot.adsBlend,
+    aimMode: snapshot.aimMode,
+    attachmentMountKind: snapshot.attachmentMountKind,
+    degradedFrameCount: snapshot.degradedFrameCount,
+    gripTargetSolveFailureReason: snapshot.gripTargetSolveFailureReason,
+    heldSupportMarkerAvailable: snapshot.heldSupportMarkerAvailable,
+    heldMountSocketName: snapshot.heldMountSocketName,
+    lastDegradedAgeMs: snapshot.lastDegradedAgeMs,
+    lastDegradedReason: snapshot.lastDegradedReason,
+    mainHandGripErrorMeters: snapshot.mainHandGripErrorMeters,
+    mainHandGripSocketComparisonErrorMeters:
+      snapshot.mainHandGripSocketComparisonErrorMeters,
+    mainHandMaxReachMeters: snapshot.mainHandMaxReachMeters,
+    mainHandPalmSocketComparisonErrorMeters:
+      snapshot.mainHandPalmSocketComparisonErrorMeters,
+    mainHandPoleAngleRadians: snapshot.mainHandPoleAngleRadians,
+    mainHandPostPoleBiasErrorMeters:
+      snapshot.mainHandPostPoleBiasErrorMeters,
+    mainHandReachClampDeltaMeters: snapshot.mainHandReachClampDeltaMeters,
+    mainHandReachSlackMeters: snapshot.mainHandReachSlackMeters,
+    mainHandSolveErrorMeters: snapshot.mainHandSolveErrorMeters,
+    mainHandSocket: snapshot.mainHandSocket,
+    mainHandTargetDistanceMeters: snapshot.mainHandTargetDistanceMeters,
+    offHandFinalErrorMeters: snapshot.offHandFinalErrorMeters,
+    offHandGripMounted: snapshot.offHandGripMounted,
+    offHandInitialSolveErrorMeters: snapshot.offHandInitialSolveErrorMeters,
+    offHandPoleAngleRadians: snapshot.offHandPoleAngleRadians,
+    offHandPreSolveErrorMeters: snapshot.offHandPreSolveErrorMeters,
+    offHandRefinementPassCount: snapshot.offHandRefinementPassCount,
+    offHandSocket: snapshot.offHandSocket,
+    offHandSupportMarkerAvailable: snapshot.offHandSupportMarkerAvailable,
+    phase: snapshot.phase,
+    servicePistolAdsPoseActive: snapshot.servicePistolAdsPoseActive,
+    servicePistolSupportPalmPoseActive:
+      snapshot.servicePistolSupportPalmPoseActive,
+    stability: snapshot.stability,
+    weaponId: snapshot.weaponId,
+    weaponStatePresent: snapshot.weaponStatePresent,
+    worstMainHandGripErrorMeters: snapshot.worstMainHandGripErrorMeters,
+    worstOffHandFinalErrorMeters: snapshot.worstOffHandFinalErrorMeters
   });
 }
 
@@ -456,6 +506,9 @@ function freezeTelemetrySnapshot(
   return Object.freeze({
     frameDeltaMs: snapshot.frameDeltaMs,
     frameRate: snapshot.frameRate,
+    localHeldWeaponGrip: freezeLocalHeldWeaponGripTelemetrySnapshot(
+      snapshot.localHeldWeaponGrip
+    ),
     renderedFrameCount: snapshot.renderedFrameCount,
     renderer: freezeRendererTelemetrySnapshot(snapshot.renderer),
     worldCadence: Object.freeze({
@@ -798,6 +851,9 @@ export class MetaverseRuntimeHudTelemetryState {
   readonly #config: MetaverseRuntimeConfig;
   readonly #devicePixelRatio: number;
   readonly #environmentPhysicsRuntime: MetaverseEnvironmentPhysicsRuntime;
+  readonly #readLocalHeldWeaponGripTelemetrySnapshot: (
+    nowMs: number
+  ) => MetaverseTelemetrySnapshot["localHeldWeaponGrip"];
   readonly #remoteWorldRuntime: MetaverseRemoteWorldRuntime;
   readonly #traversalRuntime: MetaverseTraversalRuntime;
 
@@ -815,12 +871,15 @@ export class MetaverseRuntimeHudTelemetryState {
     config,
     devicePixelRatio,
     environmentPhysicsRuntime,
+    readLocalHeldWeaponGripTelemetrySnapshot,
     remoteWorldRuntime,
     traversalRuntime
   }: MetaverseRuntimeHudTelemetryStateDependencies) {
     this.#config = config;
     this.#devicePixelRatio = devicePixelRatio;
     this.#environmentPhysicsRuntime = environmentPhysicsRuntime;
+    this.#readLocalHeldWeaponGripTelemetrySnapshot =
+      readLocalHeldWeaponGripTelemetrySnapshot;
     this.#remoteWorldRuntime = remoteWorldRuntime;
     this.#traversalRuntime = traversalRuntime;
   }
@@ -859,6 +918,7 @@ export class MetaverseRuntimeHudTelemetryState {
     return freezeTelemetrySnapshot({
       frameDeltaMs: input.frameDeltaMs,
       frameRate: input.frameRate,
+      localHeldWeaponGrip: this.#readLocalHeldWeaponGripTelemetrySnapshot(nowMs),
       renderedFrameCount: input.renderedFrameCount,
       renderer: {
         active: input.renderer !== null,

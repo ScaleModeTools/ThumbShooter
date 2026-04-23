@@ -1756,3 +1756,88 @@ test("MetaverseWorldClient uses the WebTransport weapon-state datagram lane and 
     client.dispose();
   }
 });
+
+test("MetaverseWorldClient keeps reliable fire-weapon command responses observer-qualified over WebTransport", async () => {
+  const networkModule = await clientLoader.load("/src/network/index.ts");
+  const worldServer = createRoomBoundWorldServer({
+    playerInactivityTimeoutMs: createMilliseconds(5_000),
+    tickIntervalMs: createMilliseconds(50)
+  });
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
+  const playerId = requireValue(
+    createMetaversePlayerId("loopback-webtransport-fire-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Loopback Fire Pilot"),
+    "username"
+  );
+  const scheduler = createManualTimerScheduler();
+  let nowMs = 0;
+
+  joinGroundedPlayer(runtime, playerId, username);
+  const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
+
+  const loopback = createMetaverseWorldWebTransportLoopback({
+    datagramAdapter,
+    readNowMs: () => nowMs,
+    worldAdapter
+  });
+  const client = createLoopbackWorldClient(networkModule, {
+    loopback,
+    readNowMs: () => nowMs,
+    roomId,
+    scheduler
+  });
+
+  try {
+    await client.ensureConnected(playerId);
+    await waitFor(
+      () =>
+        loopback.telemetry.snapshotSubscribeCount === 1 ? true : null,
+      "authoritative world snapshot-stream subscribe"
+    );
+
+    const initialBufferedSnapshotCount = client.worldSnapshotBuffer.length;
+
+    assert.ok(initialBufferedSnapshotCount > 0);
+
+    nowMs = 100;
+    client.fireWeapon({
+      aimMode: "hip-fire",
+      forwardDirection: {
+        x: 0,
+        y: 0,
+        z: -1
+      },
+      muzzleOrigin: {
+        x: 0,
+        y: 1.62,
+        z: 24
+      },
+      playerId,
+      weaponId: "metaverse-service-pistol-v2"
+    });
+
+    const commandSnapshot = await waitFor(() => {
+      if (loopback.telemetry.reliableCommandRequestCount !== 1) {
+        return null;
+      }
+
+      if (client.worldSnapshotBuffer.length !== initialBufferedSnapshotCount + 1) {
+        return null;
+      }
+
+      return client.worldSnapshotBuffer.at(-1) ?? null;
+    }, "observer-qualified fire-weapon command snapshot");
+
+    assert.equal(loopback.telemetry.datagramWeaponCount, 0);
+    assert.equal(client.statusSnapshot.state, "connected");
+    assert.equal(client.statusSnapshot.connected, true);
+    assert.equal(client.statusSnapshot.lastError, null);
+    assert.equal(commandSnapshot.observerPlayer?.playerId, playerId);
+    assert.equal(commandSnapshot.players[0]?.playerId, playerId);
+  } finally {
+    client.dispose();
+  }
+});

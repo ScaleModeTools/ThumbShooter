@@ -76,6 +76,7 @@ export class MetaverseScenePresentationState {
     const mountedPresentationSnapshot =
       createMetaverseSceneMountedPresentationSnapshot(mountedEnvironment);
     const presentedCameraSnapshot = localCharacterPresentationState.syncPresentation(
+      nowMs,
       cameraSnapshot,
       deltaSeconds,
       characterPresentation,

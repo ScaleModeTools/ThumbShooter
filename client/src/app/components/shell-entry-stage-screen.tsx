@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useState,
+  type FormEvent
+} from "react";
 
 import type {
   GameplayInputModeId,
@@ -26,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/class-name";
 
 interface ShellEntryStageScreenProps {
   readonly capabilityStatus: WebGpuMetaverseCapabilitySnapshot["status"];
@@ -149,6 +156,43 @@ function formatTeamDeathmatchRoomStatus(
   return `${roomEntry.connectedPlayerCount}/${roomEntry.capacity} connected`;
 }
 
+function teamDeathmatchRoomEntriesMatch(
+  leftEntries: readonly MetaverseRoomDirectoryEntrySnapshot[],
+  rightEntries: readonly MetaverseRoomDirectoryEntrySnapshot[]
+): boolean {
+  if (leftEntries === rightEntries) {
+    return true;
+  }
+
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  for (let entryIndex = 0; entryIndex < leftEntries.length; entryIndex += 1) {
+    const leftEntry = leftEntries[entryIndex];
+    const rightEntry = rightEntries[entryIndex];
+
+    if (
+      leftEntry?.roomId !== rightEntry?.roomId ||
+      leftEntry?.roomSessionId !== rightEntry?.roomSessionId ||
+      leftEntry?.phase !== rightEntry?.phase ||
+      leftEntry?.status !== rightEntry?.status ||
+      leftEntry?.connectedPlayerCount !== rightEntry?.connectedPlayerCount ||
+      leftEntry?.capacity !== rightEntry?.capacity ||
+      leftEntry?.redTeamScore !== rightEntry?.redTeamScore ||
+      leftEntry?.blueTeamScore !== rightEntry?.blueTeamScore ||
+      leftEntry?.redTeamPlayerCount !== rightEntry?.redTeamPlayerCount ||
+      leftEntry?.blueTeamPlayerCount !== rightEntry?.blueTeamPlayerCount ||
+      leftEntry?.timeRemainingMs !== rightEntry?.timeRemainingMs ||
+      leftEntry?.leaderPlayerId !== rightEntry?.leaderPlayerId
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function ShellEntryStageScreen({
   capabilityStatus,
   hasConfirmedProfile,
@@ -180,6 +224,8 @@ export function ShellEntryStageScreen({
     useState<string | null>(null);
   const [teamDeathmatchRoomDirectoryLoading, setTeamDeathmatchRoomDirectoryLoading] =
     useState(false);
+  const [teamDeathmatchRoomDirectoryReady, setTeamDeathmatchRoomDirectoryReady] =
+    useState(false);
   const profileSubmitLabel = hasStoredProfile
     ? "Update local profile"
     : "Save local profile";
@@ -196,20 +242,54 @@ export function ShellEntryStageScreen({
     inputMode === "camera-thumb-trigger" &&
     nextMetaverseStep === "metaverse";
   const showToolLauncher = import.meta.env.DEV;
+  const teamDeathmatchDirectoryStatusLabel = teamDeathmatchRoomDirectoryLoading &&
+    !teamDeathmatchRoomDirectoryReady
+    ? "Loading"
+    : teamDeathmatchRoomDirectoryError !== null
+      ? "Retrying"
+      : `${teamDeathmatchRoomEntries.length} live`;
+  const teamDeathmatchDirectoryHint = teamDeathmatchRoomDirectoryError !== null
+    ? teamDeathmatchRoomDirectoryError
+    : normalizedTeamDeathmatchRoomId === null
+      ? "Enter a valid room code before joining."
+      : "\u00a0";
+  const teamDeathmatchEmptyStateLabel = teamDeathmatchRoomDirectoryLoading &&
+    !teamDeathmatchRoomDirectoryReady
+    ? "Loading live rooms..."
+    : "No live rooms yet. Launch with the current code to create one.";
+
+  const applyTeamDeathmatchRoomDirectorySnapshot = useEffectEvent(
+    (
+      roomEntries:
+        | readonly MetaverseRoomDirectoryEntrySnapshot[]
+        | null,
+      errorMessage: string | null
+    ) => {
+      startTransition(() => {
+        if (roomEntries !== null) {
+          setTeamDeathmatchRoomEntries((currentRoomEntries) =>
+            teamDeathmatchRoomEntriesMatch(currentRoomEntries, roomEntries)
+              ? currentRoomEntries
+              : roomEntries
+          );
+        }
+        setTeamDeathmatchRoomDirectoryError((currentErrorMessage) =>
+          currentErrorMessage === errorMessage ? currentErrorMessage : errorMessage
+        );
+        setTeamDeathmatchRoomDirectoryLoading(false);
+        setTeamDeathmatchRoomDirectoryReady(true);
+      });
+    }
+  );
 
   useEffect(() => {
-    if (matchMode !== "team-deathmatch") {
-      setTeamDeathmatchRoomEntries([]);
-      setTeamDeathmatchRoomDirectoryError(null);
-      setTeamDeathmatchRoomDirectoryLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
-    const loadDirectory = async () => {
-      if (!cancelled) {
-        setTeamDeathmatchRoomDirectoryLoading(true);
+    const loadDirectory = async (isInitialLoad: boolean) => {
+      if (!cancelled && isInitialLoad) {
+        startTransition(() => {
+          setTeamDeathmatchRoomDirectoryLoading(true);
+        });
       }
 
       try {
@@ -221,36 +301,35 @@ export function ShellEntryStageScreen({
           return;
         }
 
-        setTeamDeathmatchRoomEntries(roomDirectorySnapshot.rooms);
-        setTeamDeathmatchRoomDirectoryError(null);
+        applyTeamDeathmatchRoomDirectorySnapshot(roomDirectorySnapshot.rooms, null);
       } catch (error) {
         if (cancelled) {
           return;
         }
 
-        setTeamDeathmatchRoomEntries([]);
-        setTeamDeathmatchRoomDirectoryError(
+        applyTeamDeathmatchRoomDirectorySnapshot(
+          null,
           error instanceof Error
             ? error.message
             : "Team Deathmatch room directory fetch failed."
         );
-      } finally {
-        if (!cancelled) {
-          setTeamDeathmatchRoomDirectoryLoading(false);
-        }
       }
     };
 
-    void loadDirectory();
+    void loadDirectory(!teamDeathmatchRoomDirectoryReady);
     const refreshHandle = globalThis.setInterval(() => {
-      void loadDirectory();
+      void loadDirectory(false);
     }, metaverseRoomDirectoryRefreshIntervalMs);
 
     return () => {
       cancelled = true;
       globalThis.clearInterval(refreshHandle);
     };
-  }, [matchMode, roomDirectoryClient]);
+  }, [
+    applyTeamDeathmatchRoomDirectorySnapshot,
+    roomDirectoryClient,
+    teamDeathmatchRoomDirectoryReady
+  ]);
 
   function handleLaunchRequest(selectedMatchMode: MetaverseMatchModeId): void {
     onMatchModeChange(selectedMatchMode);
@@ -456,11 +535,15 @@ export function ShellEntryStageScreen({
                               Create or join a live team deathmatch room by code.
                             </p>
                           </div>
-                          {teamDeathmatchRoomDirectoryLoading ? (
-                            <p className="text-xs uppercase tracking-[0.2em] text-game-muted">
-                              Refreshing
-                            </p>
-                          ) : null}
+                          <p
+                            aria-live="polite"
+                            className="min-w-16 text-right text-xs uppercase tracking-[0.2em] text-game-muted"
+                          >
+                            <StableInlineText
+                              reserveTexts={["Loading", "Retrying", "88 live"]}
+                              text={teamDeathmatchDirectoryStatusLabel}
+                            />
+                          </p>
                         </div>
                         <div className="mt-4 flex gap-2">
                           <Input
@@ -488,20 +571,21 @@ export function ShellEntryStageScreen({
                             Suggest
                           </Button>
                         </div>
-                        {normalizedTeamDeathmatchRoomId === null ? (
-                          <p className="mt-3 text-sm leading-6 text-rose-200/88">
-                            Enter a valid room code before joining.
-                          </p>
-                        ) : null}
-                        {teamDeathmatchRoomDirectoryError !== null ? (
-                          <p className="mt-3 text-sm leading-6 text-rose-200/88">
-                            {teamDeathmatchRoomDirectoryError}
-                          </p>
-                        ) : null}
-                        <div className="mt-4 grid gap-2">
+                        <p
+                          className={cn(
+                            "mt-3 min-h-6 text-sm leading-6",
+                            teamDeathmatchRoomDirectoryError !== null ||
+                              normalizedTeamDeathmatchRoomId === null
+                              ? "text-rose-200/88"
+                              : "text-transparent"
+                          )}
+                        >
+                          {teamDeathmatchDirectoryHint}
+                        </p>
+                        <div className="mt-4 grid min-h-28 gap-2 content-start">
                           {teamDeathmatchRoomEntries.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-sm leading-6 text-game-muted">
-                              No live rooms yet. Launch with the current code to create one.
+                              {teamDeathmatchEmptyStateLabel}
                             </div>
                           ) : (
                             teamDeathmatchRoomEntries.map((roomEntry) => {

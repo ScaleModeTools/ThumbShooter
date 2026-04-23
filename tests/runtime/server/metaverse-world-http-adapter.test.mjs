@@ -270,6 +270,7 @@ test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explici
   assert.equal(handled, true);
   assert.equal(response.statusCode, 200);
   assert.equal(response.json.type, "world-snapshot");
+  assert.equal(response.json.world.observerPlayer?.playerId, playerId);
 
   roomDirectory.advanceToTime(200);
 
@@ -352,6 +353,7 @@ test("MetaverseWorldHttpAdapter accepts explicit player look commands on the exp
   assert.equal(handled, true);
   assert.equal(response.statusCode, 200);
   assert.equal(response.json.type, "world-snapshot");
+  assert.equal(response.json.world.observerPlayer?.playerId, playerId);
   assert.equal(response.json.world.players[0]?.look.pitchRadians, -0.4);
   assert.equal(response.json.world.players[0]?.look.yawRadians, 1.2);
   assert.equal(

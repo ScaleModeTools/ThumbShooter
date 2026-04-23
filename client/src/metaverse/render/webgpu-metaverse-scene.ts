@@ -15,6 +15,8 @@ import {
   type MetaverseSceneAssetLoader,
   type MetaverseSceneCharacterProofRuntime
 } from "./characters/metaverse-scene-interactive-presentation-state";
+import { MetaverseSceneHeldWeaponGripDebugState } from "./characters/metaverse-scene-held-weapon-grip-debug-state";
+import { syncHumanoidV2HeldWeaponPose } from "./characters/metaverse-scene-held-weapon-pose";
 import { MetaverseSceneLocalCharacterPresentationState } from "./characters/metaverse-scene-local-character-presentation-state";
 import { MetaverseSceneRemoteCharacterPresentationState } from "./characters/metaverse-scene-remote-character-presentation-state";
 import { createMetaverseSceneRemoteCharacterPresentationDependencies } from "./characters/metaverse-scene-remote-character-presentation-dependencies";
@@ -50,6 +52,7 @@ import type {
   FocusedExperiencePortalSnapshot,
   MetaverseCameraSnapshot,
   MetaverseRemoteCharacterPresentationSnapshot,
+  MetaverseLocalHeldWeaponGripTelemetrySnapshot,
   MountedEnvironmentSnapshot,
   MetaverseRuntimeConfig
 } from "../types/metaverse-runtime";
@@ -81,6 +84,9 @@ export function createMetaverseScene(
   bootScenicEnvironment(): Promise<void>;
   resetPresentation(): void;
   prewarm(renderer: MetaverseSceneRendererHost): Promise<void>;
+  readLocalHeldWeaponGripTelemetrySnapshot(
+    nowMs: number
+  ): MetaverseLocalHeldWeaponGripTelemetrySnapshot;
   syncPresentation(
     cameraSnapshot: MetaverseCameraSnapshot,
     focusedPortal: FocusedExperiencePortalSnapshot | null,
@@ -196,12 +202,39 @@ export function createMetaverseScene(
   const portalPresentationState = new MetaverseScenePortalPresentationState({
     portalMeshes: scenicState.portalMeshes
   });
+  const heldWeaponGripDebugState = new MetaverseSceneHeldWeaponGripDebugState();
   const localCharacterPresentationState =
     new MetaverseSceneLocalCharacterPresentationState({
       config,
+      heldWeaponGripDebugState,
       interactivePresentationState,
-      localCharacterPresentationDependencies:
-        remoteCharacterPresentationDependencies,
+      localCharacterPresentationDependencies: {
+        applyMountedAnchorTransform:
+          remoteCharacterPresentationDependencies.applyMountedAnchorTransform,
+        captureHeldWeaponPoseRuntime:
+          remoteCharacterPresentationDependencies.captureHeldWeaponPoseRuntime,
+        restoreHeldWeaponPoseRuntime:
+          remoteCharacterPresentationDependencies.restoreHeldWeaponPoseRuntime,
+        syncHeldWeaponPose: (
+          characterRuntime,
+          heldWeaponPoseRuntime,
+          attachmentRuntime,
+          cameraSnapshot,
+          weaponState,
+          weaponAdsBlend,
+          bodyPresentation
+        ) =>
+          syncHumanoidV2HeldWeaponPose(
+            characterRuntime,
+            heldWeaponPoseRuntime,
+            attachmentRuntime,
+            cameraSnapshot,
+            weaponState,
+            weaponAdsBlend,
+            bodyPresentation,
+            heldWeaponGripDebugState
+          )
+      },
       mountInteractionState
     });
   const remoteCharacterPresentationState =
@@ -250,6 +283,9 @@ export function createMetaverseScene(
     },
     async prewarm(renderer) {
       await presentationState.prewarm(renderer);
+    },
+    readLocalHeldWeaponGripTelemetrySnapshot(nowMs) {
+      return heldWeaponGripDebugState.readSnapshot(nowMs);
     },
     syncPresentation(
       cameraSnapshot,

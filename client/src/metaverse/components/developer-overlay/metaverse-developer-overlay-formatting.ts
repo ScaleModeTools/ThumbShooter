@@ -105,12 +105,102 @@ function formatOptionalMilliseconds(value: number | null): string {
   return `${value.toFixed(0)} ms`;
 }
 
+function formatOptionalCentimeters(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  return `${(value * 100).toFixed(1)} cm`;
+}
+
+function formatBooleanFlag(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function formatOptionalDegrees(valueRadians: number | null): string {
+  if (valueRadians === null) {
+    return "n/a";
+  }
+
+  return `${((valueRadians * 180) / Math.PI).toFixed(1)} deg`;
+}
+
 function formatOptionalRateHz(value: number | null): string {
   if (value === null) {
     return "n/a";
   }
 
   return `${value.toFixed(1)} Hz`;
+}
+
+function formatHeldWeaponGripStatus(hudSnapshot: MetaverseHudSnapshot): string {
+  const gripSnapshot = hudSnapshot.telemetry.localHeldWeaponGrip;
+
+  return `${gripSnapshot.stability} · ${gripSnapshot.phase.replaceAll("-", " ")}`;
+}
+
+function formatHeldWeaponMainHandDiagnosis(
+  gripSnapshot: MetaverseHudSnapshot["telemetry"]["localHeldWeaponGrip"]
+): string {
+  if (gripSnapshot.mainHandGripErrorMeters === null) {
+    return "n/a";
+  }
+
+  if (
+    gripSnapshot.mainHandReachClampDeltaMeters !== null &&
+    gripSnapshot.mainHandReachClampDeltaMeters >= 0.01 &&
+    Math.abs(
+      gripSnapshot.mainHandGripErrorMeters -
+        gripSnapshot.mainHandReachClampDeltaMeters
+    ) <= 0.01
+  ) {
+    return "reach clamp matches residual";
+  }
+
+  if (
+    gripSnapshot.mainHandSolveErrorMeters !== null &&
+    gripSnapshot.mainHandPostPoleBiasErrorMeters !== null &&
+    gripSnapshot.mainHandGripErrorMeters >
+      gripSnapshot.mainHandPostPoleBiasErrorMeters + 0.01
+  ) {
+    return "hand align step adds residual";
+  }
+
+  if (
+    gripSnapshot.offHandPoleAngleRadians !== null &&
+    Math.abs(gripSnapshot.offHandPoleAngleRadians) >= 0.35
+  ) {
+    return "left arm pole bias is rotating the support arm";
+  }
+
+  if (
+    gripSnapshot.mainHandPoleAngleRadians !== null &&
+    Math.abs(gripSnapshot.mainHandPoleAngleRadians) >= 0.35
+  ) {
+    return "main arm pole bias is rotating the weapon arm";
+  }
+
+  if (
+    gripSnapshot.mainHandSocket === "palm" &&
+    gripSnapshot.mainHandGripSocketComparisonErrorMeters !== null &&
+    gripSnapshot.mainHandPalmSocketComparisonErrorMeters !== null &&
+    gripSnapshot.mainHandGripSocketComparisonErrorMeters + 0.01 <
+      gripSnapshot.mainHandPalmSocketComparisonErrorMeters
+  ) {
+    return "grip socket solves closer than palm";
+  }
+
+  if (
+    gripSnapshot.mainHandSocket === "grip" &&
+    gripSnapshot.mainHandGripSocketComparisonErrorMeters !== null &&
+    gripSnapshot.mainHandPalmSocketComparisonErrorMeters !== null &&
+    gripSnapshot.mainHandPalmSocketComparisonErrorMeters + 0.01 <
+      gripSnapshot.mainHandGripSocketComparisonErrorMeters
+  ) {
+    return "palm socket solves closer than grip";
+  }
+
+  return "active socket remains closest";
 }
 
 function formatDecisionReason(
@@ -338,6 +428,7 @@ function formatTopLevelHandshakeDebugLine(hudSnapshot: MetaverseHudSnapshot): st
 function createDeveloperReport(hudSnapshot: MetaverseHudSnapshot): string {
   const authoritativeLocalPlayer =
     hudSnapshot.telemetry.worldSnapshot.surfaceRouting.authoritativeLocalPlayer;
+  const heldWeaponGrip = hudSnapshot.telemetry.localHeldWeaponGrip;
 
   const sections = [
     {
@@ -374,6 +465,21 @@ function createDeveloperReport(hudSnapshot: MetaverseHudSnapshot): string {
       ]
     },
     {
+      heading: "Grip",
+      lines: [
+        `Status: ${formatHeldWeaponGripStatus(hudSnapshot)} · ${heldWeaponGrip.attachmentMountKind}`,
+        `Weapon / aim: ${heldWeaponGrip.weaponId ?? "n/a"} · ${heldWeaponGrip.aimMode ?? "n/a"} · ads ${heldWeaponGrip.adsBlend?.toFixed(2) ?? "n/a"}`,
+        `Sockets: mount ${heldWeaponGrip.heldMountSocketName ?? "n/a"} · main ${heldWeaponGrip.mainHandSocket} · off ${heldWeaponGrip.offHandSocket} · support marker ${formatBooleanFlag(heldWeaponGrip.heldSupportMarkerAvailable)} · off-hand mount ${formatBooleanFlag(heldWeaponGrip.offHandGripMounted)}`,
+        `Main: active ${formatOptionalCentimeters(heldWeaponGrip.mainHandGripErrorMeters)} · grip cmp ${formatOptionalCentimeters(heldWeaponGrip.mainHandGripSocketComparisonErrorMeters)} · palm cmp ${formatOptionalCentimeters(heldWeaponGrip.mainHandPalmSocketComparisonErrorMeters)}`,
+        `Main stages: solve ${formatOptionalCentimeters(heldWeaponGrip.mainHandSolveErrorMeters)} · post pole ${formatOptionalCentimeters(heldWeaponGrip.mainHandPostPoleBiasErrorMeters)} · final ${formatOptionalCentimeters(heldWeaponGrip.mainHandGripErrorMeters)} · pole ${formatOptionalDegrees(heldWeaponGrip.mainHandPoleAngleRadians)}`,
+        `Reach: target ${formatOptionalCentimeters(heldWeaponGrip.mainHandTargetDistanceMeters)} · max ${formatOptionalCentimeters(heldWeaponGrip.mainHandMaxReachMeters)} · clamp ${formatOptionalCentimeters(heldWeaponGrip.mainHandReachClampDeltaMeters)} · slack ${formatOptionalCentimeters(heldWeaponGrip.mainHandReachSlackMeters)}`,
+        `Pose branches: ads pose ${formatBooleanFlag(heldWeaponGrip.servicePistolAdsPoseActive)} · support palm ${formatBooleanFlag(heldWeaponGrip.servicePistolSupportPalmPoseActive)} · weapon state ${formatBooleanFlag(heldWeaponGrip.weaponStatePresent)}`,
+        `Off hand: pre ${formatOptionalCentimeters(heldWeaponGrip.offHandPreSolveErrorMeters)} · solve ${formatOptionalCentimeters(heldWeaponGrip.offHandInitialSolveErrorMeters)} · final ${formatOptionalCentimeters(heldWeaponGrip.offHandFinalErrorMeters)} · pole ${formatOptionalDegrees(heldWeaponGrip.offHandPoleAngleRadians)} · refine ${formatCount(heldWeaponGrip.offHandRefinementPassCount)}`,
+        `Diagnosis: ${formatHeldWeaponMainHandDiagnosis(heldWeaponGrip)}`,
+        `Degraded: ${heldWeaponGrip.lastDegradedReason ?? "none"} · ${formatOptionalMilliseconds(heldWeaponGrip.lastDegradedAgeMs)} ago · ${formatCount(heldWeaponGrip.degradedFrameCount)} total`
+      ]
+    },
+    {
       heading: "Transport",
       lines: [
         `Presence reliable: ${formatReliableTransportSummary(hudSnapshot.transport.presenceReliable)}`,
@@ -396,6 +502,10 @@ export {
   formatDatagramHandshakeDebugLine,
   formatDatagramTransportSummary,
   formatDecisionReason,
+  formatHeldWeaponMainHandDiagnosis,
+  formatHeldWeaponGripStatus,
+  formatOptionalCentimeters,
+  formatOptionalDegrees,
   formatOptionalMilliseconds,
   formatOptionalRateHz,
   formatReliableHandshakeDebugLine,

@@ -7,7 +7,12 @@ import type { MetaverseHudSnapshot } from "../types/metaverse-runtime";
 import { formatMetaversePlayerTeamLabel } from "./metaverse-player-team-pill";
 import {
   createDeveloperReport,
-  formatCount
+  formatCount,
+  formatHeldWeaponMainHandDiagnosis,
+  formatHeldWeaponGripStatus,
+  formatOptionalCentimeters,
+  formatOptionalDegrees,
+  formatOptionalMilliseconds
 } from "./developer-overlay/metaverse-developer-overlay-formatting";
 
 interface MetaverseDeveloperOverlayProps {
@@ -47,6 +52,7 @@ export function MetaverseDeveloperOverlay({
   onSetupRequest
 }: MetaverseDeveloperOverlayProps) {
   const connectedPlayerCount = hudSnapshot.presence.remotePlayerCount + 1;
+  const heldWeaponGrip = hudSnapshot.telemetry.localHeldWeaponGrip;
   const isModalLayout = layout === "modal";
   const developerPills = [
     {
@@ -87,6 +93,18 @@ export function MetaverseDeveloperOverlay({
         hudSnapshot.combat.matchPhase === null
           ? "free roam"
           : hudSnapshot.combat.matchPhase.replaceAll("-", " ")
+    },
+    {
+      label: "Grip",
+      value: formatHeldWeaponGripStatus(hudSnapshot)
+    },
+    {
+      label: "Grip Main",
+      value: formatOptionalCentimeters(heldWeaponGrip.mainHandGripErrorMeters)
+    },
+    {
+      label: "Grip Off",
+      value: formatOptionalCentimeters(heldWeaponGrip.offHandFinalErrorMeters)
     }
   ] as const;
 
@@ -149,6 +167,43 @@ export function MetaverseDeveloperOverlay({
           Main Menu
         </Button>
       </div>
+
+      {isModalLayout ? (
+        <div className="w-full rounded-[1.25rem] border border-white/10 bg-[rgb(15_23_42_/_0.48)] p-4 text-sm text-slate-100">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+            Local Grip Debug
+          </div>
+          <div className="mt-3 space-y-1 font-mono text-[0.82rem] leading-6 text-slate-200">
+            <div>
+              Phase: {heldWeaponGrip.phase} · mount {heldWeaponGrip.attachmentMountKind} · socket {heldWeaponGrip.heldMountSocketName ?? "n/a"}
+            </div>
+            <div>
+              Weapon: {heldWeaponGrip.weaponId ?? "n/a"} · aim {heldWeaponGrip.aimMode ?? "n/a"} · ads {heldWeaponGrip.adsBlend?.toFixed(2) ?? "n/a"}
+            </div>
+            <div>
+              Pose: ads pose {heldWeaponGrip.servicePistolAdsPoseActive ? "yes" : "no"} · support palm {heldWeaponGrip.servicePistolSupportPalmPoseActive ? "yes" : "no"} · state {heldWeaponGrip.weaponStatePresent ? "yes" : "no"}
+            </div>
+            <div>
+              Main {heldWeaponGrip.mainHandSocket} {formatOptionalCentimeters(heldWeaponGrip.mainHandGripErrorMeters)} · grip cmp {formatOptionalCentimeters(heldWeaponGrip.mainHandGripSocketComparisonErrorMeters)} · palm cmp {formatOptionalCentimeters(heldWeaponGrip.mainHandPalmSocketComparisonErrorMeters)}
+            </div>
+            <div>
+              Main stages: solve {formatOptionalCentimeters(heldWeaponGrip.mainHandSolveErrorMeters)} · post pole {formatOptionalCentimeters(heldWeaponGrip.mainHandPostPoleBiasErrorMeters)} · final {formatOptionalCentimeters(heldWeaponGrip.mainHandGripErrorMeters)} · pole {formatOptionalDegrees(heldWeaponGrip.mainHandPoleAngleRadians)}
+            </div>
+            <div>
+              Reach: target {formatOptionalCentimeters(heldWeaponGrip.mainHandTargetDistanceMeters)} · max {formatOptionalCentimeters(heldWeaponGrip.mainHandMaxReachMeters)} · clamp {formatOptionalCentimeters(heldWeaponGrip.mainHandReachClampDeltaMeters)} · slack {formatOptionalCentimeters(heldWeaponGrip.mainHandReachSlackMeters)}
+            </div>
+            <div>
+              Off {heldWeaponGrip.offHandSocket} pre {formatOptionalCentimeters(heldWeaponGrip.offHandPreSolveErrorMeters)} solve {formatOptionalCentimeters(heldWeaponGrip.offHandInitialSolveErrorMeters)} final {formatOptionalCentimeters(heldWeaponGrip.offHandFinalErrorMeters)} · pole {formatOptionalDegrees(heldWeaponGrip.offHandPoleAngleRadians)} · refine {formatCount(heldWeaponGrip.offHandRefinementPassCount)}
+            </div>
+            <div>
+              Diagnosis: {formatHeldWeaponMainHandDiagnosis(heldWeaponGrip)}
+            </div>
+            <div>
+              Last degraded: {heldWeaponGrip.lastDegradedReason ?? "none"} · {formatOptionalMilliseconds(heldWeaponGrip.lastDegradedAgeMs)} ago · {formatCount(heldWeaponGrip.degradedFrameCount)} total
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

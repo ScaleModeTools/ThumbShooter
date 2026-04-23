@@ -4,6 +4,7 @@ import {
   advanceLocalCharacterAnimation,
   syncLocalCharacterPresentation
 } from "./metaverse-scene-local-character-presentation";
+import { MetaverseSceneHeldWeaponGripDebugState } from "./metaverse-scene-held-weapon-grip-debug-state";
 import type {
   MetaverseRemoteCharacterPresentationDependencies
 } from "./metaverse-scene-remote-character-presentations";
@@ -38,6 +39,7 @@ interface MetaverseSceneLocalCharacterPresentationStateDependencies {
     MetaverseRuntimeConfig,
     "bodyPresentation" | "orientation"
   >;
+  readonly heldWeaponGripDebugState: MetaverseSceneHeldWeaponGripDebugState;
   readonly interactivePresentationState: Pick<
     MetaverseSceneInteractivePresentationState,
     "attachmentProofRuntime" | "characterProofRuntime" | "syncAttachmentMount"
@@ -73,10 +75,12 @@ export class MetaverseSceneLocalCharacterPresentationState {
   }
 
   resetPresentation(): void {
+    this.#dependencies.heldWeaponGripDebugState.reset();
     this.#dependencies.interactivePresentationState.syncAttachmentMount(null);
   }
 
   syncPresentation(
+    nowMs: number,
     cameraSnapshot: MetaverseCameraSnapshot,
     deltaSeconds: number,
     characterPresentation: MetaverseCharacterPresentationSnapshot | null = null,
@@ -87,6 +91,7 @@ export class MetaverseSceneLocalCharacterPresentationState {
   ): MetaverseCameraSnapshot {
     const {
       config,
+      heldWeaponGripDebugState,
       interactivePresentationState,
       localCharacterPresentationDependencies,
       mountInteractionState
@@ -113,22 +118,112 @@ export class MetaverseSceneLocalCharacterPresentationState {
       mountedEnvironment,
       mountedOccupancyPresentationState
     );
+    const mountedCharacterRuntime = mountInteractionState.readMountedCharacterRuntime();
     interactivePresentationState.syncAttachmentMount(
       mountedOccupancyPresentationState
     );
 
-    return interactivePresentationState.characterProofRuntime === null
-      ? cameraSnapshot
-      : syncLocalCharacterPresentation(
-          interactivePresentationState.characterProofRuntime,
-          interactivePresentationState.attachmentProofRuntime,
-          mountInteractionState.readMountedCharacterRuntime(),
-          cameraSnapshot,
-          characterPresentation,
-          config.bodyPresentation,
-          weaponState,
-          weaponAdsBlend,
-          localCharacterPresentationDependencies
-        );
+    if (interactivePresentationState.characterProofRuntime === null) {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: null,
+        heldSupportMarkerAvailable: false,
+        heldMountSocketName: null,
+        offHandSupportMarkerAvailable: false,
+        phase: "no-character-runtime",
+        weaponState
+      }, nowMs);
+
+      return cameraSnapshot;
+    }
+
+    if (interactivePresentationState.attachmentProofRuntime === null) {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: null,
+        heldSupportMarkerAvailable: false,
+        heldMountSocketName: null,
+        offHandSupportMarkerAvailable: false,
+        phase: "no-attachment-runtime",
+        weaponState
+      }, nowMs);
+
+      return syncLocalCharacterPresentation(
+        interactivePresentationState.characterProofRuntime,
+        null,
+        mountedCharacterRuntime,
+        cameraSnapshot,
+        characterPresentation,
+        config.bodyPresentation,
+        weaponState,
+        weaponAdsBlend,
+        localCharacterPresentationDependencies
+      );
+    }
+
+    const { attachmentProofRuntime, characterProofRuntime } =
+      interactivePresentationState;
+
+    if (characterProofRuntime.heldWeaponPoseRuntime === null) {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: attachmentProofRuntime.activeMountKind,
+        heldSupportMarkerAvailable:
+          attachmentProofRuntime.heldSupportMarkerNode !== null,
+        heldMountSocketName: attachmentProofRuntime.heldMount.socketName,
+        offHandSupportMarkerAvailable:
+          attachmentProofRuntime.offHandSupportMarkerNode !== null,
+        phase: "no-held-weapon-pose-runtime",
+        weaponState
+      }, nowMs);
+    } else if (characterPresentation === null) {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: attachmentProofRuntime.activeMountKind,
+        heldSupportMarkerAvailable:
+          attachmentProofRuntime.heldSupportMarkerNode !== null,
+        heldMountSocketName: attachmentProofRuntime.heldMount.socketName,
+        offHandSupportMarkerAvailable:
+          attachmentProofRuntime.offHandSupportMarkerNode !== null,
+        phase: "no-character-presentation",
+        weaponState
+      }, nowMs);
+    } else if (mountedCharacterRuntime !== null) {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: attachmentProofRuntime.activeMountKind,
+        heldSupportMarkerAvailable:
+          attachmentProofRuntime.heldSupportMarkerNode !== null,
+        heldMountSocketName: attachmentProofRuntime.heldMount.socketName,
+        offHandSupportMarkerAvailable:
+          attachmentProofRuntime.offHandSupportMarkerNode !== null,
+        phase: "mounted",
+        weaponState
+      }, nowMs);
+    } else if (attachmentProofRuntime.activeMountKind !== "held") {
+      heldWeaponGripDebugState.recordSkippedFrame({
+        adsBlend: weaponAdsBlend,
+        attachmentMountKind: attachmentProofRuntime.activeMountKind,
+        heldSupportMarkerAvailable:
+          attachmentProofRuntime.heldSupportMarkerNode !== null,
+        heldMountSocketName: attachmentProofRuntime.heldMount.socketName,
+        offHandSupportMarkerAvailable:
+          attachmentProofRuntime.offHandSupportMarkerNode !== null,
+        phase: "attachment-not-held",
+        weaponState
+      }, nowMs);
+    }
+
+    return syncLocalCharacterPresentation(
+      characterProofRuntime,
+      attachmentProofRuntime,
+      mountedCharacterRuntime,
+      cameraSnapshot,
+      characterPresentation,
+      config.bodyPresentation,
+      weaponState,
+      weaponAdsBlend,
+      localCharacterPresentationDependencies
+    );
   }
 }

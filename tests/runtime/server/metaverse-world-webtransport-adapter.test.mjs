@@ -212,6 +212,7 @@ test("MetaverseWorldWebTransportAdapter accepts typed mounted occupancy requests
   );
 
   assert.equal(response.type, "world-server-event");
+  assert.equal(response.event.world.observerPlayer?.playerId, playerId);
   assert.equal(response.event.world.players[0]?.locomotionMode, "mounted");
   assert.equal(
     response.event.world.players[0]?.mountedOccupancy?.seatId,

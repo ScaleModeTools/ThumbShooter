@@ -22,6 +22,9 @@ import type {
   RealtimeDatagramTransportStatusSnapshot,
   RealtimeReliableTransportStatusSnapshot
 } from "@/network";
+import type {
+  MetaverseRealtimePlayerWeaponAimModeId
+} from "@webgpu-metaverse/shared/metaverse/realtime";
 
 export interface MetaverseRendererTelemetrySnapshot {
   readonly active: boolean;
@@ -41,9 +44,92 @@ export interface MetaverseTelemetryGroundedBodySnapshot {
 export type MetaverseTelemetrySwimBodySnapshot =
   MetaverseSurfaceDriveBodyRuntimeSnapshot;
 
+export const metaverseLocalHeldWeaponGripDebugPhases = [
+  "no-character-runtime",
+  "no-attachment-runtime",
+  "no-held-weapon-pose-runtime",
+  "no-character-presentation",
+  "mounted",
+  "attachment-not-held",
+  "grip-target-solve-failed",
+  "no-offhand-grip-mount",
+  "solved"
+] as const;
+
+export const metaverseLocalHeldWeaponGripDebugStabilities = [
+  "inactive",
+  "stable",
+  "warning",
+  "bad"
+] as const;
+
+export const metaverseLocalHeldWeaponGripDebugHandSocketIds = [
+  "none",
+  "grip",
+  "palm",
+  "support"
+] as const;
+
+export const metaverseLocalHeldWeaponGripDebugSolveFailureReasons = [
+  "look-direction-degenerate",
+  "grip-up-direction-degenerate",
+  "grip-across-direction-degenerate"
+] as const;
+
+export type MetaverseLocalHeldWeaponGripDebugPhase =
+  (typeof metaverseLocalHeldWeaponGripDebugPhases)[number];
+export type MetaverseLocalHeldWeaponGripDebugStability =
+  (typeof metaverseLocalHeldWeaponGripDebugStabilities)[number];
+export type MetaverseLocalHeldWeaponGripDebugHandSocketId =
+  (typeof metaverseLocalHeldWeaponGripDebugHandSocketIds)[number];
+export type MetaverseLocalHeldWeaponGripDebugSolveFailureReason =
+  (typeof metaverseLocalHeldWeaponGripDebugSolveFailureReasons)[number];
+
+export interface MetaverseLocalHeldWeaponGripTelemetrySnapshot {
+  readonly adsBlend: number | null;
+  readonly aimMode: MetaverseRealtimePlayerWeaponAimModeId | null;
+  readonly attachmentMountKind: "held" | "mounted-holster" | "none";
+  readonly degradedFrameCount: number;
+  readonly gripTargetSolveFailureReason:
+    | MetaverseLocalHeldWeaponGripDebugSolveFailureReason
+    | null;
+  readonly heldSupportMarkerAvailable: boolean;
+  readonly heldMountSocketName: string | null;
+  readonly lastDegradedAgeMs: number | null;
+  readonly lastDegradedReason: string | null;
+  readonly mainHandGripErrorMeters: number | null;
+  readonly mainHandGripSocketComparisonErrorMeters: number | null;
+  readonly mainHandMaxReachMeters: number | null;
+  readonly mainHandPalmSocketComparisonErrorMeters: number | null;
+  readonly mainHandPoleAngleRadians: number | null;
+  readonly mainHandPostPoleBiasErrorMeters: number | null;
+  readonly mainHandReachClampDeltaMeters: number | null;
+  readonly mainHandReachSlackMeters: number | null;
+  readonly mainHandSolveErrorMeters: number | null;
+  readonly mainHandSocket: MetaverseLocalHeldWeaponGripDebugHandSocketId;
+  readonly mainHandTargetDistanceMeters: number | null;
+  readonly offHandFinalErrorMeters: number | null;
+  readonly offHandGripMounted: boolean;
+  readonly offHandInitialSolveErrorMeters: number | null;
+  readonly offHandPoleAngleRadians: number | null;
+  readonly offHandPreSolveErrorMeters: number | null;
+  readonly offHandRefinementPassCount: number;
+  readonly offHandSocket: MetaverseLocalHeldWeaponGripDebugHandSocketId;
+  readonly offHandSupportMarkerAvailable: boolean;
+  readonly phase: MetaverseLocalHeldWeaponGripDebugPhase;
+  readonly servicePistolAdsPoseActive: boolean;
+  readonly servicePistolSupportPalmPoseActive: boolean;
+  readonly stability: MetaverseLocalHeldWeaponGripDebugStability;
+  readonly weaponId: string | null;
+  readonly weaponStatePresent: boolean;
+  readonly worstMainHandGripErrorMeters: number;
+  readonly worstOffHandFinalErrorMeters: number;
+}
+
 export interface MetaverseTelemetrySnapshot {
   readonly frameDeltaMs: number;
   readonly frameRate: number;
+  readonly localHeldWeaponGrip: MetaverseLocalHeldWeaponGripTelemetrySnapshot;
   readonly renderedFrameCount: number;
   readonly renderer: MetaverseRendererTelemetrySnapshot;
   readonly worldCadence: {

@@ -34,6 +34,9 @@ interface MetaverseRuntimeHudPublisherDependencies {
   readonly environmentPhysicsRuntime: MetaverseEnvironmentPhysicsRuntime;
   readonly initialControlMode: MetaverseControlModeId;
   readonly presenceRuntime: MetaversePresenceRuntime;
+  readonly readLocalHeldWeaponGripTelemetrySnapshot: (
+    nowMs: number
+  ) => MetaverseHudSnapshot["telemetry"]["localHeldWeaponGrip"];
   readonly readNowMs: () => number;
   readonly remoteWorldRuntime: MetaverseRemoteWorldRuntime;
   readonly traversalRuntime: MetaverseTraversalRuntime;
@@ -211,6 +214,7 @@ export class MetaverseRuntimeHudPublisher {
     environmentPhysicsRuntime,
     initialControlMode,
     presenceRuntime,
+    readLocalHeldWeaponGripTelemetrySnapshot,
     readNowMs,
     remoteWorldRuntime,
     traversalRuntime,
@@ -225,6 +229,7 @@ export class MetaverseRuntimeHudPublisher {
       config,
       devicePixelRatio,
       environmentPhysicsRuntime,
+      readLocalHeldWeaponGripTelemetrySnapshot,
       remoteWorldRuntime,
       traversalRuntime
     });

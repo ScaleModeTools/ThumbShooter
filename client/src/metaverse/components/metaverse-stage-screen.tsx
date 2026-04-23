@@ -244,7 +244,15 @@ export function MetaverseStageScreen({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.ctrlKey || event.key !== "Tab") {
+      const eventTarget = event.target;
+      const editableTarget =
+        eventTarget instanceof HTMLElement &&
+        (eventTarget.isContentEditable ||
+          eventTarget instanceof HTMLInputElement ||
+          eventTarget instanceof HTMLTextAreaElement ||
+          eventTarget instanceof HTMLSelectElement);
+
+      if (editableTarget || event.key !== "Backspace") {
         return;
       }
 
@@ -691,7 +699,7 @@ export function MetaverseStageScreen({
                   Runtime diagnostics and shell developer controls. Toggle with
                   {" "}
                   <span className="font-medium text-game-foreground">
-                    Ctrl+Tab
+                    Backspace
                   </span>
                   .
                 </DialogDescription>
