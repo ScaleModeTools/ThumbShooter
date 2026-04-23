@@ -1,4 +1,8 @@
-import { stagingGroundMapBundle, type MetaverseMapBundleSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
+import {
+  deathmatchMapBundle,
+  stagingGroundMapBundle,
+  type MetaverseMapBundleSnapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
 
 import {
   loadStoredMetaverseWorldBundleSnapshot,
@@ -18,6 +22,12 @@ const metaverseWorldBundleRegistryEntries = Object.freeze([
     bundleId: stagingGroundMapBundle.mapId,
     label: stagingGroundMapBundle.label,
     sourceBundleId: stagingGroundMapBundle.mapId
+  } satisfies MetaverseWorldBundleRegistryEntry),
+  Object.freeze({
+    bundle: deathmatchMapBundle,
+    bundleId: deathmatchMapBundle.mapId,
+    label: deathmatchMapBundle.label,
+    sourceBundleId: deathmatchMapBundle.mapId
   } satisfies MetaverseWorldBundleRegistryEntry)
 ]);
 const metaverseWorldBundlePreviewEntriesById = new Map<

@@ -18,6 +18,7 @@ import {
   createMetaverseRealtimeWorldEvent
 } from "./realtime/metaverse-realtime-world-snapshots.js";
 import type { MetaversePlayerId } from "./metaverse-presence-contract.js";
+import type { MetaverseRoomId } from "./metaverse-room-contract.js";
 
 export const metaverseRealtimeWorldWebTransportClientMessageTypes = [
   "world-snapshot-request",
@@ -37,20 +38,24 @@ export type MetaverseRealtimeWorldWebTransportServerMessageType =
 
 export interface MetaverseRealtimeWorldWebTransportSnapshotRequest {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
   readonly type: "world-snapshot-request";
 }
 
 export interface MetaverseRealtimeWorldWebTransportSnapshotRequestInput {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
 }
 
 export interface MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
   readonly type: "world-snapshot-subscribe";
 }
 
 export interface MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequestInput {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
 }
 
 export interface MetaverseRealtimeWorldWebTransportServerEventMessage {
@@ -64,11 +69,13 @@ export interface MetaverseRealtimeWorldWebTransportServerEventMessageInput {
 
 export interface MetaverseRealtimeWorldWebTransportCommandRequest {
   readonly command: MetaverseRealtimeWorldClientCommand;
+  readonly roomId: MetaverseRoomId;
   readonly type: "world-command-request";
 }
 
 export interface MetaverseRealtimeWorldWebTransportCommandRequestInput {
   readonly command: MetaverseRealtimeWorldClientCommand;
+  readonly roomId: MetaverseRoomId;
 }
 
 export interface MetaverseRealtimeWorldWebTransportErrorMessage {
@@ -94,6 +101,7 @@ export function createMetaverseRealtimeWorldWebTransportSnapshotRequest(
 ): MetaverseRealtimeWorldWebTransportSnapshotRequest {
   return Object.freeze({
     observerPlayerId: input.observerPlayerId,
+    roomId: input.roomId,
     type: "world-snapshot-request"
   });
 }
@@ -103,6 +111,7 @@ export function createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest
 ): MetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest {
   return Object.freeze({
     observerPlayerId: input.observerPlayerId,
+    roomId: input.roomId,
     type: "world-snapshot-subscribe"
   });
 }
@@ -138,6 +147,7 @@ export function createMetaverseRealtimeWorldWebTransportCommandRequest(
 ): MetaverseRealtimeWorldWebTransportCommandRequest {
   return Object.freeze({
     command: normalizeMetaverseRealtimeWorldClientCommand(input.command),
+    roomId: input.roomId,
     type: "world-command-request"
   });
 }

@@ -1,5 +1,7 @@
 import {
+  createMetaverseRoomId,
   createMilliseconds,
+  type MetaverseRoomId
 } from "@webgpu-metaverse/shared";
 import {
   metaverseRealtimeWorldCadenceConfig
@@ -32,6 +34,16 @@ function resolveMetaverseServerOrigin(): string {
   }
 
   return browserOrigin;
+}
+
+function requireDefaultMetaverseRoomId(rawValue: string): MetaverseRoomId {
+  const roomId = createMetaverseRoomId(rawValue);
+
+  if (roomId === null) {
+    throw new Error(`Invalid default metaverse room id: ${rawValue}`);
+  }
+
+  return roomId;
 }
 
 function resolveMetaverseRealtimeTransportMode():
@@ -114,8 +126,9 @@ function isLocalhostWebTransportUrl(rawUrl: string | null): boolean {
   }
 }
 
-export const metaverseWorldPath = "/metaverse/world" as const;
-export const metaverseWorldCommandPath = "/metaverse/world/commands" as const;
+export const metaverseServerOrigin = resolveMetaverseServerOrigin();
+export const defaultMetaverseNetworkRoomId =
+  requireDefaultMetaverseRoomId("metaverse-shell-local");
 
 export const metaverseWorldCadenceConfig = Object.freeze({
   authoritativeTickIntervalMs:
@@ -132,15 +145,31 @@ export const metaverseWorldCadenceConfig = Object.freeze({
   remoteInterpolationDelayMs: 66
 });
 
-export const metaverseWorldClientConfig = {
-  defaultCommandIntervalMs: metaverseWorldCadenceConfig.defaultCommandIntervalMs,
-  defaultPollIntervalMs: metaverseWorldCadenceConfig.defaultPollIntervalMs,
-  maxBufferedSnapshots: metaverseWorldCadenceConfig.maxBufferedSnapshots,
-  serverOrigin: resolveMetaverseServerOrigin(),
-  snapshotStreamReconnectDelayMs: createMilliseconds(2_000),
-  worldCommandPath: metaverseWorldCommandPath,
-  worldPath: metaverseWorldPath
-} as const satisfies MetaverseWorldClientConfig;
+export function resolveMetaverseWorldPath(roomId: MetaverseRoomId): string {
+  return `/metaverse/rooms/${roomId}/world`;
+}
+
+export function resolveMetaverseWorldCommandPath(roomId: MetaverseRoomId): string {
+  return `/metaverse/rooms/${roomId}/world/commands`;
+}
+
+export function createMetaverseWorldClientConfig(
+  roomId: MetaverseRoomId = defaultMetaverseNetworkRoomId
+): MetaverseWorldClientConfig {
+  return Object.freeze({
+    defaultCommandIntervalMs:
+      metaverseWorldCadenceConfig.defaultCommandIntervalMs,
+    defaultPollIntervalMs: metaverseWorldCadenceConfig.defaultPollIntervalMs,
+    maxBufferedSnapshots: metaverseWorldCadenceConfig.maxBufferedSnapshots,
+    roomId,
+    serverOrigin: metaverseServerOrigin,
+    snapshotStreamReconnectDelayMs: createMilliseconds(2_000),
+    worldCommandPath: resolveMetaverseWorldCommandPath(roomId),
+    worldPath: resolveMetaverseWorldPath(roomId)
+  });
+}
+
+export const metaverseWorldClientConfig = createMetaverseWorldClientConfig();
 
 export const metaverseRealtimeMigrationConfig = Object.freeze({
   metaverseAuthoritativeCombatRewindEnabled: false,
@@ -166,7 +195,10 @@ export const metaverseLocalAuthorityReconciliationConfig = Object.freeze({
   mountedOccupancyMismatchHoldMs: 50
 });
 
-export function createMetaverseWorldClient(): MetaverseWorldClient {
+export function createMetaverseWorldClient(
+  roomId: MetaverseRoomId = defaultMetaverseNetworkRoomId
+): MetaverseWorldClient {
+  const worldClientConfig = createMetaverseWorldClientConfig(roomId);
   const preferredTransportMode = resolveMetaverseRealtimeTransportMode();
   const localdevWebTransportBootStatus = resolveLocaldevWebTransportBootStatus();
   const localdevWebTransportBootError = resolveLocaldevWebTransportBootError();
@@ -184,12 +216,13 @@ export function createMetaverseWorldClient(): MetaverseWorldClient {
     : null;
 
   const httpTransport = createMetaverseWorldHttpTransport(
-    metaverseWorldClientConfig
+    worldClientConfig
   );
   const transportFailover = shouldUseWebTransport
     ? createWebTransportHttpFallbackInvoker(
         createMetaverseWorldWebTransportTransport(
           {
+            roomId,
             webTransportUrl
           },
           webTransportFactory === null
@@ -218,6 +251,7 @@ export function createMetaverseWorldClient(): MetaverseWorldClient {
     && metaverseRealtimeMigrationConfig.metaverseWorldSnapshotStreamEnabled
     ? createMetaverseWorldWebTransportSnapshotStreamTransport(
         {
+          roomId,
           webTransportUrl
         },
         webTransportFactory === null
@@ -228,7 +262,7 @@ export function createMetaverseWorldClient(): MetaverseWorldClient {
       )
     : null;
 
-  return new MetaverseWorldClient(metaverseWorldClientConfig, {
+  return new MetaverseWorldClient(worldClientConfig, {
     ...(latestWinsDatagramTransport === null
       ? {}
       : {

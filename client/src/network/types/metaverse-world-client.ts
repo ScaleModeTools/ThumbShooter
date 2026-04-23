@@ -1,4 +1,5 @@
 import type {
+  MetaverseRoomId,
   MetaversePlayerId,
   MetaverseRealtimeWorldSnapshot,
   Milliseconds
@@ -38,6 +39,7 @@ export interface MetaverseWorldClientConfig {
   readonly defaultCommandIntervalMs: Milliseconds;
   readonly defaultPollIntervalMs: Milliseconds;
   readonly maxBufferedSnapshots: number;
+  readonly roomId?: MetaverseRoomId;
   readonly serverOrigin: string;
   readonly snapshotStreamReconnectDelayMs: Milliseconds;
   readonly worldCommandPath: string;

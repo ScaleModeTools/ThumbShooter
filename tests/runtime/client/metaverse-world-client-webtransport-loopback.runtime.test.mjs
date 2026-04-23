@@ -4,6 +4,7 @@ import test, { after, before } from "node:test";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMilliseconds,
   createUsername
 } from "@webgpu-metaverse/shared";
@@ -13,7 +14,7 @@ import {
 
 import { MetaverseRealtimeWorldWebTransportDatagramAdapter } from "../../../server/dist/metaverse/adapters/metaverse-realtime-world-webtransport-datagram-adapter.js";
 import { MetaverseWorldWebTransportAdapter } from "../../../server/dist/metaverse/adapters/metaverse-world-webtransport-adapter.js";
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
 import {
   createManualTimerScheduler,
   createTraversalIntentInput,
@@ -327,6 +328,74 @@ function createMetaverseWorldWebTransportLoopback({
   });
 }
 
+function createRoomBoundWorldServer(runtimeConfig = {}) {
+  const roomDirectory = new MetaverseRoomDirectory({
+    runtimeConfig
+  });
+  const roomAssignmentsByPlayerId = new Map();
+
+  function ensurePlayerRoomAssignment(playerId, nowMs = 0) {
+    const existingAssignment = roomAssignmentsByPlayerId.get(playerId);
+
+    if (existingAssignment !== undefined) {
+      return existingAssignment;
+    }
+
+    const roomAssignment = roomDirectory.quickJoinRoom(
+      createMetaverseQuickJoinRoomRequest({
+        matchMode: "free-roam",
+        playerId
+      }),
+      nowMs
+    );
+
+    roomAssignmentsByPlayerId.set(playerId, roomAssignment);
+
+    return roomAssignment;
+  }
+
+  return Object.freeze({
+    datagramAdapter: new MetaverseRealtimeWorldWebTransportDatagramAdapter(
+      roomDirectory
+    ),
+    ensurePlayerRoomAssignment,
+    roomDirectory,
+    runtime: Object.freeze({
+      acceptPresenceCommand(command, nowMs) {
+        return roomDirectory.acceptPresenceCommand(
+          ensurePlayerRoomAssignment(command.playerId, nowMs).roomId,
+          command,
+          nowMs
+        );
+      },
+      advanceToTime(nowMs) {
+        roomDirectory.advanceToTime(nowMs);
+      },
+      readWorldSnapshot(nowMs, observerPlayerId) {
+        if (observerPlayerId === undefined) {
+          const firstAssignment =
+            roomAssignmentsByPlayerId.values().next().value ?? null;
+
+          if (firstAssignment === null) {
+            throw new Error("No metaverse room assignment exists yet.");
+          }
+
+          return roomDirectory.readWorldSnapshot(firstAssignment.roomId, nowMs);
+        }
+
+        const roomAssignment = ensurePlayerRoomAssignment(observerPlayerId, nowMs);
+
+        return roomDirectory.readWorldSnapshot(
+          roomAssignment.roomId,
+          nowMs,
+          observerPlayerId
+        );
+      }
+    }),
+    worldAdapter: new MetaverseWorldWebTransportAdapter(roomDirectory)
+  });
+}
+
 function joinGroundedPlayer(
   runtime,
   playerId,
@@ -364,6 +433,7 @@ function createLoopbackWorldClient(
   {
     loopback,
     readNowMs,
+    roomId,
     scheduler
   }
 ) {
@@ -381,15 +451,17 @@ function createLoopbackWorldClient(
       maxBufferedSnapshots: 6,
       serverOrigin: "https://127.0.0.1:3211",
       snapshotStreamReconnectDelayMs: createMilliseconds(250),
-      worldCommandPath: "/metaverse/world/commands",
-      worldPath: "/metaverse/world"
+      worldCommandPath: `/metaverse/rooms/${roomId}/world/commands`,
+      worldPath: `/metaverse/rooms/${roomId}/world`
     },
     {
       clearTimeout: scheduler.clearTimeout,
       latestWinsDatagramTransport:
         createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
           {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
+            roomId,
+            webTransportUrl:
+              `https://127.0.0.1:3211/metaverse/rooms/${roomId}/world`
           },
           {
             webTransportFactory: loopback.webTransportFactory
@@ -400,7 +472,9 @@ function createLoopbackWorldClient(
       snapshotStreamTransport:
         createMetaverseWorldWebTransportSnapshotStreamTransport(
           {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
+            roomId,
+            webTransportUrl:
+              `https://127.0.0.1:3211/metaverse/rooms/${roomId}/world`
           },
           {
             webTransportFactory: loopback.webTransportFactory
@@ -408,7 +482,9 @@ function createLoopbackWorldClient(
         ),
       transport: createMetaverseWorldWebTransportTransport(
         {
-          webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
+          roomId,
+          webTransportUrl:
+            `https://127.0.0.1:3211/metaverse/rooms/${roomId}/world`
         },
         {
           webTransportFactory: loopback.webTransportFactory
@@ -455,20 +531,12 @@ function readRuntimeLocalPlanarDisplacementMeters(runtime, metaverseRuntimeConfi
 }
 
 test("MetaverseWorldClient uses WebTransport datagrams for grounded move and turn input while reliable WebTransport owns snapshot request and stream", async () => {
-  const {
-    MetaverseWorldClient,
-    createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport,
-    createMetaverseWorldWebTransportSnapshotStreamTransport,
-    createMetaverseWorldWebTransportTransport
-  } = await clientLoader.load("/src/network/index.ts");
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const networkModule = await clientLoader.load("/src/network/index.ts");
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const playerId = requireValue(
     createMetaversePlayerId("loopback-webtransport-grounded-pilot"),
     "playerId"
@@ -481,54 +549,19 @@ test("MetaverseWorldClient uses WebTransport datagrams for grounded move and tur
   let nowMs = 0;
 
   joinGroundedPlayer(runtime, playerId, username);
+  const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
     readNowMs: () => nowMs,
     worldAdapter
   });
-  const client = new MetaverseWorldClient(
-    {
-      defaultCommandIntervalMs: createMilliseconds(50),
-      defaultPollIntervalMs: createMilliseconds(50),
-      maxBufferedSnapshots: 6,
-      serverOrigin: "https://127.0.0.1:3211",
-      snapshotStreamReconnectDelayMs: createMilliseconds(250),
-      worldCommandPath: "/metaverse/world/commands",
-      worldPath: "/metaverse/world"
-    },
-    {
-      clearTimeout: scheduler.clearTimeout,
-      latestWinsDatagramTransport:
-        createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      readWallClockMs: () => nowMs,
-      setTimeout: scheduler.setTimeout,
-      snapshotStreamTransport:
-        createMetaverseWorldWebTransportSnapshotStreamTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      transport: createMetaverseWorldWebTransportTransport(
-        {
-          webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-        },
-        {
-          webTransportFactory: loopback.webTransportFactory
-        }
-      )
-    }
-  );
+  const client = createLoopbackWorldClient(networkModule, {
+    loopback,
+    readNowMs: () => nowMs,
+    roomId,
+    scheduler
+  });
 
   try {
     const initialSnapshot = await client.ensureConnected(playerId);
@@ -663,14 +696,11 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
   const { MetaverseRemoteWorldRuntime } = await clientLoader.load(
     "/src/metaverse/classes/metaverse-remote-world-runtime.ts"
   );
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const moverPlayerId = requireValue(
     createMetaversePlayerId("loopback-webtransport-mover-pilot"),
     "moverPlayerId"
@@ -703,6 +733,12 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
       z: 24
     }
   );
+  const moverRoomId =
+    worldServer.ensurePlayerRoomAssignment(moverPlayerId, nowMs).roomId;
+  const observerRoomId =
+    worldServer.ensurePlayerRoomAssignment(observerPlayerId, nowMs).roomId;
+
+  assert.equal(observerRoomId, moverRoomId);
 
   const moverLoopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
@@ -717,6 +753,7 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
   const moverClient = createLoopbackWorldClient(networkModule, {
     loopback: moverLoopback,
     readNowMs: () => nowMs,
+    roomId: moverRoomId,
     scheduler: moverScheduler
   });
   const observerRemoteWorldRuntime = new MetaverseRemoteWorldRuntime({
@@ -724,6 +761,7 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
       observerWorldClient = createLoopbackWorldClient(networkModule, {
         loopback: observerLoopback,
         readNowMs: () => nowMs,
+        roomId: observerRoomId,
         scheduler: observerScheduler
       });
 
@@ -887,14 +925,11 @@ test("WebGpuMetaverseRuntime preserves brief grounded tap travel locally and sta
     createUsername("Loopback Runtime Remote"),
     "remoteUsername"
   );
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const scheduler = createManualTimerScheduler();
   let nowMs = 0;
   let runtimeWorldClient = null;
@@ -906,6 +941,7 @@ test("WebGpuMetaverseRuntime preserves brief grounded tap travel locally and sta
     playerRuntimeConfig.groundedBody.spawnPosition,
     playerRuntimeConfig.camera.initialYawRadians
   );
+  const roomId = worldServer.ensurePlayerRoomAssignment(localPlayerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
@@ -926,6 +962,7 @@ test("WebGpuMetaverseRuntime preserves brief grounded tap travel locally and sta
       runtimeWorldClient = createLoopbackWorldClient(networkModule, {
         loopback,
         readNowMs: () => nowMs,
+        roomId,
         scheduler
       });
 
@@ -1142,14 +1179,11 @@ test("WebGpuMetaverseRuntime keeps an ordinary grounded jump accepted over WebTr
     createUsername("Loopback Runtime Jump Remote"),
     "remoteUsername"
   );
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const scheduler = createManualTimerScheduler();
   let nowMs = 0;
   let runtimeWorldClient = null;
@@ -1161,6 +1195,7 @@ test("WebGpuMetaverseRuntime keeps an ordinary grounded jump accepted over WebTr
     playerRuntimeConfig.groundedBody.spawnPosition,
     playerRuntimeConfig.camera.initialYawRadians
   );
+  const roomId = worldServer.ensurePlayerRoomAssignment(localPlayerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
@@ -1181,6 +1216,7 @@ test("WebGpuMetaverseRuntime keeps an ordinary grounded jump accepted over WebTr
       runtimeWorldClient = createLoopbackWorldClient(networkModule, {
         loopback,
         readNowMs: () => nowMs,
+        roomId,
         scheduler
       });
 
@@ -1367,20 +1403,12 @@ test("WebGpuMetaverseRuntime keeps an ordinary grounded jump accepted over WebTr
 });
 
 test("MetaverseWorldClient preserves rapid short-lived traversal edges over the WebTransport traversal datagram lane", async () => {
-  const {
-    MetaverseWorldClient,
-    createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport,
-    createMetaverseWorldWebTransportSnapshotStreamTransport,
-    createMetaverseWorldWebTransportTransport
-  } = await clientLoader.load("/src/network/index.ts");
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const networkModule = await clientLoader.load("/src/network/index.ts");
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(100)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const playerId = requireValue(
     createMetaversePlayerId("loopback-webtransport-rapid-history-pilot"),
     "playerId"
@@ -1393,54 +1421,19 @@ test("MetaverseWorldClient preserves rapid short-lived traversal edges over the 
   let nowMs = 0;
 
   joinGroundedPlayer(runtime, playerId, username);
+  const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
     readNowMs: () => nowMs,
     worldAdapter
   });
-  const client = new MetaverseWorldClient(
-    {
-      defaultCommandIntervalMs: createMilliseconds(50),
-      defaultPollIntervalMs: createMilliseconds(50),
-      maxBufferedSnapshots: 6,
-      serverOrigin: "https://127.0.0.1:3211",
-      snapshotStreamReconnectDelayMs: createMilliseconds(250),
-      worldCommandPath: "/metaverse/world/commands",
-      worldPath: "/metaverse/world"
-    },
-    {
-      clearTimeout: scheduler.clearTimeout,
-      latestWinsDatagramTransport:
-        createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      readWallClockMs: () => nowMs,
-      setTimeout: scheduler.setTimeout,
-      snapshotStreamTransport:
-        createMetaverseWorldWebTransportSnapshotStreamTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      transport: createMetaverseWorldWebTransportTransport(
-        {
-          webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-        },
-        {
-          webTransportFactory: loopback.webTransportFactory
-        }
-      )
-    }
-  );
+  const client = createLoopbackWorldClient(networkModule, {
+    loopback,
+    readNowMs: () => nowMs,
+    roomId,
+    scheduler
+  });
 
   try {
     await client.ensureConnected(playerId);
@@ -1555,20 +1548,12 @@ test("MetaverseWorldClient preserves rapid short-lived traversal edges over the 
 });
 
 test("MetaverseWorldClient keeps jump acceptance on the WebTransport traversal datagram lane instead of reliable commands", async () => {
-  const {
-    MetaverseWorldClient,
-    createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport,
-    createMetaverseWorldWebTransportSnapshotStreamTransport,
-    createMetaverseWorldWebTransportTransport
-  } = await clientLoader.load("/src/network/index.ts");
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const networkModule = await clientLoader.load("/src/network/index.ts");
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const playerId = requireValue(
     createMetaversePlayerId("loopback-webtransport-jump-pilot"),
     "playerId"
@@ -1581,54 +1566,19 @@ test("MetaverseWorldClient keeps jump acceptance on the WebTransport traversal d
   let nowMs = 0;
 
   joinGroundedPlayer(runtime, playerId, username);
+  const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
     readNowMs: () => nowMs,
     worldAdapter
   });
-  const client = new MetaverseWorldClient(
-    {
-      defaultCommandIntervalMs: createMilliseconds(50),
-      defaultPollIntervalMs: createMilliseconds(50),
-      maxBufferedSnapshots: 6,
-      serverOrigin: "https://127.0.0.1:3211",
-      snapshotStreamReconnectDelayMs: createMilliseconds(250),
-      worldCommandPath: "/metaverse/world/commands",
-      worldPath: "/metaverse/world"
-    },
-    {
-      clearTimeout: scheduler.clearTimeout,
-      latestWinsDatagramTransport:
-        createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      readWallClockMs: () => nowMs,
-      setTimeout: scheduler.setTimeout,
-      snapshotStreamTransport:
-        createMetaverseWorldWebTransportSnapshotStreamTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      transport: createMetaverseWorldWebTransportTransport(
-        {
-          webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-        },
-        {
-          webTransportFactory: loopback.webTransportFactory
-        }
-      )
-    }
-  );
+  const client = createLoopbackWorldClient(networkModule, {
+    loopback,
+    readNowMs: () => nowMs,
+    roomId,
+    scheduler
+  });
 
   try {
     await client.ensureConnected(playerId);
@@ -1714,20 +1664,12 @@ test("MetaverseWorldClient keeps jump acceptance on the WebTransport traversal d
 });
 
 test("MetaverseWorldClient uses the WebTransport weapon-state datagram lane and receives authoritative weapon acks", async () => {
-  const {
-    MetaverseWorldClient,
-    createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport,
-    createMetaverseWorldWebTransportSnapshotStreamTransport,
-    createMetaverseWorldWebTransportTransport
-  } = await clientLoader.load("/src/network/index.ts");
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
+  const networkModule = await clientLoader.load("/src/network/index.ts");
+  const worldServer = createRoomBoundWorldServer({
     playerInactivityTimeoutMs: createMilliseconds(5_000),
     tickIntervalMs: createMilliseconds(50)
   });
-  const worldAdapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const datagramAdapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
+  const { datagramAdapter, runtime, worldAdapter } = worldServer;
   const playerId = requireValue(
     createMetaversePlayerId("loopback-webtransport-weapon-pilot"),
     "playerId"
@@ -1740,54 +1682,19 @@ test("MetaverseWorldClient uses the WebTransport weapon-state datagram lane and 
   let nowMs = 0;
 
   joinGroundedPlayer(runtime, playerId, username);
+  const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
     readNowMs: () => nowMs,
     worldAdapter
   });
-  const client = new MetaverseWorldClient(
-    {
-      defaultCommandIntervalMs: createMilliseconds(50),
-      defaultPollIntervalMs: createMilliseconds(50),
-      maxBufferedSnapshots: 6,
-      serverOrigin: "https://127.0.0.1:3211",
-      snapshotStreamReconnectDelayMs: createMilliseconds(250),
-      worldCommandPath: "/metaverse/world/commands",
-      worldPath: "/metaverse/world"
-    },
-    {
-      clearTimeout: scheduler.clearTimeout,
-      latestWinsDatagramTransport:
-        createMetaverseRealtimeWorldLatestWinsWebTransportDatagramTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      readWallClockMs: () => nowMs,
-      setTimeout: scheduler.setTimeout,
-      snapshotStreamTransport:
-        createMetaverseWorldWebTransportSnapshotStreamTransport(
-          {
-            webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-          },
-          {
-            webTransportFactory: loopback.webTransportFactory
-          }
-        ),
-      transport: createMetaverseWorldWebTransportTransport(
-        {
-          webTransportUrl: "https://127.0.0.1:3211/metaverse/world"
-        },
-        {
-          webTransportFactory: loopback.webTransportFactory
-        }
-      )
-    }
-  );
+  const client = createLoopbackWorldClient(networkModule, {
+    loopback,
+    readNowMs: () => nowMs,
+    roomId,
+    scheduler
+  });
 
   try {
     await client.ensureConnected(playerId);

@@ -31,6 +31,10 @@ export const initialCapabilitySnapshot = Object.freeze({
 }) satisfies WebGpuMetaverseCapabilitySnapshot;
 const defaultMatchMode: MetaverseMatchModeId = "team-deathmatch";
 const guestShellUsername = createUsername("Unknown")!;
+const freeRoamMetaverseBundleId = "staging-ground";
+const freeRoamMetaverseLaunchVariationId = "shell-free-roam";
+const teamDeathmatchMetaverseBundleId = "deathmatch";
+const teamDeathmatchMetaverseLaunchVariationId = "shell-team-deathmatch";
 
 function resolveActiveMetaverseBundleId(bundleId: string): string {
   return readMetaverseWorldBundleRegistryEntry(bundleId) === null
@@ -57,6 +61,25 @@ function resolveConfirmedShellProfile(
 
   return PlayerProfile.create({
     username: createUsername(state.usernameDraft) ?? guestShellUsername
+  });
+}
+
+function resolveStandardMetaverseLaunchSelection(
+  matchMode: MetaverseMatchModeId
+): {
+  readonly bundleId: string;
+  readonly variationId: string;
+} {
+  if (matchMode === "free-roam") {
+    return Object.freeze({
+      bundleId: freeRoamMetaverseBundleId,
+      variationId: freeRoamMetaverseLaunchVariationId
+    });
+  }
+
+  return Object.freeze({
+    bundleId: teamDeathmatchMetaverseBundleId,
+    variationId: teamDeathmatchMetaverseLaunchVariationId
   });
 }
 
@@ -205,6 +228,7 @@ export function reduceMetaverseShellControllerState(
         debugPanelMode: "hidden",
         hasConfirmedProfile: true,
         isMenuOpen: false,
+        matchMode: action.launchSelection.matchMode ?? "free-roam",
         profile: resolveConfirmedShellProfile(state),
         shellStage: "metaverse"
       };
@@ -227,18 +251,32 @@ export function reduceMetaverseShellControllerState(
         : state;
     case "metaverseEntryRequested":
       {
-        const activeMetaverseBundleId = resolveActiveMetaverseBundleId(
-          state.activeMetaverseBundleId
-        );
-        const activeMetaverseLaunchVariationId =
-          activeMetaverseBundleId === state.activeMetaverseBundleId
+        const nextMatchMode = action.matchMode ?? state.matchMode;
+        const standardLaunchSelection =
+          resolveStandardMetaverseLaunchSelection(nextMatchMode);
+        const shouldUseStandardLaunchSelection =
+          action.matchMode !== undefined ||
+          state.shellStage === "main-menu" ||
+          state.activeMetaverseLaunchVariationId === null;
+        const requestedBundleId = shouldUseStandardLaunchSelection
+          ? standardLaunchSelection.bundleId
+          : state.activeMetaverseBundleId;
+        const activeMetaverseBundleId =
+          resolveActiveMetaverseBundleId(requestedBundleId);
+        const activeMetaverseLaunchVariationId = shouldUseStandardLaunchSelection
+          ? activeMetaverseBundleId === standardLaunchSelection.bundleId
+            ? standardLaunchSelection.variationId
+            : null
+          : activeMetaverseBundleId === state.activeMetaverseBundleId
             ? state.activeMetaverseLaunchVariationId
             : null;
 
         return state.shellStage === "metaverse" &&
           state.activeExperienceId === null &&
           state.activeMetaverseBundleId === activeMetaverseBundleId &&
-          state.activeMetaverseLaunchVariationId === activeMetaverseLaunchVariationId
+          state.activeMetaverseLaunchVariationId ===
+            activeMetaverseLaunchVariationId &&
+          state.matchMode === nextMatchMode
           ? state
           : {
               ...state,
@@ -248,6 +286,7 @@ export function reduceMetaverseShellControllerState(
               debugPanelMode: "hidden",
               hasConfirmedProfile: true,
               isMenuOpen: false,
+              matchMode: nextMatchMode,
               profile: resolveConfirmedShellProfile(state),
               shellStage: "metaverse"
             };

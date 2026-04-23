@@ -55,9 +55,9 @@ export function MetaversePlayerRadarHud({
       <circle
         cx={radarCenter}
         cy={radarCenter}
-        fill="rgba(15, 23, 42, 0.78)"
+        fill="rgba(2, 6, 23, 0.46)"
         r={radarRadius}
-        stroke="rgba(148, 163, 184, 0.22)"
+        stroke="rgba(148, 163, 184, 0.18)"
         strokeWidth="1.2"
       />
       <circle
@@ -65,7 +65,7 @@ export function MetaversePlayerRadarHud({
         cy={radarCenter}
         fill="none"
         r={radarRadius * 0.66}
-        stroke="rgba(148, 163, 184, 0.14)"
+        stroke="rgba(148, 163, 184, 0.11)"
         strokeWidth="1"
       />
       <circle
@@ -73,17 +73,17 @@ export function MetaversePlayerRadarHud({
         cy={radarCenter}
         fill="none"
         r={radarRadius * 0.33}
-        stroke="rgba(148, 163, 184, 0.12)"
+        stroke="rgba(148, 163, 184, 0.1)"
         strokeWidth="1"
       />
       <path
         d={`M ${radarCenter} ${radarCenter - radarRadius} L ${radarCenter} ${radarCenter + radarRadius}`}
-        stroke="rgba(148, 163, 184, 0.12)"
+        stroke="rgba(148, 163, 184, 0.1)"
         strokeWidth="1"
       />
       <path
         d={`M ${radarCenter - radarRadius} ${radarCenter} L ${radarCenter + radarRadius} ${radarCenter}`}
-        stroke="rgba(148, 163, 184, 0.12)"
+        stroke="rgba(148, 163, 184, 0.1)"
         strokeWidth="1"
       />
 

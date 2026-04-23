@@ -3,6 +3,7 @@ import test, { after, before } from "node:test";
 
 import {
   createMetaversePlayerId,
+  createMetaverseRoomId,
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldWebTransportErrorMessage,
   createMetaverseRealtimeWorldWebTransportServerEventMessage
@@ -24,14 +25,17 @@ test("createMetaverseWorldWebTransportSnapshotStreamTransport subscribes with th
   const { createMetaverseWorldWebTransportSnapshotStreamTransport } =
     await clientLoader.load("/src/network/index.ts");
   const playerId = createMetaversePlayerId("stream-world-player");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
 
   let capturedHandlers = null;
   const capturedRequests = [];
   let channelDisposed = false;
   const transport = createMetaverseWorldWebTransportSnapshotStreamTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/world"
     },
     {
@@ -65,6 +69,7 @@ test("createMetaverseWorldWebTransportSnapshotStreamTransport subscribes with th
   assert.equal(capturedRequests.length, 1);
   assert.equal(capturedRequests[0]?.type, "world-snapshot-subscribe");
   assert.equal(capturedRequests[0]?.observerPlayerId, playerId);
+  assert.equal(capturedRequests[0]?.roomId, roomId);
 
   capturedHandlers?.onResponse(
     createMetaverseRealtimeWorldWebTransportServerEventMessage({

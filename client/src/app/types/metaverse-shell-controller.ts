@@ -3,6 +3,7 @@ import type {
   ExperienceId,
   GameplayInputModeId,
   MetaverseMatchModeId,
+  MetaverseRoomAssignmentSnapshot,
   PlayerProfile
 } from "@webgpu-metaverse/shared";
 
@@ -38,6 +39,7 @@ export interface MetaverseShellController {
   readonly activeExperienceId: ExperienceId | null;
   readonly activeMetaverseBundleId: string;
   readonly activeMetaverseLaunchVariationId: string | null;
+  readonly activeMetaverseRoomAssignment: MetaverseRoomAssignmentSnapshot | null;
   readonly capabilityStatus: WebGpuMetaverseCapabilitySnapshot["status"];
   readonly coopRoomIdDraft: string;
   readonly controllerActionMatrix: ControllerActionMatrix;
@@ -45,6 +47,9 @@ export interface MetaverseShellController {
   readonly debugPanelMode: GameplayDebugPanelMode;
   readonly gameplayInputSource: GameplayInputSource;
   readonly metaverseControlMode: MetaverseControlModeId;
+  readonly metaverseLaunchError: string | null;
+  readonly metaverseLaunchPending: boolean;
+  readonly metaverseRoomIdDraft: string;
   readonly handTrackingRuntime: HandTrackingRuntime;
   readonly hydrationSource: StoredProfileHydrationResult["source"];
   readonly inputMode: GameplayInputModeId;
@@ -76,7 +81,9 @@ export interface MetaverseShellController {
   readonly onGlobalControllerBindingPresetChange: (
     globalBindingPresetId: GlobalControllerBindingPresetId
   ) => void;
-  readonly onEnterMetaverseRequest: () => void;
+  readonly onEnterMetaverseRequest: (
+    matchMode?: MetaverseMatchModeId
+  ) => void;
   readonly onExperienceLaunchRequest: (experienceId: ExperienceId) => void;
   readonly onGameplayMenuOpen: (open: boolean) => void;
   readonly onInputModeChange: (inputMode: GameplayInputModeId) => void;
@@ -98,6 +105,7 @@ export interface MetaverseShellController {
   readonly onReturnToMetaverseRequest: () => void;
   readonly onRetryCapabilityProbe: () => void;
   readonly onMatchModeChange: (mode: MetaverseMatchModeId) => void;
+  readonly onMetaverseRoomIdDraftChange: (metaverseRoomIdDraft: string) => void;
   readonly onSetupRequest: () => void;
   readonly onSfxVolumeChange: (nextValue: number) => void;
 }
@@ -177,6 +185,7 @@ export type MetaverseShellControllerAction =
     }
   | {
       readonly type: "metaverseEntryRequested";
+      readonly matchMode?: MetaverseMatchModeId;
     }
   | {
       readonly type: "matchModeChanged";

@@ -5,12 +5,13 @@ import test from "node:test";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMetaverseSyncPresenceCommand,
   createUsername
 } from "@webgpu-metaverse/shared";
 
 import { MetaversePresenceHttpAdapter } from "../../../server/dist/metaverse/adapters/metaverse-presence-http-adapter.js";
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
 import {
   authoredWaterBaySkiffPlacement,
   authoredWaterBaySkiffYawRadians
@@ -52,15 +53,43 @@ function createRequest(method, body = null) {
   return request;
 }
 
-test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot polling", async () => {
-  const adapter = new MetaversePresenceHttpAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
+function createPresenceTestContext(playerId) {
+  const roomDirectory = new MetaverseRoomDirectory();
+  const roomAssignment = roomDirectory.quickJoinRoom(
+    createMetaverseQuickJoinRoomRequest({
+      matchMode: "free-roam",
+      playerId
+    }),
+    0
   );
+
+  return {
+    adapter: new MetaversePresenceHttpAdapter(roomDirectory),
+    roomAssignment,
+    roomDirectory
+  };
+}
+
+function resolvePresenceCommandUrl(roomId) {
+  return new URL(
+    `http://127.0.0.1:3210/metaverse/rooms/${roomId}/presence/commands`
+  );
+}
+
+function resolvePresenceSnapshotUrl(roomId, playerId) {
+  return new URL(
+    `http://127.0.0.1:3210/metaverse/rooms/${roomId}/presence?playerId=${playerId}`
+  );
+}
+
+test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot polling", async () => {
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
+
+  const { adapter, roomAssignment } = createPresenceTestContext(playerId);
 
   const joinRequest = createRequest("POST", createMetaverseJoinPresenceCommand({
     characterId: "mesh2motion-humanoid-v1",
@@ -86,7 +115,7 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   const joinPromise = adapter.handleRequest(
     joinRequest,
     joinResponse,
-    new URL("http://127.0.0.1:3210/metaverse/presence/commands"),
+    resolvePresenceCommandUrl(roomAssignment.roomId),
     0
   );
 
@@ -135,7 +164,7 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   const syncPromise = adapter.handleRequest(
     syncRequest,
     syncResponse,
-    new URL("http://127.0.0.1:3210/metaverse/presence/commands"),
+    resolvePresenceCommandUrl(roomAssignment.roomId),
     50
   );
 
@@ -169,7 +198,7 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   const pollHandled = await adapter.handleRequest(
     { method: "GET" },
     pollResponse,
-    new URL("http://127.0.0.1:3210/metaverse/presence?playerId=harbor-pilot-1"),
+    resolvePresenceSnapshotUrl(roomAssignment.roomId, "harbor-pilot-1"),
     100
   );
 
@@ -197,18 +226,22 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
 });
 
 test("MetaversePresenceHttpAdapter returns conflict for unknown observers", async () => {
-  const adapter = new MetaversePresenceHttpAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
-  );
+  const playerId = createMetaversePlayerId("bound-player");
+  assert.notEqual(playerId, null);
+
+  const { adapter, roomAssignment } = createPresenceTestContext(playerId);
   const response = createResponseCapture();
   const handled = await adapter.handleRequest(
     { method: "GET" },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/presence?playerId=missing-player"),
+    resolvePresenceSnapshotUrl(roomAssignment.roomId, "missing-player"),
     0
   );
 
   assert.equal(handled, true);
   assert.equal(response.statusCode, 409);
-  assert.equal(response.json.error, "Unknown metaverse player: missing-player");
+  assert.equal(
+    response.json.error,
+    `Metaverse player missing-player is not bound to room ${roomAssignment.roomId}.`
+  );
 });

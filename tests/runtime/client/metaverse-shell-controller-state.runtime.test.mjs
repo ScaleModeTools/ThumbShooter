@@ -108,7 +108,8 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
   assert.equal(state.hasConfirmedProfile, true);
   assert.equal(state.profile?.snapshot.username, "Unknown");
   assert.equal(state.shellStage, "metaverse");
-  assert.equal(state.activeMetaverseLaunchVariationId, null);
+  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
 
   state = reduceMetaverseShellControllerState(state, {
     type: "toolPreviewRequested",
@@ -158,6 +159,25 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
   assert.equal(state.profile?.snapshot.username, "Unknown");
   assert.equal(state.shellStage, "metaverse");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-free-roam");
+});
+
+test("deathmatch bundle removes the Duck Hunt portal and keeps the shell TDM launch", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/index.ts"
+  );
+  const deathmatchBundle = loadMetaverseMapBundle("deathmatch").bundle;
+
+  assert.equal(
+    deathmatchBundle.sceneObjects.some(
+      (sceneObject) => sceneObject.objectId === "duck-hunt-launch-portal"
+    ),
+    false
+  );
+  assert.equal(deathmatchBundle.launchVariations.length, 1);
+  assert.equal(
+    deathmatchBundle.launchVariations[0]?.variationId,
+    "shell-team-deathmatch"
+  );
 });
 
 test("calibration reset auto-confirms a guest profile before entering calibration flow", async () => {
@@ -291,6 +311,8 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
 
   assert.equal(state.shellStage, "metaverse");
   assert.equal(state.activeExperienceId, null);
+  assert.equal(state.activeMetaverseBundleId, "staging-ground");
+  assert.equal(state.activeMetaverseLaunchVariationId, "shell-free-roam");
 
   state = reduceMetaverseShellControllerState(state, {
     type: "experienceLaunchRequested",
@@ -326,8 +348,14 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.shellStage, "main-menu");
 
   state = reduceMetaverseShellControllerState(state, {
+    matchMode: "team-deathmatch",
     type: "metaverseEntryRequested"
   });
+
+  assert.equal(state.matchMode, "team-deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
+
   state = reduceMetaverseShellControllerState(state, {
     type: "inputModeChanged",
     inputMode: "camera-thumb-trigger"
@@ -364,4 +392,5 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.matchMode, "team-deathmatch");
   assert.equal(state.shellStage, "main-menu");
   assert.equal(state.activeExperienceId, null);
+  assert.equal(state.activeMetaverseBundleId, "staging-ground");
 });

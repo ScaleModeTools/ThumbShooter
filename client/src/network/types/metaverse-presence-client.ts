@@ -3,6 +3,7 @@ import type {
   MetaversePlayerTeamId,
   MetaversePresencePoseSnapshotInput,
   MetaversePresenceRosterSnapshot,
+  MetaverseRoomId,
   Milliseconds,
   Username
 } from "@webgpu-metaverse/shared";
@@ -21,6 +22,7 @@ export type MetaversePresenceClientState =
 export interface MetaversePresenceClientConfig {
   readonly defaultPollIntervalMs: Milliseconds;
   readonly presencePath: string;
+  readonly roomId?: MetaverseRoomId;
   readonly serverOrigin: string;
 }
 

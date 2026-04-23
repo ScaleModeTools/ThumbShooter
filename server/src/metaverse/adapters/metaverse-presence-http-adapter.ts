@@ -17,9 +17,9 @@ import {
   type MetaversePresenceMountedOccupantRoleId,
   type MetaversePresenceCommand
 } from "@webgpu-metaverse/shared/metaverse/presence";
-import { createUsername } from "@webgpu-metaverse/shared";
+import { createMetaverseRoomId, createUsername } from "@webgpu-metaverse/shared";
 
-import type { MetaverseAuthoritativeWorldRuntimeOwner } from "../types/metaverse-authoritative-world-runtime-owner.js";
+import type { MetaverseRoomDirectoryOwner } from "../types/metaverse-room-directory-owner.js";
 
 function writeCorsHeaders(
   response: ServerResponse<IncomingMessage>
@@ -310,34 +310,68 @@ function readJsonBody(
   });
 }
 
-function isMetaversePresencePath(pathname: string): boolean {
+function resolveMetaversePresenceRoomId(pathname: string) {
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
 
-  return (
-    segments.length === 2 &&
-    segments[0] === "metaverse" &&
-    segments[1] === "presence"
-  );
+  if (
+    segments.length !== 4 ||
+    segments[0] !== "metaverse" ||
+    segments[1] !== "rooms" ||
+    segments[3] !== "presence"
+  ) {
+    return null;
+  }
+
+  const roomId = createMetaverseRoomId(segments[2] ?? "");
+
+  if (roomId === null) {
+    throw new Error(`Invalid metaverse room id: ${segments[2] ?? ""}`);
+  }
+
+  return roomId;
 }
 
-function isMetaversePresenceCommandPath(pathname: string): boolean {
+function resolveMetaversePresenceCommandRoomId(pathname: string) {
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
 
+  if (
+    segments.length !== 5 ||
+    segments[0] !== "metaverse" ||
+    segments[1] !== "rooms" ||
+    segments[3] !== "presence" ||
+    segments[4] !== "commands"
+  ) {
+    return null;
+  }
+
+  const roomId = createMetaverseRoomId(segments[2] ?? "");
+
+  if (roomId === null) {
+    throw new Error(`Invalid metaverse room id: ${segments[2] ?? ""}`);
+  }
+
+  return roomId;
+}
+
+function isUnknownRoomError(error: unknown): error is Error {
+  return error instanceof Error && error.message.startsWith("Unknown metaverse room:");
+}
+
+function isRoomBindingError(error: unknown): error is Error {
   return (
-    segments.length === 3 &&
-    segments[0] === "metaverse" &&
-    segments[1] === "presence" &&
-    segments[2] === "commands"
+    error instanceof Error &&
+    error.message.startsWith("Metaverse player ") &&
+    error.message.includes(" is not bound to room ")
   );
 }
 
 export class MetaversePresenceHttpAdapter {
-  readonly #metaverseAuthoritativeWorldRuntime: MetaverseAuthoritativeWorldRuntimeOwner;
+  readonly #roomDirectory: MetaverseRoomDirectoryOwner;
 
   constructor(
-    metaverseAuthoritativeWorldRuntime: MetaverseAuthoritativeWorldRuntimeOwner
+    roomDirectory: MetaverseRoomDirectoryOwner
   ) {
-    this.#metaverseAuthoritativeWorldRuntime = metaverseAuthoritativeWorldRuntime;
+    this.#roomDirectory = roomDirectory;
   }
 
   async handleRequest(
@@ -346,7 +380,9 @@ export class MetaversePresenceHttpAdapter {
     requestUrl: URL,
     nowMs: number
   ): Promise<boolean> {
-    if (request.method === "GET" && isMetaversePresencePath(requestUrl.pathname)) {
+    const presenceRoomId = resolveMetaversePresenceRoomId(requestUrl.pathname);
+
+    if (request.method === "GET" && presenceRoomId !== null) {
       try {
         const observerPlayerIdRaw = requestUrl.searchParams.get("playerId");
         const observerPlayerId =
@@ -357,13 +393,18 @@ export class MetaversePresenceHttpAdapter {
         writeJson(
           response,
           200,
-          this.#metaverseAuthoritativeWorldRuntime.readPresenceRosterEvent(
+          this.#roomDirectory.readPresenceRosterEvent(
+            presenceRoomId,
             nowMs,
             observerPlayerId
           )
         );
       } catch (error) {
-        if (isUnknownPlayerError(error)) {
+        if (
+          isUnknownPlayerError(error) ||
+          isUnknownRoomError(error) ||
+          isRoomBindingError(error)
+        ) {
           writeJson(response, 409, {
             error: error.message
           });
@@ -381,10 +422,11 @@ export class MetaversePresenceHttpAdapter {
       return true;
     }
 
-    if (
-      request.method === "POST" &&
-      isMetaversePresenceCommandPath(requestUrl.pathname)
-    ) {
+    const commandRoomId = resolveMetaversePresenceCommandRoomId(
+      requestUrl.pathname
+    );
+
+    if (request.method === "POST" && commandRoomId !== null) {
       try {
         const body = await readJsonBody(request);
         const command = parsePresenceCommand(body);
@@ -392,13 +434,18 @@ export class MetaversePresenceHttpAdapter {
         writeJson(
           response,
           200,
-          this.#metaverseAuthoritativeWorldRuntime.acceptPresenceCommand(
+          this.#roomDirectory.acceptPresenceCommand(
+            commandRoomId,
             command,
             nowMs
           )
         );
       } catch (error) {
-        if (isUnknownPlayerError(error)) {
+        if (
+          isUnknownPlayerError(error) ||
+          isUnknownRoomError(error) ||
+          isRoomBindingError(error)
+        ) {
           writeJson(response, 409, {
             error: error.message
           });

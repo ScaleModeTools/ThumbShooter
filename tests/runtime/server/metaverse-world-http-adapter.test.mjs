@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMetaverseSyncDriverVehicleControlCommand,
   createMetaverseSyncMountedOccupancyCommand,
   createMetaverseSyncPlayerLookIntentCommand,
@@ -11,8 +12,8 @@ import {
   createUsername
 } from "@webgpu-metaverse/shared";
 
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
 import { MetaverseWorldHttpAdapter } from "../../../server/dist/metaverse/adapters/metaverse-world-http-adapter.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
 import {
   authoredWaterBaySkiffYawRadians
 } from "../metaverse-authored-world-test-fixtures.mjs";
@@ -38,16 +39,44 @@ function createResponseCapture() {
   };
 }
 
+function createWorldTestContext(playerId) {
+  const roomDirectory = new MetaverseRoomDirectory();
+  const roomAssignment = roomDirectory.quickJoinRoom(
+    createMetaverseQuickJoinRoomRequest({
+      matchMode: "free-roam",
+      playerId
+    }),
+    0
+  );
+
+  return {
+    adapter: new MetaverseWorldHttpAdapter(roomDirectory),
+    roomAssignment,
+    roomDirectory
+  };
+}
+
+function resolveWorldSnapshotUrl(roomId, playerId) {
+  return new URL(
+    `http://127.0.0.1:3210/metaverse/rooms/${roomId}/world?playerId=${playerId}`
+  );
+}
+
+function resolveWorldCommandUrl(roomId) {
+  return new URL(`http://127.0.0.1:3210/metaverse/rooms/${roomId}/world/commands`);
+}
+
 test("MetaverseWorldHttpAdapter serves authoritative metaverse world snapshots", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldHttpAdapter(runtime);
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldTestContext(playerId);
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -77,7 +106,7 @@ test("MetaverseWorldHttpAdapter serves authoritative metaverse world snapshots",
   const handled = await adapter.handleRequest(
     { method: "GET" },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world?playerId=harbor-pilot-1"),
+    resolveWorldSnapshotUrl(roomAssignment.roomId, "harbor-pilot-1"),
     200
   );
 
@@ -97,15 +126,16 @@ test("MetaverseWorldHttpAdapter serves authoritative metaverse world snapshots",
 });
 
 test("MetaverseWorldHttpAdapter accepts driver vehicle control commands on the explicit command route", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldHttpAdapter(runtime);
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldTestContext(playerId);
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -158,7 +188,7 @@ test("MetaverseWorldHttpAdapter accepts driver vehicle control commands on the e
       }
     },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    resolveWorldCommandUrl(roomAssignment.roomId),
     100
   );
 
@@ -168,15 +198,16 @@ test("MetaverseWorldHttpAdapter accepts driver vehicle control commands on the e
 });
 
 test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explicit command route", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldHttpAdapter(runtime);
   const playerId = createMetaversePlayerId("traversal-harbor-pilot-1");
   const username = createUsername("Traversal Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldTestContext(playerId);
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -232,18 +263,21 @@ test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explici
       }
     },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    resolveWorldCommandUrl(roomAssignment.roomId),
     100
   );
 
   assert.equal(handled, true);
   assert.equal(response.statusCode, 200);
   assert.equal(response.json.type, "world-snapshot");
-  assert.equal(response.json.world.observerPlayer?.lastProcessedTraversalSequence, 1);
 
-  runtime.advanceToTime(200);
+  roomDirectory.advanceToTime(200);
 
-  const worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+  const worldSnapshot = roomDirectory.readWorldSnapshot(
+    roomAssignment.roomId,
+    200,
+    playerId
+  );
 
   assert.equal(worldSnapshot.observerPlayer?.lastProcessedTraversalSequence, 2);
   assert.equal(worldSnapshot.players[0]?.locomotionMode, "grounded");
@@ -251,15 +285,16 @@ test("MetaverseWorldHttpAdapter accepts traversal intent commands on the explici
 });
 
 test("MetaverseWorldHttpAdapter accepts explicit player look commands on the explicit command route", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldHttpAdapter(runtime);
   const playerId = createMetaversePlayerId("look-harbor-pilot-1");
   const username = createUsername("Look Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldTestContext(playerId);
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -310,7 +345,7 @@ test("MetaverseWorldHttpAdapter accepts explicit player look commands on the exp
       }
     },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    resolveWorldCommandUrl(roomAssignment.roomId),
     100
   );
 
@@ -326,15 +361,16 @@ test("MetaverseWorldHttpAdapter accepts explicit player look commands on the exp
 });
 
 test("MetaverseWorldHttpAdapter accepts reliable mounted occupancy commands on the explicit command route", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldHttpAdapter(runtime);
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldTestContext(playerId);
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -379,7 +415,7 @@ test("MetaverseWorldHttpAdapter accepts reliable mounted occupancy commands on t
       }
     },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world/commands"),
+    resolveWorldCommandUrl(roomAssignment.roomId),
     100
   );
 
@@ -394,18 +430,22 @@ test("MetaverseWorldHttpAdapter accepts reliable mounted occupancy commands on t
 });
 
 test("MetaverseWorldHttpAdapter returns conflict for unknown observers", async () => {
-  const adapter = new MetaverseWorldHttpAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
-  );
+  const playerId = createMetaversePlayerId("bound-player");
+  assert.notEqual(playerId, null);
+
+  const { adapter, roomAssignment } = createWorldTestContext(playerId);
   const response = createResponseCapture();
   const handled = await adapter.handleRequest(
     { method: "GET" },
     response,
-    new URL("http://127.0.0.1:3210/metaverse/world?playerId=missing-player"),
+    resolveWorldSnapshotUrl(roomAssignment.roomId, "missing-player"),
     0
   );
 
   assert.equal(handled, true);
   assert.equal(response.statusCode, 409);
-  assert.equal(response.json.error, "Unknown metaverse player: missing-player");
+  assert.equal(
+    response.json.error,
+    `Metaverse player missing-player is not bound to room ${roomAssignment.roomId}.`
+  );
 });

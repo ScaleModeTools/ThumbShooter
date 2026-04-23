@@ -471,6 +471,7 @@ test("LocaldevWebTransportServer routes reliable frames and datagrams through th
   const presenceStream = presenceSession.openClientBidirectionalStream();
   await presenceStream.writeJsonFrame({
     observerPlayerId: "observer-player",
+    roomId: "metaverse-room-test",
     type: "presence-roster-request"
   });
   assert.deepEqual(await presenceStream.readJsonFrame(), {
@@ -484,6 +485,7 @@ test("LocaldevWebTransportServer routes reliable frames and datagrams through th
   const worldStream = worldSession.openClientBidirectionalStream();
   await worldStream.writeJsonFrame({
     observerPlayerId: "driver-player",
+    roomId: "metaverse-room-test",
     type: "world-snapshot-request"
   });
   assert.deepEqual(await worldStream.readJsonFrame(), {
@@ -533,8 +535,10 @@ test("LocaldevWebTransportServer routes reliable frames and datagrams through th
 
   assert.equal(recordedPresenceMessages.length, 1);
   assert.equal(recordedPresenceMessages[0]?.type, "presence-roster-request");
+  assert.equal(recordedPresenceMessages[0]?.roomId, "metaverse-room-test");
   assert.equal(recordedWorldMessages.length, 1);
   assert.equal(recordedWorldMessages[0]?.type, "world-snapshot-request");
+  assert.equal(recordedWorldMessages[0]?.roomId, "metaverse-room-test");
   assert.equal(recordedWorldDatagrams.length, 3);
   assert.equal(
     recordedWorldDatagrams[0]?.type,
@@ -652,6 +656,7 @@ test("LocaldevWebTransportServer lets reliable sessions take over a persistent s
   const worldStream = worldSession.openClientBidirectionalStream();
   await worldStream.writeJsonFrame({
     observerPlayerId: "driver-player",
+    roomId: "metaverse-room-test",
     type: "world-snapshot-subscribe"
   });
 
@@ -661,6 +666,7 @@ test("LocaldevWebTransportServer lets reliable sessions take over a persistent s
   });
   assert.equal(recordedStreamMessages.length, 1);
   assert.equal(recordedStreamMessages[0]?.type, "world-snapshot-subscribe");
+  assert.equal(recordedStreamMessages[0]?.roomId, "metaverse-room-test");
   assert.equal(recordedWorldMessages.length, 0);
 
   await worldStream.close();

@@ -2,6 +2,7 @@ import type {
   MetaversePlayerId,
   MetaversePresenceCommand,
   MetaversePresenceRosterEvent,
+  MetaverseRoomId,
   MetaversePresenceWebTransportClientMessage,
   MetaversePresenceWebTransportServerMessage
 } from "@webgpu-metaverse/shared";
@@ -34,6 +35,12 @@ interface MetaversePresenceWebTransportDependencies {
       readonly reason?: string;
     }): void;
   };
+}
+
+function resolveMetaversePresenceTransportRoomId(
+  roomId: MetaverseRoomId | undefined
+): MetaverseRoomId {
+  return (roomId ?? "metaverse-shell-local") as MetaverseRoomId;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -89,8 +96,10 @@ function parsePresenceServerMessage(
 }
 
 export function createMetaversePresenceWebTransportTransport(config: {
+  readonly roomId?: MetaverseRoomId;
   readonly webTransportUrl: string;
 }, dependencies: MetaversePresenceWebTransportDependencies = {}): MetaversePresenceTransport {
+  const roomId = resolveMetaversePresenceTransportRoomId(config.roomId);
   const channel =
     dependencies.channel ??
     new ReliableWebTransportJsonRequestChannel<
@@ -127,7 +136,8 @@ export function createMetaversePresenceWebTransportTransport(config: {
     pollRosterSnapshot(playerId: MetaversePlayerId) {
       return sendRequest(
         createMetaversePresenceWebTransportRosterRequest({
-          observerPlayerId: playerId
+          observerPlayerId: playerId,
+          roomId
         })
       );
     },
@@ -137,7 +147,8 @@ export function createMetaversePresenceWebTransportTransport(config: {
     ) {
       return sendRequest(
         createMetaversePresenceWebTransportCommandRequest({
-          command
+          command,
+          roomId
         })
       );
     }

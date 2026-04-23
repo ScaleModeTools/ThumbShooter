@@ -1,4 +1,5 @@
 import {
+  deathmatchMapBundle,
   parseMetaverseMapBundleSnapshot,
   stagingGroundMapBundle,
   type MetaverseMapBundleSnapshot
@@ -15,6 +16,11 @@ const authoritativeMetaverseMapBundleEntries = Object.freeze([
     bundle: stagingGroundMapBundle,
     bundleId: stagingGroundMapBundle.mapId,
     sourceBundleId: stagingGroundMapBundle.mapId
+  } satisfies LoadedAuthoritativeMetaverseMapBundleSnapshot),
+  Object.freeze({
+    bundle: deathmatchMapBundle,
+    bundleId: deathmatchMapBundle.mapId,
+    sourceBundleId: deathmatchMapBundle.mapId
   } satisfies LoadedAuthoritativeMetaverseMapBundleSnapshot)
 ]);
 

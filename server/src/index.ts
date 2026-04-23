@@ -20,10 +20,11 @@ import {
 import { MetaversePresenceHttpAdapter } from "./metaverse/adapters/metaverse-presence-http-adapter.js";
 import { MetaversePresenceWebTransportAdapter } from "./metaverse/adapters/metaverse-presence-webtransport-adapter.js";
 import { MetaverseRealtimeWorldWebTransportDatagramAdapter } from "./metaverse/adapters/metaverse-realtime-world-webtransport-datagram-adapter.js";
+import { MetaverseRoomHttpAdapter } from "./metaverse/adapters/metaverse-room-http-adapter.js";
 import { MetaverseWorldHttpAdapter } from "./metaverse/adapters/metaverse-world-http-adapter.js";
 import { MetaverseWorldPreviewHttpAdapter } from "./metaverse/adapters/metaverse-world-preview-http-adapter.js";
 import { MetaverseWorldWebTransportAdapter } from "./metaverse/adapters/metaverse-world-webtransport-adapter.js";
-import { MetaverseAuthoritativeWorldRuntimeHost } from "./metaverse/classes/metaverse-authoritative-world-runtime-host.js";
+import { MetaverseRoomDirectory } from "./metaverse/classes/metaverse-room-directory.js";
 import { MetaverseSessionHttpAdapter } from "./metaverse/adapters/metaverse-session-http-adapter.js";
 import { MetaverseSessionRuntime } from "./metaverse/classes/metaverse-session-runtime.js";
 import type { ServerRuntimeConfig } from "./types/server-runtime-config.js";
@@ -42,24 +43,25 @@ const duckHuntCoopRoomWebTransportAdapter = new DuckHuntCoopRoomWebTransportAdap
 );
 const duckHuntCoopRoomWebTransportDatagramAdapter =
   new DuckHuntCoopRoomWebTransportDatagramAdapter(coopRoomDirectory);
-const metaverseAuthoritativeWorldRuntime = new MetaverseAuthoritativeWorldRuntimeHost();
+const metaverseRoomDirectory = new MetaverseRoomDirectory();
+const metaverseRoomHttpAdapter = new MetaverseRoomHttpAdapter(
+  metaverseRoomDirectory
+);
 const metaversePresenceHttpAdapter = new MetaversePresenceHttpAdapter(
-  metaverseAuthoritativeWorldRuntime
+  metaverseRoomDirectory
 );
 const metaversePresenceWebTransportAdapter =
-  new MetaversePresenceWebTransportAdapter(metaverseAuthoritativeWorldRuntime);
+  new MetaversePresenceWebTransportAdapter(metaverseRoomDirectory);
 const metaverseWorldHttpAdapter = new MetaverseWorldHttpAdapter(
-  metaverseAuthoritativeWorldRuntime
+  metaverseRoomDirectory
 );
-const metaverseWorldPreviewHttpAdapter = new MetaverseWorldPreviewHttpAdapter(
-  metaverseAuthoritativeWorldRuntime
-);
+const metaverseWorldPreviewHttpAdapter = new MetaverseWorldPreviewHttpAdapter();
 const metaverseWorldWebTransportAdapter = new MetaverseWorldWebTransportAdapter(
-  metaverseAuthoritativeWorldRuntime
+  metaverseRoomDirectory
 );
 const metaverseRealtimeWorldWebTransportDatagramAdapter =
   new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    metaverseAuthoritativeWorldRuntime
+    metaverseRoomDirectory
   );
 const metaverseSessionRuntime = new MetaverseSessionRuntime();
 const metaverseSessionHttpAdapter = new MetaverseSessionHttpAdapter(
@@ -154,13 +156,13 @@ function stopLocaldevWebTransportServer(): void {
 
 function startAuthoritativeTickOwners(): void {
   if (metaverseWorldTickHandle === null) {
-    metaverseAuthoritativeWorldRuntime.advanceToTime(Date.now());
+    metaverseRoomDirectory.advanceToTime(Date.now());
     metaverseWorldTickHandle = setInterval(() => {
       const nowMs = Date.now();
 
-      metaverseAuthoritativeWorldRuntime.advanceToTime(nowMs);
+      metaverseRoomDirectory.advanceToTime(nowMs);
       metaverseWorldWebTransportAdapter.publishWorldSnapshots(nowMs);
-    }, Math.max(1, metaverseAuthoritativeWorldRuntime.tickIntervalMs));
+    }, Math.max(1, metaverseRoomDirectory.tickIntervalMs));
   }
 
   if (duckHuntRoomTickHandle === null) {
@@ -260,6 +262,17 @@ const server = createServer(async (request, response) => {
   }
 
   if (metaverseSessionHttpAdapter.handleRequest(request, response, requestUrl)) {
+    return;
+  }
+
+  if (
+    await metaverseRoomHttpAdapter.handleRequest(
+      request,
+      response,
+      requestUrl,
+      nowMs
+    )
+  ) {
     return;
   }
 

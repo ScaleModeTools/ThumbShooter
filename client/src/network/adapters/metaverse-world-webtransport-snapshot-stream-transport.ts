@@ -1,6 +1,7 @@
 import type {
   MetaversePlayerId,
   MetaverseRealtimeWorldEvent,
+  MetaverseRoomId,
   MetaverseRealtimeWorldWebTransportClientMessage,
   MetaverseRealtimeWorldWebTransportServerMessage
 } from "@webgpu-metaverse/shared";
@@ -31,6 +32,12 @@ interface MetaverseWorldWebTransportSnapshotStreamDependencies {
       readonly reason?: string;
     }): void;
   };
+}
+
+function resolveMetaverseWorldSnapshotStreamRoomId(
+  roomId: MetaverseRoomId | undefined
+): MetaverseRoomId {
+  return (roomId ?? "metaverse-shell-local") as MetaverseRoomId;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -80,8 +87,10 @@ function parseMetaverseWorldServerMessage(
 }
 
 export function createMetaverseWorldWebTransportSnapshotStreamTransport(config: {
+  readonly roomId?: MetaverseRoomId;
   readonly webTransportUrl: string;
 }, dependencies: MetaverseWorldWebTransportSnapshotStreamDependencies = {}): MetaverseWorldSnapshotStreamTransport {
+  const roomId = resolveMetaverseWorldSnapshotStreamRoomId(config.roomId);
   const channel =
     dependencies.channel ??
     new ReliableWebTransportJsonSubscriptionChannel<
@@ -113,7 +122,8 @@ export function createMetaverseWorldWebTransportSnapshotStreamTransport(config: 
     ) {
       return channel.openSubscription(
         createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest({
-          observerPlayerId: playerId
+          observerPlayerId: playerId,
+          roomId
         }),
         {
           onClose: handlers.onClose,

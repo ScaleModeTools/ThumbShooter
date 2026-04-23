@@ -14,6 +14,7 @@ interface MetaverseDeveloperOverlayProps {
   readonly className?: string;
   readonly hudScaleStyle?: CSSProperties;
   readonly hudSnapshot: MetaverseHudSnapshot;
+  readonly layout?: "modal" | "overlay";
   readonly onSetupRequest: () => void;
 }
 
@@ -42,9 +43,11 @@ export function MetaverseDeveloperOverlay({
   className,
   hudScaleStyle,
   hudSnapshot,
+  layout = "overlay",
   onSetupRequest
 }: MetaverseDeveloperOverlayProps) {
   const connectedPlayerCount = hudSnapshot.presence.remotePlayerCount + 1;
+  const isModalLayout = layout === "modal";
   const developerPills = [
     {
       label: "Boot",
@@ -77,6 +80,13 @@ export function MetaverseDeveloperOverlay({
     {
       label: "Team",
       value: formatMetaversePlayerTeamLabel(hudSnapshot.presence.localTeamId)
+    },
+    {
+      label: "Matchmaking",
+      value:
+        hudSnapshot.combat.matchPhase === null
+          ? "free roam"
+          : hudSnapshot.combat.matchPhase.replaceAll("-", " ")
     }
   ] as const;
 
@@ -93,14 +103,20 @@ export function MetaverseDeveloperOverlay({
   return (
     <div
       className={[
-        "pointer-events-auto flex min-w-0 w-full flex-col items-end gap-2",
+        "pointer-events-auto flex min-w-0 w-full flex-col gap-2",
+        isModalLayout ? "items-stretch" : "items-end",
         className
       ]
         .filter(Boolean)
         .join(" ")}
       style={hudScaleStyle}
     >
-      <div className="flex max-w-full flex-wrap justify-end gap-2">
+      <div
+        className={[
+          "flex max-w-full flex-wrap gap-2",
+          isModalLayout ? "justify-start" : "justify-end"
+        ].join(" ")}
+      >
         {developerPills.map((pill) => (
           <MetaverseDeveloperPill
             key={pill.label}
@@ -110,7 +126,12 @@ export function MetaverseDeveloperOverlay({
         ))}
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <div
+        className={[
+          "flex flex-wrap gap-2",
+          isModalLayout ? "justify-start" : "justify-end"
+        ].join(" ")}
+      >
         <Button
           onClick={handleCopyReport}
           size="sm"

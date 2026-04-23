@@ -2,7 +2,13 @@ import { useEffectEvent } from "react";
 import type { Dispatch } from "react";
 import type {
   ExperienceId,
-  GameplayInputModeId
+  GameplayInputModeId,
+  MetaverseMatchModeId,
+  MetaverseRoomAssignmentSnapshot
+} from "@webgpu-metaverse/shared";
+import {
+  createMetaverseJoinRoomRequest as createJoinRoomRequest,
+  createMetaverseQuickJoinRoomRequest as createQuickJoinRoomRequest
 } from "@webgpu-metaverse/shared";
 
 import type { MetaverseAudioSession } from "../audio";
@@ -12,6 +18,12 @@ import type {
   MetaverseControllerSchemeId
 } from "../../input";
 import type { MetaverseControlModeId } from "../../metaverse";
+import {
+  createMetaverseRoomDirectoryClient,
+  resolveMetaverseTeamDeathmatchRoomIdDraft
+} from "../../metaverse/config/metaverse-room-network";
+import { resolveMetaverseLocalPlayerIdForUsername } from "../../metaverse/config/metaverse-presence-network";
+import { registerMetaverseWorldBundleOnServer } from "../../metaverse/world/map-bundles";
 import type { MetaverseWorldPreviewLaunchSelectionSnapshot } from "../../metaverse/world/map-bundles";
 import type {
   MetaverseShellControllerAction,
@@ -21,6 +33,13 @@ import type {
 interface MetaverseShellFlowPolicyDependencies {
   readonly audioSession: MetaverseAudioSession;
   readonly dispatch: Dispatch<MetaverseShellControllerAction>;
+  readonly metaverseLaunchPending: boolean;
+  readonly metaverseRoomIdDraft: string;
+  readonly setActiveMetaverseRoomAssignment: (
+    assignment: MetaverseRoomAssignmentSnapshot | null
+  ) => void;
+  readonly setMetaverseLaunchError: (errorMessage: string | null) => void;
+  readonly setMetaverseLaunchPending: (pending: boolean) => void;
   readonly state: MetaverseShellControllerState;
 }
 
@@ -29,7 +48,9 @@ interface MetaverseShellFlowPolicy {
     duckHuntControllerSchemeId: DuckHuntControllerSchemeId
   ) => void;
   readonly onCloseToolRequest: () => void;
-  readonly onEnterMetaverseRequest: () => void;
+  readonly onEnterMetaverseRequest: (
+    matchMode?: MetaverseMatchModeId
+  ) => void;
   readonly onExperienceLaunchRequest: (experienceId: ExperienceId) => void;
   readonly onGlobalControllerBindingPresetChange: (
     globalBindingPresetId: GlobalControllerBindingPresetId
@@ -49,20 +70,132 @@ interface MetaverseShellFlowPolicy {
   readonly onSetupRequest: () => void;
 }
 
+function resolveLaunchUsername(state: MetaverseShellControllerState): string {
+  const activeUsername = state.profile?.snapshot.username ?? state.usernameDraft;
+  const normalizedUsername = activeUsername.trim();
+
+  return normalizedUsername.length === 0 ? "Unknown" : normalizedUsername;
+}
+
+function resolveStandardMetaverseLaunchSelection(
+  matchMode: MetaverseMatchModeId
+): {
+  readonly bundleId: string;
+  readonly launchVariationId: string;
+} {
+  if (matchMode === "team-deathmatch") {
+    return Object.freeze({
+      bundleId: "deathmatch",
+      launchVariationId: "shell-team-deathmatch"
+    });
+  }
+
+  return Object.freeze({
+    bundleId: "staging-ground",
+    launchVariationId: "shell-free-roam"
+  });
+}
+
+function resolveErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
 export function useMetaverseShellFlowPolicy({
   audioSession,
   dispatch,
+  metaverseLaunchPending,
+  metaverseRoomIdDraft,
+  setActiveMetaverseRoomAssignment,
+  setMetaverseLaunchError,
+  setMetaverseLaunchPending,
   state
 }: MetaverseShellFlowPolicyDependencies): MetaverseShellFlowPolicy {
-  const onEnterMetaverseRequest = useEffectEvent(() => {
-    dispatch({
-      type: "metaverseEntryRequested"
-    });
-    dispatch({
-      type: "audioSnapshotChanged",
-      audioSnapshot: audioSession.playCue("ui-confirm")
-    });
-  });
+  const requestMetaverseRoomAssignment = useEffectEvent(
+    async (input: {
+      readonly bundleId: string;
+      readonly launchVariationId: string;
+      readonly matchMode: MetaverseMatchModeId;
+    }): Promise<MetaverseRoomAssignmentSnapshot> => {
+      const roomDirectoryClient = createMetaverseRoomDirectoryClient();
+      const playerId = resolveMetaverseLocalPlayerIdForUsername(
+        resolveLaunchUsername(state)
+      );
+
+      await registerMetaverseWorldBundleOnServer(input.bundleId);
+
+      if (input.matchMode === "team-deathmatch") {
+        const roomId = resolveMetaverseTeamDeathmatchRoomIdDraft(
+          metaverseRoomIdDraft
+        );
+
+        if (roomId === null) {
+          throw new Error("Enter a valid Team Deathmatch room code.");
+        }
+
+        return roomDirectoryClient.joinRoom(
+          roomId,
+          createJoinRoomRequest({
+            bundleId: input.bundleId,
+            launchVariationId: input.launchVariationId,
+            playerId
+          })
+        );
+      }
+
+      return roomDirectoryClient.quickJoinRoom(
+        createQuickJoinRoomRequest({
+          bundleId: input.bundleId,
+          launchVariationId: input.launchVariationId,
+          matchMode: input.matchMode,
+          playerId
+        })
+      );
+    }
+  );
+
+  const onEnterMetaverseRequest = useEffectEvent(
+    async (matchMode?: MetaverseMatchModeId) => {
+      if (metaverseLaunchPending) {
+        return;
+      }
+
+      const resolvedMatchMode = matchMode ?? state.matchMode;
+      const launchSelection =
+        resolveStandardMetaverseLaunchSelection(resolvedMatchMode);
+
+      setMetaverseLaunchPending(true);
+      setMetaverseLaunchError(null);
+      setActiveMetaverseRoomAssignment(null);
+      dispatch({
+        type: "audioSnapshotChanged",
+        audioSnapshot: audioSession.playCue("ui-confirm")
+      });
+
+      try {
+        const roomAssignment = await requestMetaverseRoomAssignment({
+          bundleId: launchSelection.bundleId,
+          launchVariationId: launchSelection.launchVariationId,
+          matchMode: resolvedMatchMode
+        });
+
+        setActiveMetaverseRoomAssignment(roomAssignment);
+        dispatch({
+          matchMode: roomAssignment.matchMode,
+          type: "metaverseEntryRequested"
+        });
+      } catch (error) {
+        setMetaverseLaunchError(
+          resolveErrorMessage(error, "Metaverse room launch failed.")
+        );
+      } finally {
+        setMetaverseLaunchPending(false);
+      }
+    }
+  );
 
   const onExperienceLaunchRequest = useEffectEvent((experienceId: ExperienceId) => {
     dispatch({
@@ -86,6 +219,9 @@ export function useMetaverseShellFlowPolicy({
   });
 
   const onSetupRequest = useEffectEvent(() => {
+    setActiveMetaverseRoomAssignment(null);
+    setMetaverseLaunchError(null);
+    setMetaverseLaunchPending(false);
     dispatch({
       type: "setupRequested"
     });
@@ -190,6 +326,9 @@ export function useMetaverseShellFlowPolicy({
   );
 
   const onOpenToolRequest = useEffectEvent(() => {
+    setActiveMetaverseRoomAssignment(null);
+    setMetaverseLaunchError(null);
+    setMetaverseLaunchPending(false);
     dispatch({
       type: "toolEditorRequested"
     });
@@ -200,6 +339,9 @@ export function useMetaverseShellFlowPolicy({
   });
 
   const onCloseToolRequest = useEffectEvent(() => {
+    setActiveMetaverseRoomAssignment(null);
+    setMetaverseLaunchError(null);
+    setMetaverseLaunchPending(false);
     dispatch({
       type: "toolEditorExited"
     });
@@ -210,15 +352,44 @@ export function useMetaverseShellFlowPolicy({
   });
 
   const onRunToolPreviewRequest = useEffectEvent(
-    (launchSelection: MetaverseWorldPreviewLaunchSelectionSnapshot) => {
-    dispatch({
-      launchSelection,
-      type: "toolPreviewRequested"
-    });
-    dispatch({
-      type: "audioSnapshotChanged",
-      audioSnapshot: audioSession.playCue("ui-confirm")
-    });
+    async (launchSelection: MetaverseWorldPreviewLaunchSelectionSnapshot) => {
+      if (metaverseLaunchPending) {
+        return;
+      }
+
+      const previewMatchMode = launchSelection.matchMode ?? "free-roam";
+      const previewLaunchVariationId =
+        launchSelection.variationId ??
+        resolveStandardMetaverseLaunchSelection(previewMatchMode)
+          .launchVariationId;
+
+      setMetaverseLaunchPending(true);
+      setMetaverseLaunchError(null);
+      setActiveMetaverseRoomAssignment(null);
+      dispatch({
+        type: "audioSnapshotChanged",
+        audioSnapshot: audioSession.playCue("ui-confirm")
+      });
+
+      try {
+        const roomAssignment = await requestMetaverseRoomAssignment({
+          bundleId: launchSelection.bundleId,
+          launchVariationId: previewLaunchVariationId,
+          matchMode: previewMatchMode
+        });
+
+        setActiveMetaverseRoomAssignment(roomAssignment);
+        dispatch({
+          launchSelection,
+          type: "toolPreviewRequested"
+        });
+      } catch (error) {
+        setMetaverseLaunchError(
+          resolveErrorMessage(error, "Metaverse preview launch failed.")
+        );
+      } finally {
+        setMetaverseLaunchPending(false);
+      }
     }
   );
 

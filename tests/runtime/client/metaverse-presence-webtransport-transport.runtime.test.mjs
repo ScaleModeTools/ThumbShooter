@@ -5,6 +5,7 @@ import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
   createMetaversePresenceRosterEvent,
+  createMetaverseRoomId,
   createMetaversePresenceWebTransportErrorMessage,
   createMetaversePresenceWebTransportServerEventMessage,
   createUsername
@@ -27,15 +28,18 @@ test("createMetaversePresenceWebTransportTransport sends explicit presence reque
     "/src/network/index.ts"
   );
   const playerId = createMetaversePlayerId("harbor-pilot-1");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
   assert.notEqual(username, null);
 
   const requests = [];
   let disposed = false;
   const transport = createMetaversePresenceWebTransportTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/presence"
     },
     {
@@ -79,8 +83,10 @@ test("createMetaversePresenceWebTransportTransport sends explicit presence reque
 
   assert.equal(requests[0]?.type, "presence-command-request");
   assert.equal(requests[0]?.command.type, "join-presence");
+  assert.equal(requests[0]?.roomId, roomId);
   assert.equal(requests[1]?.type, "presence-roster-request");
   assert.equal(requests[1]?.observerPlayerId, playerId);
+  assert.equal(requests[1]?.roomId, roomId);
   assert.equal(disposed, true);
 });
 
@@ -89,11 +95,14 @@ test("createMetaversePresenceWebTransportTransport surfaces typed error frames a
     "/src/network/index.ts"
   );
   const playerId = createMetaversePlayerId("missing-player");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
 
   const transport = createMetaversePresenceWebTransportTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/presence"
     },
     {

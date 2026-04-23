@@ -3,16 +3,16 @@ import type {
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 import type { MetaversePlayerId } from "@webgpu-metaverse/shared/metaverse/presence";
 
-import type { MetaverseAuthoritativeWorldRuntimeOwner } from "../types/metaverse-authoritative-world-runtime-owner.js";
+import type { MetaverseRoomDirectoryOwner } from "../types/metaverse-room-directory-owner.js";
 
 export class MetaverseRealtimeWorldWebTransportDatagramSession {
-  readonly #runtime: MetaverseAuthoritativeWorldRuntimeOwner;
+  readonly #roomDirectory: MetaverseRoomDirectoryOwner;
 
   #boundPlayerId: MetaversePlayerId | null = null;
   #disposed = false;
 
-  constructor(runtime: MetaverseAuthoritativeWorldRuntimeOwner) {
-    this.#runtime = runtime;
+  constructor(roomDirectory: MetaverseRoomDirectoryOwner) {
+    this.#roomDirectory = roomDirectory;
   }
 
   receiveClientDatagram(
@@ -21,7 +21,7 @@ export class MetaverseRealtimeWorldWebTransportDatagramSession {
   ): void {
     this.#assertNotDisposed();
     this.#bindPlayerIdentity(datagram.command.playerId);
-    this.#runtime.acceptWorldCommand(datagram.command, nowMs);
+    this.#roomDirectory.acceptBoundWorldCommand(datagram.command, nowMs);
   }
 
   dispose(): void {
@@ -48,13 +48,13 @@ export class MetaverseRealtimeWorldWebTransportDatagramSession {
 }
 
 export class MetaverseRealtimeWorldWebTransportDatagramAdapter {
-  readonly #runtime: MetaverseAuthoritativeWorldRuntimeOwner;
+  readonly #roomDirectory: MetaverseRoomDirectoryOwner;
 
-  constructor(runtime: MetaverseAuthoritativeWorldRuntimeOwner) {
-    this.#runtime = runtime;
+  constructor(roomDirectory: MetaverseRoomDirectoryOwner) {
+    this.#roomDirectory = roomDirectory;
   }
 
   openSession(): MetaverseRealtimeWorldWebTransportDatagramSession {
-    return new MetaverseRealtimeWorldWebTransportDatagramSession(this.#runtime);
+    return new MetaverseRealtimeWorldWebTransportDatagramSession(this.#roomDirectory);
   }
 }

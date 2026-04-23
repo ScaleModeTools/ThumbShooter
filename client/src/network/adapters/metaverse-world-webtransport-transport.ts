@@ -2,6 +2,7 @@ import type {
   MetaversePlayerId,
   MetaverseRealtimeWorldClientCommand,
   MetaverseRealtimeWorldEvent,
+  MetaverseRoomId,
   MetaverseRealtimeWorldWebTransportClientMessage,
   MetaverseRealtimeWorldWebTransportServerMessage
 } from "@webgpu-metaverse/shared";
@@ -33,6 +34,12 @@ interface MetaverseWorldWebTransportDependencies {
       readonly reason?: string;
     }): void;
   };
+}
+
+function resolveMetaverseWorldTransportRoomId(
+  roomId: MetaverseRoomId | undefined
+): MetaverseRoomId {
+  return (roomId ?? "metaverse-shell-local") as MetaverseRoomId;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,8 +93,10 @@ function parseMetaverseWorldServerMessage(
 }
 
 export function createMetaverseWorldWebTransportTransport(config: {
+  readonly roomId?: MetaverseRoomId;
   readonly webTransportUrl: string;
 }, dependencies: MetaverseWorldWebTransportDependencies = {}): MetaverseWorldTransport {
+  const roomId = resolveMetaverseWorldTransportRoomId(config.roomId);
   const channel =
     dependencies.channel ??
     new ReliableWebTransportJsonRequestChannel<
@@ -112,7 +121,8 @@ export function createMetaverseWorldWebTransportTransport(config: {
     async pollWorldSnapshot(playerId: MetaversePlayerId): Promise<MetaverseRealtimeWorldEvent> {
       const response = await channel.sendRequest(
         createMetaverseRealtimeWorldWebTransportSnapshotRequest({
-          observerPlayerId: playerId
+          observerPlayerId: playerId,
+          roomId
         })
       );
 
@@ -127,7 +137,8 @@ export function createMetaverseWorldWebTransportTransport(config: {
     ): Promise<MetaverseRealtimeWorldEvent> {
       const response = await channel.sendRequest(
         createMetaverseRealtimeWorldWebTransportCommandRequest({
-          command
+          command,
+          roomId
         })
       );
 

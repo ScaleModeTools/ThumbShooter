@@ -19,6 +19,7 @@ export function MetaverseShell() {
     <ShellStageRouter
       activeExperienceId={controller.activeExperienceId}
       activeMetaverseBundleId={controller.activeMetaverseBundleId}
+      activeMetaverseRoomAssignment={controller.activeMetaverseRoomAssignment}
       activeStep={activeStep}
       audioStatusLabel={controller.shellView.audioStatusLabel}
       bestScore={controller.profile?.snapshot.bestScore ?? 0}
@@ -32,6 +33,9 @@ export function MetaverseShell() {
       hasStoredProfile={controller.hydrationSource !== "empty"}
       inputMode={controller.inputMode}
       loginError={controller.loginError}
+      metaverseLaunchError={controller.metaverseLaunchError}
+      metaverseLaunchPending={controller.metaverseLaunchPending}
+      metaverseRoomIdDraft={controller.metaverseRoomIdDraft}
       onBestScoreChange={controller.onBestScoreChange}
       onEnterMetaverseRequest={controller.onEnterMetaverseRequest}
       permissionError={controller.permissionError}
@@ -58,6 +62,7 @@ export function MetaverseShell() {
       onRecalibrationRequest={controller.onRecalibrationRequest}
       onRetryCapabilityProbe={controller.onRetryCapabilityProbe}
       onMatchModeChange={controller.onMatchModeChange}
+      onMetaverseRoomIdDraftChange={controller.onMetaverseRoomIdDraftChange}
       onSetupRequest={controller.onSetupRequest}
       setUsernameDraft={controller.setUsernameDraft}
     />

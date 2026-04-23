@@ -4,6 +4,7 @@ import test, { after, before } from "node:test";
 import {
   createMetaversePlayerId,
   createMetaverseSyncDriverVehicleControlCommand,
+  createMetaverseRoomId,
   createMetaverseRealtimeWorldEvent,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportErrorMessage,
@@ -29,16 +30,19 @@ test("createMetaverseWorldWebTransportTransport sends explicit realtime world sn
     "/src/network/index.ts"
   );
   const playerId = createMetaversePlayerId("harbor-pilot-1");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
   const vehicleId = createMetaverseVehicleId("harbor-skiff-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
   assert.notEqual(vehicleId, null);
   assert.notEqual(username, null);
 
   const requests = [];
   const transport = createMetaverseWorldWebTransportTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/world"
     },
     {
@@ -108,6 +112,7 @@ test("createMetaverseWorldWebTransportTransport sends explicit realtime world sn
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.type, "world-snapshot-request");
   assert.equal(requests[0]?.observerPlayerId, playerId);
+  assert.equal(requests[0]?.roomId, roomId);
   assert.equal(event.type, "world-snapshot");
   assert.equal(event.world.tick.currentTick, 10);
 });
@@ -117,11 +122,14 @@ test("createMetaverseWorldWebTransportTransport surfaces typed error frames as e
     "/src/network/index.ts"
   );
   const playerId = createMetaversePlayerId("missing-player");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
 
   const transport = createMetaverseWorldWebTransportTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/world"
     },
     {
@@ -147,12 +155,15 @@ test("createMetaverseWorldWebTransportTransport sends explicit driver vehicle co
     "/src/network/index.ts"
   );
   const playerId = createMetaversePlayerId("harbor-pilot-1");
+  const roomId = createMetaverseRoomId("metaverse-room-test");
 
   assert.notEqual(playerId, null);
+  assert.notEqual(roomId, null);
 
   const requests = [];
   const transport = createMetaverseWorldWebTransportTransport(
     {
+      roomId,
       webTransportUrl: "https://example.test/metaverse/world"
     },
     {
@@ -196,6 +207,7 @@ test("createMetaverseWorldWebTransportTransport sends explicit driver vehicle co
   assert.deepEqual(
     requests[0],
     createMetaverseRealtimeWorldWebTransportCommandRequest({
+      roomId,
       command: createMetaverseSyncDriverVehicleControlCommand({
         controlIntent: {
           boost: true,

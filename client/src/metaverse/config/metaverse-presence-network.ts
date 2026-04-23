@@ -16,6 +16,10 @@ import {
   type MetaversePresenceClientConfig
 } from "@/network";
 import { createWebTransportHttpFallbackInvoker } from "@/network/adapters/webtransport-http-fallback";
+import {
+  defaultMetaverseNetworkRoomId,
+  metaverseServerOrigin
+} from "./metaverse-world-network";
 
 export interface MetaverseLocalPlayerIdentity {
   readonly characterId: string;
@@ -92,22 +96,6 @@ function resolveMetaverseLocalPlayerId(username: string): MetaversePlayerId {
   storeMetaverseLocalPlayerId(playerId);
 
   return playerId;
-}
-
-function resolveMetaverseServerOrigin(): string {
-  const configuredOrigin = import.meta.env?.VITE_SERVER_ORIGIN?.trim();
-
-  if (configuredOrigin !== undefined && configuredOrigin.length > 0) {
-    return configuredOrigin;
-  }
-
-  const browserOrigin = globalThis.window?.location.origin;
-
-  if (browserOrigin === undefined) {
-    return "http://127.0.0.1:3210";
-  }
-
-  return browserOrigin;
 }
 
 function resolveMetaverseRealtimeTransportMode():
@@ -190,15 +178,27 @@ function isLocalhostWebTransportUrl(rawUrl: string | null): boolean {
   }
 }
 
-export const metaversePresencePath = "/metaverse/presence" as const;
+export function resolveMetaversePresencePath(roomId = defaultMetaverseNetworkRoomId): string {
+  return `/metaverse/rooms/${roomId}/presence`;
+}
 
-export const metaversePresenceClientConfig = {
-  defaultPollIntervalMs: createMilliseconds(150),
-  presencePath: metaversePresencePath,
-  serverOrigin: resolveMetaverseServerOrigin()
-} as const satisfies MetaversePresenceClientConfig;
+export function createMetaversePresenceClientConfig(
+  roomId = defaultMetaverseNetworkRoomId
+): MetaversePresenceClientConfig {
+  return Object.freeze({
+    defaultPollIntervalMs: createMilliseconds(150),
+    presencePath: resolveMetaversePresencePath(roomId),
+    roomId,
+    serverOrigin: metaverseServerOrigin
+  });
+}
 
-export function createMetaversePresenceClient(): MetaversePresenceClient {
+export const metaversePresenceClientConfig = createMetaversePresenceClientConfig();
+
+export function createMetaversePresenceClient(
+  roomId = defaultMetaverseNetworkRoomId
+): MetaversePresenceClient {
+  const presenceClientConfig = createMetaversePresenceClientConfig(roomId);
   const preferredTransportMode = resolveMetaverseRealtimeTransportMode();
   const localdevWebTransportBootStatus = resolveLocaldevWebTransportBootStatus();
   const localdevWebTransportBootError = resolveLocaldevWebTransportBootError();
@@ -216,12 +216,13 @@ export function createMetaversePresenceClient(): MetaversePresenceClient {
     : null;
 
   const httpTransport = createMetaversePresenceHttpTransport(
-    metaversePresenceClientConfig
+    presenceClientConfig
   );
   const transportFailover = shouldUseWebTransport
     ? createWebTransportHttpFallbackInvoker(
         createMetaversePresenceWebTransportTransport(
           {
+            roomId,
             webTransportUrl
           },
           webTransportFactory === null
@@ -234,7 +235,7 @@ export function createMetaversePresenceClient(): MetaversePresenceClient {
       )
     : null;
 
-  return new MetaversePresenceClient(metaversePresenceClientConfig, {
+  return new MetaversePresenceClient(presenceClientConfig, {
     resolveReliableTransportStatusSnapshot: () => {
       if (preferredTransportMode !== "webtransport-preferred") {
         return createRealtimeReliableTransportStatusSnapshot({
@@ -359,4 +360,10 @@ export function createMetaverseLocalPlayerIdentity(
     playerId,
     username: resolvedUsername
   });
+}
+
+export function resolveMetaverseLocalPlayerIdForUsername(
+  username: string
+): MetaversePlayerId {
+  return resolveMetaverseLocalPlayerId(username);
 }

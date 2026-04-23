@@ -4,26 +4,44 @@ import test from "node:test";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMetaversePresenceWebTransportCommandRequest,
   createMetaversePresenceWebTransportRosterRequest,
   createUsername
 } from "@webgpu-metaverse/shared";
 
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
 import { MetaversePresenceWebTransportAdapter } from "../../../server/dist/metaverse/adapters/metaverse-presence-webtransport-adapter.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
+
+function createPresenceSessionContext(playerId, nowMs = 0) {
+  const roomDirectory = new MetaverseRoomDirectory();
+  const roomAssignment = roomDirectory.quickJoinRoom(
+    createMetaverseQuickJoinRoomRequest({
+      matchMode: "free-roam",
+      playerId
+    }),
+    nowMs
+  );
+
+  return {
+    adapter: new MetaversePresenceWebTransportAdapter(roomDirectory),
+    roomAssignment
+  };
+}
 
 test("MetaversePresenceWebTransportAdapter serves presence commands and roster reads through one session owner", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaversePresenceWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
+  const { adapter, roomAssignment } = createPresenceSessionContext(playerId);
+  const session = adapter.openSession();
+
   const joinResponse = session.receiveClientMessage(
     createMetaversePresenceWebTransportCommandRequest({
+      roomId: roomAssignment.roomId,
       command: createMetaverseJoinPresenceCommand({
         characterId: "mesh2motion-humanoid-v1",
         playerId,
@@ -46,7 +64,8 @@ test("MetaversePresenceWebTransportAdapter serves presence commands and roster r
   );
   const rosterResponse = session.receiveClientMessage(
     createMetaversePresenceWebTransportRosterRequest({
-      observerPlayerId: playerId
+      observerPlayerId: playerId,
+      roomId: roomAssignment.roomId
     }),
     50
   );
@@ -62,17 +81,17 @@ test("MetaversePresenceWebTransportAdapter serves presence commands and roster r
 });
 
 test("MetaversePresenceWebTransportAdapter returns typed error frames for unknown observers", () => {
-  const adapter = new MetaversePresenceWebTransportAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
-  );
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("missing-player");
 
   assert.notEqual(playerId, null);
 
+  const { adapter, roomAssignment } = createPresenceSessionContext(playerId);
+  const session = adapter.openSession();
+
   const response = session.receiveClientMessage(
     createMetaversePresenceWebTransportRosterRequest({
-      observerPlayerId: playerId
+      observerPlayerId: playerId,
+      roomId: roomAssignment.roomId
     }),
     0
   );

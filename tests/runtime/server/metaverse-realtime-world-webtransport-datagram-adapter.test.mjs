@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMetaverseRealtimeWorldWebTransportDriverVehicleControlDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerLookIntentDatagram,
   createMetaverseRealtimeWorldWebTransportPlayerTraversalIntentDatagram,
@@ -21,7 +22,7 @@ import {
   authoredWaterBaySkiffYawRadians
 } from "../metaverse-authored-world-test-fixtures.mjs";
 import { MetaverseRealtimeWorldWebTransportDatagramAdapter } from "../../../server/dist/metaverse/adapters/metaverse-realtime-world-webtransport-datagram-adapter.js";
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
 
 function requireValue(value, label) {
   assert.notEqual(value, null, `${label} should resolve`);
@@ -34,22 +35,48 @@ function readPrimaryPlayerActiveBodySnapshot(worldSnapshot) {
   );
 }
 
-test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards driver-control datagrams into authoritative world state", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
-    playerInactivityTimeoutMs: createMilliseconds(5_000),
-    tickIntervalMs: createMilliseconds(100)
-  });
-  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
+function createDatagramTestContext(
+  playerId,
+  {
+    nowMs = 0,
+    roomDirectory = new MetaverseRoomDirectory()
+  } = {}
+) {
+  const roomAssignment = roomDirectory.quickJoinRoom(
+    createMetaverseQuickJoinRoomRequest({
+      matchMode: "free-roam",
+      playerId
+    }),
+    nowMs
   );
-  const session = adapter.openSession();
+
+  return {
+    adapter: new MetaverseRealtimeWorldWebTransportDatagramAdapter(roomDirectory),
+    roomAssignment,
+    roomDirectory
+  };
+}
+
+test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards driver-control datagrams into authoritative world state", () => {
+  const roomDirectory = new MetaverseRoomDirectory({
+    runtimeConfig: {
+      playerInactivityTimeoutMs: createMilliseconds(5_000),
+      tickIntervalMs: createMilliseconds(100)
+    }
+  });
   const playerId = requireValue(
     createMetaversePlayerId("harbor-pilot-datagram"),
     "playerId"
   );
   const username = requireValue(createUsername("Harbor Pilot"), "username");
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment } = createDatagramTestContext(playerId, {
+    roomDirectory
+  });
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -92,9 +119,13 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards driver-control 
     }),
     100
   );
-  runtime.advanceToTime(1_000);
+  roomDirectory.advanceToTime(1_000);
 
-  const worldSnapshot = runtime.readWorldSnapshot(1_000, playerId);
+  const worldSnapshot = roomDirectory.readWorldSnapshot(
+    roomAssignment.roomId,
+    1_000,
+    playerId
+  );
   const activeBodySnapshot = readPrimaryPlayerActiveBodySnapshot(worldSnapshot);
 
   assert.equal(worldSnapshot.tick.currentTick, 10);
@@ -107,7 +138,7 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards driver-control 
 
 test("MetaverseRealtimeWorldWebTransportDatagramAdapter rejects datagrams after disposal", () => {
   const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
+    new MetaverseRoomDirectory()
   );
   const session = adapter.openSession();
   const playerId = requireValue(
@@ -140,21 +171,25 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter rejects datagrams after 
 });
 
 test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards traversal-intent datagrams into authoritative world state", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
-    playerInactivityTimeoutMs: createMilliseconds(5_000),
-    tickIntervalMs: createMilliseconds(100)
+  const roomDirectory = new MetaverseRoomDirectory({
+    runtimeConfig: {
+      playerInactivityTimeoutMs: createMilliseconds(5_000),
+      tickIntervalMs: createMilliseconds(100)
+    }
   });
-  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
-  const session = adapter.openSession();
   const playerId = requireValue(
     createMetaversePlayerId("harbor-pilot-traversal-datagram"),
     "playerId"
   );
   const username = requireValue(createUsername("Harbor Pilot"), "username");
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment } = createDatagramTestContext(playerId, {
+    roomDirectory
+  });
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -198,9 +233,13 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards traversal-inten
     }),
     0
   );
-  runtime.advanceToTime(200);
+  roomDirectory.advanceToTime(200);
 
-  const worldSnapshot = runtime.readWorldSnapshot(200, playerId);
+  const worldSnapshot = roomDirectory.readWorldSnapshot(
+    roomAssignment.roomId,
+    200,
+    playerId
+  );
   const activeBodySnapshot = readPrimaryPlayerActiveBodySnapshot(worldSnapshot);
 
   assert.equal(worldSnapshot.observerPlayer?.lastProcessedTraversalSequence, 2);
@@ -211,21 +250,25 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards traversal-inten
 });
 
 test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards player-look datagrams into authoritative world state", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
-    playerInactivityTimeoutMs: createMilliseconds(5_000),
-    tickIntervalMs: createMilliseconds(100)
+  const roomDirectory = new MetaverseRoomDirectory({
+    runtimeConfig: {
+      playerInactivityTimeoutMs: createMilliseconds(5_000),
+      tickIntervalMs: createMilliseconds(100)
+    }
   });
-  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
-  const session = adapter.openSession();
   const playerId = requireValue(
     createMetaversePlayerId("harbor-pilot-look-datagram"),
     "playerId"
   );
   const username = requireValue(createUsername("Harbor Pilot"), "username");
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment } = createDatagramTestContext(playerId, {
+    roomDirectory
+  });
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -265,7 +308,11 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards player-look dat
     50
   );
 
-  const worldSnapshot = runtime.readWorldSnapshot(50, playerId);
+  const worldSnapshot = roomDirectory.readWorldSnapshot(
+    roomAssignment.roomId,
+    50,
+    playerId
+  );
   const activeBodySnapshot = readPrimaryPlayerActiveBodySnapshot(worldSnapshot);
 
   assert.equal(worldSnapshot.players[0]?.look.pitchRadians, -0.3);
@@ -274,11 +321,7 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter forwards player-look dat
 });
 
 test("MetaverseRealtimeWorldWebTransportDatagramAdapter binds the session to the first datagram player identity", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseRealtimeWorldWebTransportDatagramAdapter(
-    runtime
-  );
-  const session = adapter.openSession();
+  const roomDirectory = new MetaverseRoomDirectory();
   const firstPlayerId = requireValue(
     createMetaversePlayerId("first-harbor-pilot"),
     "first playerId"
@@ -292,7 +335,13 @@ test("MetaverseRealtimeWorldWebTransportDatagramAdapter binds the session to the
     "first username"
   );
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment } = createDatagramTestContext(firstPlayerId, {
+    roomDirectory
+  });
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId: firstPlayerId,

@@ -1,9 +1,12 @@
 import { useEffect, useReducer, useState } from "react";
 
+import type { MetaverseRoomAssignmentSnapshot } from "@webgpu-metaverse/shared";
+
 import { BrowserAudioSession } from "../../audio";
 import type { GameplaySignal } from "../../experiences/duck-hunt";
 import { resolveControllerActionMatrix } from "../../input";
 import { WebGpuMetaverseCapabilityProbe } from "../../metaverse/classes/webgpu-metaverse-capability-probe";
+import { createSuggestedMetaverseTeamDeathmatchRoomIdDraft } from "../../metaverse/config/metaverse-room-network";
 import { applyStoredMetaverseWorldBundleOverrides } from "../../metaverse/world/bundle-registry";
 import { LocalProfileStorage } from "../../network";
 import { WebcamPermissionGateway, resolveShellNavigation } from "../../navigation";
@@ -32,9 +35,18 @@ function readBrowserStorage(): Storage | null {
 
 export function useMetaverseShellController(): MetaverseShellController {
   const [browserStorage] = useState(() => readBrowserStorage());
+  const [activeMetaverseRoomAssignment, setActiveMetaverseRoomAssignment] =
+    useState<MetaverseRoomAssignmentSnapshot | null>(null);
   const [profileStorage] = useState(() => new LocalProfileStorage());
   const [capabilityProbe] = useState(() => new WebGpuMetaverseCapabilityProbe());
   const [handTrackingRuntime] = useState(() => new HandTrackingRuntime());
+  const [metaverseLaunchError, setMetaverseLaunchError] = useState<string | null>(
+    null
+  );
+  const [metaverseLaunchPending, setMetaverseLaunchPending] = useState(false);
+  const [metaverseRoomIdDraft, setMetaverseRoomIdDraft] = useState(() =>
+    createSuggestedMetaverseTeamDeathmatchRoomIdDraft()
+  );
   const [mouseGameplayInput] = useState(() => new MouseGameplayInput());
   const [permissionGateway] = useState(() => new WebcamPermissionGateway());
   const [audioSession] = useState(
@@ -104,6 +116,11 @@ export function useMetaverseShellController(): MetaverseShellController {
   const flowPolicy = useMetaverseShellFlowPolicy({
     audioSession,
     dispatch,
+    metaverseLaunchPending,
+    metaverseRoomIdDraft,
+    setActiveMetaverseRoomAssignment,
+    setMetaverseLaunchError,
+    setMetaverseLaunchPending,
     state
   });
   const profilePolicy = useMetaverseShellProfilePolicy({
@@ -140,6 +157,7 @@ export function useMetaverseShellController(): MetaverseShellController {
     activeExperienceId: state.activeExperienceId,
     activeMetaverseBundleId: state.activeMetaverseBundleId,
     activeMetaverseLaunchVariationId: state.activeMetaverseLaunchVariationId,
+    activeMetaverseRoomAssignment,
     capabilityStatus: state.capabilitySnapshot.status,
     coopRoomIdDraft: state.coopRoomIdDraft,
     controllerActionMatrix,
@@ -152,6 +170,9 @@ export function useMetaverseShellController(): MetaverseShellController {
     isMenuOpen: state.isMenuOpen,
     loginError: state.loginError,
     metaverseControlMode: state.metaverseControlMode,
+    metaverseLaunchError,
+    metaverseLaunchPending,
+    metaverseRoomIdDraft,
     navigationSnapshot,
     permissionError: state.permissionError,
     permissionState: state.permissionState,
@@ -200,10 +221,15 @@ export function useMetaverseShellController(): MetaverseShellController {
     onReturnToMetaverseRequest: flowPolicy.onReturnToMetaverseRequest,
     onRetryCapabilityProbe: entryPolicy.onRetryCapabilityProbe,
     onMatchModeChange: (matchMode) => {
+      setMetaverseLaunchError(null);
       dispatch({
         matchMode,
         type: "matchModeChanged"
       });
+    },
+    onMetaverseRoomIdDraftChange: (nextMetaverseRoomIdDraft) => {
+      setMetaverseLaunchError(null);
+      setMetaverseRoomIdDraft(nextMetaverseRoomIdDraft);
     },
     onSetupRequest: flowPolicy.onSetupRequest,
     onSfxVolumeChange: profilePolicy.onSfxVolumeChange

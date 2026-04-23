@@ -6,6 +6,7 @@ import type {
   MetaversePresenceRosterEvent,
   MetaverseSyncPresenceCommand
 } from "./metaverse-presence-contract.js";
+import type { MetaverseRoomId } from "./metaverse-room-contract.js";
 import {
   createMetaverseJoinPresenceCommand,
   createMetaverseLeavePresenceCommand,
@@ -30,20 +31,24 @@ export type MetaversePresenceWebTransportServerMessageType =
 
 export interface MetaversePresenceWebTransportRosterRequest {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
   readonly type: "presence-roster-request";
 }
 
 export interface MetaversePresenceWebTransportRosterRequestInput {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
 }
 
 export interface MetaversePresenceWebTransportCommandRequest {
   readonly command: MetaversePresenceCommand;
+  readonly roomId: MetaverseRoomId;
   readonly type: "presence-command-request";
 }
 
 export interface MetaversePresenceWebTransportCommandRequestInput {
   readonly command: MetaversePresenceCommand;
+  readonly roomId: MetaverseRoomId;
 }
 
 export interface MetaversePresenceWebTransportServerEventMessage {
@@ -94,6 +99,7 @@ export function createMetaversePresenceWebTransportRosterRequest(
 ): MetaversePresenceWebTransportRosterRequest {
   return Object.freeze({
     observerPlayerId: input.observerPlayerId,
+    roomId: input.roomId,
     type: "presence-roster-request"
   });
 }
@@ -103,6 +109,7 @@ export function createMetaversePresenceWebTransportCommandRequest(
 ): MetaversePresenceWebTransportCommandRequest {
   return Object.freeze({
     command: normalizePresenceCommand(input.command),
+    roomId: input.roomId,
     type: "presence-command-request"
   });
 }

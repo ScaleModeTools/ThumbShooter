@@ -18,6 +18,7 @@ export { CoopRoomClient } from "./classes/coop-room-client";
 export { CoopRoomDirectoryClient } from "./classes/coop-room-directory-client";
 export { profileStoragePlan } from "./config/profile-storage";
 export { LocalProfileStorage } from "./classes/local-profile-storage";
+export { MetaverseRoomDirectoryClient } from "./classes/metaverse-room-directory-client";
 export {
   coopRoomClientStates,
   coopRoomSnapshotPaths,
@@ -47,6 +48,10 @@ export type { ProfileStoragePlan } from "./types/profile-storage";
 export type {
   CoopRoomDirectoryClientConfig
 } from "./types/coop-room-directory";
+export type {
+  MetaverseRoomDirectoryClientConfig,
+  MetaverseRoomDirectoryClientRuntime
+} from "./types/metaverse-room-directory";
 export type {
   CoopRoomClientConfig,
   CoopRoomClientTelemetrySnapshot,

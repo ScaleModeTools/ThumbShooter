@@ -1,5 +1,6 @@
 export * from "./metaverse-player-team.js";
 export * from "./metaverse-match-mode.js";
+export * from "./metaverse-room-contract.js";
 export * from "./metaverse-combat.js";
 export * from "./traversal/index.js";
 export * from "./world/index.js";

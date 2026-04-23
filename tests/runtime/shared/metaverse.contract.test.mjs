@@ -19,6 +19,7 @@ import {
   createMetaversePlayerId,
   createMetaversePresenceMountedOccupancySnapshot,
   createMetaversePresenceRosterSnapshot,
+  createMetaverseRoomId,
   createMetaversePresenceWebTransportCommandRequest,
   createMetaversePresenceWebTransportRosterRequest,
   createMetaversePresenceWebTransportServerEventMessage,
@@ -1366,6 +1367,7 @@ test("shared metaverse mounted occupancy identity keys stay aligned across comma
 
 test("webtransport shared contracts wrap presence, world, and Duck Hunt room messages with explicit domain names", () => {
   const metaversePlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const metaverseRoomId = createMetaverseRoomId("metaverse-room-test");
   const metaverseVehicleId = createMetaverseVehicleId("harbor-skiff-1");
   const coopPlayerId = createCoopPlayerId("coop-pilot-1");
   const coopRoomId = createCoopRoomId("co-op-harbor");
@@ -1373,6 +1375,7 @@ test("webtransport shared contracts wrap presence, world, and Duck Hunt room mes
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(metaversePlayerId, null);
+  assert.notEqual(metaverseRoomId, null);
   assert.notEqual(metaverseVehicleId, null);
   assert.notEqual(coopPlayerId, null);
   assert.notEqual(coopRoomId, null);
@@ -1480,6 +1483,7 @@ test("webtransport shared contracts wrap presence, world, and Duck Hunt room mes
   });
 
   const presenceCommandRequest = createMetaversePresenceWebTransportCommandRequest({
+    roomId: metaverseRoomId,
     command: createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId: metaversePlayerId,
@@ -1495,11 +1499,13 @@ test("webtransport shared contracts wrap presence, world, and Duck Hunt room mes
     })
   });
   const presenceRosterRequest = createMetaversePresenceWebTransportRosterRequest({
-    observerPlayerId: metaversePlayerId
+    observerPlayerId: metaversePlayerId,
+    roomId: metaverseRoomId
   });
   const worldSnapshotRequest =
     createMetaverseRealtimeWorldWebTransportSnapshotRequest({
-      observerPlayerId: metaversePlayerId
+      observerPlayerId: metaversePlayerId,
+      roomId: metaverseRoomId
     });
   const coopCommandRequest = createDuckHuntCoopRoomWebTransportCommandRequest({
     command: createCoopJoinRoomCommand({
@@ -1519,10 +1525,13 @@ test("webtransport shared contracts wrap presence, world, and Duck Hunt room mes
   assert.ok(Object.isFrozen(presenceServerMessage));
   assert.equal(presenceCommandRequest.type, "presence-command-request");
   assert.equal(presenceCommandRequest.command.type, "join-presence");
+  assert.equal(presenceCommandRequest.roomId, metaverseRoomId);
   assert.equal(presenceRosterRequest.type, "presence-roster-request");
+  assert.equal(presenceRosterRequest.roomId, metaverseRoomId);
   assert.equal(worldServerMessage.type, "world-server-event");
   assert.equal(worldServerMessage.event.type, "world-snapshot");
   assert.equal(worldSnapshotRequest.type, "world-snapshot-request");
+  assert.equal(worldSnapshotRequest.roomId, metaverseRoomId);
   assert.equal(coopServerMessage.type, "coop-room-server-event");
   assert.equal(coopServerMessage.event.type, "room-snapshot");
   assert.equal(coopCommandRequest.type, "coop-room-command-request");

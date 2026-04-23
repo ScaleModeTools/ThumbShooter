@@ -4,7 +4,6 @@ import test from "node:test";
 import { stagingGroundMapBundle } from "@webgpu-metaverse/shared/metaverse/world";
 
 import { MetaverseWorldPreviewHttpAdapter } from "../../../../server/dist/metaverse/adapters/metaverse-world-preview-http-adapter.js";
-import { MetaverseAuthoritativeWorldRuntimeHost } from "../../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime-host.js";
 import { createMetaverseAuthoritativeWorldBundleInputs } from "../../../../server/dist/metaverse/world/map-bundles/metaverse-authoritative-world-bundle-inputs.js";
 import {
   loadAuthoritativeMetaverseMapBundle,
@@ -109,9 +108,8 @@ test("authoritative preview registration derives spawn and water inputs from the
   );
 });
 
-test("MetaverseWorldPreviewHttpAdapter registers and activates preview bundles on the authoritative host", async () => {
-  const host = new MetaverseAuthoritativeWorldRuntimeHost();
-  const adapter = new MetaverseWorldPreviewHttpAdapter(host);
+test("MetaverseWorldPreviewHttpAdapter registers preview bundles for later room launches", async () => {
+  const adapter = new MetaverseWorldPreviewHttpAdapter();
   const previewBundle = createPreviewBundle("server-preview-http-adapter-test");
   const response = createResponseCapture();
   const handled = await adapter.handleRequest(
@@ -128,7 +126,6 @@ test("MetaverseWorldPreviewHttpAdapter registers and activates preview bundles o
   assert.equal(response.json.status, "registered");
   assert.equal(response.json.bundleId, "server-preview-http-adapter-test");
   assert.equal(response.json.sourceBundleId, "staging-ground");
-  assert.equal(host.activeBundleId, "server-preview-http-adapter-test");
   assert.equal(
     loadAuthoritativeMetaverseMapBundle("server-preview-http-adapter-test").bundle
       .mapId,

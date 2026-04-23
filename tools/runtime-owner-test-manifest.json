@@ -504,6 +504,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/network/classes/metaverse-room-directory-client.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-room-directory-client.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/experiences/duck-hunt/classes/coop-room-directory.ts",
       "testPaths": [
         "tests/runtime/server/coop-room-directory.test.mjs"
@@ -531,6 +537,24 @@
       "ownerPath": "server/src/experiences/duck-hunt/adapters/duck-hunt-coop-room-webtransport-datagram-adapter.ts",
       "testPaths": [
         "tests/runtime/server/duck-hunt-coop-room-webtransport-datagram-adapter.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/classes/metaverse-room-directory.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-room-directory.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/classes/metaverse-room-runtime.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-room-runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/adapters/metaverse-room-http-adapter.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-room-http-adapter.test.mjs"
       ]
     },
     {

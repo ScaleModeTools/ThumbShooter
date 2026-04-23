@@ -5,6 +5,7 @@ import {
   createMetaverseJoinPresenceCommand,
   createMilliseconds,
   createMetaversePlayerId,
+  createMetaverseQuickJoinRoomRequest,
   createMetaverseRealtimeWorldWebTransportCommandRequest,
   createMetaverseRealtimeWorldWebTransportSnapshotRequest,
   createMetaverseSyncDriverVehicleControlCommand,
@@ -13,7 +14,7 @@ import {
 } from "@webgpu-metaverse/shared";
 
 import { MetaverseWorldWebTransportAdapter } from "../../../server/dist/metaverse/adapters/metaverse-world-webtransport-adapter.js";
-import { MetaverseAuthoritativeWorldRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-world-runtime.js";
+import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
 
 function createDeferred() {
   let resolve = () => {};
@@ -36,17 +37,40 @@ function flushAsyncWork() {
   });
 }
 
+function createWorldSessionContext(
+  playerId,
+  {
+    nowMs = 0,
+    roomDirectory = new MetaverseRoomDirectory()
+  } = {}
+) {
+  const roomAssignment = roomDirectory.quickJoinRoom(
+    createMetaverseQuickJoinRoomRequest({
+      matchMode: "free-roam",
+      playerId
+    }),
+    nowMs
+  );
+
+  return {
+    adapter: new MetaverseWorldWebTransportAdapter(roomDirectory),
+    roomAssignment,
+    roomDirectory
+  };
+}
+
 test("MetaverseWorldWebTransportAdapter serves authoritative world snapshots through one session owner", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldSessionContext(playerId);
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -73,7 +97,8 @@ test("MetaverseWorldWebTransportAdapter serves authoritative world snapshots thr
 
   const response = session.receiveClientMessage(
     createMetaverseRealtimeWorldWebTransportSnapshotRequest({
-      observerPlayerId: playerId
+      observerPlayerId: playerId,
+      roomId: roomAssignment.roomId
     }),
     100
   );
@@ -84,16 +109,17 @@ test("MetaverseWorldWebTransportAdapter serves authoritative world snapshots thr
 });
 
 test("MetaverseWorldWebTransportAdapter accepts typed driver vehicle control requests", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldSessionContext(playerId);
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -120,6 +146,7 @@ test("MetaverseWorldWebTransportAdapter accepts typed driver vehicle control req
 
   const response = session.receiveClientMessage(
     createMetaverseRealtimeWorldWebTransportCommandRequest({
+      roomId: roomAssignment.roomId,
       command: createMetaverseSyncDriverVehicleControlCommand({
         controlIntent: {
           boost: false,
@@ -140,16 +167,17 @@ test("MetaverseWorldWebTransportAdapter accepts typed driver vehicle control req
 });
 
 test("MetaverseWorldWebTransportAdapter accepts typed mounted occupancy requests", () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldSessionContext(playerId);
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -168,6 +196,7 @@ test("MetaverseWorldWebTransportAdapter accepts typed mounted occupancy requests
 
   const response = session.receiveClientMessage(
     createMetaverseRealtimeWorldWebTransportCommandRequest({
+      roomId: roomAssignment.roomId,
       command: createMetaverseSyncMountedOccupancyCommand({
         mountedOccupancy: {
           environmentAssetId: "metaverse-hub-skiff-v1",
@@ -191,17 +220,17 @@ test("MetaverseWorldWebTransportAdapter accepts typed mounted occupancy requests
 });
 
 test("MetaverseWorldWebTransportAdapter returns typed error frames for unknown observers", () => {
-  const adapter = new MetaverseWorldWebTransportAdapter(
-    new MetaverseAuthoritativeWorldRuntime()
-  );
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("missing-player");
 
   assert.notEqual(playerId, null);
 
+  const { adapter, roomAssignment } = createWorldSessionContext(playerId);
+  const session = adapter.openSession();
+
   const response = session.receiveClientMessage(
     createMetaverseRealtimeWorldWebTransportSnapshotRequest({
-      observerPlayerId: playerId
+      observerPlayerId: playerId,
+      roomId: roomAssignment.roomId
     }),
     0
   );
@@ -211,9 +240,6 @@ test("MetaverseWorldWebTransportAdapter returns typed error frames for unknown o
 });
 
 test("MetaverseWorldWebTransportAdapter keeps a persistent snapshot subscription alive and pushes newer snapshots", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime();
-  const adapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("stream-harbor-pilot");
   const username = createUsername("Stream Harbor Pilot");
   const writes = [];
@@ -222,7 +248,11 @@ test("MetaverseWorldWebTransportAdapter keeps a persistent snapshot subscription
   assert.notEqual(playerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment, roomDirectory } = createWorldSessionContext(playerId);
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -243,6 +273,7 @@ test("MetaverseWorldWebTransportAdapter keeps a persistent snapshot subscription
   const streamPromise = session.handleClientStream(
     {
       observerPlayerId: playerId,
+      roomId: roomAssignment.roomId,
       type: "world-snapshot-subscribe"
     },
     {
@@ -260,7 +291,7 @@ test("MetaverseWorldWebTransportAdapter keeps a persistent snapshot subscription
   assert.equal(writes[0]?.type, "world-server-event");
   assert.equal(writes[0]?.event.world.tick.currentTick, 0);
 
-  runtime.advanceToTime(100);
+  roomDirectory.advanceToTime(100);
   adapter.publishWorldSnapshots(100);
   await flushAsyncWork();
 
@@ -273,11 +304,11 @@ test("MetaverseWorldWebTransportAdapter keeps a persistent snapshot subscription
 });
 
 test("MetaverseWorldWebTransportAdapter binds stream subscriptions to one player identity and keeps only the latest buffered publish for slow subscribers", async () => {
-  const runtime = new MetaverseAuthoritativeWorldRuntime({
-    tickIntervalMs: createMilliseconds(50)
+  const roomDirectory = new MetaverseRoomDirectory({
+    runtimeConfig: {
+      tickIntervalMs: createMilliseconds(50)
+    }
   });
-  const adapter = new MetaverseWorldWebTransportAdapter(runtime);
-  const session = adapter.openSession();
   const playerId = createMetaversePlayerId("latest-wins-harbor-pilot");
   const otherPlayerId = createMetaversePlayerId("other-harbor-pilot");
   const username = createUsername("Latest Wins Pilot");
@@ -290,7 +321,13 @@ test("MetaverseWorldWebTransportAdapter binds stream subscriptions to one player
   assert.notEqual(otherPlayerId, null);
   assert.notEqual(username, null);
 
-  runtime.acceptPresenceCommand(
+  const { adapter, roomAssignment } = createWorldSessionContext(playerId, {
+    roomDirectory
+  });
+  const session = adapter.openSession();
+
+  roomDirectory.acceptPresenceCommand(
+    roomAssignment.roomId,
     createMetaverseJoinPresenceCommand({
       characterId: "mesh2motion-humanoid-v1",
       playerId,
@@ -311,6 +348,7 @@ test("MetaverseWorldWebTransportAdapter binds stream subscriptions to one player
   const streamPromise = session.handleClientStream(
     {
       observerPlayerId: playerId,
+      roomId: roomAssignment.roomId,
       type: "world-snapshot-subscribe"
     },
     {
@@ -331,7 +369,8 @@ test("MetaverseWorldWebTransportAdapter binds stream subscriptions to one player
 
   const identityMismatchResponse = session.receiveClientMessage(
     createMetaverseRealtimeWorldWebTransportSnapshotRequest({
-      observerPlayerId: otherPlayerId
+      observerPlayerId: otherPlayerId,
+      roomId: roomAssignment.roomId
     }),
     0
   );
@@ -339,9 +378,9 @@ test("MetaverseWorldWebTransportAdapter binds stream subscriptions to one player
   assert.equal(identityMismatchResponse.type, "world-error");
   assert.match(identityMismatchResponse.message, /already bound/);
 
-  runtime.advanceToTime(50);
+  roomDirectory.advanceToTime(50);
   adapter.publishWorldSnapshots(50);
-  runtime.advanceToTime(100);
+  roomDirectory.advanceToTime(100);
   adapter.publishWorldSnapshots(100);
   await flushAsyncWork();
 

@@ -4,7 +4,6 @@ import type {
 } from "node:http";
 
 import { registerAuthoritativeMetaverseMapBundlePreview } from "../world/map-bundles/load-authoritative-metaverse-map-bundle.js";
-import { MetaverseAuthoritativeWorldRuntimeHost } from "../classes/metaverse-authoritative-world-runtime-host.js";
 
 function writeCorsHeaders(
   response: ServerResponse<IncomingMessage>
@@ -101,12 +100,6 @@ function isMetaverseWorldPreviewBundlePath(pathname: string): boolean {
 }
 
 export class MetaverseWorldPreviewHttpAdapter {
-  readonly #runtimeHost: MetaverseAuthoritativeWorldRuntimeHost;
-
-  constructor(runtimeHost: MetaverseAuthoritativeWorldRuntimeHost) {
-    this.#runtimeHost = runtimeHost;
-  }
-
   async handleRequest(
     request: IncomingMessage,
     response: ServerResponse<IncomingMessage>,
@@ -135,9 +128,6 @@ export class MetaverseWorldPreviewHttpAdapter {
           "request.sourceBundleId"
         )
       );
-
-      this.#runtimeHost.activateBundle(previewEntry.bundleId);
-      this.#runtimeHost.advanceToTime(Date.now());
 
       writeJson(response, 200, {
         bundleId: previewEntry.bundleId,

@@ -307,7 +307,13 @@ function parseMetaversePresenceClientMessage(
           "observerPlayerId"
         ) as Parameters<
           typeof createMetaversePresenceWebTransportRosterRequest
-        >[0]["observerPlayerId"]
+        >[0]["observerPlayerId"],
+        roomId: readNonEmptyStringField(
+          payload.roomId,
+          "roomId"
+        ) as Parameters<
+          typeof createMetaversePresenceWebTransportRosterRequest
+        >[0]["roomId"]
       });
     case "presence-command-request":
       if (!isRecord(payload.command)) {
@@ -317,7 +323,13 @@ function parseMetaversePresenceClientMessage(
       return createMetaversePresenceWebTransportCommandRequest({
         command: payload.command as unknown as Parameters<
           typeof createMetaversePresenceWebTransportCommandRequest
-        >[0]["command"]
+        >[0]["command"],
+        roomId: readNonEmptyStringField(
+          payload.roomId,
+          "roomId"
+        ) as Parameters<
+          typeof createMetaversePresenceWebTransportCommandRequest
+        >[0]["roomId"]
       });
     default:
       throw new Error(
@@ -343,7 +355,13 @@ function parseMetaverseWorldClientMessage(
           "observerPlayerId"
         ) as Parameters<
           typeof createMetaverseRealtimeWorldWebTransportSnapshotRequest
-        >[0]["observerPlayerId"]
+        >[0]["observerPlayerId"],
+        roomId: readNonEmptyStringField(
+          payload.roomId,
+          "roomId"
+        ) as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportSnapshotRequest
+        >[0]["roomId"]
       });
     case "world-snapshot-subscribe":
       return createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest({
@@ -352,7 +370,13 @@ function parseMetaverseWorldClientMessage(
           "observerPlayerId"
         ) as Parameters<
           typeof createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest
-        >[0]["observerPlayerId"]
+        >[0]["observerPlayerId"],
+        roomId: readNonEmptyStringField(
+          payload.roomId,
+          "roomId"
+        ) as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportSnapshotSubscribeRequest
+        >[0]["roomId"]
       });
     case "world-command-request":
       if (!isRecord(payload.command)) {
@@ -362,7 +386,13 @@ function parseMetaverseWorldClientMessage(
       return createMetaverseRealtimeWorldWebTransportCommandRequest({
         command: payload.command as unknown as Parameters<
           typeof createMetaverseRealtimeWorldWebTransportCommandRequest
-        >[0]["command"]
+        >[0]["command"],
+        roomId: readNonEmptyStringField(
+          payload.roomId,
+          "roomId"
+        ) as Parameters<
+          typeof createMetaverseRealtimeWorldWebTransportCommandRequest
+        >[0]["roomId"]
       });
     default:
       throw new Error(

@@ -5,6 +5,7 @@ import {
   type GameplayInputModeId,
   type ExperienceId,
   type MetaverseMatchModeId,
+  type MetaverseRoomAssignmentSnapshot,
   type PlayerProfile
 } from "@webgpu-metaverse/shared";
 
@@ -63,6 +64,7 @@ const DuckHuntGameplayStageScreen = lazy(async () =>
 interface ShellStageRouterProps {
   readonly activeExperienceId: ExperienceId | null;
   readonly activeMetaverseBundleId: string;
+  readonly activeMetaverseRoomAssignment: MetaverseRoomAssignmentSnapshot | null;
   readonly activeStep: NavigationStepId;
   readonly audioStatusLabel: string;
   readonly bestScore: number;
@@ -77,6 +79,9 @@ interface ShellStageRouterProps {
   readonly inputMode: GameplayInputModeId;
   readonly loginError: string | null;
   readonly metaverseControlMode: MetaverseControlModeId;
+  readonly metaverseLaunchError: string | null;
+  readonly metaverseLaunchPending: boolean;
+  readonly metaverseRoomIdDraft: string;
   readonly nextMetaverseStep: MetaverseEntryStepId | null;
   readonly onCloseToolRequest: () => void;
   readonly permissionError: string | null;
@@ -93,7 +98,9 @@ interface ShellStageRouterProps {
   readonly onClearProfile: () => void;
   readonly onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => void;
   readonly onEditProfile: () => void;
-  readonly onEnterMetaverseRequest: () => void;
+  readonly onEnterMetaverseRequest: (
+    matchMode?: MetaverseMatchModeId
+  ) => void;
   readonly onExperienceLaunchRequest: (experienceId: ExperienceId) => void;
   readonly onGameplaySignal: (signal: GameplaySignal) => void;
   readonly onInputModeChange: (inputMode: GameplayInputModeId) => void;
@@ -107,6 +114,7 @@ interface ShellStageRouterProps {
   readonly onRecalibrationRequest: () => void;
   readonly onRetryCapabilityProbe: () => void;
   readonly onMatchModeChange: (mode: MetaverseMatchModeId) => void;
+  readonly onMetaverseRoomIdDraftChange: (metaverseRoomIdDraft: string) => void;
   readonly onSetupRequest: () => void;
   readonly setUsernameDraft: (value: string) => void;
 }
@@ -129,6 +137,7 @@ function GameplayStageFallback() {
 export function ShellStageRouter({
   activeExperienceId,
   activeMetaverseBundleId,
+  activeMetaverseRoomAssignment,
   activeStep,
   audioStatusLabel,
   bestScore,
@@ -143,6 +152,9 @@ export function ShellStageRouter({
   inputMode,
   loginError,
   metaverseControlMode,
+  metaverseLaunchError,
+  metaverseLaunchPending,
+  metaverseRoomIdDraft,
   nextMetaverseStep,
   onCloseToolRequest,
   permissionError,
@@ -168,6 +180,7 @@ export function ShellStageRouter({
   onRecalibrationRequest,
   onRetryCapabilityProbe,
   onMatchModeChange,
+  onMetaverseRoomIdDraftChange,
   onSetupRequest,
   setUsernameDraft
 }: ShellStageRouterProps) {
@@ -194,9 +207,15 @@ export function ShellStageRouter({
           hasStoredProfile={hasStoredProfile}
           inputMode={inputMode}
           loginError={loginError}
+          matchMode={matchMode}
+          metaverseLaunchError={metaverseLaunchError}
+          metaverseLaunchPending={metaverseLaunchPending}
+          metaverseRoomIdDraft={metaverseRoomIdDraft}
           onClearProfile={onClearProfile}
           onEditProfile={onEditProfile}
           onEnterMetaverse={onEnterMetaverseRequest}
+          onMatchModeChange={onMatchModeChange}
+          onMetaverseRoomIdDraftChange={onMetaverseRoomIdDraftChange}
           onOpenToolRequest={onOpenToolRequest}
           onRequestPermission={onRequestPermission}
           onRecalibrationRequest={onRecalibrationRequest}
@@ -225,7 +244,9 @@ export function ShellStageRouter({
         />
       ) : null}
 
-      {activeStep === "metaverse" && profile !== null ? (
+      {activeStep === "metaverse" &&
+      profile !== null &&
+      activeMetaverseRoomAssignment !== null ? (
         <Suspense fallback={<GameplayStageFallback />}>
           <MetaverseStageScreen
             attachmentProofConfig={metaverseAttachmentProofConfig}
@@ -239,8 +260,8 @@ export function ShellStageRouter({
             metaverseControlMode={metaverseControlMode}
             onCoopRoomIdDraftChange={onCoopRoomIdDraftChange}
             onExperienceLaunchRequest={onExperienceLaunchRequest}
-            onMatchModeChange={onMatchModeChange}
             onRecalibrationRequest={onRecalibrationRequest}
+            roomAssignment={activeMetaverseRoomAssignment}
             onSetupRequest={onSetupRequest}
             matchMode={matchMode}
             username={profile.snapshot.username}

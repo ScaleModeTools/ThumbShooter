@@ -3,12 +3,13 @@ import type {
   MetaverseRealtimeWorldWebTransportServerMessage
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 import type { MetaversePlayerId } from "@webgpu-metaverse/shared/metaverse/presence";
+import type { MetaverseRoomId } from "@webgpu-metaverse/shared";
 import {
   createMetaverseRealtimeWorldWebTransportErrorMessage,
   createMetaverseRealtimeWorldWebTransportServerEventMessage
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 
-import type { MetaverseAuthoritativeWorldRuntimeOwner } from "../types/metaverse-authoritative-world-runtime-owner.js";
+import type { MetaverseRoomDirectoryOwner } from "../types/metaverse-room-directory-owner.js";
 
 interface PersistentReliableStreamContext<Response> {
   readonly closed: Promise<void>;
@@ -17,6 +18,7 @@ interface PersistentReliableStreamContext<Response> {
 
 interface MetaverseWorldSnapshotSubscriber {
   readonly observerPlayerId: MetaversePlayerId;
+  readonly roomId: MetaverseRoomId;
   readonly session: MetaverseWorldWebTransportSession;
   readonly writeResponse: (
     response: MetaverseRealtimeWorldWebTransportServerMessage
@@ -44,19 +46,26 @@ function resolveBoundPlayerId(
   }
 }
 
+function resolveBoundRoomId(
+  message: MetaverseRealtimeWorldWebTransportClientMessage
+): MetaverseRoomId {
+  return message.roomId;
+}
+
 export class MetaverseWorldWebTransportSession {
   readonly #adapter: MetaverseWorldWebTransportAdapter;
-  readonly #runtime: MetaverseAuthoritativeWorldRuntimeOwner;
+  readonly #roomDirectory: MetaverseRoomDirectoryOwner;
 
   #boundPlayerId: MetaversePlayerId | null = null;
+  #boundRoomId: MetaverseRoomId | null = null;
   #disposed = false;
 
   constructor(
-    runtime: MetaverseAuthoritativeWorldRuntimeOwner,
+    roomDirectory: MetaverseRoomDirectoryOwner,
     adapter: MetaverseWorldWebTransportAdapter
   ) {
     this.#adapter = adapter;
-    this.#runtime = runtime;
+    this.#roomDirectory = roomDirectory;
   }
 
   receiveClientMessage(
@@ -66,12 +75,16 @@ export class MetaverseWorldWebTransportSession {
     this.#assertNotDisposed();
 
     try {
-      this.#bindPlayerIdentity(resolveBoundPlayerId(message));
+      this.#bindSession(resolveBoundPlayerId(message), resolveBoundRoomId(message));
 
       switch (message.type) {
         case "world-snapshot-request":
           return createMetaverseRealtimeWorldWebTransportServerEventMessage({
-            event: this.#runtime.readWorldEvent(nowMs, message.observerPlayerId)
+            event: this.#roomDirectory.readWorldEvent(
+              message.roomId,
+              nowMs,
+              message.observerPlayerId
+            )
           });
         case "world-snapshot-subscribe":
           return createMetaverseRealtimeWorldWebTransportErrorMessage({
@@ -80,7 +93,11 @@ export class MetaverseWorldWebTransportSession {
           });
         case "world-command-request":
           return createMetaverseRealtimeWorldWebTransportServerEventMessage({
-            event: this.#runtime.acceptWorldCommand(message.command, nowMs)
+            event: this.#roomDirectory.acceptWorldCommand(
+              message.roomId,
+              message.command,
+              nowMs
+            )
           });
         default: {
           const exhaustiveMessage: never = message;
@@ -112,7 +129,7 @@ export class MetaverseWorldWebTransportSession {
     }
 
     try {
-      this.#bindPlayerIdentity(message.observerPlayerId);
+      this.#bindSession(message.observerPlayerId, message.roomId);
     } catch (error) {
       await context.writeResponse(
         createMetaverseRealtimeWorldWebTransportErrorMessage({
@@ -128,6 +145,7 @@ export class MetaverseWorldWebTransportSession {
     const unsubscribe = this.#adapter.subscribeWorldSnapshots(
       this,
       message.observerPlayerId,
+      message.roomId,
       context.writeResponse,
       nowMs
     );
@@ -150,14 +168,21 @@ export class MetaverseWorldWebTransportSession {
     this.#disposed = true;
   }
 
-  #bindPlayerIdentity(playerId: MetaversePlayerId): void {
+  #bindSession(playerId: MetaversePlayerId, roomId: MetaverseRoomId): void {
     if (this.#boundPlayerId !== null && this.#boundPlayerId !== playerId) {
       throw new Error(
         `Metaverse world WebTransport session is already bound to ${this.#boundPlayerId}.`
       );
     }
 
+    if (this.#boundRoomId !== null && this.#boundRoomId !== roomId) {
+      throw new Error(
+        `Metaverse world WebTransport session is already bound to room ${this.#boundRoomId}.`
+      );
+    }
+
     this.#boundPlayerId = playerId;
+    this.#boundRoomId = roomId;
   }
 
   #assertNotDisposed(): void {
@@ -170,18 +195,18 @@ export class MetaverseWorldWebTransportSession {
 }
 
 export class MetaverseWorldWebTransportAdapter {
-  readonly #runtime: MetaverseAuthoritativeWorldRuntimeOwner;
+  readonly #roomDirectory: MetaverseRoomDirectoryOwner;
   readonly #snapshotSubscribers = new Map<
     MetaverseWorldWebTransportSession,
     MetaverseWorldSnapshotSubscriber
   >();
 
-  constructor(runtime: MetaverseAuthoritativeWorldRuntimeOwner) {
-    this.#runtime = runtime;
+  constructor(roomDirectory: MetaverseRoomDirectoryOwner) {
+    this.#roomDirectory = roomDirectory;
   }
 
   openSession(): MetaverseWorldWebTransportSession {
-    return new MetaverseWorldWebTransportSession(this.#runtime, this);
+    return new MetaverseWorldWebTransportSession(this.#roomDirectory, this);
   }
 
   publishWorldSnapshots(nowMs: number): void {
@@ -193,6 +218,7 @@ export class MetaverseWorldWebTransportAdapter {
   subscribeWorldSnapshots(
     session: MetaverseWorldWebTransportSession,
     observerPlayerId: MetaversePlayerId,
+    roomId: MetaverseRoomId,
     writeResponse: (
       response: MetaverseRealtimeWorldWebTransportServerMessage
     ) => Promise<void>,
@@ -203,6 +229,7 @@ export class MetaverseWorldWebTransportAdapter {
     const subscriber: MetaverseWorldSnapshotSubscriber = {
       closeAfterWrite: false,
       observerPlayerId,
+      roomId,
       pendingResponse: null,
       session,
       writeResponse,
@@ -229,6 +256,7 @@ export class MetaverseWorldWebTransportAdapter {
   ): void {
     const response = this.#createSnapshotResponse(
       subscriber.observerPlayerId,
+      subscriber.roomId,
       nowMs
     );
 
@@ -245,11 +273,16 @@ export class MetaverseWorldWebTransportAdapter {
 
   #createSnapshotResponse(
     observerPlayerId: MetaversePlayerId,
+    roomId: MetaverseRoomId,
     nowMs: number
   ): MetaverseRealtimeWorldWebTransportServerMessage {
     try {
       return createMetaverseRealtimeWorldWebTransportServerEventMessage({
-        event: this.#runtime.readWorldEvent(nowMs, observerPlayerId)
+        event: this.#roomDirectory.readWorldEvent(
+          roomId,
+          nowMs,
+          observerPlayerId
+        )
       });
     } catch (error) {
       return createMetaverseRealtimeWorldWebTransportErrorMessage({
