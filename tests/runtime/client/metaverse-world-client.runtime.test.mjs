@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
 import {
-  createMetaverseFireWeaponCommand,
+  createMetaverseIssuePlayerActionCommand,
   createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseRealtimeWorldEvent,
   createMetaversePlayerId,
@@ -39,6 +39,29 @@ function createPassiveSnapshotStreamTransport(initialWorldEvent = null) {
         close() {}
       });
     }
+  });
+}
+
+function createFireWeaponPlayerActionCommand({
+  actionSequence,
+  aimMode,
+  issuedAtAuthoritativeTimeMs,
+  playerId,
+  weaponId
+}) {
+  return createMetaverseIssuePlayerActionCommand({
+    action: {
+      ...(aimMode === undefined ? {} : { aimMode }),
+      actionSequence,
+      aimSnapshot: {
+        pitchRadians: 0,
+        yawRadians: 0
+      },
+      issuedAtAuthoritativeTimeMs,
+      kind: "fire-weapon",
+      weaponId
+    },
+    playerId
   });
 }
 
@@ -107,6 +130,8 @@ test("MetaverseWorldClient sends fire-weapon commands over the reliable command 
 
   assert.notEqual(playerId, null);
 
+  const scheduler = createManualTimerScheduler();
+  let nowMs = 10_000;
   const sentCommands = [];
   const initialWorldEvent = createWorldEvent({
     currentTick: 10,
@@ -143,51 +168,217 @@ test("MetaverseWorldClient sends fire-weapon commands over the reliable command 
           });
         }
       },
-      readWallClockMs: () => 1_234
+      clearTimeout: scheduler.clearTimeout,
+      readWallClockMs: () => 1_234,
+      setTimeout: scheduler.setTimeout
     }
   );
 
   await client.ensureConnected(playerId);
   client.fireWeapon({
     aimMode: "hip-fire",
-    forwardDirection: {
-      x: 0,
-      y: 0,
-      z: -1
+    aimSnapshot: {
+      pitchRadians: 0,
+      yawRadians: 0
     },
-    muzzleOrigin: {
-      x: 2,
-      y: 1.5,
-      z: 3
-    },
+    issuedAtAuthoritativeTimeMs: 1_234,
     playerId,
     weaponId: "metaverse-service-pistol-v2"
   });
+  scheduler.runNext(0);
   await flushAsyncWork();
 
   assert.deepEqual(
     sentCommands,
     [
-      createMetaverseFireWeaponCommand({
+      createFireWeaponPlayerActionCommand({
         aimMode: "hip-fire",
-        clientFireTimeMs: 1_234,
-        fireSequence: 1,
-        forwardDirection: {
-          x: 0,
-          y: 0,
-          z: -1
-        },
-        muzzleOrigin: {
-          x: 2,
-          y: 1.5,
-          z: 3
-        },
+        actionSequence: 1,
+        issuedAtAuthoritativeTimeMs: 1_234,
         playerId,
         weaponId: "metaverse-service-pistol-v2"
       })
     ]
   );
   assert.equal(client.worldSnapshotBuffer.at(-1)?.snapshotSequence, 2);
+});
+
+test("MetaverseWorldClient resends the oldest pending fire action until the observer ack advances", async () => {
+  const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
+  const playerId = createMetaversePlayerId("fire-resend-pilot-1");
+
+  assert.notEqual(playerId, null);
+
+  const scheduler = createManualTimerScheduler();
+  let nowMs = 10_000;
+  const sentCommands = [];
+  const initialWorldEvent = createWorldEvent({
+    currentTick: 10,
+    lastProcessedCombatActionSequence: 0,
+    playerId,
+    serverTimeMs: 10_000,
+    snapshotSequence: 1,
+    vehicleX: 8
+  });
+  let sendCount = 0;
+  const client = new MetaverseWorldClient(
+    {
+      defaultCommandIntervalMs: createMilliseconds(50),
+      defaultPollIntervalMs: createMilliseconds(50),
+      maxBufferedSnapshots: 2,
+      serverOrigin: "http://127.0.0.1:3210",
+      worldCommandPath: "/metaverse/world/commands",
+      worldPath: "/metaverse/world"
+    },
+    {
+      snapshotStreamTransport: createPassiveSnapshotStreamTransport(
+        initialWorldEvent
+      ),
+      transport: {
+        async pollWorldSnapshot() {
+          return initialWorldEvent;
+        },
+        async sendCommand(command) {
+          sentCommands.push(command);
+          sendCount += 1;
+
+          return createWorldEvent({
+            currentTick: 10 + sendCount,
+            lastProcessedCombatActionSequence: sendCount >= 2 ? 1 : 0,
+            ...(sendCount >= 2
+              ? {
+                  latestCombatActionReceipt: {
+                    actionSequence: 1,
+                    kind: "fire-weapon",
+                    processedAtTimeMs: 10_150,
+                    sourceProjectileId: `${playerId}:1`,
+                    status: "accepted",
+                    weaponId: "metaverse-service-pistol-v2"
+                  }
+                }
+              : {}),
+            playerId,
+            serverTimeMs: 10_000 + sendCount * 50,
+            snapshotSequence: 1 + sendCount,
+            vehicleX: 8
+          });
+        }
+      },
+      clearTimeout: scheduler.clearTimeout,
+      readWallClockMs: () => nowMs,
+      setTimeout: scheduler.setTimeout
+    }
+  );
+
+  await client.ensureConnected(playerId);
+  client.fireWeapon({
+    aimMode: "hip-fire",
+    aimSnapshot: {
+      pitchRadians: 0,
+      yawRadians: 0
+    },
+    issuedAtAuthoritativeTimeMs: 10_000,
+    playerId,
+    weaponId: "metaverse-service-pistol-v2"
+  });
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentCommands.length, 1);
+  assert.equal(sentCommands[0]?.action.actionSequence, 1);
+  assert.equal(scheduler.pendingTasks.length, 1);
+
+  nowMs = 10_050;
+  scheduler.runNext(50);
+  await flushAsyncWork();
+
+  assert.equal(sentCommands.length, 2);
+  assert.equal(sentCommands[1]?.action.actionSequence, 1);
+  assert.equal(
+    client.worldSnapshotBuffer.at(-1)?.observerPlayer
+      ?.highestProcessedPlayerActionSequence,
+    1
+  );
+  assert.equal(scheduler.pendingTasks.length, 0);
+});
+
+test("MetaverseWorldClient fills the action window with later fire actions before earlier ones are acked", async () => {
+  const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
+  const playerId = createMetaversePlayerId("fire-readiness-pilot-1");
+
+  assert.notEqual(playerId, null);
+
+  const scheduler = createManualTimerScheduler();
+  const sentCommands = [];
+  const initialWorldEvent = createWorldEvent({
+    currentTick: 10,
+    playerId,
+    serverTimeMs: 10_000,
+    snapshotSequence: 1,
+    vehicleX: 8
+  });
+  const client = new MetaverseWorldClient(
+    {
+      defaultCommandIntervalMs: createMilliseconds(50),
+      defaultPollIntervalMs: createMilliseconds(50),
+      maxBufferedSnapshots: 2,
+      serverOrigin: "http://127.0.0.1:3210",
+      worldCommandPath: "/metaverse/world/commands",
+      worldPath: "/metaverse/world"
+    },
+    {
+      snapshotStreamTransport: createPassiveSnapshotStreamTransport(
+        initialWorldEvent
+      ),
+      transport: {
+        async pollWorldSnapshot() {
+          return initialWorldEvent;
+        },
+        async sendCommand(command) {
+          sentCommands.push(command);
+
+          return createWorldEvent({
+            currentTick: 11,
+            playerId,
+            serverTimeMs: 10_200,
+            snapshotSequence: 2,
+            vehicleX: 8
+          });
+        }
+      },
+      clearTimeout: scheduler.clearTimeout,
+      setTimeout: scheduler.setTimeout
+    }
+  );
+
+  await client.ensureConnected(playerId);
+  client.fireWeapon({
+    aimMode: "hip-fire",
+    aimSnapshot: {
+      pitchRadians: 0,
+      yawRadians: 0
+    },
+    issuedAtAuthoritativeTimeMs: 10_050,
+    playerId,
+    weaponId: "metaverse-service-pistol-v2"
+  });
+
+  client.fireWeapon({
+    aimMode: "hip-fire",
+    aimSnapshot: {
+      pitchRadians: 0,
+      yawRadians: 0
+    },
+    issuedAtAuthoritativeTimeMs: 10_160,
+    playerId,
+    weaponId: "metaverse-service-pistol-v2"
+  });
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentCommands.length, 2);
+  assert.equal(sentCommands[0]?.action.actionSequence, 1);
+  assert.equal(sentCommands[1]?.action.actionSequence, 2);
 });
 
 test("MetaverseWorldClient prefers latest-wins traversal intent datagrams over reliable commands when available", async () => {

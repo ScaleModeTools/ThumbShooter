@@ -428,6 +428,7 @@ function formatTopLevelHandshakeDebugLine(hudSnapshot: MetaverseHudSnapshot): st
 function createDeveloperReport(hudSnapshot: MetaverseHudSnapshot): string {
   const authoritativeLocalPlayer =
     hudSnapshot.telemetry.worldSnapshot.surfaceRouting.authoritativeLocalPlayer;
+  const combatAction = authoritativeLocalPlayer.combatAction;
   const heldWeaponGrip = hudSnapshot.telemetry.localHeldWeaponGrip;
 
   const sections = [
@@ -461,7 +462,8 @@ function createDeveloperReport(hudSnapshot: MetaverseHudSnapshot): string {
       heading: "Traversal",
       lines: [
         `Local locomotion routing: ${hudSnapshot.telemetry.worldSnapshot.surfaceRouting.local.locomotionMode} · ${formatDecisionReason(hudSnapshot.telemetry.worldSnapshot.surfaceRouting.local.decisionReason)}`,
-        `Authority / ack: ${authoritativeLocalPlayer.locomotionMode === null ? "n/a" : `${authoritativeLocalPlayer.locomotionMode} · ack ${formatCount(authoritativeLocalPlayer.lastProcessedTraversalSequence ?? 0)}`}`
+        `Authority / ack: ${authoritativeLocalPlayer.locomotionMode === null ? "n/a" : `${authoritativeLocalPlayer.locomotionMode} · ack ${formatCount(authoritativeLocalPlayer.lastProcessedTraversalSequence ?? 0)}`}`,
+        `Combat / ack: ${combatAction.highestProcessedPlayerActionSequence === null ? "n/a" : `ack ${formatCount(combatAction.highestProcessedPlayerActionSequence)} · ${combatAction.status ?? "none"} · action ${formatCount(combatAction.actionSequence ?? combatAction.highestProcessedPlayerActionSequence)} · projectile ${combatAction.sourceProjectileId ?? "n/a"} · reject ${combatAction.rejectionReason ?? "none"}`}`
       ]
     },
     {

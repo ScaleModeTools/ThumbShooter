@@ -32,6 +32,7 @@ const neutralMetaverseFlightInputSnapshot = Object.freeze({
   moveAxis: 0,
   pitchAxis: 0,
   primaryAction: false,
+  primaryActionPressedCount: 0,
   secondaryAction: false,
   strafeAxis: 0,
   yawAxis: 0
@@ -125,15 +126,9 @@ interface MetaverseRuntimeFrameRemoteWorldRuntime {
   sampleRemoteWorld(): void;
   fireWeapon(input: {
     readonly aimMode?: "ads" | "hip-fire";
-    readonly forwardDirection: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
-    };
-    readonly muzzleOrigin: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
+    readonly aimSnapshot: {
+      readonly pitchRadians: number;
+      readonly yawRadians: number;
     };
     readonly weaponId: string;
   }): void;
@@ -236,17 +231,6 @@ interface MetaverseRuntimeFrameSyncRequest {
   readonly canvas: MetaverseRuntimeFrameCanvasHost;
   readonly nowMs: number;
   readonly renderer: MetaverseRuntimeFrameRendererHost;
-}
-
-function createProjectedMuzzleOrigin(
-  cameraSnapshot: MetaverseCameraSnapshot,
-  distanceMeters = 0.35
-): MetaverseCameraSnapshot["position"] {
-  return Object.freeze({
-    x: cameraSnapshot.position.x + cameraSnapshot.lookDirection.x * distanceMeters,
-    y: cameraSnapshot.position.y + cameraSnapshot.lookDirection.y * distanceMeters,
-    z: cameraSnapshot.position.z + cameraSnapshot.lookDirection.z * distanceMeters
-  });
 }
 
 export class MetaverseRuntimeFrameLoop {
@@ -479,8 +463,10 @@ export class MetaverseRuntimeFrameLoop {
     ) {
       this.#remoteWorldRuntime.fireWeapon({
         aimMode: weaponPresentationRuntime.weaponState.aimMode,
-        forwardDirection: cameraSnapshot.lookDirection,
-        muzzleOrigin: createProjectedMuzzleOrigin(cameraSnapshot),
+        aimSnapshot: {
+          pitchRadians: cameraSnapshot.pitchRadians,
+          yawRadians: cameraSnapshot.yawRadians
+        },
         weaponId: weaponPresentationRuntime.weaponState.weaponId
       });
     }

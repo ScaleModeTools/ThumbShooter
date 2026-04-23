@@ -82,20 +82,13 @@ const heldWeaponElbowPolePreferenceWeight = 1.4;
 const heldWeaponChestForwardMeters = 0.42;
 const heldWeaponLeftArmReachSlackMeters = 0.001;
 const heldWeaponRightArmReachSlackMeters = 0.045;
-const heldWeaponServicePistolAdsAcrossOffsetMeters = -0.004;
 const heldWeaponServicePistolLeftArmReachSlackMeters = 0.02;
 const heldWeaponSupportMarkerRefinementPassCount = 3;
 const heldWeaponGripFingerContactLocalOffsetMeters = 0.014;
 const heldWeaponRightTriggerContactLocalExtensionScale = 0.36;
 const heldWeaponSampledRestoreBoneNames = Object.freeze([
   "clavicle_l",
-  "upperarm_l",
-  "lowerarm_l",
-  "hand_l",
   "clavicle_r",
-  "upperarm_r",
-  "lowerarm_r",
-  "hand_r",
   "index_01_r",
   "index_02_r",
   "index_03_r"
@@ -843,10 +836,21 @@ function resolveHeldWeaponGripAimTarget(
         cameraSnapshot.position.z
       );
     }
-    heldWeaponCameraWorldPositionScratch.addScaledVector(
-      heldWeaponGripAcrossDirectionScratch,
-      heldWeaponServicePistolAdsAcrossOffsetMeters
-    );
+    if (attachmentRuntime.heldAdsCameraTargetOffset !== null) {
+      heldWeaponCameraWorldPositionScratch
+        .addScaledVector(
+          heldWeaponLookDirectionScratch,
+          attachmentRuntime.heldAdsCameraTargetOffset.forward
+        )
+        .addScaledVector(
+          heldWeaponGripUpDirectionScratch,
+          attachmentRuntime.heldAdsCameraTargetOffset.up
+        )
+        .addScaledVector(
+          heldWeaponGripAcrossDirectionScratch,
+          attachmentRuntime.heldAdsCameraTargetOffset.across
+        );
+    }
     resolveGripTargetWorldPositionFromLocalGripOffset(
       heldWeaponCameraWorldPositionScratch,
       outputGripWorldQuaternion,

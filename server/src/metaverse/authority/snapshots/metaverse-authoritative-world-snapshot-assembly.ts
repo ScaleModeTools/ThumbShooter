@@ -36,6 +36,7 @@ import type {
   MetaverseCombatFeedEventSnapshot,
   MetaverseCombatMatchSnapshot,
   MetaverseCombatProjectileSnapshot,
+  MetaversePlayerActionReceiptSnapshot,
   MetaversePlayerCombatSnapshot
 } from "@webgpu-metaverse/shared/metaverse";
 import type {
@@ -134,6 +135,14 @@ export interface MetaverseAuthoritativeWorldSnapshotAssemblyConfig {
   readonly lastAdvancedAtMs: number | null;
   readonly nowMs: number;
   readonly observerPlayerId?: MetaversePlayerId;
+  readonly playerCombatActionObserverSnapshotsByPlayerId: ReadonlyMap<
+    MetaversePlayerId,
+    {
+      readonly highestProcessedPlayerActionSequence: number;
+      readonly recentPlayerActionReceipts:
+        readonly MetaversePlayerActionReceiptSnapshot[];
+    }
+  >;
   readonly playerCombatSnapshotsByPlayerId: ReadonlyMap<
     MetaversePlayerId,
     MetaversePlayerCombatSnapshot
@@ -160,9 +169,18 @@ function createPlayerPresentationIntentSnapshot(
 }
 
 function createObserverPlayerSnapshot(
-  playerRuntime: MetaverseAuthoritativeSnapshotPlayerRuntimeState
+  playerRuntime: MetaverseAuthoritativeSnapshotPlayerRuntimeState,
+  combatActionObserverSnapshot:
+    | {
+        readonly highestProcessedPlayerActionSequence: number;
+        readonly recentPlayerActionReceipts:
+          readonly MetaversePlayerActionReceiptSnapshot[];
+      }
+    | undefined
 ): MetaverseRealtimeObserverPlayerSnapshotInput {
   return {
+    highestProcessedPlayerActionSequence:
+      combatActionObserverSnapshot?.highestProcessedPlayerActionSequence ?? 0,
     jumpDebug: {
       pendingActionSequence:
         playerRuntime.unmountedTraversalState.actionState.pendingActionKind ===
@@ -196,7 +214,9 @@ function createObserverPlayerSnapshot(
     lastProcessedTraversalSequence:
       playerRuntime.lastProcessedTraversalSequence,
     lastProcessedWeaponSequence: playerRuntime.lastProcessedWeaponSequence,
-    playerId: playerRuntime.playerId
+    playerId: playerRuntime.playerId,
+    recentPlayerActionReceipts:
+      combatActionObserverSnapshot?.recentPlayerActionReceipts ?? []
   };
 }
 
@@ -374,7 +394,12 @@ export function createMetaverseAuthoritativeWorldSnapshot<
     ...(observerPlayerRuntime === null
       ? {}
       : {
-          observerPlayer: createObserverPlayerSnapshot(observerPlayerRuntime)
+          observerPlayer: createObserverPlayerSnapshot(
+            observerPlayerRuntime,
+            config.playerCombatActionObserverSnapshotsByPlayerId.get(
+              observerPlayerRuntime.playerId
+            )
+          )
         }),
     players,
     projectiles: config.projectiles,

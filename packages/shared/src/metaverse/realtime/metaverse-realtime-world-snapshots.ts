@@ -67,6 +67,8 @@ import {
   createMetaverseRealtimePlayerWeaponStateSnapshot
 } from "./metaverse-realtime-player-weapon-state.js";
 import type {
+  MetaversePlayerActionReceiptSnapshot,
+  MetaversePlayerActionReceiptSnapshotInput,
   MetaverseCombatFeedEventSnapshot,
   MetaverseCombatFeedEventSnapshotInput,
   MetaverseCombatMatchSnapshot,
@@ -77,6 +79,7 @@ import type {
   MetaversePlayerCombatSnapshotInput
 } from "../metaverse-combat.js";
 import {
+  createMetaversePlayerActionReceiptSnapshot,
   createMetaverseCombatFeedEventSnapshot,
   createMetaverseCombatMatchSnapshot,
   createMetaverseCombatProjectileSnapshot,
@@ -246,19 +249,25 @@ export interface MetaverseRealtimePlayerSnapshotInput {
 }
 
 export interface MetaverseRealtimeObserverPlayerSnapshot {
+  readonly highestProcessedPlayerActionSequence: number;
   readonly jumpDebug: MetaverseRealtimePlayerJumpDebugSnapshot;
   readonly lastProcessedLookSequence: number;
   readonly lastProcessedTraversalSequence: number;
   readonly lastProcessedWeaponSequence: number;
   readonly playerId: MetaversePlayerId;
+  readonly recentPlayerActionReceipts:
+    readonly MetaversePlayerActionReceiptSnapshot[];
 }
 
 export interface MetaverseRealtimeObserverPlayerSnapshotInput {
+  readonly highestProcessedPlayerActionSequence?: number;
   readonly jumpDebug?: MetaverseRealtimePlayerJumpDebugSnapshotInput;
   readonly lastProcessedLookSequence?: number;
   readonly lastProcessedTraversalSequence?: number;
   readonly lastProcessedWeaponSequence?: number;
   readonly playerId: MetaversePlayerId;
+  readonly recentPlayerActionReceipts?:
+    readonly MetaversePlayerActionReceiptSnapshotInput[];
 }
 
 export interface MetaverseRealtimeVehicleSnapshot {
@@ -482,10 +491,27 @@ function freezePlayerJumpDebugSnapshot(
   });
 }
 
+function freezePlayerActionReceiptSnapshots(
+  input:
+    | readonly MetaversePlayerActionReceiptSnapshotInput[]
+    | undefined
+): readonly MetaversePlayerActionReceiptSnapshot[] {
+  if (input === undefined || input.length === 0) {
+    return Object.freeze([]);
+  }
+
+  return Object.freeze(
+    input.map((entry) => createMetaversePlayerActionReceiptSnapshot(entry))
+  );
+}
+
 function freezeObserverPlayerSnapshot(
   input: MetaverseRealtimeObserverPlayerSnapshotInput
 ): MetaverseRealtimeObserverPlayerSnapshot {
   return Object.freeze({
+    highestProcessedPlayerActionSequence: normalizeFiniteNonNegativeInteger(
+      input.highestProcessedPlayerActionSequence ?? 0
+    ),
     jumpDebug: freezePlayerJumpDebugSnapshot(input.jumpDebug),
     lastProcessedLookSequence: normalizeFiniteNonNegativeInteger(
       input.lastProcessedLookSequence ?? 0
@@ -496,7 +522,10 @@ function freezeObserverPlayerSnapshot(
     lastProcessedWeaponSequence: normalizeFiniteNonNegativeInteger(
       input.lastProcessedWeaponSequence ?? 0
     ),
-    playerId: input.playerId
+    playerId: input.playerId,
+    recentPlayerActionReceipts: freezePlayerActionReceiptSnapshots(
+      input.recentPlayerActionReceipts
+    )
   });
 }
 

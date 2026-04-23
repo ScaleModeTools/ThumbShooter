@@ -27,7 +27,7 @@ import {
   type MetaverseRealtimeWorldClientCommand
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 import {
-  createMetaverseFireWeaponCommand
+  createMetaverseIssuePlayerActionCommand
 } from "@webgpu-metaverse/shared/metaverse";
 
 import type { MetaverseRoomDirectoryOwner } from "../types/metaverse-room-directory-owner.js";
@@ -491,32 +491,65 @@ function parseWorldCommand(
   const commandType = readStringField(body.type, "type");
 
   switch (commandType) {
-    case "fire-weapon":
-      return createMetaverseFireWeaponCommand({
-        ...(body.aimMode === undefined
-          ? {}
-          : {
-              aimMode: readStringField(body.aimMode, "aimMode") as
-                | "ads"
-                | "hip-fire"
-            }),
-        ...(body.clientFireTimeMs === undefined
-          ? {}
-          : {
-              clientFireTimeMs: readNumberField(
-                body.clientFireTimeMs,
-                "clientFireTimeMs"
-              )
-            }),
-        fireSequence: readNumberField(body.fireSequence, "fireSequence"),
-        forwardDirection: parseWorldVector3(
-          body.forwardDirection,
-          "forwardDirection"
-        ),
-        muzzleOrigin: parseWorldVector3(body.muzzleOrigin, "muzzleOrigin"),
-        playerId: resolvePlayerId(readStringField(body.playerId, "playerId")),
-        weaponId: readStringField(body.weaponId, "weaponId")
-      });
+    case "issue-player-action": {
+      const action = readRecordField(body.action, "action");
+      const actionKind = readStringField(action.kind, "action.kind");
+
+      switch (actionKind) {
+        case "fire-weapon":
+          return createMetaverseIssuePlayerActionCommand({
+            action: {
+              actionSequence: readNumberField(
+                action.actionSequence,
+                "action.actionSequence"
+              ),
+              ...(action.aimMode === undefined
+                ? {}
+                : {
+                    aimMode: readStringField(action.aimMode, "action.aimMode") as
+                      | "ads"
+                      | "hip-fire"
+                  }),
+              aimSnapshot: {
+                pitchRadians: readNumberField(
+                  readRecordField(action.aimSnapshot, "action.aimSnapshot")
+                    .pitchRadians,
+                  "action.aimSnapshot.pitchRadians"
+                ),
+                yawRadians: readNumberField(
+                  readRecordField(action.aimSnapshot, "action.aimSnapshot")
+                    .yawRadians,
+                  "action.aimSnapshot.yawRadians"
+                )
+              },
+              issuedAtAuthoritativeTimeMs: readNumberField(
+                action.issuedAtAuthoritativeTimeMs,
+                "action.issuedAtAuthoritativeTimeMs"
+              ),
+              kind: "fire-weapon",
+              weaponId: readStringField(action.weaponId, "action.weaponId")
+            },
+            playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+          });
+        case "jump":
+          return createMetaverseIssuePlayerActionCommand({
+            action: {
+              actionSequence: readNumberField(
+                action.actionSequence,
+                "action.actionSequence"
+              ),
+              issuedAtAuthoritativeTimeMs: readNumberField(
+                action.issuedAtAuthoritativeTimeMs,
+                "action.issuedAtAuthoritativeTimeMs"
+              ),
+              kind: "jump"
+            },
+            playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+          });
+        default:
+          throw new Error(`Unsupported action.kind: ${actionKind}`);
+      }
+    }
     case "sync-mounted-occupancy":
       return createMetaverseSyncMountedOccupancyCommand({
         mountedOccupancy: parseWorldMountedOccupancy(

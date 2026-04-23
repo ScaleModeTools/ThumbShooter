@@ -3,6 +3,7 @@ import type {
   MetaverseMapPlayerSpawnTeamId
 } from "@webgpu-metaverse/shared";
 
+import { mapEditorBuildGridUnitMeters } from "@/engine-tool/build/map-editor-build-placement";
 import {
   readMetaverseMapBundleLaunchTargetCapability,
   type LoadedMetaverseMapBundleSnapshot
@@ -41,11 +42,16 @@ export interface MapEditorSceneObjectDraftSnapshot {
 }
 
 export interface MapEditorWaterRegionDraftSnapshot {
-  readonly center: MapEditorVector3DraftSnapshot;
+  readonly footprint: {
+    readonly centerX: number;
+    readonly centerZ: number;
+    readonly sizeCellsX: number;
+    readonly sizeCellsZ: number;
+  };
+  readonly depthMeters: number;
   readonly previewColorHex: string;
   readonly previewOpacity: number;
-  readonly rotationYRadians: number;
-  readonly size: MapEditorVector3DraftSnapshot;
+  readonly topElevationMeters: number;
   readonly waterRegionId: string;
 }
 
@@ -102,8 +108,44 @@ export function freezeWaterRegionDraft(
 ): MapEditorWaterRegionDraftSnapshot {
   return Object.freeze({
     ...draft,
-    center: freezeVector3Draft(draft.center),
-    size: freezeVector3Draft(draft.size)
+    depthMeters: Math.max(0.5, draft.depthMeters),
+    footprint: Object.freeze({
+      centerX: draft.footprint.centerX,
+      centerZ: draft.footprint.centerZ,
+      sizeCellsX: Math.max(1, Math.round(draft.footprint.sizeCellsX)),
+      sizeCellsZ: Math.max(1, Math.round(draft.footprint.sizeCellsZ))
+    }),
+    topElevationMeters: draft.topElevationMeters
+  });
+}
+
+export function resolveMapEditorWaterRegionSize(
+  draft: MapEditorWaterRegionDraftSnapshot
+): MapEditorVector3DraftSnapshot {
+  return Object.freeze({
+    x: draft.footprint.sizeCellsX * mapEditorBuildGridUnitMeters,
+    y: Math.max(0.5, draft.depthMeters),
+    z: draft.footprint.sizeCellsZ * mapEditorBuildGridUnitMeters
+  });
+}
+
+export function resolveMapEditorWaterRegionCenter(
+  draft: MapEditorWaterRegionDraftSnapshot
+): MapEditorVector3DraftSnapshot {
+  return Object.freeze({
+    x: draft.footprint.centerX,
+    y: draft.topElevationMeters - Math.max(0.5, draft.depthMeters) * 0.5,
+    z: draft.footprint.centerZ
+  });
+}
+
+export function resolveMapEditorWaterRegionTopCenter(
+  draft: MapEditorWaterRegionDraftSnapshot
+): MapEditorVector3DraftSnapshot {
+  return Object.freeze({
+    x: draft.footprint.centerX,
+    y: draft.topElevationMeters,
+    z: draft.footprint.centerZ
   });
 }
 
@@ -159,11 +201,22 @@ export function createWaterRegionDrafts(
   return Object.freeze(
     loadedBundle.bundle.waterRegions.map((waterRegion) =>
       freezeWaterRegionDraft({
-        center: waterRegion.center,
+        depthMeters: Math.max(0.5, waterRegion.size.y),
+        footprint: Object.freeze({
+          centerX: waterRegion.center.x,
+          centerZ: waterRegion.center.z,
+          sizeCellsX: Math.max(
+            1,
+            Math.round(waterRegion.size.x / mapEditorBuildGridUnitMeters)
+          ),
+          sizeCellsZ: Math.max(
+            1,
+            Math.round(waterRegion.size.z / mapEditorBuildGridUnitMeters)
+          )
+        }),
         previewColorHex: defaultMapEditorWaterPreviewColorHex,
         previewOpacity: defaultMapEditorWaterPreviewOpacity,
-        rotationYRadians: waterRegion.rotationYRadians,
-        size: waterRegion.size,
+        topElevationMeters: waterRegion.center.y + waterRegion.size.y * 0.5,
         waterRegionId: waterRegion.waterRegionId
       })
     )

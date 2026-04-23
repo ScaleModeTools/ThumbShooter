@@ -1,5 +1,6 @@
 import type {
   MetaversePlayerId,
+  MetaversePlayerActionReceiptSnapshot,
   MetaverseRealtimePlayerSnapshot,
   MetaverseRealtimeEnvironmentBodySnapshot,
   MetaverseRealtimeVehicleSnapshot,
@@ -46,11 +47,14 @@ function resolveTraversalMovementSequence(input: {
 
 export type MetaverseRealtimeAuthoritativeLocalPlayerSnapshot =
   MetaverseRealtimePlayerSnapshot & {
+    readonly highestProcessedPlayerActionSequence: number;
     readonly jumpDebug:
       NonNullable<MetaverseRealtimeWorldSnapshot["observerPlayer"]>["jumpDebug"];
     readonly lastProcessedLookSequence: number;
     readonly lastProcessedTraversalSequence: number;
     readonly lastProcessedWeaponSequence: number;
+    readonly recentPlayerActionReceipts:
+      readonly MetaversePlayerActionReceiptSnapshot[];
   };
 
 const emptyRealtimeEnvironmentBodySnapshots =
@@ -446,6 +450,8 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
     playerSnapshot
   }: FreshLocalPlayerSnapshot): MetaverseRealtimeAuthoritativeLocalPlayerSnapshot {
     return Object.freeze({
+      highestProcessedPlayerActionSequence:
+        observerPlayerSnapshot.highestProcessedPlayerActionSequence,
       ...playerSnapshot,
       jumpDebug: observerPlayerSnapshot.jumpDebug,
       lastProcessedLookSequence:
@@ -453,7 +459,9 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
       lastProcessedTraversalSequence:
         observerPlayerSnapshot.lastProcessedTraversalSequence,
       lastProcessedWeaponSequence:
-        observerPlayerSnapshot.lastProcessedWeaponSequence
+        observerPlayerSnapshot.lastProcessedWeaponSequence,
+      recentPlayerActionReceipts:
+        observerPlayerSnapshot.recentPlayerActionReceipts
     });
   }
 

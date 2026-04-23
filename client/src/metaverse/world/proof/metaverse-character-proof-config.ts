@@ -38,7 +38,9 @@ import { resolveMetaverseProofLodModelPath } from "./resolve-metaverse-proof-lod
 function resolveHeldAttachmentSocketName(
   socketId: SocketId
 ): MetaverseAttachmentProofConfig["heldMount"]["socketName"] {
-  return socketId === "hand_r_socket" ? "palm_r_socket" : socketId;
+  // Handheld weapons are authored around an explicit grip socket, so mount them
+  // to the synthesized grip seam instead of the broader palm center.
+  return socketId === "hand_r_socket" ? "grip_r_socket" : socketId;
 }
 
 function resolveAttachmentSupportPoints(
@@ -417,6 +419,15 @@ function resolveMetaverseAttachmentProofConfig(
               attachmentDescriptor.heldMount.adsCameraAnchorNodeName,
               "held ads camera anchor node name"
             ),
+      adsCameraTargetOffset:
+        attachmentDescriptor.heldMount.adsCameraTargetOffset === null ||
+        attachmentDescriptor.heldMount.adsCameraTargetOffset === undefined
+          ? null
+          : Object.freeze({
+              across: attachmentDescriptor.heldMount.adsCameraTargetOffset.across,
+              forward: attachmentDescriptor.heldMount.adsCameraTargetOffset.forward,
+              up: attachmentDescriptor.heldMount.adsCameraTargetOffset.up
+            }),
       attachmentSocketNodeName: resolveAttachmentSocketNodeName(
         attachmentDescriptor.label,
         attachmentDescriptor.heldMount,

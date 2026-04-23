@@ -391,7 +391,7 @@ type MetaverseRealtimeWorldWebTransportSnapshotRequestTypeMatches = AssertTrue<
 type MetaverseRealtimeWorldCommandTypeMatches = AssertTrue<
   IsEqual<
     MetaverseRealtimeWorldClientCommand["type"],
-    | "fire-weapon"
+    | "issue-player-action"
     | "sync-driver-vehicle-control"
     | "sync-mounted-occupancy"
     | "sync-player-look-intent"

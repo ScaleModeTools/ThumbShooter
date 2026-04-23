@@ -192,6 +192,11 @@ export const weaponArchetypeManifest = defineWeaponArchetypeManifest([
     weaponAimProfile: {
       poseProfileId: "sidearm",
       adsFovDegrees: 44,
+      adsCameraTargetOffset: {
+        across: 0.000,
+        forward: .1,
+        up: -.05
+      },
       defaultReticleId: "default-ring",
       reticleStyleId: "pistol-ring",
       zoomLevels: sidearmZoomLevels

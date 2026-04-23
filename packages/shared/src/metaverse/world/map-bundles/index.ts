@@ -1,4 +1,8 @@
 export type {
+  MetaverseMapBundleCompiledCollisionBoxSnapshot,
+  MetaverseMapBundleCompiledWorldChunkBoundsSnapshot,
+  MetaverseMapBundleCompiledWorldChunkSnapshot,
+  MetaverseMapBundleCompiledWorldSnapshot,
   MetaverseMapBundleEnvironmentAssetSnapshot,
   MetaverseMapBundleLaunchVariationSnapshot,
   MetaverseMapBundleSceneObjectCapabilitySnapshot,
@@ -8,6 +12,16 @@ export type {
   MetaverseMapBundlePlacementSnapshot,
   MetaverseMapBundlePresentationProfileIds,
   MetaverseMapBundleResourceSpawnSnapshot,
+  MetaverseMapBundleSemanticCompatibilityAssetIdsSnapshot,
+  MetaverseMapBundleSemanticConnectorSnapshot,
+  MetaverseMapBundleSemanticEdgeSnapshot,
+  MetaverseMapBundleSemanticModuleSnapshot,
+  MetaverseMapBundleSemanticPlanarLoopSnapshot,
+  MetaverseMapBundleSemanticPlanarPointSnapshot,
+  MetaverseMapBundleSemanticRegionSnapshot,
+  MetaverseMapBundleSemanticSurfaceSnapshot,
+  MetaverseMapBundleSemanticTerrainChunkSnapshot,
+  MetaverseMapBundleSemanticWorldSnapshot,
   MetaverseMapBundleSnapshot,
   MetaverseMapPlayerSpawnTeamId,
   MetaverseMapPlayerTeamId,
@@ -18,6 +32,10 @@ export type {
 } from "./resolve-metaverse-map-player-spawn-node.js";
 export type { MetaversePlayerTeamId } from "../../metaverse-player-team.js";
 export { parseMetaverseMapBundleSnapshot } from "./parse-metaverse-map-bundle.js";
+export {
+  compileMetaverseMapBundleSemanticWorld,
+  createDefaultMetaverseMapBundleCompiledWorld
+} from "./compile-metaverse-semantic-world.js";
 export {
   defaultMetaverseMapBundlePlayerSpawnSelection,
   metaverseMapPlayerSpawnTeamIds

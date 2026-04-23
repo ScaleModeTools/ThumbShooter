@@ -600,3 +600,146 @@ test("MetaverseRuntimeHudTelemetryState resolves authoritative swim telemetry fr
     Math.hypot(1, -3)
   );
 });
+
+test("MetaverseRuntimeHudTelemetryState publishes authoritative combat action receipt telemetry from the room snapshot", async () => {
+  const [{ MetaverseRuntimeHudTelemetryState }, { metaverseRuntimeConfig }] =
+    await Promise.all([
+      clientLoader.load("/src/metaverse/hud/debug/metaverse-runtime-hud-telemetry-state.ts"),
+      clientLoader.load("/src/metaverse/config/metaverse-runtime.ts")
+    ]);
+  const nowMs = 0;
+  const dependencies = createFakeHudPublisherDependencies(() => nowMs);
+  dependencies.config = metaverseRuntimeConfig;
+  const telemetryState = new MetaverseRuntimeHudTelemetryState(dependencies);
+  const renderedCamera = createFakeRenderedCamera();
+
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot =
+    () =>
+      Object.freeze({
+        combat: Object.freeze({
+          activeWeapon: Object.freeze({
+            ammoInMagazine: 10,
+            ammoInReserve: 48,
+            reloadRemainingMs: 0,
+            weaponId: "metaverse-service-pistol-v2"
+          }),
+          alive: true,
+          assists: 0,
+          damageLedger: Object.freeze([]),
+          deaths: 0,
+          headshotKills: 0,
+          health: 100,
+          kills: 0,
+          maxHealth: 100,
+          respawnRemainingMs: 0,
+          spawnProtectionRemainingMs: 0,
+          weaponStats: Object.freeze([])
+        }),
+        jumpDebug: Object.freeze({
+          pendingActionSequence: 0,
+          pendingActionBufferAgeMs: null,
+          resolvedActionSequence: 0,
+          resolvedActionState: "none"
+        }),
+        groundedBody: Object.freeze({
+          contact: Object.freeze({
+            appliedMovementDelta: Object.freeze({ x: 0, y: 0, z: 0 }),
+            blockedPlanarMovement: false,
+            blockedVerticalMovement: false,
+            desiredMovementDelta: Object.freeze({ x: 0, y: 0, z: 0 }),
+            supportingContactDetected: true
+          }),
+          driveTarget: Object.freeze({
+            boost: false,
+            moveAxis: 0,
+            movementMagnitude: 0,
+            strafeAxis: 0,
+            targetForwardSpeedUnitsPerSecond: 0,
+            targetPlanarSpeedUnitsPerSecond: 0,
+            targetStrafeSpeedUnitsPerSecond: 0
+          }),
+          interaction: Object.freeze({
+            applyImpulsesToDynamicBodies: false
+          }),
+          jumpBody: Object.freeze({
+            grounded: true,
+            jumpGroundContactGraceSecondsRemaining: 0,
+            jumpReady: true,
+            jumpSnapSuppressionActive: false,
+            verticalSpeedUnitsPerSecond: 0
+          }),
+          linearVelocity: Object.freeze({
+            x: 0,
+            y: 0,
+            z: 0
+          }),
+          position: Object.freeze({
+            x: 0,
+            y: 1.62,
+            z: 0
+          }),
+          yawRadians: 0
+        }),
+        lastProcessedTraversalSequence: 12,
+        highestProcessedPlayerActionSequence: 8,
+        linearVelocity: Object.freeze({
+          x: 0,
+          y: 0,
+          z: 0
+        }),
+        locomotionMode: "grounded",
+        position: Object.freeze({
+          x: 0,
+          y: 1.62,
+          z: 0
+        }),
+        traversalAuthority: Object.freeze({
+          currentActionKind: "none",
+          currentActionPhase: "idle",
+          currentActionSequence: 0,
+          lastConsumedActionSequence: 0,
+          lastRejectedActionReason: "none",
+          lastRejectedActionSequence: 0,
+          phaseStartedAtTick: 0
+        }),
+        recentPlayerActionReceipts: Object.freeze([
+          Object.freeze({
+            actionSequence: 8,
+            kind: "fire-weapon",
+            processedAtTimeMs: 1_250,
+            rejectionReason: null,
+            sourceProjectileId: "combat-projectile-8",
+            status: "accepted",
+            weaponId: "metaverse-service-pistol-v2"
+          })
+        ]),
+        yawRadians: 0
+      });
+
+  telemetryState.trackFrame(
+    nowMs,
+    dependencies.traversalRuntime.cameraSnapshot,
+    renderedCamera
+  );
+
+  const telemetrySnapshot = telemetryState.createSnapshot(
+    nowMs,
+    createPublishInput()
+  );
+
+  assert.equal(
+    telemetrySnapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+      .combatAction.highestProcessedPlayerActionSequence,
+    8
+  );
+  assert.equal(
+    telemetrySnapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+      .combatAction.status,
+    "accepted"
+  );
+  assert.equal(
+    telemetrySnapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+      .combatAction.sourceProjectileId,
+    "combat-projectile-8"
+  );
+});

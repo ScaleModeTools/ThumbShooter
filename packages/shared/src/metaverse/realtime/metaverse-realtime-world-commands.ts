@@ -40,15 +40,12 @@ import {
   createMetaverseRealtimePlayerWeaponStateSnapshot
 } from "./metaverse-realtime-player-weapon-state.js";
 import type {
-  MetaverseFireWeaponCommand as MetaverseCombatFireWeaponCommand,
-  MetaverseFireWeaponCommandInput as MetaverseCombatFireWeaponCommandInput
-} from "../metaverse-combat.js";
-import {
-  createMetaverseFireWeaponCommand as createMetaverseCombatFireWeaponCommand
+  MetaverseIssuePlayerActionCommand as MetaverseCombatIssuePlayerActionCommand,
+  MetaverseIssuePlayerActionCommandInput as MetaverseCombatIssuePlayerActionCommandInput
 } from "../metaverse-combat.js";
 
 export const metaverseRealtimeWorldClientCommandTypes = [
-  "fire-weapon",
+  "issue-player-action",
   "sync-mounted-occupancy",
   "sync-player-traversal-intent",
   "sync-player-look-intent",
@@ -224,12 +221,12 @@ export interface MetaverseSyncPlayerWeaponStateCommandInput {
   readonly weaponState: MetaverseRealtimePlayerWeaponStateSnapshotInput | null;
 }
 
-type MetaverseFireWeaponCommand = MetaverseCombatFireWeaponCommand;
-type MetaverseFireWeaponCommandInput =
-  MetaverseCombatFireWeaponCommandInput;
+type MetaverseIssuePlayerActionCommand = MetaverseCombatIssuePlayerActionCommand;
+type MetaverseIssuePlayerActionCommandInput =
+  MetaverseCombatIssuePlayerActionCommandInput;
 
 export type MetaverseRealtimeWorldClientCommand =
-  | MetaverseFireWeaponCommand
+  | MetaverseIssuePlayerActionCommand
   | MetaverseSyncMountedOccupancyCommand
   | MetaverseSyncPlayerTraversalIntentCommand
   | MetaverseSyncPlayerLookIntentCommand
@@ -440,10 +437,4 @@ export function createMetaverseSyncPlayerWeaponStateCommand(
         ? null
         : createMetaverseRealtimePlayerWeaponStateSnapshot(input.weaponState)
   });
-}
-
-function createMetaverseFireWeaponCommand(
-  input: MetaverseFireWeaponCommandInput
-): MetaverseFireWeaponCommand {
-  return createMetaverseCombatFireWeaponCommand(input);
 }

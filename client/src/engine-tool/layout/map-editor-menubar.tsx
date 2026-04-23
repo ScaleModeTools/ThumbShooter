@@ -18,11 +18,11 @@ import type {
 } from "@/engine-tool/types/map-editor";
 
 interface MapEditorMenubarProps {
-  readonly canDeleteSelectedPlacement: boolean;
+  readonly canDeleteSelectedEntity: boolean;
   readonly canResetSelectedTransform: boolean;
   readonly canUndoProjectChange: boolean;
   readonly onCloseRequest: () => void;
-  readonly onDeleteSelectedPlacementRequest: () => void;
+  readonly onDeleteSelectedEntityRequest: () => void;
   readonly onResetDraftRequest: () => void;
   readonly onResetSelectedTransformRequest: () => void;
   readonly onSaveDraftRequest: () => void;
@@ -43,7 +43,12 @@ function readViewportToolMode(
   nextValue: string
 ): MapEditorViewportToolMode | null {
   if (
-    nextValue === "build" ||
+    nextValue === "select" ||
+    nextValue === "terrain" ||
+    nextValue === "wall" ||
+    nextValue === "path" ||
+    nextValue === "water" ||
+    nextValue === "module" ||
     nextValue === "move" ||
     nextValue === "rotate" ||
     nextValue === "scale"
@@ -55,11 +60,11 @@ function readViewportToolMode(
 }
 
 export function MapEditorMenubar({
-  canDeleteSelectedPlacement,
+  canDeleteSelectedEntity,
   canResetSelectedTransform,
   canUndoProjectChange,
   onCloseRequest,
-  onDeleteSelectedPlacementRequest,
+  onDeleteSelectedEntityRequest,
   onResetDraftRequest,
   onResetSelectedTransformRequest,
   onSaveDraftRequest,
@@ -104,10 +109,10 @@ export function MapEditorMenubar({
             <MenubarShortcut>Ctrl+Z</MenubarShortcut>
           </MenubarItem>
           <MenubarItem
-            disabled={!canDeleteSelectedPlacement}
-            onClick={onDeleteSelectedPlacementRequest}
+            disabled={!canDeleteSelectedEntity}
+            onClick={onDeleteSelectedEntityRequest}
           >
-            Delete Selected Placement
+            Delete Selection
             <MenubarShortcut>Del</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
@@ -183,7 +188,12 @@ export function MapEditorMenubar({
             }}
             value={viewportToolMode}
           >
-            <MenubarRadioItem value="build">Build</MenubarRadioItem>
+            <MenubarRadioItem value="select">Select</MenubarRadioItem>
+            <MenubarRadioItem value="terrain">Terrain</MenubarRadioItem>
+            <MenubarRadioItem value="wall">Wall</MenubarRadioItem>
+            <MenubarRadioItem value="path">Path</MenubarRadioItem>
+            <MenubarRadioItem value="water">Water</MenubarRadioItem>
+            <MenubarRadioItem value="module">Module</MenubarRadioItem>
             <MenubarRadioItem value="move">Move</MenubarRadioItem>
             <MenubarRadioItem value="rotate">Rotate</MenubarRadioItem>
             <MenubarRadioItem value="scale">Scale</MenubarRadioItem>

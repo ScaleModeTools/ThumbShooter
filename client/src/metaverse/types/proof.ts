@@ -82,6 +82,7 @@ export type MetaverseAttachmentSocketName =
 
 export interface MetaverseAttachmentMountProofConfig {
   readonly adsCameraAnchorNodeName?: string | null;
+  readonly adsCameraTargetOffset?: MetaverseAttachmentAimBasisOffsetSnapshot | null;
   readonly attachmentSocketNodeName: string;
   readonly forwardReferenceNodeName?: string | null;
   readonly offHandSupportPointId?: string | null;
@@ -89,6 +90,12 @@ export interface MetaverseAttachmentMountProofConfig {
   readonly supportMarkerNodeName?: string | null;
   readonly triggerMarkerNodeName?: string | null;
   readonly upReferenceNodeName?: string | null;
+}
+
+export interface MetaverseAttachmentAimBasisOffsetSnapshot {
+  readonly across: number;
+  readonly forward: number;
+  readonly up: number;
 }
 
 export interface MetaverseAttachmentProofConfig {

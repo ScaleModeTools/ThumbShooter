@@ -7,6 +7,7 @@ import type {
   MetaverseCombatFeedEventSnapshot,
   MetaverseCombatMatchSnapshot,
   MetaverseCombatProjectileSnapshot,
+  MetaversePlayerActionReceiptSnapshot,
   MetaversePlayerCombatSnapshot
 } from "@webgpu-metaverse/shared/metaverse";
 import type {
@@ -51,6 +52,13 @@ interface MetaverseAuthoritativeWorldReadStateDependencies<
   readonly readCombatFeedSnapshots:
     () => readonly MetaverseCombatFeedEventSnapshot[];
   readonly readCombatMatchSnapshot: () => MetaverseCombatMatchSnapshot | null;
+  readonly readPlayerCombatActionObserverSnapshot: (
+    playerId: MetaversePlayerId
+  ) => {
+    readonly highestProcessedPlayerActionSequence: number;
+    readonly recentPlayerActionReceipts:
+      readonly MetaversePlayerActionReceiptSnapshot[];
+  } | null;
   readonly readPlayerCombatSnapshot: (
     playerId: MetaversePlayerId
   ) => MetaversePlayerCombatSnapshot | null;
@@ -119,6 +127,14 @@ export class MetaverseAuthoritativeWorldReadState<
       MetaversePlayerId,
       MetaversePlayerCombatSnapshot
     >();
+    const playerCombatActionObserverSnapshotsByPlayerId = new Map<
+      MetaversePlayerId,
+      {
+        readonly highestProcessedPlayerActionSequence: number;
+        readonly recentPlayerActionReceipts:
+          readonly MetaversePlayerActionReceiptSnapshot[];
+      }
+    >();
 
     if (
       observerPlayerId !== undefined &&
@@ -144,6 +160,18 @@ export class MetaverseAuthoritativeWorldReadState<
           combatSnapshot
         );
       }
+
+      const combatActionObserverSnapshot =
+        this.#dependencies.readPlayerCombatActionObserverSnapshot(
+          playerRuntime.playerId
+        );
+
+      if (combatActionObserverSnapshot !== null) {
+        playerCombatActionObserverSnapshotsByPlayerId.set(
+          playerRuntime.playerId,
+          combatActionObserverSnapshot
+        );
+      }
     }
 
     return createMetaverseAuthoritativeWorldSnapshot({
@@ -155,6 +183,7 @@ export class MetaverseAuthoritativeWorldReadState<
       lastAdvancedAtMs: this.#dependencies.readLastAdvancedAtMs(),
       nowMs: normalizedNowMs,
       ...(observerPlayerId === undefined ? {} : { observerPlayerId }),
+      playerCombatActionObserverSnapshotsByPlayerId,
       playerCombatSnapshotsByPlayerId,
       players: this.#dependencies.playersById.values(),
       projectiles: this.#dependencies.readProjectileSnapshots(),

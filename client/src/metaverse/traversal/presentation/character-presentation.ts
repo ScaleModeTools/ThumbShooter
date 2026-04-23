@@ -32,6 +32,7 @@ interface TraversalCharacterPresentationInput {
 }
 
 const groundedWalkAnimationPlaybackRateMultiplier = 1.5;
+const minimumAnimationPlaybackRateMagnitude = 0.01;
 
 function sanitizeAnimationPlaybackRateMultiplier(
   value: number | null | undefined
@@ -40,26 +41,39 @@ function sanitizeAnimationPlaybackRateMultiplier(
     return 1;
   }
 
-  return Math.max(0.01, value);
+  if (value === 0) {
+    return minimumAnimationPlaybackRateMagnitude;
+  }
+
+  return (
+    Math.sign(value) *
+    Math.max(minimumAnimationPlaybackRateMagnitude, Math.abs(value))
+  );
 }
 
 export function resolveCharacterAnimationPlaybackRateMultiplier({
   animationVocabulary,
   boost,
   config,
-  locomotionMode
+  locomotionMode,
+  moveAxis = 0
 }: {
   readonly animationVocabulary: MetaverseCharacterPresentationSnapshot["animationVocabulary"];
   readonly boost: boolean;
   readonly config: Pick<MetaverseRuntimeConfig, "groundedBody">;
   readonly locomotionMode: MetaverseLocomotionModeId;
+  readonly moveAxis?: number;
 }): number {
   if (locomotionMode !== "grounded" || animationVocabulary !== "walk") {
     return 1;
   }
 
+  const directionMultiplier =
+    Number.isFinite(moveAxis) && moveAxis < 0 ? -1 : 1;
+
   return sanitizeAnimationPlaybackRateMultiplier(
-    groundedWalkAnimationPlaybackRateMultiplier *
+    directionMultiplier *
+      groundedWalkAnimationPlaybackRateMultiplier *
       (boost ? Math.max(1, config.groundedBody.boostMultiplier) : 1)
   );
 }
@@ -191,7 +205,8 @@ export function createTraversalCharacterPresentationSnapshot({
             animationVocabulary,
             boost: groundedBodySnapshot.driveTarget.boost,
             config,
-            locomotionMode
+            locomotionMode,
+            moveAxis: groundedBodySnapshot.driveTarget.moveAxis
           }),
           presentationYawRadians ?? groundedBodySnapshot.yawRadians,
           groundedPresentationPosition ?? groundedBodySnapshot.position

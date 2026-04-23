@@ -32,9 +32,16 @@ export interface MetaverseAttachmentOffHandGripRuntime {
   readonly localQuaternion: Quaternion;
 }
 
+export interface MetaverseAttachmentAimBasisOffsetRuntime {
+  readonly across: number;
+  readonly forward: number;
+  readonly up: number;
+}
+
 export interface MetaverseAttachmentProofRuntime {
   activeMountKind: "held" | "mounted-holster" | null;
   readonly attachmentRoot: Group;
+  readonly heldAdsCameraTargetOffset: MetaverseAttachmentAimBasisOffsetRuntime | null;
   readonly heldGripLocalAimQuaternion: Quaternion;
   readonly heldGripToAdsCameraAnchorLocalPosition: Vector3 | null;
   readonly heldGripToForwardReferenceLocalPosition: Vector3;
@@ -365,6 +372,14 @@ export function cloneMetaverseAttachmentProofRuntime<
       sourceRuntime.attachmentRoot.name,
       cloneLabel
     ),
+    heldAdsCameraTargetOffset:
+      sourceRuntime.heldAdsCameraTargetOffset === null
+        ? null
+        : {
+            across: sourceRuntime.heldAdsCameraTargetOffset.across,
+            forward: sourceRuntime.heldAdsCameraTargetOffset.forward,
+            up: sourceRuntime.heldAdsCameraTargetOffset.up
+          },
     heldGripLocalAimQuaternion: sourceRuntime.heldGripLocalAimQuaternion.clone(),
     heldGripToAdsCameraAnchorLocalPosition:
       sourceRuntime.heldGripToAdsCameraAnchorLocalPosition?.clone() ?? null,
@@ -599,6 +614,15 @@ export async function loadMetaverseAttachmentProofRuntime<
   const attachmentRuntime: MetaverseAttachmentProofRuntime = {
     activeMountKind: null,
     attachmentRoot,
+    heldAdsCameraTargetOffset:
+      attachmentProofConfig.heldMount.adsCameraTargetOffset === null ||
+      attachmentProofConfig.heldMount.adsCameraTargetOffset === undefined
+        ? null
+        : {
+            across: attachmentProofConfig.heldMount.adsCameraTargetOffset.across,
+            forward: attachmentProofConfig.heldMount.adsCameraTargetOffset.forward,
+            up: attachmentProofConfig.heldMount.adsCameraTargetOffset.up
+          },
     heldGripLocalAimQuaternion,
     heldGripToAdsCameraAnchorLocalPosition,
     heldGripToForwardReferenceLocalPosition,

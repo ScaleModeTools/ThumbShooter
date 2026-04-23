@@ -1,17 +1,21 @@
-import type { MetaverseMapBundleSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
+import {
+  parseMetaverseMapBundleSnapshot,
+  type MetaverseMapBundleSnapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
 
 const storedMetaverseWorldBundleStorageKeyPrefix =
   "webgpu-metaverse:engine-tool:map-editor-project:";
 
-export const storedMetaverseWorldBundleRecordVersion = 2 as const;
+export const storedMetaverseWorldBundleRecordVersion = 3 as const;
+const supportedStoredMetaverseWorldBundleRecordVersions = Object.freeze([2, 3]);
 
 export interface StoredMetaverseWorldBundleStorageLike {
   getItem(key: string): string | null;
 }
 
 interface StoredMetaverseWorldBundleRecord {
-  readonly bundle: MetaverseMapBundleSnapshot;
-  readonly version: typeof storedMetaverseWorldBundleRecordVersion;
+  readonly bundle: unknown;
+  readonly version: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -22,33 +26,33 @@ export function readStoredMetaverseWorldBundleStorageKey(bundleId: string): stri
   return `${storedMetaverseWorldBundleStorageKeyPrefix}${bundleId}`;
 }
 
-function isStoredMetaverseWorldBundleRecord(
+function parseStoredBundleRecord(
   value: unknown,
   bundleId: string
-): value is StoredMetaverseWorldBundleRecord {
-  if (!isRecord(value) || !isRecord(value.bundle)) {
-    return false;
+): MetaverseMapBundleSnapshot | null {
+  if (!isRecord(value) || !("bundle" in value)) {
+    return null;
   }
 
-  const { bundle } = value;
-  const presentationProfileIds = bundle.presentationProfileIds;
+  const version =
+    typeof value.version === "number" && Number.isFinite(value.version)
+      ? value.version
+      : null;
 
-  return (
-    value.version === storedMetaverseWorldBundleRecordVersion &&
-    bundle.mapId === bundleId &&
-    typeof bundle.description === "string" &&
-    (bundle.gameplayProfileId === undefined ||
-      typeof bundle.gameplayProfileId === "string") &&
-    typeof bundle.label === "string" &&
-    Array.isArray(bundle.environmentAssets) &&
-    Array.isArray(bundle.launchVariations) &&
-    Array.isArray(bundle.playerSpawnNodes) &&
-    isRecord(bundle.playerSpawnSelection) &&
-    Array.isArray(bundle.resourceSpawns) &&
-    Array.isArray(bundle.sceneObjects) &&
-    Array.isArray(bundle.waterRegions) &&
-    isRecord(presentationProfileIds)
-  );
+  if (
+    version === null ||
+    !supportedStoredMetaverseWorldBundleRecordVersions.includes(version)
+  ) {
+    return null;
+  }
+
+  try {
+    const bundle = parseMetaverseMapBundleSnapshot(value.bundle);
+
+    return bundle.mapId === bundleId ? bundle : null;
+  } catch {
+    return null;
+  }
 }
 
 export function loadStoredMetaverseWorldBundleSnapshot(
@@ -66,11 +70,7 @@ export function loadStoredMetaverseWorldBundleSnapshot(
   }
 
   try {
-    const parsedValue = JSON.parse(rawValue) as unknown;
-
-    return isStoredMetaverseWorldBundleRecord(parsedValue, bundleId)
-      ? parsedValue.bundle
-      : null;
+    return parseStoredBundleRecord(JSON.parse(rawValue) as unknown, bundleId);
   } catch {
     return null;
   }

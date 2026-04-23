@@ -1,4 +1,5 @@
 import {
+  BoxGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -15,6 +16,11 @@ import type {
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
 import {
+  resolveMapEditorWaterRegionCenter,
+  resolveMapEditorWaterRegionSize,
+  resolveMapEditorWaterRegionTopCenter
+} from "@/engine-tool/project/map-editor-project-scene-drafts";
+import {
   createPortalMeshRuntime,
   createPortalSharedRenderResources,
   type PortalSharedRenderResources
@@ -24,6 +30,8 @@ interface SceneDraftMeshUserData {
   mapEditorOwnsGeometry?: boolean;
   mapEditorOwnsMaterial?: boolean;
   playerSpawnId?: string;
+  sceneObjectId?: string;
+  waterRegionId?: string;
 }
 
 function disposeOwnedMesh(mesh: Mesh): void {
@@ -90,7 +98,7 @@ function disposePortalSharedRenderResources(
 }
 
 function createOwnedMesh(
-  geometry: ConeGeometry | CylinderGeometry | PlaneGeometry,
+  geometry: BoxGeometry | ConeGeometry | CylinderGeometry | PlaneGeometry,
   material: MeshStandardMaterial
 ): Mesh {
   const mesh = new Mesh(geometry, material);
@@ -150,7 +158,7 @@ function createSceneObjectDraftGroup(
     return null;
   }
 
-  return createPortalMeshRuntime(
+  const portalGroup = createPortalMeshRuntime(
     {
       beamColor: new Color(launchTarget.beamColorHex).toArray().slice(0, 3) as [
         number,
@@ -170,26 +178,36 @@ function createSceneObjectDraftGroup(
     },
     sharedRenderResources
   ).anchorGroup;
+  const userData = portalGroup.userData as SceneDraftMeshUserData;
+
+  portalGroup.name = `map_editor_scene_object/${sceneObjectDraft.objectId}`;
+  userData.sceneObjectId = sceneObjectDraft.objectId;
+
+  return portalGroup;
 }
 
 function createWaterRegionDraftGroup(
   waterRegionDraft: MapEditorWaterRegionDraftSnapshot
 ): Group {
   const root = new Group();
-  const floor = createOwnedMesh(
-    new PlaneGeometry(waterRegionDraft.size.x, waterRegionDraft.size.z),
+  const userData = root.userData as SceneDraftMeshUserData;
+  const size = resolveMapEditorWaterRegionSize(waterRegionDraft);
+  const center = resolveMapEditorWaterRegionCenter(waterRegionDraft);
+  const topCenter = resolveMapEditorWaterRegionTopCenter(waterRegionDraft);
+  const volume = createOwnedMesh(
+    new BoxGeometry(size.x, size.y, size.z),
     new MeshStandardMaterial({
       color: waterRegionDraft.previewColorHex,
       emissive: waterRegionDraft.previewColorHex,
       emissiveIntensity: 0.08,
       opacity: waterRegionDraft.previewOpacity,
-      roughness: 0.18,
       side: DoubleSide,
+      roughness: 0.18,
       transparent: true
     })
   );
   const outline = createOwnedMesh(
-    new PlaneGeometry(waterRegionDraft.size.x, waterRegionDraft.size.z),
+    new PlaneGeometry(size.x, size.z),
     new MeshStandardMaterial({
       color: "#d5f3ff",
       emissive: "#b3ecff",
@@ -202,31 +220,32 @@ function createWaterRegionDraftGroup(
   );
 
   root.name = `map_editor_water/${waterRegionDraft.waterRegionId}`;
-  floor.rotation.x = -Math.PI / 2;
+  userData.waterRegionId = waterRegionDraft.waterRegionId;
+  volume.position.y = 0;
   outline.rotation.x = -Math.PI / 2;
-  outline.position.y = 0.02;
-  root.add(floor, outline);
-  root.position.set(
-    waterRegionDraft.center.x,
-    waterRegionDraft.center.y,
-    waterRegionDraft.center.z
-  );
-  root.rotation.y = waterRegionDraft.rotationYRadians;
+  outline.position.y = size.y * 0.5 + 0.02;
+  root.add(volume, outline);
+  root.position.set(center.x, center.y, center.z);
+  outline.position.set(0, topCenter.y - center.y + 0.02, 0);
 
   return root;
 }
 
 export interface MapEditorViewportSceneDraftHandles {
+  readonly sceneObjectGroupsById: Map<string, Group>;
   readonly playerSpawnGroupsById: Map<string, Group>;
   readonly portalSharedRenderResources: PortalSharedRenderResources;
   readonly rootGroup: Group;
+  readonly waterRegionGroupsById: Map<string, Group>;
 }
 
 export function createMapEditorViewportSceneDraftHandles(): MapEditorViewportSceneDraftHandles {
   return Object.freeze({
+    sceneObjectGroupsById: new Map<string, Group>(),
     playerSpawnGroupsById: new Map<string, Group>(),
     portalSharedRenderResources: createPortalSharedRenderResources(),
-    rootGroup: new Group()
+    rootGroup: new Group(),
+    waterRegionGroupsById: new Map<string, Group>()
   });
 }
 
@@ -248,6 +267,8 @@ export function syncMapEditorViewportSceneDrafts(
   disposeOwnedGroup(handles.rootGroup, handles.portalSharedRenderResources);
   handles.rootGroup.clear();
   handles.playerSpawnGroupsById.clear();
+  handles.sceneObjectGroupsById.clear();
+  handles.waterRegionGroupsById.clear();
 
   for (const spawnDraft of drafts.playerSpawnDrafts) {
     const spawnGroup = createSpawnDraftGroup(spawnDraft);
@@ -263,11 +284,18 @@ export function syncMapEditorViewportSceneDrafts(
     );
 
     if (sceneObjectGroup !== null) {
+      handles.sceneObjectGroupsById.set(sceneObjectDraft.objectId, sceneObjectGroup);
       handles.rootGroup.add(sceneObjectGroup);
     }
   }
 
   for (const waterRegionDraft of drafts.waterRegionDrafts) {
-    handles.rootGroup.add(createWaterRegionDraftGroup(waterRegionDraft));
+    const waterRegionGroup = createWaterRegionDraftGroup(waterRegionDraft);
+
+    handles.waterRegionGroupsById.set(
+      waterRegionDraft.waterRegionId,
+      waterRegionGroup
+    );
+    handles.rootGroup.add(waterRegionGroup);
   }
 }

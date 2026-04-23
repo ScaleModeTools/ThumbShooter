@@ -28,7 +28,9 @@ test("metaverse map bundle loader resolves the staging-ground authored slice and
 
   assert.equal(loadedBundle.bundle.mapId, "staging-ground");
   assert.equal(loadedBundle.bundle.environmentAssets.length, 5);
-  assert.equal(loadedBundle.bundle.launchVariations.length, 2);
+  assert.equal(loadedBundle.bundle.launchVariations.length, 3);
+  assert.ok(loadedBundle.bundle.semanticWorld.regions.length > 0);
+  assert.ok(loadedBundle.bundle.compiledWorld.chunks.length > 0);
   assert.equal(loadedBundle.bundle.playerSpawnNodes.length, 5);
   assert.equal(loadedBundle.bundle.playerSpawnNodes[0]?.teamId, "neutral");
   assert.equal(
@@ -328,13 +330,13 @@ test("map editor project flattens authored placements and updates selected place
   const initialSelectedPlacement = readSelectedMapEditorPlacement(initialProject);
 
   assert.equal(initialProject.bundleId, "staging-ground");
-  assert.equal(initialProject.placementDrafts.length, 6);
+  assert.equal(initialProject.placementDrafts.length, 5);
   assert.equal(initialProject.hudProfileId, "shell-default-hud");
   assert.equal(
     initialProject.environmentPresentationProfileId,
     "shell-default-environment-presentation"
   );
-  assert.equal(initialProject.launchVariationDrafts.length, 2);
+  assert.equal(initialProject.launchVariationDrafts.length, 3);
   assert.equal(initialProject.playerSpawnDrafts.length, 5);
   assert.equal(initialProject.playerSpawnDrafts[0].teamId, "neutral");
   assert.equal(
@@ -347,7 +349,8 @@ test("map editor project flattens authored placements and updates selected place
   );
   assert.equal(initialProject.sceneObjectDrafts.length, 1);
   assert.equal(initialProject.waterRegionDrafts.length, 1);
-  assert.notEqual(initialSelectedPlacement, null);
+  assert.equal(initialSelectedPlacement, null);
+  assert.equal(initialProject.selectedEntityRef?.kind, "region");
   assert.equal(
     readSelectedMapEditorLaunchVariation(initialProject)?.variationId,
     "shell-free-roam"
@@ -425,9 +428,9 @@ test("map editor project flattens authored placements and updates selected place
     initialProject.waterRegionDrafts[0].waterRegionId,
     (waterRegionDraft) => ({
       ...waterRegionDraft,
-      center: {
-        ...waterRegionDraft.center,
-        x: waterRegionDraft.center.x + 3
+      footprint: {
+        ...waterRegionDraft.footprint,
+        centerX: waterRegionDraft.footprint.centerX + 3
       },
       previewColorHex: "#3aa5c7"
     })
@@ -482,25 +485,31 @@ test("map editor project flattens authored placements and updates selected place
 
   assert.equal(selectedProject.selectedPlacementId, nextSelectedPlacementId);
   assert.equal(
-    primitiveAddedProject.placementDrafts[primitiveAddedProject.placementDrafts.length - 1]
-      .position.x,
-    selectedProject.placementDrafts[1].position.x + 4
+    primitiveAddedProject.regionDrafts.length,
+    selectedProject.regionDrafts.length + 1
   );
   assert.equal(
-    primitiveAddedProject.placementDrafts[primitiveAddedProject.placementDrafts.length - 1]
-      .position.z,
-    selectedProject.placementDrafts[1].position.z
+    primitiveAddedProject.selectedEntityRef?.kind,
+    "region"
   );
   assert.deepEqual(snappedBuildPosition, {
     x: 4,
     y: 0,
     z: 8
   });
+  assert.equal(
+    explicitlyPlacedPrimitiveProject.edgeDrafts.length,
+    selectedProject.edgeDrafts.length + 1
+  );
   assert.deepEqual(
-    explicitlyPlacedPrimitiveProject.placementDrafts[
-      explicitlyPlacedPrimitiveProject.placementDrafts.length - 1
-    ].position,
-    snappedBuildPosition
+    explicitlyPlacedPrimitiveProject.edgeDrafts[
+      explicitlyPlacedPrimitiveProject.edgeDrafts.length - 1
+    ].center,
+    {
+      x: snappedBuildPosition.x,
+      y: snappedBuildPosition.y + 2,
+      z: snappedBuildPosition.z
+    }
   );
   assert.equal(addedProject.placementDrafts.length, initialProject.placementDrafts.length + 1);
   assert.notEqual(updatedPlacement, null);
@@ -524,8 +533,8 @@ test("map editor project flattens authored placements and updates selected place
   );
   assert.equal(initialProject.placementDrafts[1].notes, "");
   assert.equal(
-    updatedWaterProject.waterRegionDrafts[0].center.x,
-    initialProject.waterRegionDrafts[0].center.x + 3
+    updatedWaterProject.waterRegionDrafts[0].footprint.centerX,
+    initialProject.waterRegionDrafts[0].footprint.centerX + 3
   );
   assert.equal(
     updatedWaterProject.waterRegionDrafts[0].previewColorHex,
@@ -585,8 +594,8 @@ test("map editor project flattens authored placements and updates selected place
   assert.equal(
     addedWaterRegionProject.waterRegionDrafts[
       addedWaterRegionProject.waterRegionDrafts.length - 1
-    ].size.x,
-    24
+    ].footprint.sizeCellsX,
+    6
   );
   assert.equal(
     addedLaunchVariationProject.selectedLaunchVariationId,
@@ -652,7 +661,7 @@ test("map editor project session undoes authored changes without treating select
     (project) =>
       addMapEditorPlacementFromAsset(
         project,
-        listMapEditorBuildPrimitiveCatalogEntries()[0].asset
+        listMapEditorBuildPrimitiveCatalogEntries()[2].asset
       )
   );
   const undoneSession = undoMapEditorProjectSessionChange(authoredChangeSession);
@@ -760,7 +769,7 @@ test("map editor project save/load persists authored launch variations and envir
     restoredProject.environmentPresentationProfileId,
     "shell-golden-hour-environment-presentation"
   );
-  assert.equal(restoredProject.launchVariationDrafts.length, 2);
+  assert.equal(restoredProject.launchVariationDrafts.length, 3);
 });
 
 test("stored staging-ground bundle overrides can become the default runtime map bundle", async () => {
@@ -846,7 +855,7 @@ test("metaverse environment proof loads from the bundle-backed staging-ground ma
     metaverseEnvironmentProofConfig.assets.some(
       (asset) => asset.placement === "instanced"
     ),
-    false
+    true
   );
 });
 
@@ -989,27 +998,38 @@ test("metaverse environment proof rejects procedural box drift away from exact-m
   );
   const {
     environmentPropManifest,
-    metaversePlaygroundRangeFloorEnvironmentAssetId
+    metaverseBuilderFloorTileEnvironmentAssetId
   } = await clientLoader.load("/src/assets/config/environment-prop-manifest.ts");
 
   const floorAsset =
-    environmentPropManifest.byId[metaversePlaygroundRangeFloorEnvironmentAssetId];
+    environmentPropManifest.byId[metaverseBuilderFloorTileEnvironmentAssetId];
   const originalFloorLods = floorAsset.renderModel.lods;
 
   const createPreviewBundleWithFloor = (previewId, mutateFloorAsset) => {
     const previewBundle = structuredClone(stagingGroundMapBundle);
+    const mutateAssets = (environmentAssets) =>
+      Object.freeze(
+        environmentAssets.map((environmentAsset) => {
+          if (
+            environmentAsset.assetId !==
+            metaverseBuilderFloorTileEnvironmentAssetId
+          ) {
+            return Object.freeze(environmentAsset);
+          }
+
+          return Object.freeze(mutateFloorAsset(structuredClone(environmentAsset)));
+        })
+      );
 
     previewBundle.label = `Exact Match Proof ${previewId}`;
     previewBundle.mapId = previewId;
-    previewBundle.environmentAssets = Object.freeze(
-      previewBundle.environmentAssets.map((environmentAsset) => {
-        if (environmentAsset.assetId !== metaversePlaygroundRangeFloorEnvironmentAssetId) {
-          return Object.freeze(environmentAsset);
-        }
-
-        return Object.freeze(mutateFloorAsset(structuredClone(environmentAsset)));
-      })
-    );
+    previewBundle.environmentAssets = mutateAssets(previewBundle.environmentAssets);
+    previewBundle.compiledWorld = Object.freeze({
+      ...previewBundle.compiledWorld,
+      compatibilityEnvironmentAssets: mutateAssets(
+        previewBundle.compiledWorld.compatibilityEnvironmentAssets
+      )
+    });
 
     return Object.freeze(previewBundle);
   };
@@ -1153,7 +1173,7 @@ test("map editor validate-and-run exports a bundle-backed preview through the ru
   assert.match(fetchCalls[0].url, /\/metaverse\/world\/preview-bundles$/);
   assert.equal(fetchCalls[0].init.method, "POST");
   assert.equal(previewBundle.bundle.sceneObjects.length, 1);
-  assert.equal(previewBundle.bundle.launchVariations.length, 2);
+  assert.equal(previewBundle.bundle.launchVariations.length, 3);
   assert.equal(
     previewBundle.bundle.sceneObjects[0]?.capabilities[0]?.kind,
     "launch-target"
@@ -1170,6 +1190,9 @@ test("map editor preview registration pushes authored player spawns into the act
   );
   const { loadMetaverseMapBundle } = await clientLoader.load(
     "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const { mapEditorBuildGridUnitMeters } = await clientLoader.load(
+    "/src/engine-tool/build/map-editor-build-placement.ts"
   );
   const { createMetaverseRuntimeConfig } = await clientLoader.load(
     "/src/metaverse/config/metaverse-runtime.ts"
@@ -1243,6 +1266,9 @@ test("map editor preview registration pushes authored water regions into the act
   const { loadMetaverseMapBundle } = await clientLoader.load(
     "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
   );
+  const { mapEditorBuildGridUnitMeters } = await clientLoader.load(
+    "/src/engine-tool/build/map-editor-build-placement.ts"
+  );
   const { createMetaverseRuntimeConfig } = await clientLoader.load(
     "/src/metaverse/config/metaverse-runtime.ts"
   );
@@ -1254,13 +1280,10 @@ test("map editor preview registration pushes authored water regions into the act
         "shell-water-region-1",
         (waterRegionDraft) => ({
           ...waterRegionDraft,
-          center: {
-            ...waterRegionDraft.center,
-            x: waterRegionDraft.center.x + 7
-          },
-          size: {
-            ...waterRegionDraft.size,
-            z: waterRegionDraft.size.z + 10
+          footprint: {
+            ...waterRegionDraft.footprint,
+            centerX: waterRegionDraft.footprint.centerX + 7,
+            sizeCellsZ: waterRegionDraft.footprint.sizeCellsZ + 3
           }
         })
       ),
@@ -1295,11 +1318,13 @@ test("map editor preview registration pushes authored water regions into the act
   assert.equal(runtimeConfig.waterRegionSnapshots.length, 1);
   assert.equal(
     runtimeConfig.waterRegionSnapshots[0]?.translation.x,
-    project.waterRegionDrafts[0]?.center.x
+    project.waterRegionDrafts[0]?.footprint.centerX
   );
   assert.equal(
     runtimeConfig.waterRegionSnapshots[0]?.halfExtents.z,
-    project.waterRegionDrafts[0]?.size.z * 0.5
+    project.waterRegionDrafts[0]?.footprint.sizeCellsZ *
+      mapEditorBuildGridUnitMeters *
+      0.5
   );
   assert.deepEqual(runtimeConfig.environment.fogColor, [0.78, 0.6, 0.48]);
   assert.deepEqual(runtimeConfig.ocean.nearColor, [0.34, 0.41, 0.58]);

@@ -175,6 +175,7 @@ function createDefaultVehicleSnapshot({ vehicleX = 8 } = {}) {
 }
 
 function createWorldEvent({
+  combatMatch = null,
   authoritativeJumpActionSequence = 0,
   currentTick,
   groundedBody = Object.freeze({
@@ -191,13 +192,19 @@ function createWorldEvent({
     yawRadians: 0
   }),
   includeDefaultVehicle = true,
+  highestProcessedPlayerActionSequence = null,
+  lastProcessedCombatActionSequence = 0,
   lastProcessedTraversalSequence,
   lastProcessedLookSequence = 0,
   lastProcessedWeaponSequence = 0,
+  latestCombatActionReceipt = null,
   locomotionMode = "grounded",
+  mountedOccupancy = undefined,
+  playerCombat = null,
   playerCharacterId = "mesh2motion-humanoid-v1",
   playerId,
   playerStateSequence,
+  recentPlayerActionReceipts = null,
   teamId = "red",
   serverTimeMs,
   snapshotSequence,
@@ -217,6 +224,11 @@ function createWorldEvent({
 
   return createMetaverseRealtimeWorldEvent({
     world: {
+      ...(combatMatch === null
+        ? {}
+        : {
+            combatMatch
+          }),
       observerPlayer: {
         ...(authoritativeJumpActionSequence > 0
           ? {
@@ -226,16 +238,34 @@ function createWorldEvent({
               }
             }
           : {}),
+        highestProcessedPlayerActionSequence:
+          highestProcessedPlayerActionSequence ??
+          lastProcessedCombatActionSequence,
         lastProcessedTraversalSequence: resolvedLastProcessedTraversalSequence,
         lastProcessedLookSequence,
         lastProcessedWeaponSequence,
+        recentPlayerActionReceipts:
+          recentPlayerActionReceipts ??
+          (latestCombatActionReceipt === null
+            ? []
+            : [latestCombatActionReceipt]),
         playerId
       },
       players: [
         {
           characterId: playerCharacterId,
+          ...(playerCombat === null
+            ? {}
+            : {
+                combat: playerCombat
+              }),
           groundedBody,
           locomotionMode,
+          ...(mountedOccupancy === undefined
+            ? {}
+            : {
+                mountedOccupancy
+              }),
           playerId,
           teamId,
           ...(authoritativeJumpActionSequence > 0

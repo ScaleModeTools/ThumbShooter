@@ -74,7 +74,7 @@ export const metaverseGroundedBodyTraversalCoreConfig = Object.freeze({
   dragCurveExponent: 1.5,
   gravityUnitsPerSecond: 17,
   jumpGroundContactGraceSeconds: 0.2,
-  jumpImpulseUnitsPerSecond: 10.1,
+  jumpImpulseUnitsPerSecond: 3.5,
   maxSlopeClimbAngleRadians: Math.PI * 0.26,
   maxTurnSpeedRadiansPerSecond: 3.6,
   minSlopeSlideAngleRadians: Math.PI * 0.34,

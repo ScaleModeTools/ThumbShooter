@@ -515,6 +515,11 @@ test("attachment manifests keep explicit attachment socket ownership for held an
   assert.equal(pistolAttachment.defaultSocketId, "hand_r_socket");
   assert.deepEqual(pistolAttachment.heldMount, {
     adsCameraAnchorNodeName: "metaverse_service_pistol_ads_camera_anchor",
+    adsCameraTargetOffset: {
+      across: 0,
+      forward: 0.1,
+      up: -0.05
+    },
     attachmentSocketNodeName: "metaverse_service_pistol_grip_hand_r_socket",
     forwardReferenceNodeName: "metaverse_service_pistol_forward_marker",
     supportMarkerNodeName: "metaverse_service_pistol_support_marker",

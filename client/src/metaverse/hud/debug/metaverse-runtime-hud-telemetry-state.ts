@@ -9,6 +9,9 @@ import type {
 import {
   readMetaverseRealtimePlayerActiveBodyKinematicSnapshot
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import type {
+  MetaversePlayerActionReceiptSnapshot
+} from "@webgpu-metaverse/shared";
 
 import {
   metaverseLocalAuthorityReconciliationConfig,
@@ -77,6 +80,32 @@ interface RenderedCameraOffsetDeltaEventSnapshot {
   readonly lookAngleRadians: number;
   readonly planarMagnitudeMeters: number;
   readonly verticalMagnitudeMeters: number;
+}
+
+function readLatestFireWeaponActionReceipt(
+  recentPlayerActionReceipts:
+    | readonly MetaversePlayerActionReceiptSnapshot[]
+    | null
+    | undefined
+): Extract<
+  MetaversePlayerActionReceiptSnapshot,
+  {
+    readonly kind: "fire-weapon";
+  }
+> | null {
+  if (recentPlayerActionReceipts == null) {
+    return null;
+  }
+
+  for (let index = recentPlayerActionReceipts.length - 1; index >= 0; index -= 1) {
+    const receiptSnapshot = recentPlayerActionReceipts[index];
+
+    if (receiptSnapshot?.kind === "fire-weapon") {
+      return receiptSnapshot;
+    }
+  }
+
+  return null;
 }
 
 function freezeGroundedJumpBodyTelemetrySnapshot(
@@ -697,6 +726,32 @@ function freezeTelemetrySnapshot(
               .verticalMagnitudeMeters
         }),
         authoritativeLocalPlayer: Object.freeze({
+          combatAction: Object.freeze({
+            actionSequence:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.actionSequence,
+            kind:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.kind,
+            highestProcessedPlayerActionSequence:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.highestProcessedPlayerActionSequence,
+            processedAtTimeMs:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.processedAtTimeMs,
+            sourceProjectileId:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.sourceProjectileId,
+            rejectionReason:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.rejectionReason,
+            status:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.status,
+            weaponId:
+              snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
+                .combatAction.weaponId
+          }),
           correctionPlanarMagnitudeMeters:
             snapshot.worldSnapshot.surfaceRouting.authoritativeLocalPlayer
               .correctionPlanarMagnitudeMeters,
@@ -995,6 +1050,12 @@ export class MetaverseRuntimeHudTelemetryState {
         : null;
     const authoritativeLocalPlayerGroundedBodyActive =
       authoritativeLocalPlayerSnapshot?.locomotionMode === "grounded";
+    const latestFireWeaponActionReceipt =
+      authoritativeLocalPlayerSnapshot === null
+        ? null
+        : readLatestFireWeaponActionReceipt(
+            authoritativeLocalPlayerSnapshot.recentPlayerActionReceipts
+          );
     const authoritativeLocalPlayerSurfaceRouting =
       authoritativeLocalPlayerSnapshot !== null &&
       authoritativeActiveBodySnapshot !== null &&
@@ -1013,6 +1074,23 @@ export class MetaverseRuntimeHudTelemetryState {
       authoritativeCorrection:
         this.#traversalRuntime.authoritativeCorrectionTelemetrySnapshot,
       authoritativeLocalPlayer: Object.freeze({
+        combatAction: Object.freeze({
+          actionSequence: latestFireWeaponActionReceipt?.actionSequence ?? null,
+          kind: latestFireWeaponActionReceipt?.kind ?? null,
+          highestProcessedPlayerActionSequence:
+            authoritativeLocalPlayerSnapshot
+              ?.highestProcessedPlayerActionSequence ?? null,
+          processedAtTimeMs:
+            latestFireWeaponActionReceipt == null
+              ? null
+              : Number(latestFireWeaponActionReceipt.processedAtTimeMs),
+          sourceProjectileId:
+            latestFireWeaponActionReceipt?.sourceProjectileId ?? null,
+          rejectionReason:
+            latestFireWeaponActionReceipt?.rejectionReason ?? null,
+          status: latestFireWeaponActionReceipt?.status ?? null,
+          weaponId: latestFireWeaponActionReceipt?.weaponId ?? null
+        }),
         correctionPlanarMagnitudeMeters:
           authoritativeLocalPlayerCorrectionPlanarMagnitudeMeters,
         correctionVerticalMagnitudeMeters:

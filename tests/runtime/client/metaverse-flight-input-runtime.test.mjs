@@ -128,6 +128,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       moveAxis: 1,
       pitchAxis: 1,
       primaryAction: true,
+      primaryActionPressedCount: 1,
       secondaryAction: false,
       strafeAxis: 1,
       yawAxis: 1
@@ -139,6 +140,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       moveAxis: 1,
       pitchAxis: 0,
       primaryAction: true,
+      primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 1,
       yawAxis: 0
@@ -157,6 +159,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       moveAxis: 0,
       pitchAxis: 0,
       primaryAction: false,
+      primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 1,
       yawAxis: 0
@@ -183,6 +186,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       moveAxis: 0,
       pitchAxis: 0,
       primaryAction: false,
+      primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 0,
       yawAxis: 0
@@ -206,6 +210,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       moveAxis: 0,
       pitchAxis: 0,
       primaryAction: false,
+      primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 0,
       yawAxis: 0
@@ -335,6 +340,7 @@ test("MetaverseFlightInputRuntime maps gamepad triggers onto primary and seconda
       moveAxis: 0,
       pitchAxis: 0,
       primaryAction: true,
+      primaryActionPressedCount: 1,
       secondaryAction: true,
       strafeAxis: 0,
       yawAxis: 0

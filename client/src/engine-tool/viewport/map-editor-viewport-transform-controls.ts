@@ -19,8 +19,6 @@ function resolveTransformControlsMode(
   viewportToolMode: MapEditorViewportToolMode
 ): TransformControlsMode {
   switch (viewportToolMode) {
-    case "build":
-      return "translate";
     case "rotate":
       return "rotate";
     case "scale":
@@ -134,13 +132,18 @@ export class MapEditorViewportTransformController {
     this.#viewportToolMode = viewportToolMode;
     this.#controls.setMode(resolveTransformControlsMode(viewportToolMode));
     this.#controls.setSpace(
-      viewportToolMode === "move" || viewportToolMode === "build"
+      viewportToolMode === "move"
         ? "world"
         : "local"
     );
 
     switch (viewportToolMode) {
-      case "build":
+      case "module":
+      case "path":
+      case "select":
+      case "terrain":
+      case "wall":
+      case "water":
         this.#controls.showX = false;
         this.#controls.showY = false;
         this.#controls.showZ = false;

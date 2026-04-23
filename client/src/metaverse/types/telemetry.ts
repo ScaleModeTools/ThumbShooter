@@ -1,4 +1,7 @@
 import type {
+  MetaverseCombatActionKindId,
+  MetaverseCombatActionReceiptStatusId,
+  MetaverseCombatActionRejectionReasonId,
   MetaversePlayerTraversalActionIntentSnapshot,
   MetaversePlayerTraversalBodyControlSnapshot,
   MetaverseRealtimePlayerTraversalActionResolutionStateId,
@@ -281,6 +284,16 @@ export interface MetaverseTelemetrySnapshot {
         readonly verticalMagnitudeMeters: number;
       };
       readonly authoritativeLocalPlayer: {
+        readonly combatAction: {
+          readonly actionSequence: number | null;
+          readonly kind: MetaverseCombatActionKindId | null;
+          readonly highestProcessedPlayerActionSequence: number | null;
+          readonly processedAtTimeMs: number | null;
+          readonly sourceProjectileId: string | null;
+          readonly rejectionReason: MetaverseCombatActionRejectionReasonId | null;
+          readonly status: MetaverseCombatActionReceiptStatusId | null;
+          readonly weaponId: string | null;
+        };
         readonly correctionPlanarMagnitudeMeters: number | null;
         readonly correctionVerticalMagnitudeMeters: number | null;
         readonly groundedBody: MetaverseTelemetryGroundedBodySnapshot | null;

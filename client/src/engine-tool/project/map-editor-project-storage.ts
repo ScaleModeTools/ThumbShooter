@@ -1,5 +1,6 @@
 import {
   defaultMetaverseGameplayProfileId,
+  parseMetaverseMapBundleSnapshot,
   resolveMetaverseGameplayProfile,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
@@ -16,13 +17,13 @@ import {
 
 import {
   createMapEditorProject,
-  removeMapEditorPlacementsByAssetId,
+  selectMapEditorEntity,
   selectMapEditorLaunchVariation,
   selectMapEditorPlacement,
-  type MapEditorProjectSnapshot
+  type MapEditorSelectedEntityRef
 } from "./map-editor-project-state";
+import type { MapEditorProjectSnapshot } from "./map-editor-project-state";
 import { exportMapEditorProjectToMetaverseMapBundle } from "../run/export-map-editor-project-to-metaverse-map-bundle";
-import { metaversePlaygroundRangeBarrierEnvironmentAssetId } from "@/assets/config/environment-prop-manifest";
 
 export interface MapEditorProjectStorageLike {
   getItem(key: string): string | null;
@@ -31,10 +32,11 @@ export interface MapEditorProjectStorageLike {
 }
 
 interface StoredMapEditorProjectRecord {
-  readonly bundle: MetaverseMapBundleSnapshot;
-  readonly selectedLaunchVariationId: string | null;
-  readonly selectedPlacementId: string | null;
-  readonly version: typeof storedMetaverseWorldBundleRecordVersion;
+  readonly bundle: unknown;
+  readonly selectedEntityRef?: unknown;
+  readonly selectedLaunchVariationId?: unknown;
+  readonly selectedPlacementId?: unknown;
+  readonly version: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -43,35 +45,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readStorageKey(bundleId: string): string {
   return readStoredMetaverseWorldBundleStorageKey(bundleId);
-}
-
-function isStoredMapEditorProjectRecord(
-  value: unknown,
-  bundleId: string
-): value is StoredMapEditorProjectRecord {
-  if (!isRecord(value) || !isRecord(value.bundle)) {
-    return false;
-  }
-
-  const { bundle } = value;
-  const presentationProfileIds = bundle.presentationProfileIds;
-
-  return (
-    value.version === storedMetaverseWorldBundleRecordVersion &&
-    bundle.mapId === bundleId &&
-    typeof bundle.description === "string" &&
-    (bundle.gameplayProfileId === undefined ||
-      typeof bundle.gameplayProfileId === "string") &&
-    typeof bundle.label === "string" &&
-    Array.isArray(bundle.environmentAssets) &&
-    Array.isArray(bundle.launchVariations) &&
-    Array.isArray(bundle.playerSpawnNodes) &&
-    isRecord(bundle.playerSpawnSelection) &&
-    Array.isArray(bundle.resourceSpawns) &&
-    Array.isArray(bundle.sceneObjects) &&
-    Array.isArray(bundle.waterRegions) &&
-    isRecord(presentationProfileIds)
-  );
 }
 
 function createLoadedMetaverseMapBundleFromBundle(
@@ -89,19 +62,37 @@ function createLoadedMetaverseMapBundleFromBundle(
       bundle.presentationProfileIds.environmentPresentationProfileId
     ),
     gameplayProfile: resolveMetaverseGameplayProfile(
-      "gameplayProfileId" in bundle &&
-        typeof bundle.gameplayProfileId === "string"
-        ? bundle.gameplayProfileId
-        : defaultMetaverseGameplayProfileId
+      bundle.gameplayProfileId ?? defaultMetaverseGameplayProfileId
     ),
     hudProfile: readMetaverseHudProfile(bundle.presentationProfileIds.hudProfileId)
   });
 }
 
+function readSelectedEntityRef(
+  value: unknown
+): MapEditorSelectedEntityRef | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return typeof value.id === "string" && typeof value.kind === "string"
+    ? Object.freeze({
+        id: value.id,
+        kind: value.kind as MapEditorSelectedEntityRef["kind"]
+      })
+    : null;
+}
+
 function parseStoredRecord(
   storage: MapEditorProjectStorageLike,
   bundleId: string
-): StoredMapEditorProjectRecord | null {
+): {
+  readonly bundle: MetaverseMapBundleSnapshot;
+  readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly selectedLaunchVariationId: string | null;
+  readonly selectedPlacementId: string | null;
+  readonly version: number;
+} | null {
   const rawValue = storage.getItem(readStorageKey(bundleId));
 
   if (rawValue === null) {
@@ -109,14 +100,52 @@ function parseStoredRecord(
   }
 
   try {
-    const parsedValue = JSON.parse(rawValue) as unknown;
+    const parsedValue = JSON.parse(rawValue) as StoredMapEditorProjectRecord;
 
-    return isStoredMapEditorProjectRecord(parsedValue, bundleId)
-      ? parsedValue
-      : null;
+    if (!isRecord(parsedValue) || typeof parsedValue.version !== "number") {
+      return null;
+    }
+
+    const bundle = parseMetaverseMapBundleSnapshot(parsedValue.bundle);
+
+    if (bundle.mapId !== bundleId || (parsedValue.version !== 2 && parsedValue.version !== 3)) {
+      return null;
+    }
+
+    return Object.freeze({
+      bundle,
+      selectedEntityRef: readSelectedEntityRef(parsedValue.selectedEntityRef),
+      selectedLaunchVariationId:
+        typeof parsedValue.selectedLaunchVariationId === "string"
+          ? parsedValue.selectedLaunchVariationId
+          : null,
+      selectedPlacementId:
+        typeof parsedValue.selectedPlacementId === "string"
+          ? parsedValue.selectedPlacementId
+          : null,
+      version: parsedValue.version
+    });
   } catch {
     return null;
   }
+}
+
+function writeStoredProjectRecord(
+  storage: MapEditorProjectStorageLike,
+  project: MapEditorProjectSnapshot
+): void {
+  storage.setItem(
+    readStorageKey(project.bundleId),
+    JSON.stringify(
+      Object.freeze({
+        bundle: exportMapEditorProjectToMetaverseMapBundle(project),
+        selectedEntityRef: project.selectedEntityRef,
+        selectedLaunchVariationId: project.selectedLaunchVariationId,
+        selectedPlacementId: project.selectedPlacementId,
+        version: storedMetaverseWorldBundleRecordVersion
+      })
+    )
+  );
 }
 
 export function loadStoredMapEditorProject(
@@ -137,12 +166,9 @@ export function loadStoredMapEditorProject(
     createLoadedMetaverseMapBundleFromBundle(storedRecord.bundle)
   );
 
-  project = removeMapEditorPlacementsByAssetId(
-    project,
-    metaversePlaygroundRangeBarrierEnvironmentAssetId
-  );
-
-  if (storedRecord.selectedPlacementId !== null) {
+  if (storedRecord.selectedEntityRef !== null) {
+    project = selectMapEditorEntity(project, storedRecord.selectedEntityRef);
+  } else if (storedRecord.selectedPlacementId !== null) {
     project = selectMapEditorPlacement(project, storedRecord.selectedPlacementId);
   }
 
@@ -151,6 +177,13 @@ export function loadStoredMapEditorProject(
       project,
       storedRecord.selectedLaunchVariationId
     );
+  }
+
+  if (
+    storedRecord.version !== storedMetaverseWorldBundleRecordVersion ||
+    storedRecord.selectedEntityRef === null
+  ) {
+    writeStoredProjectRecord(storage, project);
   }
 
   return project;
@@ -164,14 +197,7 @@ export function saveMapEditorProject(
     return;
   }
 
-  const storedRecord = Object.freeze({
-    bundle: exportMapEditorProjectToMetaverseMapBundle(project),
-    selectedLaunchVariationId: project.selectedLaunchVariationId,
-    selectedPlacementId: project.selectedPlacementId,
-    version: storedMetaverseWorldBundleRecordVersion
-  } satisfies StoredMapEditorProjectRecord);
-
-  storage.setItem(readStorageKey(project.bundleId), JSON.stringify(storedRecord));
+  writeStoredProjectRecord(storage, project);
 }
 
 export function clearStoredMapEditorProject(

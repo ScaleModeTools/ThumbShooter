@@ -857,7 +857,7 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
 
     assert.ok(expectedTurnTraversalSequence > expectedMoveTraversalSequence);
 
-    nowMs = 100;
+    nowMs = 1_200;
     await publishAuthoritativeWorld(runtime, worldAdapter, nowMs);
     observerRemoteWorldRuntime.sampleRemoteWorld();
 
@@ -1768,15 +1768,34 @@ test("MetaverseWorldClient keeps reliable fire-weapon command responses observer
     createMetaversePlayerId("loopback-webtransport-fire-pilot"),
     "playerId"
   );
+  const remotePlayerId = requireValue(
+    createMetaversePlayerId("loopback-webtransport-fire-target"),
+    "remotePlayerId"
+  );
   const username = requireValue(
     createUsername("Loopback Fire Pilot"),
     "username"
+  );
+  const remoteUsername = requireValue(
+    createUsername("Loopback Fire Target"),
+    "remoteUsername"
   );
   const scheduler = createManualTimerScheduler();
   let nowMs = 0;
 
   joinGroundedPlayer(runtime, playerId, username);
+  joinGroundedPlayer(
+    runtime,
+    remotePlayerId,
+    remoteUsername,
+    {
+      x: 0,
+      y: 1.62,
+      z: 15
+    }
+  );
   const roomId = worldServer.ensurePlayerRoomAssignment(playerId, nowMs).roomId;
+  worldServer.ensurePlayerRoomAssignment(remotePlayerId, nowMs);
 
   const loopback = createMetaverseWorldWebTransportLoopback({
     datagramAdapter,
@@ -1798,37 +1817,39 @@ test("MetaverseWorldClient keeps reliable fire-weapon command responses observer
       "authoritative world snapshot-stream subscribe"
     );
 
-    const initialBufferedSnapshotCount = client.worldSnapshotBuffer.length;
+    const initialSnapshotSequence =
+      client.worldSnapshotBuffer.at(-1)?.snapshotSequence ?? 0;
 
-    assert.ok(initialBufferedSnapshotCount > 0);
+    assert.ok(initialSnapshotSequence > 0);
 
-    nowMs = 100;
+    nowMs = 1_200;
     client.fireWeapon({
       aimMode: "hip-fire",
-      forwardDirection: {
-        x: 0,
-        y: 0,
-        z: -1
+      aimSnapshot: {
+        pitchRadians: 0,
+        yawRadians: 0
       },
-      muzzleOrigin: {
-        x: 0,
-        y: 1.62,
-        z: 24
-      },
+      issuedAtAuthoritativeTimeMs: 1_200,
       playerId,
       weaponId: "metaverse-service-pistol-v2"
     });
+    scheduler.runNext(0);
 
     const commandSnapshot = await waitFor(() => {
       if (loopback.telemetry.reliableCommandRequestCount !== 1) {
         return null;
       }
 
-      if (client.worldSnapshotBuffer.length !== initialBufferedSnapshotCount + 1) {
+      const latestSnapshot = client.worldSnapshotBuffer.at(-1) ?? null;
+
+      if (
+        latestSnapshot === null ||
+        latestSnapshot.snapshotSequence <= initialSnapshotSequence
+      ) {
         return null;
       }
 
-      return client.worldSnapshotBuffer.at(-1) ?? null;
+      return latestSnapshot;
     }, "observer-qualified fire-weapon command snapshot");
 
     assert.equal(loopback.telemetry.datagramWeaponCount, 0);

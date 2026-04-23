@@ -20,6 +20,7 @@ export interface AttachmentVector3Descriptor {
 
 export interface AttachmentMountSocketDescriptor {
   readonly adsCameraAnchorNodeName?: string | null;
+  readonly adsCameraTargetOffset?: AttachmentAimBasisOffsetDescriptor | null;
   readonly attachmentSocketNodeName?: string | null;
   readonly attachmentSocketNodeNameBySocketId?: Partial<
     Record<SocketId, string | null>
@@ -34,6 +35,12 @@ export interface AttachmentSupportPointDescriptor {
   readonly authoringNodeName?: string | null;
   readonly localPosition: AttachmentVector3Descriptor;
   readonly supportPointId: string;
+}
+
+export interface AttachmentAimBasisOffsetDescriptor {
+  readonly across: number;
+  readonly forward: number;
+  readonly up: number;
 }
 
 export type AttachmentOffHandSupportPointIdBySocketId = Partial<

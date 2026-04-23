@@ -12,8 +12,10 @@ import {
   createDuckHuntCoopRoomWebTransportPlayerPresenceDatagram,
   createDuckHuntCoopRoomWebTransportServerEventMessage,
   createDuckHuntCoopRoomWebTransportSnapshotRequest,
+  createMetaverseCombatActionReceiptSnapshot,
   createMetaverseDriverVehicleControlIntentSnapshot,
   createMetaverseGameplayTraversalIntentSnapshotInput,
+  createMetaverseIssuePlayerActionCommand,
   createMetaverseJoinPresenceCommand,
   createMetaverseMountedOccupancyIdentityKey,
   createMetaversePlayerId,
@@ -101,6 +103,31 @@ function createMetaverseSyncPlayerTraversalIntentCommand(input) {
       locomotionMode: nextIntent.locomotionMode,
       sequence: nextIntent.sequence
     }
+  });
+}
+
+function createFireWeaponPlayerActionCommand({
+  actionSequence,
+  aimMode,
+  issuedAtAuthoritativeTimeMs,
+  playerId,
+  weaponId,
+  yawRadians = 0,
+  pitchRadians = 0
+}) {
+  return createMetaverseIssuePlayerActionCommand({
+    action: {
+      ...(aimMode === undefined ? {} : { aimMode }),
+      actionSequence,
+      aimSnapshot: {
+        pitchRadians,
+        yawRadians
+      },
+      issuedAtAuthoritativeTimeMs,
+      kind: "fire-weapon",
+      weaponId
+    },
+    playerId
   });
 }
 
@@ -605,6 +632,142 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
   assert.ok(Object.isFrozen(worldSnapshot.environmentBodies));
   assert.ok(Object.isFrozen(worldSnapshot.vehicles));
   assert.ok(Object.isFrozen(worldSnapshot.players[0]?.mountedOccupancy));
+});
+
+test("metaverse realtime world contracts keep combat action receipts observer-local and correlate projectile outcomes", () => {
+  const playerId = createMetaversePlayerId("combat-observer-pilot");
+  const username = createUsername("Combat Observer Pilot");
+
+  assert.notEqual(playerId, null);
+  assert.notEqual(username, null);
+
+  const worldSnapshot = createMetaverseRealtimeWorldSnapshot({
+    combatFeed: [
+      {
+        attackerPlayerId: playerId,
+        damageAmount: 42,
+        hitZone: "head",
+        sequence: 5.9,
+        sourceActionSequence: 3.4,
+        sourceProjectileId: " projectile-3 ",
+        targetPlayerId: playerId,
+        timeMs: 1_250.4,
+        type: "damage",
+        weaponId: " metaverse-service-pistol-v2 "
+      },
+      {
+        attackerPlayerId: playerId,
+        headshot: true,
+        sequence: 6.2,
+        sourceActionSequence: 3.4,
+        sourceProjectileId: " projectile-3 ",
+        targetPlayerId: playerId,
+        timeMs: 1_260.1,
+        type: "kill",
+        weaponId: " metaverse-service-pistol-v2 "
+      }
+    ],
+    observerPlayer: {
+      highestProcessedPlayerActionSequence: 3.8,
+      playerId,
+      recentPlayerActionReceipts: [
+        createMetaverseCombatActionReceiptSnapshot({
+          actionSequence: 3.4,
+          kind: "fire-weapon",
+          processedAtTimeMs: 1_240.9,
+          projectileId: " projectile-3 ",
+          status: "accepted",
+          weaponId: " metaverse-service-pistol-v2 "
+        })
+      ]
+    },
+    players: [
+      {
+        characterId: "mesh2motion-humanoid-v1",
+        groundedBody: {
+          linearVelocity: {
+            x: 0,
+            y: 0,
+            z: 0
+          },
+          position: {
+            x: 0,
+            y: 1.62,
+            z: 0
+          },
+          yawRadians: 0
+        },
+        playerId,
+        stateSequence: 2,
+        username
+      }
+    ],
+    projectiles: [
+      {
+        direction: {
+          x: 0,
+          y: 0,
+          z: -1
+        },
+        ownerPlayerId: playerId,
+        position: {
+          x: 0,
+          y: 1.62,
+          z: 0
+        },
+        projectileId: " projectile-3 ",
+        sourceActionSequence: 3.4,
+        spawnedAtTimeMs: 1_240.2,
+        velocityMetersPerSecond: 900,
+        weaponId: " metaverse-service-pistol-v2 "
+      }
+    ],
+    snapshotSequence: 8,
+    tick: {
+      currentTick: 24,
+      emittedAtServerTimeMs: 1_250,
+      tickIntervalMs: 50
+    },
+    vehicles: []
+  });
+
+  assert.equal(
+    worldSnapshot.observerPlayer?.highestProcessedPlayerActionSequence,
+    3
+  );
+  assert.equal(
+    worldSnapshot.observerPlayer?.recentPlayerActionReceipts[0]?.actionSequence,
+    3
+  );
+  assert.equal(
+    worldSnapshot.observerPlayer?.recentPlayerActionReceipts[0]?.sourceProjectileId,
+    "projectile-3"
+  );
+  assert.equal(worldSnapshot.projectiles[0]?.sourceActionSequence, 3);
+  assert.equal(worldSnapshot.combatFeed[0]?.type, "damage");
+  assert.equal(worldSnapshot.combatFeed[0]?.sourceActionSequence, 3);
+  assert.equal(worldSnapshot.combatFeed[0]?.sourceProjectileId, "projectile-3");
+  assert.equal(worldSnapshot.combatFeed[1]?.type, "kill");
+  assert.equal(worldSnapshot.combatFeed[1]?.sourceActionSequence, 3);
+  assert.equal(worldSnapshot.combatFeed[1]?.sourceProjectileId, "projectile-3");
+});
+
+test("metaverse issue-player-action fire commands normalize actionSequence instead of fireSequence", () => {
+  const playerId = createMetaversePlayerId("combat-command-pilot");
+
+  assert.notEqual(playerId, null);
+
+  const fireWeaponCommand = createFireWeaponPlayerActionCommand({
+    actionSequence: 4.9,
+    issuedAtAuthoritativeTimeMs: 1_200.6,
+    playerId,
+    weaponId: " metaverse-service-pistol-v2 "
+  });
+
+  assert.equal(fireWeaponCommand.action.actionSequence, 4);
+  assert.equal(fireWeaponCommand.action.weaponId, "metaverse-service-pistol-v2");
+  assert.equal(fireWeaponCommand.action.aimSnapshot.yawRadians, 0);
+  assert.equal(fireWeaponCommand.type, "issue-player-action");
 });
 
 test("metaverse realtime world contracts preserve explicit traversal authority from accepted jump resolution", () => {

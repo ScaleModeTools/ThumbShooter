@@ -12,6 +12,7 @@ export const metaverseAuthoritativeWorldCadenceConfig = Object.freeze({
 });
 
 export const metaverseAuthoritativeWorldRuntimeConfig = {
+  authoritativeCombatRewindEnabled: true,
   playerInactivityTimeoutMs: createMilliseconds(10_000),
   tickIntervalMs: metaverseAuthoritativeWorldCadenceConfig.tickIntervalMs
 } as const satisfies MetaverseAuthoritativeWorldRuntimeConfig;

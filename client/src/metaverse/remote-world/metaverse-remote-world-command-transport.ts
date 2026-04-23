@@ -13,20 +13,32 @@ import type {
   RoutedDriverVehicleControlIntentSnapshot
 } from "../traversal/types/traversal";
 import type { MetaverseWorldClientRuntime } from "@/network";
+import { MetaverseFireWeaponActionPolicy } from "./metaverse-fire-weapon-action-policy";
 
 interface MetaverseRemoteWorldCommandTransportDependencies {
   readonly localPlayerIdentity: MetaverseLocalPlayerIdentity | null;
+  readonly readEstimatedServerTimeMs: (localWallClockMs: number) => number;
+  readonly readWallClockMs: () => number;
   readonly readWorldClient: () => MetaverseWorldClientRuntime | null;
 }
 
 export class MetaverseRemoteWorldCommandTransport {
+  readonly #fireWeaponActionPolicy: MetaverseFireWeaponActionPolicy;
   readonly #localPlayerIdentity: MetaverseLocalPlayerIdentity | null;
   readonly #readWorldClient: () => MetaverseWorldClientRuntime | null;
 
   constructor({
     localPlayerIdentity,
+    readEstimatedServerTimeMs,
+    readWallClockMs,
     readWorldClient
   }: MetaverseRemoteWorldCommandTransportDependencies) {
+    this.#fireWeaponActionPolicy = new MetaverseFireWeaponActionPolicy({
+      readEstimatedServerTimeMs,
+      readLocalPlayerId: () => this.#localPlayerIdentity?.playerId ?? null,
+      readWallClockMs,
+      readWorldClient
+    });
     this.#localPlayerIdentity = localPlayerIdentity;
     this.#readWorldClient = readWorldClient;
   }
@@ -165,15 +177,9 @@ export class MetaverseRemoteWorldCommandTransport {
 
   fireWeapon(input: {
     readonly aimMode?: "ads" | "hip-fire";
-    readonly forwardDirection: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
-    };
-    readonly muzzleOrigin: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
+    readonly aimSnapshot: {
+      readonly pitchRadians: number;
+      readonly yawRadians: number;
     };
     readonly weaponId: string;
   }): void {
@@ -183,16 +189,27 @@ export class MetaverseRemoteWorldCommandTransport {
       return;
     }
 
-    worldClient.fireWeapon?.({
-      ...(input.aimMode === undefined
-        ? {}
-        : {
-            aimMode: input.aimMode
-          }),
-      forwardDirection: input.forwardDirection,
-      muzzleOrigin: input.muzzleOrigin,
-      playerId: this.#localPlayerIdentity.playerId,
-      weaponId: input.weaponId
+    const fireWeaponAction =
+      this.#fireWeaponActionPolicy.createFireWeaponAction(input);
+
+    if (fireWeaponAction === null) {
+      return;
+    }
+
+    worldClient.issuePlayerAction?.({
+      action: {
+        ...(fireWeaponAction.aimMode === undefined
+          ? {}
+          : {
+              aimMode: fireWeaponAction.aimMode
+            }),
+        aimSnapshot: fireWeaponAction.aimSnapshot,
+        issuedAtAuthoritativeTimeMs:
+          fireWeaponAction.issuedAtAuthoritativeTimeMs,
+        kind: "fire-weapon",
+        weaponId: fireWeaponAction.weaponId
+      },
+      playerId: this.#localPlayerIdentity.playerId
     });
   }
 }

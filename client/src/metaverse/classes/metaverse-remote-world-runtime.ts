@@ -77,6 +77,7 @@ interface MetaverseRemoteWorldRuntimeDependencies {
 }
 
 export class MetaverseRemoteWorldRuntime {
+  readonly #authoritativeServerClock: AuthoritativeServerClock;
   readonly #commandTransport: MetaverseRemoteWorldCommandTransport;
   readonly #connectionRequired: boolean;
   readonly #connectionLifecycle: MetaverseRemoteWorldConnectionLifecycle;
@@ -95,12 +96,15 @@ export class MetaverseRemoteWorldRuntime {
     this.#connectionRequired =
       createMetaverseWorldClient !== null && localPlayerIdentity !== null;
     const resolvedReadWallClockMs = readWallClockMs ?? Date.now;
-    const authoritativeServerClock = new AuthoritativeServerClock({
+    this.#authoritativeServerClock = new AuthoritativeServerClock({
       clockOffsetCorrectionAlpha: samplingConfig.clockOffsetCorrectionAlpha,
       clockOffsetMaxStepMs: samplingConfig.clockOffsetMaxStepMs
     });
     this.#commandTransport = new MetaverseRemoteWorldCommandTransport({
       localPlayerIdentity,
+      readEstimatedServerTimeMs: (localWallClockMs) =>
+        this.#authoritativeServerClock.readEstimatedServerTimeMs(localWallClockMs),
+      readWallClockMs: resolvedReadWallClockMs,
       readWorldClient: () => this.#connectionLifecycle.worldClient
     });
     this.#connectionLifecycle = new MetaverseRemoteWorldConnectionLifecycle({
@@ -116,7 +120,7 @@ export class MetaverseRemoteWorldRuntime {
     );
     this.#remoteWorldAuthoritativeSnapshotState =
       new MetaverseRemoteWorldAuthoritativeSnapshotState({
-        authoritativeServerClock,
+        authoritativeServerClock: this.#authoritativeServerClock,
         readLatestPlayerTraversalSequence: () =>
           this.#connectionLifecycle.worldClient?.latestPlayerTraversalSequence ??
           this.#connectionLifecycle.worldClient
@@ -131,7 +135,7 @@ export class MetaverseRemoteWorldRuntime {
           this.#connectionLifecycle.worldClient?.worldSnapshotBuffer ?? []
       });
     this.#samplingState = new MetaverseRemoteWorldSamplingState({
-      authoritativeServerClock,
+      authoritativeServerClock: this.#authoritativeServerClock,
       interpolationDelayMs: samplingConfig.interpolationDelayMs,
       localPlayerIdentity,
       maxExtrapolationMs: samplingConfig.maxExtrapolationMs,
@@ -336,15 +340,9 @@ export class MetaverseRemoteWorldRuntime {
 
   fireWeapon(input: {
     readonly aimMode?: "ads" | "hip-fire";
-    readonly forwardDirection: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
-    };
-    readonly muzzleOrigin: {
-      readonly x: number;
-      readonly y: number;
-      readonly z: number;
+    readonly aimSnapshot: {
+      readonly pitchRadians: number;
+      readonly yawRadians: number;
     };
     readonly weaponId: string;
   }): void {

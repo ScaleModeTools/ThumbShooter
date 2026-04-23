@@ -4,6 +4,7 @@ import type { AttachmentAssetId } from "./asset-id";
 import type { AssetLodGroup } from "./asset-lod";
 import type { SkeletonId, SocketId } from "./asset-socket";
 import type {
+  AttachmentAimBasisOffsetDescriptor,
   AttachmentAssetDescriptor,
   AttachmentMountedHolsterDescriptor
 } from "./attachment-asset-manifest";
@@ -63,6 +64,7 @@ export interface WeaponZoomLevelDescriptor {
 
 export interface WeaponAimProfileDescriptor {
   readonly adsFovDegrees: number;
+  readonly adsCameraTargetOffset?: AttachmentAimBasisOffsetDescriptor | null;
   readonly defaultReticleId: ReticleId;
   readonly poseProfileId: WeaponPoseProfileId;
   readonly reticleStyleId: string;
@@ -218,6 +220,7 @@ export interface WeaponArchetypeDescriptor<
 }
 
 export interface WeaponModuleAimOverridesDescriptor {
+  readonly adsCameraTargetOffset?: AttachmentAimBasisOffsetDescriptor | null;
   readonly adsFovDegrees?: number;
   readonly defaultReticleId?: ReticleId;
   readonly reticleStyleId?: string;
@@ -299,6 +302,7 @@ export function buildAttachmentAssetFromWeaponArchetype<
     defaultSocketId: weapon.defaultSocketId,
     heldMount: {
       adsCameraAnchorNodeName: weapon.nodes.adsCameraAnchorNodeName,
+      adsCameraTargetOffset: weapon.weaponAimProfile.adsCameraTargetOffset ?? null,
       attachmentSocketNodeName: weapon.nodes.rightHandGripSocketNodeName,
       forwardReferenceNodeName: weapon.nodes.forwardReferenceNodeName,
       supportMarkerNodeName: weapon.nodes.supportMarkerNodeName ?? null,

@@ -8,7 +8,7 @@ export interface MapEditorBuildPlacementPositionSnapshot {
 
 export const mapEditorBuildGridUnitMeters = 4;
 
-function snapMapEditorBuildCoordinate(value: number): number {
+export function snapMapEditorBuildCoordinateToGrid(value: number): number {
   return Math.round(value / mapEditorBuildGridUnitMeters) * mapEditorBuildGridUnitMeters;
 }
 
@@ -17,8 +17,8 @@ export function resolveMapEditorBuildGroundPlacementPosition(
   _primitive: MapEditorBuildPrimitiveCatalogEntry
 ): MapEditorBuildPlacementPositionSnapshot {
   return Object.freeze({
-    x: snapMapEditorBuildCoordinate(point.x),
+    x: snapMapEditorBuildCoordinateToGrid(point.x),
     y: 0,
-    z: snapMapEditorBuildCoordinate(point.z)
+    z: snapMapEditorBuildCoordinateToGrid(point.z)
   });
 }

@@ -1,4 +1,6 @@
 import type {
+  MetaversePlayerActionReceiptSnapshot,
+  MetaversePlayerCombatSnapshot,
   MetaversePlayerId,
   MetaverseRealtimeWorldEvent,
   MetaverseRealtimeWorldSnapshot
@@ -13,9 +15,19 @@ import type {
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;
 type SnapshotAcceptanceSource = "command" | "polling" | "snapshot-stream";
 type LocalPlayerWorldSnapshot = {
+  readonly combat: MetaversePlayerCombatSnapshot | null;
+  readonly combatMatchPhase:
+    NonNullable<MetaverseRealtimeWorldSnapshot["combatMatch"]>["phase"] | null;
+  readonly highestProcessedPlayerActionSequence: number;
   readonly lastProcessedLookSequence: number;
   readonly lastProcessedTraversalSequence: number;
   readonly lastProcessedWeaponSequence: number;
+  readonly mountedOccupancy:
+    | MetaverseRealtimeWorldSnapshot["players"][number]["mountedOccupancy"]
+    | null;
+  readonly recentPlayerActionReceipts:
+    readonly MetaversePlayerActionReceiptSnapshot[];
+  readonly serverTimeMs: number;
   readonly traversalAuthority:
     MetaverseRealtimeWorldSnapshot["players"][number]["traversalAuthority"];
 };
@@ -290,12 +302,20 @@ export class MetaverseWorldSnapshotState {
     }
 
     return Object.freeze({
+      combat: localPlayerSnapshot.combat,
+      combatMatchPhase: latestWorldSnapshot.combatMatch?.phase ?? null,
+      highestProcessedPlayerActionSequence:
+        observerPlayerSnapshot.highestProcessedPlayerActionSequence,
       lastProcessedLookSequence:
         observerPlayerSnapshot.lastProcessedLookSequence,
       lastProcessedTraversalSequence:
         observerPlayerSnapshot.lastProcessedTraversalSequence,
       lastProcessedWeaponSequence:
         observerPlayerSnapshot.lastProcessedWeaponSequence,
+      mountedOccupancy: localPlayerSnapshot.mountedOccupancy ?? null,
+      recentPlayerActionReceipts:
+        observerPlayerSnapshot.recentPlayerActionReceipts,
+      serverTimeMs: Number(latestWorldSnapshot.tick.serverTimeMs),
       traversalAuthority: localPlayerSnapshot.traversalAuthority
     });
   }

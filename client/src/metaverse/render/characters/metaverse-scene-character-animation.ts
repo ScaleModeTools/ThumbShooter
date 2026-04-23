@@ -26,6 +26,7 @@ const humanoidV2PistolLowerBodyVocabularyIds = Object.freeze([
 ] as const satisfies readonly MetaverseCharacterAnimationVocabularyId[]);
 const humanoidV2PistolPoseWeightEpsilon = 0.000001;
 const metaverseCharacterRenderYawOffsetRadians = Math.PI;
+const minimumAnimationPlaybackRateMagnitude = 0.01;
 
 export interface HumanoidV2PistolPoseRuntime {
   readonly actionsByPoseId: ReadonlyMap<
@@ -349,9 +350,15 @@ export function syncCharacterAnimation(
       ? characterRuntime.activeAnimationCycleId
       : Math.max(0, Math.trunc(animationCycleId));
   const resolvedAnimationPlaybackRateMultiplier =
-    Number.isFinite(animationPlaybackRateMultiplier)
-      ? Math.max(0.01, animationPlaybackRateMultiplier)
-      : 1;
+    !Number.isFinite(animationPlaybackRateMultiplier)
+      ? 1
+      : animationPlaybackRateMultiplier === 0
+        ? minimumAnimationPlaybackRateMagnitude
+        : Math.sign(animationPlaybackRateMultiplier) *
+          Math.max(
+            minimumAnimationPlaybackRateMagnitude,
+            Math.abs(animationPlaybackRateMultiplier)
+          );
   const nextPlaybackRate = resolveAnimationPlaybackRate(
     nextVocabulary,
     useHumanoidV2PistolLayering,
@@ -389,7 +396,9 @@ export function syncCharacterAnimation(
   nextAction.setEffectiveWeight(1);
   nextAction.zeroSlopeAtStart = true;
   nextAction.zeroSlopeAtEnd = nextVocabulary === "idle";
-  nextAction.reset().play();
+  nextAction.reset();
+  nextAction.time = nextPlaybackRate < 0 ? nextAction.getClip().duration : 0;
+  nextAction.play();
 
   if (previousAction !== undefined && previousAction !== nextAction) {
     previousAction.zeroSlopeAtEnd = nextVocabulary === "idle";

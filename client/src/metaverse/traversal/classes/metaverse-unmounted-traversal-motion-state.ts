@@ -1067,6 +1067,7 @@ function createMovementInputFromTraversalIntent(
       traversalIntentInput.actionIntent.pressed === true,
     moveAxis: traversalIntentInput.bodyControl?.moveAxis ?? 0,
     primaryAction: false,
+    primaryActionPressedCount: 0,
     pitchAxis: 0,
     secondaryAction: false,
     strafeAxis: traversalIntentInput.bodyControl?.strafeAxis ?? 0,

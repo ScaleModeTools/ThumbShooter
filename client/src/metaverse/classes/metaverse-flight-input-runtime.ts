@@ -13,6 +13,7 @@ interface MouseFlightInputState {
   lookDeltaX: number;
   lookDeltaY: number;
   primaryAction: boolean;
+  primaryActionPressedCount: number;
   secondaryAction: boolean;
 }
 
@@ -58,6 +59,7 @@ function createMouseFlightInputState(): MouseFlightInputState {
     lookDeltaX: 0,
     lookDeltaY: 0,
     primaryAction: false,
+    primaryActionPressedCount: 0,
     secondaryAction: false
   };
 }
@@ -108,6 +110,7 @@ export class MetaverseFlightInputRuntime {
 
   #canvas: HTMLCanvasElement | null = null;
   #inputCleanup: (() => void) | null = null;
+  #lastGamepadPrimaryAction = false;
   #lastSnapshotAtMs: number | null = null;
 
   constructor(dependencies: MetaverseFlightInputRuntimeDependencies = {}) {
@@ -150,6 +153,11 @@ export class MetaverseFlightInputRuntime {
       }
 
       event.preventDefault();
+
+      if (inputKey === "primaryAction" && !this.#mouseInput.primaryAction) {
+        this.#mouseInput.primaryActionPressedCount += 1;
+      }
+
       this.#mouseInput[inputKey] = true;
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -227,6 +235,7 @@ export class MetaverseFlightInputRuntime {
   reset(): void {
     Object.assign(this.#keyboardInput, createKeyboardFlightInputState());
     Object.assign(this.#mouseInput, createMouseFlightInputState());
+    this.#lastGamepadPrimaryAction = false;
     this.#lastSnapshotAtMs = null;
   }
 
@@ -247,6 +256,11 @@ export class MetaverseFlightInputRuntime {
     this.#mouseInput.lookDeltaX = 0;
     this.#mouseInput.lookDeltaY = 0;
     const gamepadTriggerInput = this.#readGamepadTriggerInput();
+    const primaryActionPressedCount =
+      this.#mouseInput.primaryActionPressedCount +
+      (gamepadTriggerInput.primaryAction && !this.#lastGamepadPrimaryAction ? 1 : 0);
+    this.#mouseInput.primaryActionPressedCount = 0;
+    this.#lastGamepadPrimaryAction = gamepadTriggerInput.primaryAction;
 
     return Object.freeze({
       boost: this.#keyboardInput.boost,
@@ -256,6 +270,7 @@ export class MetaverseFlightInputRuntime {
         (this.#keyboardInput.moveBackward ? 1 : 0),
       primaryAction:
         this.#mouseInput.primaryAction || gamepadTriggerInput.primaryAction,
+      primaryActionPressedCount,
       pitchAxis,
       secondaryAction:
         this.#mouseInput.secondaryAction || gamepadTriggerInput.secondaryAction,

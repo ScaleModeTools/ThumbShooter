@@ -37,7 +37,7 @@ interface AdvanceWeaponPresentationInput {
   readonly deltaSeconds: number;
   readonly flightInput: Pick<
     MetaverseFlightInputSnapshot,
-    "primaryAction" | "secondaryAction"
+    "primaryAction" | "primaryActionPressedCount" | "secondaryAction"
   >;
   readonly mountedEnvironment: MountedEnvironmentSnapshot | null;
 }
@@ -274,7 +274,9 @@ export class MetaverseWeaponPresentationRuntime {
     const resolvedWeapon = this.#resolvedWeapon;
     const visible = resolvedWeapon !== null && mountedEnvironment === null;
     const primaryActionPressedThisFrame =
-      visible && flightInput.primaryAction && !this.#fireTriggerHeld;
+      visible &&
+      (flightInput.primaryActionPressedCount > 0 ||
+        (flightInput.primaryAction && !this.#fireTriggerHeld));
     const secondaryActionPressedThisFrame =
       flightInput.secondaryAction && !this.#secondaryActionHeld;
 

@@ -493,7 +493,8 @@ export class MetaverseRemoteCharacterPresentationOwner {
           sampledDiscretePlayerSnapshot.locomotionMode === "grounded" &&
           sampledDiscretePlayerSnapshot.groundedBody.driveTarget.boost,
         config: this.#config,
-        locomotionMode: sampledDiscretePlayerSnapshot.locomotionMode
+        locomotionMode: sampledDiscretePlayerSnapshot.locomotionMode,
+        moveAxis: sampledDiscretePlayerSnapshot.presentationIntent.moveAxis
       });
     sampleRemotePlayerRootPositionInto(
       this.#snapshot.presentation.position,

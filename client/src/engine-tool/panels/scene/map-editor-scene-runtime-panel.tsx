@@ -2,6 +2,10 @@ import { LifeBuoyIcon, PlusIcon, SparklesIcon, WavesIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  resolveMapEditorWaterRegionCenter,
+  resolveMapEditorWaterRegionSize
+} from "@/engine-tool/project/map-editor-project-scene-drafts";
 import type { MapEditorProjectSnapshot } from "@/engine-tool/project/map-editor-project-state";
 
 interface MapEditorSceneRuntimePanelProps {
@@ -99,23 +103,31 @@ export function MapEditorSceneRuntimePanel({
       </SceneRuntimeSection>
 
       <SceneRuntimeSection title="Water Regions">
-        {project.waterRegionDrafts.map((waterRegionDraft) => (
-          <div
-            className="rounded-xl border border-border/70 bg-background/70 px-3 py-2"
-            key={waterRegionDraft.waterRegionId}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium">{waterRegionDraft.waterRegionId}</span>
-              <span className="text-xs text-muted-foreground">
-                {waterRegionDraft.size.x.toFixed(1)} x {waterRegionDraft.size.z.toFixed(1)}
-              </span>
+        {project.waterRegionDrafts.map((waterRegionDraft) => {
+          const center = resolveMapEditorWaterRegionCenter(waterRegionDraft);
+          const size = resolveMapEditorWaterRegionSize(waterRegionDraft);
+
+          return (
+            <div
+              className="rounded-xl border border-border/70 bg-background/70 px-3 py-2"
+              key={waterRegionDraft.waterRegionId}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">{waterRegionDraft.waterRegionId}</span>
+                <span className="text-xs text-muted-foreground">
+                  {size.x.toFixed(1)} x {size.z.toFixed(1)}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Center {center.x.toFixed(1)}, {center.y.toFixed(1)}, {center.z.toFixed(1)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Top {waterRegionDraft.topElevationMeters.toFixed(1)} / depth{" "}
+                {waterRegionDraft.depthMeters.toFixed(1)}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Center {waterRegionDraft.center.x.toFixed(1)}, {waterRegionDraft.center.y.toFixed(1)},{" "}
-              {waterRegionDraft.center.z.toFixed(1)}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </SceneRuntimeSection>
 
       <div className="rounded-xl border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">

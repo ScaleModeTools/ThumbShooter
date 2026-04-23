@@ -1,10 +1,18 @@
 import { stagingGroundMapBundle } from "../staging-ground/map-bundle.js";
+import { compileMetaverseMapBundleSemanticWorld } from "../compile-metaverse-semantic-world.js";
 import type { MetaverseMapBundleSnapshot } from "../metaverse-map-bundle.js";
+
+const semanticWorld = Object.freeze({
+  ...stagingGroundMapBundle.semanticWorld
+});
+const compiledWorld = compileMetaverseMapBundleSemanticWorld(semanticWorld);
 
 export const deathmatchMapBundle = Object.freeze({
   ...stagingGroundMapBundle,
+  compiledWorld,
   description:
-    "Dedicated shell team-deathmatch bundle over the current authored surface slice with the Duck Hunt portal removed.",
+    "Dedicated shell team-deathmatch bundle over the current semantic staging-ground slice with the Duck Hunt portal removed.",
+  environmentAssets: compiledWorld.compatibilityEnvironmentAssets,
   label: "Deathmatch",
   launchVariations: Object.freeze([
     Object.freeze({
@@ -20,9 +28,5 @@ export const deathmatchMapBundle = Object.freeze({
     })
   ]),
   mapId: "deathmatch",
-  sceneObjects: Object.freeze(
-    stagingGroundMapBundle.sceneObjects.filter(
-      (sceneObject) => sceneObject.objectId !== "duck-hunt-launch-portal"
-    )
-  )
+  sceneObjects: Object.freeze([])
 } satisfies MetaverseMapBundleSnapshot);

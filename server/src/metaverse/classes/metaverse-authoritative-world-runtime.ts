@@ -348,6 +348,9 @@ export class MetaverseAuthoritativeWorldRuntime
       );
 
     this.#config = {
+      authoritativeCombatRewindEnabled:
+        config.authoritativeCombatRewindEnabled ??
+        metaverseAuthoritativeWorldRuntimeConfig.authoritativeCombatRewindEnabled,
       playerInactivityTimeoutMs:
         config.playerInactivityTimeoutMs ??
         metaverseAuthoritativeWorldRuntimeConfig.playerInactivityTimeoutMs,
@@ -641,6 +644,8 @@ export class MetaverseAuthoritativeWorldRuntime
         playersById: this.#playersById
       });
     this.#combatAuthority = new MetaverseAuthoritativeCombatAuthority({
+      authoritativeCombatRewindEnabled:
+        this.#config.authoritativeCombatRewindEnabled,
       clearDriverVehicleControl: (playerId) =>
         this.#playerLifecycleAuthority.clearDriverVehicleControl(playerId),
       clearPlayerTraversalIntent: (playerId) =>
@@ -759,6 +764,8 @@ export class MetaverseAuthoritativeWorldRuntime
       playersById: this.#playersById,
       readCombatFeedSnapshots: () => this.#combatAuthority.readCombatFeedSnapshots(),
       readCombatMatchSnapshot: () => this.#combatAuthority.readCombatMatchSnapshot(),
+      readPlayerCombatActionObserverSnapshot: (playerId) =>
+        this.#combatAuthority.readPlayerCombatActionObserverSnapshot(playerId),
       readPlayerCombatSnapshot: (playerId) =>
         this.#combatAuthority.readPlayerCombatSnapshot(playerId),
       readProjectileSnapshots: () => this.#combatAuthority.readProjectileSnapshots(),

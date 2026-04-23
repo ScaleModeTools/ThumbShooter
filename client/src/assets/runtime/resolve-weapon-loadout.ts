@@ -32,6 +32,11 @@ function cloneAimProfile(
 ): Mutable<WeaponAimProfileDescriptor> {
   return {
     ...aimProfile,
+    adsCameraTargetOffset:
+      aimProfile.adsCameraTargetOffset === undefined ||
+      aimProfile.adsCameraTargetOffset === null
+        ? aimProfile.adsCameraTargetOffset
+        : { ...aimProfile.adsCameraTargetOffset },
     zoomLevels: aimProfile.zoomLevels.map((zoomLevel) => ({ ...zoomLevel }))
   } as Mutable<WeaponAimProfileDescriptor>;
 }
@@ -269,6 +274,15 @@ function applyAimOverrides(
   }
 
   return {
+    adsCameraTargetOffset:
+      aimOverrides.adsCameraTargetOffset !== undefined
+        ? aimOverrides.adsCameraTargetOffset === null
+          ? null
+          : { ...aimOverrides.adsCameraTargetOffset }
+        : baseAimProfile.adsCameraTargetOffset === undefined ||
+            baseAimProfile.adsCameraTargetOffset === null
+          ? baseAimProfile.adsCameraTargetOffset
+          : { ...baseAimProfile.adsCameraTargetOffset },
     adsFovDegrees: aimOverrides.adsFovDegrees ?? baseAimProfile.adsFovDegrees,
     defaultReticleId:
       aimOverrides.defaultReticleId !== undefined

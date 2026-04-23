@@ -119,7 +119,157 @@ export interface MetaverseMapBundleLaunchVariationSnapshot {
   readonly weaponLayoutId: string | null;
 }
 
+export interface MetaverseMapBundleSemanticPlanarPointSnapshot {
+  readonly x: number;
+  readonly z: number;
+}
+
+export interface MetaverseMapBundleSemanticPlanarLoopSnapshot {
+  readonly points: readonly MetaverseMapBundleSemanticPlanarPointSnapshot[];
+}
+
+export interface MetaverseMapBundleSemanticTerrainChunkSnapshot {
+  readonly chunkId: string;
+  readonly heights: readonly number[];
+  readonly origin: MetaverseWorldSurfaceVector3Snapshot;
+  readonly sampleCountX: number;
+  readonly sampleCountZ: number;
+  readonly sampleStrideMeters: number;
+  readonly waterLevelMeters: number | null;
+}
+
+export interface MetaverseMapBundleSemanticSurfaceSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly elevation: number;
+  readonly kind: "flat-slab" | "terrain-patch";
+  readonly label: string;
+  readonly rotationYRadians: number;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly surfaceId: string;
+  readonly terrainChunkId: string | null;
+}
+
+export interface MetaverseMapBundleSemanticRegionSnapshot {
+  readonly holes: readonly MetaverseMapBundleSemanticPlanarLoopSnapshot[];
+  readonly label: string;
+  readonly materialReferenceId: string | null;
+  readonly outerLoop: MetaverseMapBundleSemanticPlanarLoopSnapshot;
+  readonly regionId: string;
+  readonly regionKind: "arena" | "floor" | "path";
+  readonly surfaceId: string;
+}
+
+export interface MetaverseMapBundleSemanticEdgeSnapshot {
+  readonly edgeId: string;
+  readonly edgeKind:
+    | "curb"
+    | "fence"
+    | "rail"
+    | "retaining-wall"
+    | "wall";
+  readonly heightMeters: number;
+  readonly label: string;
+  readonly path: readonly MetaverseMapBundleSemanticPlanarPointSnapshot[];
+  readonly surfaceId: string;
+  readonly thicknessMeters: number;
+}
+
+export interface MetaverseMapBundleSemanticConnectorSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly connectorId: string;
+  readonly connectorKind: "door" | "gate" | "ramp" | "stairs";
+  readonly fromSurfaceId: string;
+  readonly label: string;
+  readonly rotationYRadians: number;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly toSurfaceId: string;
+}
+
+export interface MetaverseMapBundleSemanticModuleSnapshot {
+  readonly assetId: string;
+  readonly collisionEnabled: boolean;
+  readonly collisionPath: string | null;
+  readonly collider: MetaverseWorldEnvironmentColliderAuthoring | null;
+  readonly dynamicBody: MetaverseWorldEnvironmentDynamicBodyAuthoring | null;
+  readonly entries: readonly MetaverseWorldMountedEntryAuthoring[] | null;
+  readonly isVisible: boolean;
+  readonly label: string;
+  readonly materialReferenceId: string | null;
+  readonly moduleId: string;
+  readonly notes: string;
+  readonly placementMode: MetaverseWorldSurfacePlacementId;
+  readonly position: MetaverseWorldSurfaceVector3Snapshot;
+  readonly rotationYRadians: number;
+  readonly scale: MetaverseWorldSurfaceScaleSnapshot;
+  readonly seats: readonly MetaverseWorldMountedSeatAuthoring[] | null;
+  readonly surfaceColliders: readonly MetaverseWorldSurfaceColliderAuthoring[];
+  readonly traversalAffordance: MetaverseWorldEnvironmentTraversalAffordanceId;
+}
+
+export interface MetaverseMapBundleSemanticCompatibilityAssetIdsSnapshot {
+  readonly connectorAssetId: string | null;
+  readonly floorAssetId: string | null;
+  readonly wallAssetId: string | null;
+}
+
+export interface MetaverseMapBundleSemanticWorldSnapshot {
+  readonly compatibilityAssetIds: MetaverseMapBundleSemanticCompatibilityAssetIdsSnapshot;
+  readonly connectors: readonly MetaverseMapBundleSemanticConnectorSnapshot[];
+  readonly edges: readonly MetaverseMapBundleSemanticEdgeSnapshot[];
+  readonly modules: readonly MetaverseMapBundleSemanticModuleSnapshot[];
+  readonly regions: readonly MetaverseMapBundleSemanticRegionSnapshot[];
+  readonly surfaces: readonly MetaverseMapBundleSemanticSurfaceSnapshot[];
+  readonly terrainChunks: readonly MetaverseMapBundleSemanticTerrainChunkSnapshot[];
+}
+
+export interface MetaverseMapBundleCompiledWorldChunkBoundsSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+}
+
+export interface MetaverseMapBundleCompiledCollisionBoxSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly ownerId: string;
+  readonly ownerKind:
+    | "connector"
+    | "edge"
+    | "module"
+    | "region"
+    | "terrain-chunk";
+  readonly rotationYRadians: number;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly traversalAffordance: "blocker" | "support";
+}
+
+export interface MetaverseMapBundleCompiledWorldChunkSnapshot {
+  readonly bounds: MetaverseMapBundleCompiledWorldChunkBoundsSnapshot;
+  readonly chunkId: string;
+  readonly collision: {
+    readonly boxes: readonly MetaverseMapBundleCompiledCollisionBoxSnapshot[];
+  };
+  readonly navigation: {
+    readonly connectorIds: readonly string[];
+    readonly regionIds: readonly string[];
+    readonly surfaceIds: readonly string[];
+  };
+  readonly render: {
+    readonly edgeIds: readonly string[];
+    readonly instancedModuleAssetIds: readonly string[];
+    readonly regionIds: readonly string[];
+    readonly terrainChunkIds: readonly string[];
+    readonly transparentEntityIds: readonly string[];
+  };
+}
+
+export interface MetaverseMapBundleCompiledWorldSnapshot {
+  readonly chunkSizeMeters: number;
+  readonly chunks: readonly MetaverseMapBundleCompiledWorldChunkSnapshot[];
+  readonly compatibilityEnvironmentAssets:
+    readonly MetaverseMapBundleEnvironmentAssetSnapshot[];
+}
+
 export interface MetaverseMapBundleSnapshot {
+  readonly compiledWorld: MetaverseMapBundleCompiledWorldSnapshot;
   readonly description: string;
   readonly environmentAssets: readonly MetaverseMapBundleEnvironmentAssetSnapshot[];
   readonly gameplayProfileId: string;
@@ -131,5 +281,6 @@ export interface MetaverseMapBundleSnapshot {
   readonly presentationProfileIds: MetaverseMapBundlePresentationProfileIds;
   readonly resourceSpawns: readonly MetaverseMapBundleResourceSpawnSnapshot[];
   readonly sceneObjects: readonly MetaverseMapBundleSceneObjectSnapshot[];
+  readonly semanticWorld: MetaverseMapBundleSemanticWorldSnapshot;
   readonly waterRegions: readonly MetaverseWorldWaterRegionAuthoring[];
 }

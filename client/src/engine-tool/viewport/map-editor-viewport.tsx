@@ -3,10 +3,15 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   AmbientLight,
+  BoxGeometry,
   Color,
   DirectionalLight,
+  DoubleSide,
   Group,
+  Mesh,
+  MeshStandardMaterial,
   Plane,
+  PlaneGeometry,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -20,15 +25,32 @@ import type {
   EnvironmentAssetDescriptor,
   EnvironmentRenderLodDescriptor
 } from "@/assets/types/environment-asset-manifest";
-import { resolveMapEditorBuildGroundPlacementPosition } from "@/engine-tool/build/map-editor-build-placement";
+import {
+  mapEditorBuildGridUnitMeters,
+  snapMapEditorBuildCoordinateToGrid
+} from "@/engine-tool/build/map-editor-build-placement";
 import { readMapEditorBuildPrimitiveCatalogEntry } from "@/engine-tool/build/map-editor-build-primitives";
 import type {
   MapEditorPlayerSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
-import type { MapEditorPlacementDraftSnapshot } from "@/engine-tool/project/map-editor-project-state";
+import {
+  resolveMapEditorWaterRegionCenter,
+  resolveMapEditorWaterRegionSize
+} from "@/engine-tool/project/map-editor-project-scene-drafts";
 import type {
+  MapEditorConnectorDraftSnapshot,
+  MapEditorEdgeDraftSnapshot,
+  MapEditorPlacementDraftSnapshot,
+  MapEditorRegionDraftSnapshot,
+  MapEditorSelectedEntityRef,
+  MapEditorSurfaceDraftSnapshot,
+  MapEditorTerrainChunkDraftSnapshot,
+  resolveMapEditorTerrainCellPosition
+} from "@/engine-tool/project/map-editor-project-state";
+import type {
+  MapEditorBuilderToolStateSnapshot,
   MapEditorPlayerSpawnTransformUpdate,
   MapEditorPlacementUpdate,
   MapEditorViewportHelperVisibilitySnapshot,
@@ -61,13 +83,43 @@ import {
   disposeMapEditorViewportSceneDraftHandles,
   syncMapEditorViewportSceneDrafts
 } from "./map-editor-viewport-scene-drafts";
+import type { MapEditorViewportSemanticDraftHandles } from "./map-editor-viewport-semantic-drafts";
+import {
+  createMapEditorViewportSemanticDraftHandles,
+  disposeMapEditorViewportSemanticDraftHandles,
+  syncMapEditorViewportSemanticDrafts
+} from "./map-editor-viewport-semantic-drafts";
 import { MapEditorViewportTransformController } from "./map-editor-viewport-transform-controls";
 
 interface MapEditorViewportProps {
-  readonly activeBuildPrimitiveAssetId: string | null;
+  readonly activeModuleAssetId: string | null;
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
   readonly bundleId: string;
+  readonly connectorDrafts: readonly MapEditorConnectorDraftSnapshot[];
+  readonly edgeDrafts: readonly MapEditorEdgeDraftSnapshot[];
   readonly helperVisibility: MapEditorViewportHelperVisibilitySnapshot;
-  readonly onBuildPlacementAtPosition: (
+  readonly onApplyTerrainBrushAtPosition: (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => void;
+  readonly onCommitPathSegment: (
+    targetPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    targetElevationMeters: number,
+    fromAnchor: {
+      readonly center: {
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+      };
+      readonly elevation: number;
+    } | null
+  ) => void;
+  readonly onCreateModuleAtPosition: (
     assetId: string,
     position: {
       readonly x: number;
@@ -83,11 +135,31 @@ interface MapEditorViewportProps {
     spawnId: string,
     update: MapEditorPlayerSpawnTransformUpdate
   ) => void;
-  readonly onSelectPlacementId: (placementId: string) => void;
+  readonly onCommitWallSegment: (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => void;
+  readonly onCreateWaterRegionAtPosition: (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => void;
+  readonly onSelectEntity: (entityRef: MapEditorSelectedEntityRef | null) => void;
   readonly placementDrafts: readonly MapEditorPlacementDraftSnapshot[];
   readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
+  readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
   readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
-  readonly selectedPlacementId: string | null;
+  readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly surfaceDrafts: readonly MapEditorSurfaceDraftSnapshot[];
+  readonly terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[];
   readonly waterRegionDrafts: readonly MapEditorWaterRegionDraftSnapshot[];
   readonly viewportToolMode: MapEditorViewportToolMode;
 }
@@ -108,6 +180,348 @@ type MapEditorViewportTransformTarget =
       readonly id: string;
       readonly kind: "player-spawn";
     };
+
+interface MapEditorPathAnchorSnapshot {
+  readonly center: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly elevation: number;
+}
+
+function createTransformTargetFromSelectedEntity(
+  selectedEntityRef: MapEditorSelectedEntityRef | null
+): MapEditorViewportTransformTarget | null {
+  if (selectedEntityRef?.kind === "module") {
+    return Object.freeze({
+      id: selectedEntityRef.id,
+      kind: "placement"
+    });
+  }
+
+  if (selectedEntityRef?.kind === "player-spawn") {
+    return Object.freeze({
+      id: selectedEntityRef.id,
+      kind: "player-spawn"
+    });
+  }
+
+  return null;
+}
+
+function disposeBuilderPreviewGroup(group: Group): void {
+  group.traverse((node) => {
+    if (!("isMesh" in node) || node.isMesh !== true) {
+      return;
+    }
+
+    const mesh = node as Mesh;
+
+    mesh.geometry.dispose();
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+    for (const material of materials) {
+      material.dispose();
+    }
+  });
+
+  group.clear();
+}
+
+function createPreviewMesh(
+  geometry: BoxGeometry | PlaneGeometry,
+  material: MeshStandardMaterial
+): Mesh {
+  return new Mesh(geometry, material);
+}
+
+function createPreviewMaterial(
+  color: string,
+  opacity = 0.28
+): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.08,
+    opacity,
+    roughness: 0.45,
+    side: DoubleSide,
+    transparent: true
+  });
+}
+
+function resolveSnappedGroundPosition(point: {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}): {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+} {
+  return Object.freeze({
+    x: snapMapEditorBuildCoordinateToGrid(point.x),
+    y: 0,
+    z: snapMapEditorBuildCoordinateToGrid(point.z)
+  });
+}
+
+function resolveWallSegmentEnd(
+  startPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  hoverPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }
+): {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+} {
+  const deltaX = hoverPosition.x - startPosition.x;
+  const deltaZ = hoverPosition.z - startPosition.z;
+
+  return Math.abs(deltaX) >= Math.abs(deltaZ)
+    ? Object.freeze({
+        x: hoverPosition.x,
+        y: startPosition.y,
+        z: startPosition.z
+      })
+    : Object.freeze({
+        x: startPosition.x,
+        y: startPosition.y,
+        z: hoverPosition.z
+      });
+}
+
+function findTerrainChunkAtPosition(
+  terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[],
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }
+): MapEditorTerrainChunkDraftSnapshot | null {
+  return (
+    terrainChunkDrafts.find((terrainChunk) => {
+      const halfWidth =
+        ((terrainChunk.sampleCountX - 1) * terrainChunk.sampleStrideMeters) * 0.5;
+      const halfDepth =
+        ((terrainChunk.sampleCountZ - 1) * terrainChunk.sampleStrideMeters) * 0.5;
+
+      return (
+        Math.abs(position.x - terrainChunk.origin.x) <= halfWidth + 0.01 &&
+        Math.abs(position.z - terrainChunk.origin.z) <= halfDepth + 0.01
+      );
+    }) ?? null
+  );
+}
+
+function resolveTerrainHeightAtPosition(
+  terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[],
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }
+): number {
+  const terrainChunk = findTerrainChunkAtPosition(terrainChunkDrafts, position);
+
+  if (terrainChunk === null) {
+    return 0;
+  }
+
+  const halfCellCountX = (terrainChunk.sampleCountX - 1) * 0.5;
+  const halfCellCountZ = (terrainChunk.sampleCountZ - 1) * 0.5;
+  const cellX = Math.round(
+    (position.x - terrainChunk.origin.x) / terrainChunk.sampleStrideMeters +
+      halfCellCountX
+  );
+  const cellZ = Math.round(
+    (position.z - terrainChunk.origin.z) / terrainChunk.sampleStrideMeters +
+      halfCellCountZ
+  );
+
+  if (
+    cellX < 0 ||
+    cellX >= terrainChunk.sampleCountX ||
+    cellZ < 0 ||
+    cellZ >= terrainChunk.sampleCountZ
+  ) {
+    return terrainChunk.origin.y;
+  }
+
+  const heightIndex = cellZ * terrainChunk.sampleCountX + cellX;
+
+  return terrainChunk.origin.y + (terrainChunk.heights[heightIndex] ?? 0);
+}
+
+function addTerrainBrushPreview(
+  previewGroup: Group,
+  terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[],
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  brushSizeCells: number,
+  smoothEdges: boolean
+): void {
+  const brushOffset = Math.floor(brushSizeCells * 0.5);
+  const minCellX = position.x - brushOffset * mapEditorBuildGridUnitMeters;
+  const minCellZ = position.z - brushOffset * mapEditorBuildGridUnitMeters;
+
+  for (let offsetZ = 0; offsetZ < brushSizeCells; offsetZ += 1) {
+    for (let offsetX = 0; offsetX < brushSizeCells; offsetX += 1) {
+      const cellPosition = Object.freeze({
+        x: minCellX + offsetX * mapEditorBuildGridUnitMeters,
+        y: 0,
+        z: minCellZ + offsetZ * mapEditorBuildGridUnitMeters
+      });
+      const height = resolveTerrainHeightAtPosition(terrainChunkDrafts, cellPosition);
+      const cellDistance = Math.max(
+        Math.abs(offsetX - brushOffset),
+        Math.abs(offsetZ - brushOffset)
+      );
+      const opacity =
+        smoothEdges === true
+          ? Math.max(0.18, 0.38 - cellDistance * 0.06)
+          : 0.34;
+      const mesh = createPreviewMesh(
+        new BoxGeometry(
+          mapEditorBuildGridUnitMeters * 0.96,
+          0.24,
+          mapEditorBuildGridUnitMeters * 0.96
+        ),
+        createPreviewMaterial("#7dd3fc", opacity)
+      );
+
+      mesh.position.set(cellPosition.x, height + 0.12, cellPosition.z);
+      previewGroup.add(mesh);
+    }
+  }
+}
+
+function addWallSegmentPreview(
+  previewGroup: Group,
+  startPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  hoverPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }
+): void {
+  const endPosition = resolveWallSegmentEnd(startPosition, hoverPosition);
+  const deltaX = endPosition.x - startPosition.x;
+  const deltaZ = endPosition.z - startPosition.z;
+  const length = Math.max(
+    mapEditorBuildGridUnitMeters,
+    Math.abs(deltaX) + Math.abs(deltaZ)
+  );
+  const center = Object.freeze({
+    x: (startPosition.x + endPosition.x) * 0.5,
+    y: startPosition.y + 2,
+    z: (startPosition.z + endPosition.z) * 0.5
+  });
+  const mesh = createPreviewMesh(
+    new BoxGeometry(length, 4, 0.5),
+    createPreviewMaterial("#fb923c", 0.34)
+  );
+
+  mesh.position.set(center.x, center.y, center.z);
+  mesh.rotation.y = Math.abs(deltaX) >= Math.abs(deltaZ) ? Math.PI * 0.5 : 0;
+  previewGroup.add(mesh);
+}
+
+function addPathPreview(
+  previewGroup: Group,
+  targetPosition: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  targetElevationMeters: number,
+  fromAnchor: MapEditorPathAnchorSnapshot | null
+): void {
+  const topY = targetElevationMeters + 0.08;
+  const targetMesh = createPreviewMesh(
+    new BoxGeometry(mapEditorBuildGridUnitMeters, 0.18, mapEditorBuildGridUnitMeters),
+    createPreviewMaterial("#fbbf24", 0.34)
+  );
+
+  targetMesh.position.set(targetPosition.x, topY, targetPosition.z);
+  previewGroup.add(targetMesh);
+
+  if (fromAnchor === null) {
+    return;
+  }
+
+  if (Math.abs(fromAnchor.elevation - targetElevationMeters) <= 0.01) {
+    return;
+  }
+
+  const deltaX = targetPosition.x - fromAnchor.center.x;
+  const deltaZ = targetPosition.z - fromAnchor.center.z;
+  const rampLength = Math.max(
+    mapEditorBuildGridUnitMeters,
+    Math.hypot(deltaX, deltaZ)
+  );
+  const rampMesh = createPreviewMesh(
+    new BoxGeometry(
+      mapEditorBuildGridUnitMeters * 0.7,
+      Math.abs(targetElevationMeters - fromAnchor.elevation) + 0.4,
+      rampLength
+    ),
+    createPreviewMaterial("#f59e0b", 0.22)
+  );
+
+  rampMesh.position.set(
+    (fromAnchor.center.x + targetPosition.x) * 0.5,
+    (fromAnchor.elevation + targetElevationMeters) * 0.5,
+    (fromAnchor.center.z + targetPosition.z) * 0.5
+  );
+  rampMesh.rotation.y = Math.atan2(deltaX, deltaZ);
+  previewGroup.add(rampMesh);
+}
+
+function addWaterPreview(
+  previewGroup: Group,
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  builderToolState: MapEditorBuilderToolStateSnapshot
+): void {
+  const sizeX = builderToolState.waterFootprintCellsX * mapEditorBuildGridUnitMeters;
+  const sizeZ = builderToolState.waterFootprintCellsZ * mapEditorBuildGridUnitMeters;
+  const depth = Math.max(0.5, builderToolState.waterDepthMeters);
+  const topElevation = builderToolState.waterTopElevationMeters;
+  const volumeMesh = createPreviewMesh(
+    new BoxGeometry(sizeX, depth, sizeZ),
+    createPreviewMaterial("#38bdf8", 0.26)
+  );
+  const topPlane = createPreviewMesh(
+    new PlaneGeometry(sizeX, sizeZ),
+    createPreviewMaterial("#67e8f9", 0.32)
+  );
+
+  volumeMesh.position.set(position.x, topElevation - depth * 0.5, position.z);
+  topPlane.position.set(position.x, topElevation + 0.02, position.z);
+  topPlane.rotation.x = -Math.PI * 0.5;
+  previewGroup.add(volumeMesh);
+  previewGroup.add(topPlane);
+}
 
 function createEmptyPlacementExtents(): PlacementExtents {
   return Object.freeze({
@@ -220,14 +634,24 @@ function resolvePlacementExtents(
   placementDrafts: readonly MapEditorPlacementDraftSnapshot[],
   sceneDrafts: {
     readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
+    readonly connectorDrafts: readonly MapEditorConnectorDraftSnapshot[];
+    readonly edgeDrafts: readonly MapEditorEdgeDraftSnapshot[];
+    readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
     readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
+    readonly surfaceDrafts: readonly MapEditorSurfaceDraftSnapshot[];
+    readonly terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[];
     readonly waterRegionDrafts: readonly MapEditorWaterRegionDraftSnapshot[];
   }
 ): PlacementExtents {
   if (
     placementDrafts.length === 0 &&
     sceneDrafts.playerSpawnDrafts.length === 0 &&
+    sceneDrafts.connectorDrafts.length === 0 &&
+    sceneDrafts.edgeDrafts.length === 0 &&
+    sceneDrafts.regionDrafts.length === 0 &&
     sceneDrafts.sceneObjectDrafts.length === 0 &&
+    sceneDrafts.surfaceDrafts.length === 0 &&
+    sceneDrafts.terrainChunkDrafts.length === 0 &&
     sceneDrafts.waterRegionDrafts.length === 0
   ) {
     return createEmptyPlacementExtents();
@@ -264,10 +688,51 @@ function resolvePlacementExtents(
   }
 
   for (const waterRegionDraft of sceneDrafts.waterRegionDrafts) {
-    minX = Math.min(minX, waterRegionDraft.center.x - waterRegionDraft.size.x * 0.5);
-    maxX = Math.max(maxX, waterRegionDraft.center.x + waterRegionDraft.size.x * 0.5);
-    minZ = Math.min(minZ, waterRegionDraft.center.z - waterRegionDraft.size.z * 0.5);
-    maxZ = Math.max(maxZ, waterRegionDraft.center.z + waterRegionDraft.size.z * 0.5);
+    const center = resolveMapEditorWaterRegionCenter(waterRegionDraft);
+    const size = resolveMapEditorWaterRegionSize(waterRegionDraft);
+
+    minX = Math.min(minX, center.x - size.x * 0.5);
+    maxX = Math.max(maxX, center.x + size.x * 0.5);
+    minZ = Math.min(minZ, center.z - size.z * 0.5);
+    maxZ = Math.max(maxZ, center.z + size.z * 0.5);
+  }
+
+  for (const terrainChunk of sceneDrafts.terrainChunkDrafts) {
+    const width = Math.max(1, terrainChunk.sampleCountX * terrainChunk.sampleStrideMeters);
+    const depth = Math.max(1, terrainChunk.sampleCountZ * terrainChunk.sampleStrideMeters);
+
+    minX = Math.min(minX, terrainChunk.origin.x - width * 0.5);
+    maxX = Math.max(maxX, terrainChunk.origin.x + width * 0.5);
+    minZ = Math.min(minZ, terrainChunk.origin.z - depth * 0.5);
+    maxZ = Math.max(maxZ, terrainChunk.origin.z + depth * 0.5);
+  }
+
+  for (const surface of sceneDrafts.surfaceDrafts) {
+    minX = Math.min(minX, surface.center.x - surface.size.x * 0.5);
+    maxX = Math.max(maxX, surface.center.x + surface.size.x * 0.5);
+    minZ = Math.min(minZ, surface.center.z - surface.size.z * 0.5);
+    maxZ = Math.max(maxZ, surface.center.z + surface.size.z * 0.5);
+  }
+
+  for (const region of sceneDrafts.regionDrafts) {
+    minX = Math.min(minX, region.center.x - region.size.x * 0.5);
+    maxX = Math.max(maxX, region.center.x + region.size.x * 0.5);
+    minZ = Math.min(minZ, region.center.z - region.size.z * 0.5);
+    maxZ = Math.max(maxZ, region.center.z + region.size.z * 0.5);
+  }
+
+  for (const edge of sceneDrafts.edgeDrafts) {
+    minX = Math.min(minX, edge.center.x - edge.lengthMeters * 0.5);
+    maxX = Math.max(maxX, edge.center.x + edge.lengthMeters * 0.5);
+    minZ = Math.min(minZ, edge.center.z - edge.lengthMeters * 0.5);
+    maxZ = Math.max(maxZ, edge.center.z + edge.lengthMeters * 0.5);
+  }
+
+  for (const connector of sceneDrafts.connectorDrafts) {
+    minX = Math.min(minX, connector.center.x - connector.size.x * 0.5);
+    maxX = Math.max(maxX, connector.center.x + connector.size.x * 0.5);
+    minZ = Math.min(minZ, connector.center.z - connector.size.z * 0.5);
+    maxZ = Math.max(maxZ, connector.center.z + connector.size.z * 0.5);
   }
 
   return Object.freeze({
@@ -339,42 +804,164 @@ function createSceneDraftSignature(
       ].join(":")
     ),
     ...sceneDrafts.waterRegionDrafts.map((waterRegionDraft) =>
-      [
-        "water",
-        waterRegionDraft.waterRegionId,
-        waterRegionDraft.center.x,
-        waterRegionDraft.center.y,
-        waterRegionDraft.center.z,
-        waterRegionDraft.size.x,
-        waterRegionDraft.size.y,
-        waterRegionDraft.size.z,
-        waterRegionDraft.rotationYRadians,
-        waterRegionDraft.previewColorHex,
-        waterRegionDraft.previewOpacity
-      ].join(":")
+      {
+        const center = resolveMapEditorWaterRegionCenter(waterRegionDraft);
+        const size = resolveMapEditorWaterRegionSize(waterRegionDraft);
+
+        return [
+          "water",
+          waterRegionDraft.waterRegionId,
+          center.x,
+          center.y,
+          center.z,
+          size.x,
+          size.y,
+          size.z,
+          waterRegionDraft.topElevationMeters,
+          waterRegionDraft.depthMeters,
+          waterRegionDraft.previewColorHex,
+          waterRegionDraft.previewOpacity
+        ].join(":");
+      }
     )
   ].join("|");
 }
 
-function readTransformTargetFromObject(
+function readNearestPathAnchorFromDrafts(
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  },
+  regionDrafts: readonly MapEditorRegionDraftSnapshot[],
+  surfaceDrafts: readonly MapEditorSurfaceDraftSnapshot[]
+): MapEditorPathAnchorSnapshot | null {
+  const surfacesById = new Map(
+    surfaceDrafts.map((surfaceDraft) => [surfaceDraft.surfaceId, surfaceDraft] as const)
+  );
+  let nearestAnchor:
+    | {
+        readonly center: {
+          readonly x: number;
+          readonly y: number;
+          readonly z: number;
+        };
+        readonly distanceSquared: number;
+        readonly elevation: number;
+      }
+    | null = null;
+
+  for (const regionDraft of regionDrafts) {
+    if (regionDraft.regionKind !== "path") {
+      continue;
+    }
+
+    const surfaceDraft = surfacesById.get(regionDraft.surfaceId) ?? null;
+
+    if (surfaceDraft === null) {
+      continue;
+    }
+
+    const deltaX = regionDraft.center.x - position.x;
+    const deltaZ = regionDraft.center.z - position.z;
+    const distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
+
+    if (distanceSquared > mapEditorBuildGridUnitMeters * mapEditorBuildGridUnitMeters) {
+      continue;
+    }
+
+    if (
+      nearestAnchor === null ||
+      distanceSquared < nearestAnchor.distanceSquared
+    ) {
+      nearestAnchor = Object.freeze({
+        center: Object.freeze({
+          x: regionDraft.center.x,
+          y: surfaceDraft.elevation,
+          z: regionDraft.center.z
+        }),
+        distanceSquared,
+        elevation: surfaceDraft.elevation
+      });
+    }
+  }
+
+  return nearestAnchor === null
+    ? null
+    : Object.freeze({
+        center: nearestAnchor.center,
+        elevation: nearestAnchor.elevation
+      });
+}
+
+function readSelectedEntityFromObject(
   object: {
     parent: unknown;
     userData?: {
+      connectorId?: unknown;
+      edgeId?: unknown;
       placementId?: unknown;
       playerSpawnId?: unknown;
+      regionId?: unknown;
+      sceneObjectId?: unknown;
+      surfaceId?: unknown;
+      terrainChunkId?: unknown;
+      waterRegionId?: unknown;
     };
   } | null
-): MapEditorViewportTransformTarget | null {
+): MapEditorSelectedEntityRef | null {
   let currentObject = object;
 
   while (currentObject !== null) {
+    const candidateTerrainChunkId = currentObject.userData?.terrainChunkId;
+    const candidateSurfaceId = currentObject.userData?.surfaceId;
+    const candidateRegionId = currentObject.userData?.regionId;
+    const candidateEdgeId = currentObject.userData?.edgeId;
+    const candidateConnectorId = currentObject.userData?.connectorId;
     const candidatePlacementId = currentObject.userData?.placementId;
     const candidatePlayerSpawnId = currentObject.userData?.playerSpawnId;
+    const candidateSceneObjectId = currentObject.userData?.sceneObjectId;
+    const candidateWaterRegionId = currentObject.userData?.waterRegionId;
+
+    if (typeof candidateTerrainChunkId === "string") {
+      return Object.freeze({
+        id: candidateTerrainChunkId,
+        kind: "terrain-chunk"
+      });
+    }
+
+    if (typeof candidateSurfaceId === "string") {
+      return Object.freeze({
+        id: candidateSurfaceId,
+        kind: "surface"
+      });
+    }
+
+    if (typeof candidateRegionId === "string") {
+      return Object.freeze({
+        id: candidateRegionId,
+        kind: "region"
+      });
+    }
+
+    if (typeof candidateEdgeId === "string") {
+      return Object.freeze({
+        id: candidateEdgeId,
+        kind: "edge"
+      });
+    }
+
+    if (typeof candidateConnectorId === "string") {
+      return Object.freeze({
+        id: candidateConnectorId,
+        kind: "connector"
+      });
+    }
 
     if (typeof candidatePlacementId === "string") {
       return Object.freeze({
         id: candidatePlacementId,
-        kind: "placement"
+        kind: "module"
       });
     }
 
@@ -382,6 +969,20 @@ function readTransformTargetFromObject(
       return Object.freeze({
         id: candidatePlayerSpawnId,
         kind: "player-spawn"
+      });
+    }
+
+    if (typeof candidateSceneObjectId === "string") {
+      return Object.freeze({
+        id: candidateSceneObjectId,
+        kind: "scene-object"
+      });
+    }
+
+    if (typeof candidateWaterRegionId === "string") {
+      return Object.freeze({
+        id: candidateWaterRegionId,
+        kind: "water-region"
       });
     }
 
@@ -417,17 +1018,27 @@ function readCanvasPointer(
 }
 
 export function MapEditorViewport({
-  activeBuildPrimitiveAssetId,
+  activeModuleAssetId,
+  builderToolState,
   bundleId,
+  connectorDrafts,
+  edgeDrafts,
   helperVisibility,
-  onBuildPlacementAtPosition,
+  onApplyTerrainBrushAtPosition,
+  onCommitPathSegment,
+  onCreateModuleAtPosition,
+  onCommitWallSegment,
+  onCreateWaterRegionAtPosition,
   onCommitPlacementTransform,
   onCommitPlayerSpawnTransform,
-  onSelectPlacementId,
+  onSelectEntity,
   placementDrafts,
   playerSpawnDrafts,
+  regionDrafts,
   sceneObjectDrafts,
-  selectedPlacementId,
+  selectedEntityRef,
+  surfaceDrafts,
+  terrainChunkDrafts,
   waterRegionDrafts,
   viewportToolMode
 }: MapEditorViewportProps) {
@@ -444,13 +1055,27 @@ export function MapEditorViewport({
   const previewAssetLibraryRef =
     useRef<MapEditorViewportPreviewAssetLibrary | null>(null);
   const sceneDraftHandlesRef = useRef<MapEditorViewportSceneDraftHandles | null>(null);
+  const semanticDraftHandlesRef =
+    useRef<MapEditorViewportSemanticDraftHandles | null>(null);
   const placementAnchorByIdRef = useRef(new Map<string, Group>());
   const collisionAnchorByIdRef = useRef(new Map<string, Group>());
   const buildCursorAnchorRef = useRef<Group | null>(null);
   const buildCursorAssetIdRef = useRef<string | null>(null);
-  const activeBuildPrimitiveAssetIdRef = useRef(activeBuildPrimitiveAssetId);
+  const builderPreviewGroupRef = useRef<Group | null>(null);
+  const activeModuleAssetIdRef = useRef(activeModuleAssetId);
+  const builderToolStateRef = useRef(builderToolState);
   const placementDraftsRef = useRef(placementDrafts);
+  const regionDraftsRef = useRef(regionDrafts);
+  const surfaceDraftsRef = useRef(surfaceDrafts);
+  const terrainChunkDraftsRef = useRef(terrainChunkDrafts);
   const viewportToolModeRef = useRef(viewportToolMode);
+  const pendingWallAnchorRef = useRef<{
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  } | null>(null);
+  const pendingPathAnchorRef = useRef<MapEditorPathAnchorSnapshot | null>(null);
+  const pathAnchorPointerYRef = useRef<number | null>(null);
   const transformControllerRef =
     useRef<MapEditorViewportTransformController | null>(null);
   const helperHandlesRef = useRef<MapEditorViewportHelperHandles | null>(null);
@@ -473,13 +1098,8 @@ export function MapEditorViewport({
   const animationFrameRef = useRef(0);
   const lastFrameTimeRef = useRef<number | null>(null);
   const [selectedTransformTarget, setSelectedTransformTarget] =
-    useState<MapEditorViewportTransformTarget | null>(
-      selectedPlacementId === null
-        ? null
-        : Object.freeze({
-            id: selectedPlacementId,
-            kind: "placement"
-          })
+    useState<MapEditorViewportTransformTarget | null>(() =>
+      createTransformTargetFromSelectedEntity(selectedEntityRef)
     );
   const [viewportError, setViewportError] = useState<string | null>(null);
   const previewPlacementSignature = useMemo(
@@ -500,9 +1120,11 @@ export function MapEditorViewport({
     [playerSpawnDrafts, sceneObjectDrafts, waterRegionDrafts]
   );
 
-  const handlePlacementSelection = useEffectEvent((placementId: string) => {
-    onSelectPlacementId(placementId);
-  });
+  const handleEntitySelection = useEffectEvent(
+    (entityRef: MapEditorSelectedEntityRef | null) => {
+      onSelectEntity(entityRef);
+    }
+  );
   const handlePlacementTransformCommit = useEffectEvent(
     (placementId: string, update: MapEditorPlacementUpdate) => {
       onCommitPlacementTransform(placementId, update);
@@ -516,7 +1138,7 @@ export function MapEditorViewport({
       onCommitPlayerSpawnTransform(spawnId, update);
     }
   );
-  const handleBuildPlacement = useEffectEvent(
+  const handleCreateModulePlacement = useEffectEvent(
     (
       assetId: string,
       position: {
@@ -525,7 +1147,54 @@ export function MapEditorViewport({
         readonly z: number;
       }
     ) => {
-      onBuildPlacementAtPosition(assetId, position);
+      onCreateModuleAtPosition(assetId, position);
+    }
+  );
+  const handleApplyTerrainBrush = useEffectEvent(
+    (position: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }) => {
+      onApplyTerrainBrushAtPosition(position);
+    }
+  );
+  const handleCommitWall = useEffectEvent(
+    (
+      startPosition: {
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+      },
+      endPosition: {
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+      }
+    ) => {
+      onCommitWallSegment(startPosition, endPosition);
+    }
+  );
+  const handleCommitPath = useEffectEvent(
+    (
+      targetPosition: {
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+      },
+      targetElevationMeters: number,
+      fromAnchor: MapEditorPathAnchorSnapshot | null
+    ) => {
+      onCommitPathSegment(targetPosition, targetElevationMeters, fromAnchor);
+    }
+  );
+  const handleCreateWaterRegion = useEffectEvent(
+    (position: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }) => {
+      onCreateWaterRegionAtPosition(position);
     }
   );
   const syncPlacementPreviewAnchors = useEffectEvent(
@@ -547,6 +1216,7 @@ export function MapEditorViewport({
     const helperHandles = helperHandlesRef.current;
     const transformController = transformControllerRef.current;
     const sceneDraftHandles = sceneDraftHandlesRef.current;
+    const semanticDraftHandles = semanticDraftHandlesRef.current;
 
     if (scene === null || helperHandles === null || transformController === null) {
       return;
@@ -554,9 +1224,57 @@ export function MapEditorViewport({
 
     transformController.syncToolMode(viewportToolMode);
 
+    let selectedPresentationAnchor: Group | null = null;
     let selectedTransformAnchor: Group | null = null;
 
-    if (viewportToolMode !== "build" && selectedTransformTarget !== null) {
+    if (selectedEntityRef !== null) {
+      switch (selectedEntityRef.kind) {
+        case "module":
+          selectedPresentationAnchor =
+            placementAnchorByIdRef.current.get(selectedEntityRef.id) ?? null;
+          break;
+        case "player-spawn":
+          selectedPresentationAnchor =
+            sceneDraftHandles?.playerSpawnGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "scene-object":
+          selectedPresentationAnchor =
+            sceneDraftHandles?.sceneObjectGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "water-region":
+          selectedPresentationAnchor =
+            sceneDraftHandles?.waterRegionGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "terrain-chunk":
+          selectedPresentationAnchor =
+            semanticDraftHandles?.terrainChunkGroupsById.get(selectedEntityRef.id) ??
+            null;
+          break;
+        case "surface":
+          selectedPresentationAnchor =
+            semanticDraftHandles?.surfaceGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "region":
+          selectedPresentationAnchor =
+            semanticDraftHandles?.regionGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "edge":
+          selectedPresentationAnchor =
+            semanticDraftHandles?.edgeGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+        case "connector":
+          selectedPresentationAnchor =
+            semanticDraftHandles?.connectorGroupsById.get(selectedEntityRef.id) ?? null;
+          break;
+      }
+    }
+
+    if (
+      (viewportToolMode === "move" ||
+        viewportToolMode === "rotate" ||
+        viewportToolMode === "scale") &&
+      selectedTransformTarget !== null
+    ) {
       switch (selectedTransformTarget.kind) {
         case "placement":
           selectedTransformAnchor =
@@ -584,32 +1302,58 @@ export function MapEditorViewport({
     replaceMapEditorViewportSelectionBoundsHelper(
       scene,
       helperHandles,
-      selectedTransformAnchor,
+      selectedPresentationAnchor,
       helperVisibility
     );
   });
 
   useEffect(() => {
-    setSelectedTransformTarget(
-      selectedPlacementId === null
-        ? null
-        : Object.freeze({
-            id: selectedPlacementId,
-            kind: "placement"
-          })
-    );
-  }, [bundleId, selectedPlacementId]);
+    setSelectedTransformTarget(createTransformTargetFromSelectedEntity(selectedEntityRef));
+  }, [bundleId, selectedEntityRef]);
 
   useEffect(() => {
     placementDraftsRef.current = placementDrafts;
   }, [placementDrafts]);
 
   useEffect(() => {
-    activeBuildPrimitiveAssetIdRef.current = activeBuildPrimitiveAssetId;
-  }, [activeBuildPrimitiveAssetId]);
+    builderToolStateRef.current = builderToolState;
+  }, [builderToolState]);
+
+  useEffect(() => {
+    regionDraftsRef.current = regionDrafts;
+  }, [regionDrafts]);
+
+  useEffect(() => {
+    surfaceDraftsRef.current = surfaceDrafts;
+  }, [surfaceDrafts]);
+
+  useEffect(() => {
+    terrainChunkDraftsRef.current = terrainChunkDrafts;
+  }, [terrainChunkDrafts]);
+
+  useEffect(() => {
+    activeModuleAssetIdRef.current = activeModuleAssetId;
+  }, [activeModuleAssetId]);
 
   useEffect(() => {
     viewportToolModeRef.current = viewportToolMode;
+  }, [viewportToolMode]);
+
+  useEffect(() => {
+    if (viewportToolMode !== "wall") {
+      pendingWallAnchorRef.current = null;
+    }
+
+    if (viewportToolMode !== "path") {
+      pendingPathAnchorRef.current = null;
+      pathAnchorPointerYRef.current = null;
+    }
+
+    if (viewportToolMode === "module" || viewportToolMode === "select") {
+      if (builderPreviewGroupRef.current !== null) {
+        disposeBuilderPreviewGroup(builderPreviewGroupRef.current);
+      }
+    }
   }, [viewportToolMode]);
 
   useEffect(() => {
@@ -656,9 +1400,15 @@ export function MapEditorViewport({
     collisionGroup.visible = helperVisibility.collisionBounds;
     collisionGroupRef.current = collisionGroup;
     scene.add(collisionGroup);
+    const builderPreviewGroup = new Group();
+    builderPreviewGroupRef.current = builderPreviewGroup;
+    scene.add(builderPreviewGroup);
     const sceneDraftHandles = createMapEditorViewportSceneDraftHandles();
     sceneDraftHandlesRef.current = sceneDraftHandles;
     scene.add(sceneDraftHandles.rootGroup);
+    const semanticDraftHandles = createMapEditorViewportSemanticDraftHandles();
+    semanticDraftHandlesRef.current = semanticDraftHandles;
+    scene.add(semanticDraftHandles.rootGroup);
     const previewAssetLibrary = new MapEditorViewportPreviewAssetLibrary();
     previewAssetLibraryRef.current = previewAssetLibrary;
     const helperHandles = createMapEditorViewportHelperHandles(scene);
@@ -724,10 +1474,10 @@ export function MapEditorViewport({
       }
     };
 
-    const readSelectedTransformTarget = (
+    const readSelectedEntity = (
       clientX: number,
       clientY: number
-    ): MapEditorViewportTransformTarget | null => {
+    ): MapEditorSelectedEntityRef | null => {
       const pointer = readCanvasPointer(
         canvasElement,
         clientX,
@@ -738,15 +1488,26 @@ export function MapEditorViewport({
       raycasterRef.current.setFromCamera(pointer, camera);
 
       const intersections = raycasterRef.current.intersectObjects(
-        sceneDraftHandlesRef.current === null
-          ? placementGroup.children
-          : [...placementGroup.children, sceneDraftHandlesRef.current.rootGroup],
+        [
+          ...placementGroup.children,
+          ...(sceneDraftHandlesRef.current === null
+            ? []
+            : [sceneDraftHandlesRef.current.rootGroup]),
+          ...(semanticDraftHandlesRef.current === null
+            ? []
+            : [semanticDraftHandlesRef.current.rootGroup])
+        ],
         true
       );
 
-      return readTransformTargetFromObject(intersections[0]?.object ?? null);
+      return readSelectedEntityFromObject(intersections[0]?.object ?? null);
     };
-    const readBuildPlacementPosition = (
+    const clearBuilderPreview = () => {
+      if (builderPreviewGroupRef.current !== null) {
+        disposeBuilderPreviewGroup(builderPreviewGroupRef.current);
+      }
+    };
+    const readGroundPlacementPosition = (
       clientX: number,
       clientY: number
     ): {
@@ -754,17 +1515,6 @@ export function MapEditorViewport({
       readonly y: number;
       readonly z: number;
     } | null => {
-      const activeBuildPrimitive =
-        activeBuildPrimitiveAssetIdRef.current === null
-          ? null
-          : readMapEditorBuildPrimitiveCatalogEntry(
-              activeBuildPrimitiveAssetIdRef.current
-            );
-
-      if (activeBuildPrimitive === null) {
-        return null;
-      }
-
       const pointer = readCanvasPointer(
         canvasElement,
         clientX,
@@ -783,19 +1533,18 @@ export function MapEditorViewport({
         return null;
       }
 
-      return resolveMapEditorBuildGroundPlacementPosition(
+      return resolveSnappedGroundPosition(
         Object.freeze({
           x: placementPoint.x,
           y: placementPoint.y,
           z: placementPoint.z
-        }),
-        activeBuildPrimitive
+        })
       );
     };
     const syncBuildCursor = (clientX: number, clientY: number) => {
       const buildCursorAnchor = buildCursorAnchorRef.current;
 
-      if (viewportToolModeRef.current !== "build") {
+      if (viewportToolModeRef.current !== "module") {
         buildCursorPositionRef.current = null;
 
         if (buildCursorAnchor !== null) {
@@ -805,7 +1554,7 @@ export function MapEditorViewport({
         return;
       }
 
-      const nextBuildCursorPosition = readBuildPlacementPosition(clientX, clientY);
+      const nextBuildCursorPosition = readGroundPlacementPosition(clientX, clientY);
 
       if (nextBuildCursorPosition === null) {
         buildCursorPositionRef.current = null;
@@ -829,6 +1578,109 @@ export function MapEditorViewport({
       );
       buildCursorAnchor.updateMatrixWorld(true);
     };
+    const syncBuilderPreview = (
+      clientX: number,
+      clientY: number,
+      ctrlKey: boolean
+    ) => {
+      const builderPreviewGroup = builderPreviewGroupRef.current;
+
+      if (builderPreviewGroup === null) {
+        return;
+      }
+
+      clearBuilderPreview();
+
+      if (
+        viewportToolModeRef.current === "select" ||
+        viewportToolModeRef.current === "move" ||
+        viewportToolModeRef.current === "rotate" ||
+        viewportToolModeRef.current === "scale" ||
+        viewportToolModeRef.current === "module"
+      ) {
+        return;
+      }
+
+      const nextGroundPosition = readGroundPlacementPosition(clientX, clientY);
+
+      if (nextGroundPosition === null) {
+        return;
+      }
+
+      switch (viewportToolModeRef.current) {
+        case "terrain":
+          addTerrainBrushPreview(
+            builderPreviewGroup,
+            terrainChunkDraftsRef.current,
+            nextGroundPosition,
+            builderToolStateRef.current.terrainBrushSizeCells,
+            builderToolStateRef.current.terrainSmoothEdges
+          );
+          return;
+        case "wall":
+          if (pendingWallAnchorRef.current === null) {
+            const marker = createPreviewMesh(
+              new BoxGeometry(
+                mapEditorBuildGridUnitMeters * 0.45,
+                0.5,
+                mapEditorBuildGridUnitMeters * 0.45
+              ),
+              createPreviewMaterial("#fb923c", 0.38)
+            );
+
+            marker.position.set(nextGroundPosition.x, 0.25, nextGroundPosition.z);
+            builderPreviewGroup.add(marker);
+            return;
+          }
+
+          addWallSegmentPreview(
+            builderPreviewGroup,
+            pendingWallAnchorRef.current,
+            nextGroundPosition
+          );
+          return;
+        case "path": {
+          const fallbackAnchor = readNearestPathAnchorFromDrafts(
+            nextGroundPosition,
+            regionDraftsRef.current,
+            surfaceDraftsRef.current
+          );
+          const activeAnchor = pendingPathAnchorRef.current ?? fallbackAnchor;
+          const elevationDelta =
+            ctrlKey &&
+            pendingPathAnchorRef.current !== null &&
+            pathAnchorPointerYRef.current !== null
+              ? Math.round((pathAnchorPointerYRef.current - clientY) / 24)
+              : 0;
+          const baseElevation =
+            activeAnchor?.elevation ??
+            resolveTerrainHeightAtPosition(
+              terrainChunkDraftsRef.current,
+              nextGroundPosition
+            );
+          const targetElevation = baseElevation + elevationDelta;
+
+          addPathPreview(
+            builderPreviewGroup,
+            Object.freeze({
+              x: nextGroundPosition.x,
+              y: targetElevation,
+              z: nextGroundPosition.z
+            }),
+            targetElevation,
+            pendingPathAnchorRef.current
+          );
+          return;
+        }
+        case "water":
+          addWaterPreview(
+            builderPreviewGroup,
+            nextGroundPosition,
+            builderToolStateRef.current
+          );
+          return;
+      }
+    };
 
     const handlePointerDown = (event: PointerEvent) => {
       hostElement.focus({ preventScroll: true });
@@ -842,6 +1694,7 @@ export function MapEditorViewport({
         y: event.clientY
       });
       syncBuildCursor(event.clientX, event.clientY);
+      syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -867,17 +1720,17 @@ export function MapEditorViewport({
       }
 
       if (
-        viewportToolModeRef.current === "build" &&
-        activeBuildPrimitiveAssetIdRef.current !== null
+        viewportToolModeRef.current === "module" &&
+        activeModuleAssetIdRef.current !== null
       ) {
-        const nextBuildPlacementPosition = readBuildPlacementPosition(
+        const nextBuildPlacementPosition = readGroundPlacementPosition(
           event.clientX,
           event.clientY
         );
 
         if (nextBuildPlacementPosition !== null) {
-          handleBuildPlacement(
-            activeBuildPrimitiveAssetIdRef.current,
+          handleCreateModulePlacement(
+            activeModuleAssetIdRef.current,
             nextBuildPlacementPosition
           );
         }
@@ -885,18 +1738,98 @@ export function MapEditorViewport({
         return;
       }
 
-      const nextSelectedTransformTarget = readSelectedTransformTarget(
-        event.clientX,
-        event.clientY
-      );
+      const nextScenePosition = readGroundPlacementPosition(event.clientX, event.clientY);
 
-      if (nextSelectedTransformTarget !== null) {
-        setSelectedTransformTarget(nextSelectedTransformTarget);
+      if (nextScenePosition !== null) {
+        switch (viewportToolModeRef.current) {
+          case "terrain":
+            handleApplyTerrainBrush(nextScenePosition);
+            return;
+          case "wall":
+            if (pendingWallAnchorRef.current === null) {
+              pendingWallAnchorRef.current = nextScenePosition;
+              syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
+              return;
+            }
 
-        if (nextSelectedTransformTarget.kind === "placement") {
-          handlePlacementSelection(nextSelectedTransformTarget.id);
+            const nextWallEnd = resolveWallSegmentEnd(
+              pendingWallAnchorRef.current,
+              nextScenePosition
+            );
+
+            if (
+              nextWallEnd.x === pendingWallAnchorRef.current.x &&
+              nextWallEnd.z === pendingWallAnchorRef.current.z
+            ) {
+              return;
+            }
+
+            handleCommitWall(pendingWallAnchorRef.current, nextWallEnd);
+            pendingWallAnchorRef.current = nextWallEnd;
+            syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
+            return;
+          case "path": {
+            const existingAnchor = readNearestPathAnchorFromDrafts(
+              nextScenePosition,
+              regionDraftsRef.current,
+              surfaceDraftsRef.current
+            );
+            const activeAnchor = pendingPathAnchorRef.current ?? existingAnchor;
+            const elevationDelta =
+              event.ctrlKey &&
+              pendingPathAnchorRef.current !== null &&
+              pathAnchorPointerYRef.current !== null
+                ? Math.round((pathAnchorPointerYRef.current - event.clientY) / 24)
+                : 0;
+            const targetElevation =
+              (activeAnchor?.elevation ??
+                resolveTerrainHeightAtPosition(
+                  terrainChunkDraftsRef.current,
+                  nextScenePosition
+                )) + elevationDelta;
+            const nextPathAnchor = Object.freeze({
+              center: Object.freeze({
+                x: nextScenePosition.x,
+                y: targetElevation,
+                z: nextScenePosition.z
+              }),
+              elevation: targetElevation
+            });
+
+            if (
+              activeAnchor !== null &&
+              activeAnchor.center.x === nextScenePosition.x &&
+              activeAnchor.center.z === nextScenePosition.z &&
+              Math.abs(activeAnchor.elevation - targetElevation) <= 0.01
+            ) {
+              pendingPathAnchorRef.current = activeAnchor;
+              pathAnchorPointerYRef.current = event.clientY;
+              syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
+              return;
+            }
+
+            handleCommitPath(
+              nextPathAnchor.center,
+              targetElevation,
+              activeAnchor
+            );
+            pendingPathAnchorRef.current = nextPathAnchor;
+            pathAnchorPointerYRef.current = event.clientY;
+            syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
+            return;
+          }
+          case "water":
+            handleCreateWaterRegion(nextScenePosition);
+            return;
         }
       }
+
+      const nextSelectedEntity = readSelectedEntity(event.clientX, event.clientY);
+
+      setSelectedTransformTarget(
+        createTransformTargetFromSelectedEntity(nextSelectedEntity)
+      );
+      handleEntitySelection(nextSelectedEntity);
     };
 
     const handlePointerCancel = () => {
@@ -904,6 +1837,7 @@ export function MapEditorViewport({
     };
     const handlePointerMove = (event: PointerEvent) => {
       syncBuildCursor(event.clientX, event.clientY);
+      syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
     };
     const handlePointerLeave = () => {
       buildCursorPositionRef.current = null;
@@ -911,10 +1845,16 @@ export function MapEditorViewport({
       if (buildCursorAnchorRef.current !== null) {
         buildCursorAnchorRef.current.visible = false;
       }
+
+      clearBuilderPreview();
     };
 
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
+      pendingWallAnchorRef.current = null;
+      pendingPathAnchorRef.current = null;
+      pathAnchorPointerYRef.current = null;
+      clearBuilderPreview();
     };
 
     const initializeViewport = async () => {
@@ -967,10 +1907,22 @@ export function MapEditorViewport({
         disposeMapEditorViewportPreviewGroup(collisionGroupRef.current);
         collisionGroupRef.current = null;
       }
+      if (builderPreviewGroupRef.current !== null) {
+        scene.remove(builderPreviewGroupRef.current);
+        disposeBuilderPreviewGroup(builderPreviewGroupRef.current);
+        builderPreviewGroupRef.current = null;
+      }
       if (sceneDraftHandlesRef.current !== null) {
         scene.remove(sceneDraftHandlesRef.current.rootGroup);
         disposeMapEditorViewportSceneDraftHandles(sceneDraftHandlesRef.current);
         sceneDraftHandlesRef.current = null;
+      }
+      if (semanticDraftHandlesRef.current !== null) {
+        scene.remove(semanticDraftHandlesRef.current.rootGroup);
+        disposeMapEditorViewportSemanticDraftHandles(
+          semanticDraftHandlesRef.current
+        );
+        semanticDraftHandlesRef.current = null;
       }
       if (buildCursorAnchorRef.current !== null) {
         const buildCursorDisposalGroup = new Group();
@@ -1115,6 +2067,30 @@ export function MapEditorViewport({
   }, [playerSpawnDrafts, sceneDraftSignature, sceneObjectDrafts, waterRegionDrafts]);
 
   useEffect(() => {
+    const semanticDraftHandles = semanticDraftHandlesRef.current;
+
+    if (semanticDraftHandles === null) {
+      return;
+    }
+
+    syncMapEditorViewportSemanticDrafts(semanticDraftHandles, {
+      connectorDrafts,
+      edgeDrafts,
+      regionDrafts,
+      surfaceDrafts,
+      terrainChunkDrafts
+    });
+    syncSelectionPresentation();
+  }, [
+    connectorDrafts,
+    edgeDrafts,
+    regionDrafts,
+    surfaceDrafts,
+    syncSelectionPresentation,
+    terrainChunkDrafts
+  ]);
+
+  useEffect(() => {
     const scene = sceneRef.current;
     const previewAssetLibrary = previewAssetLibraryRef.current;
 
@@ -1140,14 +2116,14 @@ export function MapEditorViewport({
       buildCursorPositionRef.current = null;
     };
 
-    if (viewportToolMode !== "build" || activeBuildPrimitiveAssetId === null) {
+    if (viewportToolMode !== "module" || activeModuleAssetId === null) {
       removeBuildCursorAnchor();
       return;
     }
 
     if (
       buildCursorAnchorRef.current !== null &&
-      buildCursorAssetIdRef.current === activeBuildPrimitiveAssetId
+      buildCursorAssetIdRef.current === activeModuleAssetId
     ) {
       buildCursorAnchorRef.current.visible = buildCursorPositionRef.current !== null;
       return;
@@ -1157,11 +2133,16 @@ export function MapEditorViewport({
 
     const createBuildCursorAnchor = async () => {
       const placement = {
-        assetId: activeBuildPrimitiveAssetId,
+        assetId: activeModuleAssetId,
         colliderCount: 0,
         collisionEnabled: true,
+        collisionPath: null,
+        collider: null,
+        dynamicBody: null,
+        entries: null,
         isVisible: true,
         materialReferenceId: null,
+        moduleId: "__map-editor-build-cursor__",
         notes: "",
         placementId: "__map-editor-build-cursor__",
         placementMode: "instanced",
@@ -1175,7 +2156,10 @@ export function MapEditorViewport({
           x: 1,
           y: 1,
           z: 1
-        })
+        }),
+        seats: null,
+        surfaceColliders: Object.freeze([]),
+        traversalAffordance: "support"
       } satisfies MapEditorPlacementDraftSnapshot;
       const buildCursorAnchor =
         await previewAssetLibrary.createPlacementPreviewAnchor(placement);
@@ -1200,7 +2184,7 @@ export function MapEditorViewport({
         buildCursorAnchor.visible = false;
       }
       buildCursorAnchorRef.current = buildCursorAnchor;
-      buildCursorAssetIdRef.current = activeBuildPrimitiveAssetId;
+      buildCursorAssetIdRef.current = activeModuleAssetId;
       scene.add(buildCursorAnchor);
     };
 
@@ -1209,7 +2193,7 @@ export function MapEditorViewport({
     return () => {
       cancelled = true;
     };
-  }, [activeBuildPrimitiveAssetId, viewportToolMode]);
+  }, [activeModuleAssetId, viewportToolMode]);
 
   useEffect(() => {
     const helperHandles = helperHandlesRef.current;
@@ -1228,7 +2212,12 @@ export function MapEditorViewport({
 
   useEffect(() => {
     syncSelectionPresentation();
-  }, [selectedTransformTarget, syncSelectionPresentation, viewportToolMode]);
+  }, [
+    selectedEntityRef,
+    selectedTransformTarget,
+    syncSelectionPresentation,
+    viewportToolMode
+  ]);
 
   useEffect(() => {
     const camera = cameraRef.current;
@@ -1249,8 +2238,13 @@ export function MapEditorViewport({
     }
 
     const extents = resolvePlacementExtents(placementDrafts, {
+      connectorDrafts,
+      edgeDrafts,
       playerSpawnDrafts,
+      regionDrafts,
       sceneObjectDrafts,
+      surfaceDrafts,
+      terrainChunkDrafts,
       waterRegionDrafts
     });
     const centerX = (extents.minX + extents.maxX) * 0.5;
@@ -1263,14 +2257,33 @@ export function MapEditorViewport({
 
     frameMapEditorViewportCamera(camera, orbitControls, centerX, centerZ, span);
     framedBundleIdRef.current = bundleId;
-  }, [bundleId, placementDrafts, playerSpawnDrafts, sceneObjectDrafts, waterRegionDrafts]);
+  }, [
+    bundleId,
+    connectorDrafts,
+    edgeDrafts,
+    placementDrafts,
+    playerSpawnDrafts,
+    regionDrafts,
+    sceneObjectDrafts,
+    surfaceDrafts,
+    terrainChunkDrafts,
+    waterRegionDrafts
+  ]);
 
   return (
     <div className="relative flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border/70 bg-[radial-gradient(circle_at_top,rgb(56_189_248/0.08),transparent_32%),linear-gradient(180deg,rgb(15_23_42/0.18),rgb(2_6_23/0.6))]">
       <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full border border-border/70 bg-background/78 px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
-        {viewportToolMode === "build" && activeBuildPrimitiveAssetId !== null
-          ? `Build mode: click to stamp ${activeBuildPrimitiveAssetId} on the snapped plane. Drag to orbit, right-drag to pan, and use WASD plus Q/E to fly.`
-          : "Click to focus. Drag to orbit. Right-drag to pan. Scroll to zoom. Use WASD to fly, Q/E for height, and Shift to move faster."}
+        {viewportToolMode === "module" && activeModuleAssetId !== null
+          ? `Module tool: click to place ${activeModuleAssetId} on the snapped plane.`
+          : viewportToolMode === "terrain"
+            ? "Terrain tool: paint stepped terrain on the snapped grid. Brush size and smooth falloff come from the toolbar."
+            : viewportToolMode === "wall"
+              ? "Wall tool: click once to anchor, hover the next edge, then click again to commit and keep chaining."
+              : viewportToolMode === "path"
+                ? "Path tool: click to start or continue. Hold Ctrl and move vertically before commit to preview elevation changes."
+                : viewportToolMode === "water"
+                  ? "Water tool: place a snapped rectangular footprint using top elevation and depth."
+                  : "Click to focus. Drag to orbit. Right-drag to pan. Scroll to zoom. Use WASD to fly, Q/E for height, and Shift to move faster."}
       </div>
       {viewportError !== null ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/92 p-6 text-center text-sm text-muted-foreground">

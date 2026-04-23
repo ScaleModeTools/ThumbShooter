@@ -76,7 +76,9 @@ export function createRealtimeWorldSnapshot({
   localJumpAuthorityState,
   localJumpDebug,
   localGroundedBody,
+  localLatestCombatActionReceipt = null,
   localLastAcceptedJumpActionSequence = 0,
+  localLastProcessedCombatActionSequence = 0,
   localLastProcessedJumpActionSequence = 0,
   localLastProcessedLookSequence,
   localLastProcessedTraversalSequence,
@@ -261,10 +263,17 @@ export function createRealtimeWorldSnapshot({
   return createMetaverseRealtimeWorldSnapshot({
     observerPlayer: {
       jumpDebug: resolvedLocalJumpDebug,
+      lastProcessedCombatActionSequence:
+        localLastProcessedCombatActionSequence,
       lastProcessedTraversalSequence:
         resolvedLocalLastProcessedTraversalSequence,
       lastProcessedLookSequence: resolvedLocalLastProcessedLookSequence,
       lastProcessedWeaponSequence: localLastProcessedWeaponSequence,
+      ...(localLatestCombatActionReceipt === null
+        ? {}
+        : {
+            latestCombatActionReceipt: localLatestCombatActionReceipt
+          }),
       playerId: localPlayerId
     },
     players: [

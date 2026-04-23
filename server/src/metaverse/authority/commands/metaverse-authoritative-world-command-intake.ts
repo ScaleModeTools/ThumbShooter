@@ -6,6 +6,9 @@ import type {
   MetaverseSyncPresenceCommand
 } from "@webgpu-metaverse/shared/metaverse/presence";
 import type {
+  MetaverseIssuePlayerActionCommand,
+} from "@webgpu-metaverse/shared/metaverse";
+import type {
   MetaverseRealtimeWorldClientCommand,
   MetaverseRealtimeWorldEvent,
   MetaverseSyncDriverVehicleControlCommand,
@@ -14,9 +17,6 @@ import type {
   MetaverseSyncPlayerTraversalIntentCommand,
   MetaverseSyncPlayerWeaponStateCommand
 } from "@webgpu-metaverse/shared/metaverse/realtime";
-import type {
-  MetaverseFireWeaponCommand
-} from "@webgpu-metaverse/shared/metaverse";
 
 interface MetaverseAuthoritativePlayerPoseCommandHandler {
   acceptJoinCommand(command: MetaverseJoinPresenceCommand, nowMs: number): void;
@@ -46,8 +46,8 @@ interface MetaverseAuthoritativePlayerWeaponStateCommandHandler {
 }
 
 interface MetaverseAuthoritativeCombatCommandHandler {
-  acceptFireWeaponCommand(
-    command: MetaverseFireWeaponCommand,
+  acceptIssuePlayerActionCommand(
+    command: MetaverseIssuePlayerActionCommand,
     nowMs: number
   ): void;
 }
@@ -145,8 +145,8 @@ export class MetaverseAuthoritativeWorldCommandIntake {
     this.#dependencies.advanceToTime(normalizedNowMs);
 
     switch (command.type) {
-      case "fire-weapon":
-        this.#dependencies.combatAuthority.acceptFireWeaponCommand(
+      case "issue-player-action":
+        this.#dependencies.combatAuthority.acceptIssuePlayerActionCommand(
           command,
           normalizedNowMs
         );

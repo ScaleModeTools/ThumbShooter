@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  createMetaverseFireWeaponCommand,
+  createMetaverseIssuePlayerActionCommand,
   createMetaversePlayerId,
   createMetaverseRealtimePlayerWeaponStateSnapshot,
   createMetaverseUnmountedTraversalStateSnapshot
@@ -46,6 +46,34 @@ function createForwardDirection(origin, target) {
     x: deltaX / length,
     y: deltaY / length,
     z: deltaZ / length
+  });
+}
+
+function createFireWeaponPlayerActionCommand({
+  actionSequence,
+  aimMode,
+  issuedAtAuthoritativeTimeMs,
+  origin,
+  playerId,
+  target,
+  weaponId
+}) {
+  const forwardDirection = createForwardDirection(origin, target);
+  const planarMagnitude = Math.hypot(forwardDirection.x, forwardDirection.z);
+
+  return createMetaverseIssuePlayerActionCommand({
+    action: {
+      ...(aimMode === undefined ? {} : { aimMode }),
+      actionSequence,
+      aimSnapshot: {
+        pitchRadians: Math.atan2(forwardDirection.y, planarMagnitude),
+        yawRadians: Math.atan2(forwardDirection.x, -forwardDirection.z)
+      },
+      issuedAtAuthoritativeTimeMs,
+      kind: "fire-weapon",
+      weaponId
+    },
+    playerId
   });
 }
 
@@ -137,38 +165,38 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
   combatAuthority.syncCombatState(0);
   combatAuthority.advanceCombatRuntimes(1.1, 1_100);
 
-  combatAuthority.acceptFireWeaponCommand(
-    createMetaverseFireWeaponCommand({
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
       aimMode: "hip-fire",
-      clientFireTimeMs: 1_050,
-      fireSequence: 1,
-      forwardDirection: createForwardDirection(redMuzzleOrigin, blueBodyTarget),
-      muzzleOrigin: redMuzzleOrigin,
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_050,
+      origin: redMuzzleOrigin,
       playerId: redPlayerId,
+      target: blueBodyTarget,
       weaponId: "metaverse-service-pistol-v2"
     }),
     1_200
   );
-  combatAuthority.acceptFireWeaponCommand(
-    createMetaverseFireWeaponCommand({
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
       aimMode: "hip-fire",
-      clientFireTimeMs: 1_250,
-      fireSequence: 2,
-      forwardDirection: createForwardDirection(redMuzzleOrigin, blueHeadTarget),
-      muzzleOrigin: redMuzzleOrigin,
+      actionSequence: 2,
+      issuedAtAuthoritativeTimeMs: 1_250,
+      origin: redMuzzleOrigin,
       playerId: redPlayerId,
+      target: blueHeadTarget,
       weaponId: "metaverse-service-pistol-v2"
     }),
     1_400
   );
-  combatAuthority.acceptFireWeaponCommand(
-    createMetaverseFireWeaponCommand({
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
       aimMode: "hip-fire",
-      clientFireTimeMs: 1_450,
-      fireSequence: 3,
-      forwardDirection: createForwardDirection(redMuzzleOrigin, blueHeadTarget),
-      muzzleOrigin: redMuzzleOrigin,
+      actionSequence: 3,
+      issuedAtAuthoritativeTimeMs: 1_450,
+      origin: redMuzzleOrigin,
       playerId: redPlayerId,
+      target: blueHeadTarget,
       weaponId: "metaverse-service-pistol-v2"
     }),
     1_600
@@ -196,7 +224,11 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
   );
   assert.equal(damageFeedEvents.length, 2);
   assert.equal(damageFeedEvents[0]?.hitZone, "body");
+  assert.equal(damageFeedEvents[0]?.sourceActionSequence, 1);
+  assert.equal(damageFeedEvents[0]?.sourceProjectileId, `${redPlayerId}:1`);
   assert.equal(damageFeedEvents[1]?.hitZone, "head");
+  assert.equal(damageFeedEvents[1]?.sourceActionSequence, 2);
+  assert.equal(damageFeedEvents[1]?.sourceProjectileId, `${redPlayerId}:2`);
   assert.equal(preRespawnBlueCombatSnapshot?.alive, false);
   assert.equal(preRespawnBlueCombatSnapshot?.deaths, 1);
   assert.equal(preRespawnBlueCombatSnapshot?.health, 0);
@@ -207,16 +239,18 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
   assert.equal(killFeedEvent?.type, "kill");
   assert.equal(killFeedEvent?.attackerPlayerId, redPlayerId);
   assert.equal(killFeedEvent?.headshot, true);
+  assert.equal(killFeedEvent?.sourceActionSequence, 3);
+  assert.equal(killFeedEvent?.sourceProjectileId, `${redPlayerId}:3`);
   assert.equal(killFeedEvent?.targetPlayerId, bluePlayerId);
 
-  combatAuthority.acceptFireWeaponCommand(
-    createMetaverseFireWeaponCommand({
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
       aimMode: "hip-fire",
-      clientFireTimeMs: 1_650,
-      fireSequence: 4,
-      forwardDirection: createForwardDirection(redMuzzleOrigin, blueHeadTarget),
-      muzzleOrigin: redMuzzleOrigin,
+      actionSequence: 4,
+      issuedAtAuthoritativeTimeMs: 1_650,
+      origin: redMuzzleOrigin,
       playerId: redPlayerId,
+      target: blueHeadTarget,
       weaponId: "metaverse-service-pistol-v2"
     }),
     1_800
@@ -257,17 +291,14 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
   assert.equal(bluePlayerRuntime?.yawRadians, blueRespawnYawRadians);
   assert.ok((bluePlayerRuntime?.stateSequence ?? 0) > 0);
 
-  combatAuthority.acceptFireWeaponCommand(
-    createMetaverseFireWeaponCommand({
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
       aimMode: "hip-fire",
-      clientFireTimeMs: 4_560,
-      fireSequence: 5,
-      forwardDirection: createForwardDirection(
-        redMuzzleOrigin,
-        blueRespawnHeadTarget
-      ),
-      muzzleOrigin: redMuzzleOrigin,
+      actionSequence: 5,
+      issuedAtAuthoritativeTimeMs: 4_560,
+      origin: redMuzzleOrigin,
       playerId: redPlayerId,
+      target: blueRespawnHeadTarget,
       weaponId: "metaverse-service-pistol-v2"
     }),
     4_710
@@ -281,5 +312,156 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
         (weaponStats) => weaponStats.weaponId === "metaverse-service-pistol-v2"
       )?.shotsHit,
     3
+  );
+});
+
+test("MetaverseAuthoritativeCombatAuthority publishes exactly-once combat action receipts for accepted and rejected fire commands", () => {
+  const redPlayerId = createMetaversePlayerId("combat-receipt-red-1");
+  const bluePlayerId = createMetaversePlayerId("combat-receipt-blue-1");
+
+  assert.notEqual(redPlayerId, null);
+  assert.notEqual(bluePlayerId, null);
+
+  const redRootPosition = Object.freeze({
+    x: 0,
+    y: 0,
+    z: 0
+  });
+  const blueRootPosition = Object.freeze({
+    x: 0,
+    y: 0,
+    z: -9
+  });
+  const redMuzzleOrigin = Object.freeze({
+    x: 0,
+    y: 1.62,
+    z: 0
+  });
+  const blueBodyTarget = Object.freeze({
+    x: 0,
+    y: 0.95,
+    z: -9
+  });
+  let snapshotSequence = 0;
+
+  const combatAuthority = new MetaverseAuthoritativeCombatAuthority({
+    clearDriverVehicleControl() {},
+    clearPlayerTraversalIntent() {},
+    clearPlayerVehicleOccupancy() {},
+    incrementSnapshotSequence() {
+      snapshotSequence += 1;
+    },
+    physicsRuntime: {
+      castRay() {
+        return null;
+      }
+    },
+    playerTraversalColliderHandles: new Set(),
+    playersById: new Map([
+      [
+        redPlayerId,
+        createPlayerRuntimeState(redPlayerId, "red", redRootPosition)
+      ],
+      [
+        bluePlayerId,
+        createPlayerRuntimeState(bluePlayerId, "blue", blueRootPosition)
+      ]
+    ]),
+    readTickIntervalMs: () => 33,
+    resolveRespawnPose(_playerId, teamId) {
+      return {
+        position: teamId === "red" ? redRootPosition : blueRootPosition,
+        yawRadians: 0
+      };
+    },
+    syncAuthoritativePlayerLookToCurrentFacing() {},
+    syncPlayerTraversalAuthorityState() {},
+    syncPlayerTraversalBodyRuntimes() {}
+  });
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+  const snapshotSequenceBeforeFirstShot = snapshotSequence;
+
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_050,
+      origin: redMuzzleOrigin,
+      playerId: redPlayerId,
+      target: blueBodyTarget,
+      weaponId: "metaverse-service-pistol-v2"
+    }),
+    1_200
+  );
+
+  const acceptedReceiptSnapshot =
+    combatAuthority.readPlayerCombatActionObserverSnapshot(redPlayerId);
+  const snapshotSequenceAfterAcceptedShot = snapshotSequence;
+
+  assert.ok(snapshotSequenceAfterAcceptedShot > snapshotSequenceBeforeFirstShot);
+  assert.equal(
+    acceptedReceiptSnapshot?.highestProcessedPlayerActionSequence,
+    1
+  );
+  assert.equal(
+    acceptedReceiptSnapshot?.recentPlayerActionReceipts[0]?.status,
+    "accepted"
+  );
+  assert.equal(
+    acceptedReceiptSnapshot?.recentPlayerActionReceipts[0]?.sourceProjectileId,
+    `${redPlayerId}:1`
+  );
+
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_150,
+      origin: redMuzzleOrigin,
+      playerId: redPlayerId,
+      target: blueBodyTarget,
+      weaponId: "metaverse-service-pistol-v2"
+    }),
+    1_220
+  );
+
+  assert.equal(snapshotSequence, snapshotSequenceAfterAcceptedShot);
+  assert.equal(
+    combatAuthority.readPlayerCombatActionObserverSnapshot(redPlayerId)
+      ?.recentPlayerActionReceipts[0]?.status,
+    "accepted"
+  );
+
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 2,
+      issuedAtAuthoritativeTimeMs: 1_250,
+      origin: redMuzzleOrigin,
+      playerId: redPlayerId,
+      target: blueBodyTarget,
+      weaponId: "metaverse-service-pistol-v2"
+    }),
+    1_250
+  );
+
+  const rejectedReceiptSnapshot =
+    combatAuthority.readPlayerCombatActionObserverSnapshot(redPlayerId);
+
+  assert.equal(snapshotSequence, snapshotSequenceAfterAcceptedShot + 1);
+  assert.equal(
+    rejectedReceiptSnapshot?.highestProcessedPlayerActionSequence,
+    2
+  );
+  assert.equal(
+    rejectedReceiptSnapshot?.recentPlayerActionReceipts[1]?.status,
+    "rejected"
+  );
+  assert.equal(
+    rejectedReceiptSnapshot?.recentPlayerActionReceipts[1]?.rejectionReason,
+    "cooldown"
+  );
+  assert.equal(
+    rejectedReceiptSnapshot?.recentPlayerActionReceipts[1]?.sourceProjectileId,
+    null
   );
 });

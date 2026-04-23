@@ -1,6 +1,47 @@
 import type { MetaverseWorldSurfaceVector3Snapshot } from "@webgpu-metaverse/shared/metaverse/world";
 
-export type MapEditorViewportToolMode = "build" | "move" | "rotate" | "scale";
+export type MapEditorViewportToolMode =
+  | "module"
+  | "move"
+  | "path"
+  | "rotate"
+  | "scale"
+  | "select"
+  | "terrain"
+  | "wall"
+  | "water";
+
+export type MapEditorTerrainBrushMode = "lower" | "raise" | "smooth";
+export type MapEditorTerrainBrushSizeCells = 1 | 2 | 4 | 8;
+export type MapEditorWallToolPresetId =
+  | "curb"
+  | "fence"
+  | "rail"
+  | "retaining-wall"
+  | "wall";
+
+export interface MapEditorBuilderToolStateSnapshot {
+  readonly terrainBrushMode: MapEditorTerrainBrushMode;
+  readonly terrainBrushSizeCells: MapEditorTerrainBrushSizeCells;
+  readonly terrainSmoothEdges: boolean;
+  readonly wallPresetId: MapEditorWallToolPresetId;
+  readonly waterDepthMeters: number;
+  readonly waterFootprintCellsX: number;
+  readonly waterFootprintCellsZ: number;
+  readonly waterTopElevationMeters: number;
+}
+
+export const defaultMapEditorBuilderToolState =
+  Object.freeze<MapEditorBuilderToolStateSnapshot>({
+    terrainBrushMode: "raise",
+    terrainBrushSizeCells: 2,
+    terrainSmoothEdges: true,
+    wallPresetId: "wall",
+    waterDepthMeters: 4,
+    waterFootprintCellsX: 6,
+    waterFootprintCellsZ: 6,
+    waterTopElevationMeters: 0
+  });
 export type MapEditorViewportHelperId =
   | "axes"
   | "collisionBounds"
