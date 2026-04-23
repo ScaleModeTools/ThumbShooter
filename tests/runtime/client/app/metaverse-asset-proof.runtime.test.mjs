@@ -117,12 +117,12 @@ test("metaverse asset proof resolves the active full-body humanoid character fro
   }
 });
 
-test("metaverse asset proof resolves static, instanced, and dynamic environment config from manifests", async () => {
+test("metaverse asset proof resolves the shipped static and dynamic environment config from manifests", async () => {
   const { metaverseEnvironmentProofConfig } = await clientLoader.load(
     "/src/metaverse/world/proof/index.ts"
   );
 
-  assert.equal(metaverseEnvironmentProofConfig.assets.length, 6);
+  assert.equal(metaverseEnvironmentProofConfig.assets.length, 5);
 
   const floorAsset = metaverseEnvironmentProofConfig.assets.find(
     (asset) => asset.environmentAssetId === "metaverse-playground-range-floor-v1"
@@ -162,25 +162,7 @@ test("metaverse asset proof resolves static, instanced, and dynamic environment 
     tier: "high"
   });
 
-  assert.ok(barrierAsset);
-  assert.equal(barrierAsset.collisionPath, null);
-  assert.equal(barrierAsset.placement, "instanced");
-  assert.equal(barrierAsset.traversalAffordance, "support");
-  assert.equal(barrierAsset.lods.length, 1);
-  assert.equal(barrierAsset.placements.length, 6);
-  assert.equal(barrierAsset.physicsColliders?.length, 1);
-  assert.equal(barrierAsset.physicsColliders?.[0]?.traversalAffordance, "support");
-  assert.deepEqual(barrierAsset.lods[0], {
-    kind: "procedural-box",
-    materialPreset: "training-range-accent",
-    maxDistanceMeters: null,
-    size: {
-      x: 8.5,
-      y: 3.2,
-      z: 1.4
-    },
-    tier: "high"
-  });
+  assert.equal(barrierAsset, undefined);
 
   assert.ok(dockAsset);
   assert.equal(

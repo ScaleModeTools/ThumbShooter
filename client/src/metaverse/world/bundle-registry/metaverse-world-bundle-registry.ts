@@ -1,5 +1,10 @@
 import { stagingGroundMapBundle, type MetaverseMapBundleSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
 
+import {
+  loadStoredMetaverseWorldBundleSnapshot,
+  type StoredMetaverseWorldBundleStorageLike
+} from "../map-bundles/stored-metaverse-world-bundle";
+
 export interface MetaverseWorldBundleRegistryEntry {
   readonly bundle: MetaverseMapBundleSnapshot;
   readonly bundleId: string;
@@ -68,6 +73,36 @@ export function registerMetaverseWorldBundlePreviewEntry(
   entry: MetaverseWorldBundleRegistryEntry
 ): void {
   metaverseWorldBundlePreviewEntriesById.set(entry.bundleId, freezeRegistryEntry(entry));
+}
+
+export function applyStoredMetaverseWorldBundleOverride(
+  storage: StoredMetaverseWorldBundleStorageLike | null,
+  bundleId: string
+): boolean {
+  const storedBundle = loadStoredMetaverseWorldBundleSnapshot(storage, bundleId);
+
+  if (storedBundle === null) {
+    return false;
+  }
+
+  registerMetaverseWorldBundlePreviewEntry(
+    Object.freeze({
+      bundle: storedBundle,
+      bundleId,
+      label: storedBundle.label,
+      sourceBundleId: bundleId
+    })
+  );
+
+  return true;
+}
+
+export function applyStoredMetaverseWorldBundleOverrides(
+  storage: StoredMetaverseWorldBundleStorageLike | null
+): void {
+  for (const entry of metaverseWorldBundleRegistryEntries) {
+    applyStoredMetaverseWorldBundleOverride(storage, entry.bundleId);
+  }
 }
 
 export function clearMetaverseWorldBundlePreviewEntry(bundleId: string): void {

@@ -1,4 +1,5 @@
 import type { AnimationMixer, Object3D } from "three/webgpu";
+import type { MetaverseRealtimePlayerWeaponStateSnapshot } from "@webgpu-metaverse/shared";
 
 import { resolveFirstPersonHeadClearanceCameraSnapshot } from "../first-person-camera-clearance";
 import {
@@ -98,6 +99,8 @@ export function syncLocalCharacterPresentation<
   cameraSnapshot: MetaverseCameraSnapshot,
   characterPresentation: MetaverseCharacterPresentationSnapshot | null,
   bodyPresentation: MetaverseRuntimeConfig["bodyPresentation"],
+  weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null,
+  weaponAdsBlend: number | null,
   dependencies: {
     readonly applyMountedAnchorTransform: (
       characterRuntime: TCharacterRuntime,
@@ -110,7 +113,14 @@ export function syncLocalCharacterPresentation<
       characterRuntime: TCharacterRuntime,
       heldWeaponPoseRuntime: NonNullable<TCharacterRuntime["heldWeaponPoseRuntime"]>,
       attachmentRuntime: TAttachmentRuntime,
-      cameraSnapshot: MetaverseCameraSnapshot
+      cameraSnapshot: MetaverseCameraSnapshot,
+      weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null,
+      weaponAdsBlend?: number | null,
+      bodyPresentation?: Pick<
+        MetaverseRuntimeConfig["bodyPresentation"],
+        | "groundedFirstPersonHeadClearanceMeters"
+        | "groundedFirstPersonHeadOcclusionRadiusMeters"
+      >
     ) => void;
   }
 ): MetaverseCameraSnapshot {
@@ -152,7 +162,10 @@ export function syncLocalCharacterPresentation<
       characterRuntime,
       characterRuntime.heldWeaponPoseRuntime,
       attachmentRuntime,
-      presentedCameraSnapshot
+      presentedCameraSnapshot,
+      weaponState,
+      weaponAdsBlend,
+      bodyPresentation
     );
   }
 

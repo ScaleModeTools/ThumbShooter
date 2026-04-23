@@ -18,11 +18,15 @@ import type {
 } from "@/engine-tool/types/map-editor";
 
 interface MapEditorMenubarProps {
+  readonly canDeleteSelectedPlacement: boolean;
   readonly canResetSelectedTransform: boolean;
+  readonly canUndoProjectChange: boolean;
   readonly onCloseRequest: () => void;
+  readonly onDeleteSelectedPlacementRequest: () => void;
   readonly onResetDraftRequest: () => void;
   readonly onResetSelectedTransformRequest: () => void;
   readonly onSaveDraftRequest: () => void;
+  readonly onUndoProjectChangeRequest: () => void;
   readonly onValidateAndRunRequest: () => void;
   readonly onViewportHelperVisibilityChange: (
     helperId: MapEditorViewportHelperId,
@@ -51,11 +55,15 @@ function readViewportToolMode(
 }
 
 export function MapEditorMenubar({
+  canDeleteSelectedPlacement,
   canResetSelectedTransform,
+  canUndoProjectChange,
   onCloseRequest,
+  onDeleteSelectedPlacementRequest,
   onResetDraftRequest,
   onResetSelectedTransformRequest,
   onSaveDraftRequest,
+  onUndoProjectChangeRequest,
   onValidateAndRunRequest,
   onViewportHelperVisibilityChange,
   viewportHelperVisibility,
@@ -89,6 +97,21 @@ export function MapEditorMenubar({
         <MenubarContent>
           <MenubarLabel>Selection</MenubarLabel>
           <MenubarItem
+            disabled={!canUndoProjectChange}
+            onClick={onUndoProjectChangeRequest}
+          >
+            Undo
+            <MenubarShortcut>Ctrl+Z</MenubarShortcut>
+          </MenubarItem>
+          <MenubarItem
+            disabled={!canDeleteSelectedPlacement}
+            onClick={onDeleteSelectedPlacementRequest}
+          >
+            Delete Selected Placement
+            <MenubarShortcut>Del</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
+          <MenubarItem
             disabled={!canResetSelectedTransform}
             onClick={onResetSelectedTransformRequest}
           >
@@ -116,6 +139,17 @@ export function MapEditorMenubar({
             }}
           >
             Axes
+          </MenubarCheckboxItem>
+          <MenubarCheckboxItem
+            checked={viewportHelperVisibility.collisionBounds}
+            onCheckedChange={(checked) => {
+              onViewportHelperVisibilityChange(
+                "collisionBounds",
+                checked === true
+              );
+            }}
+          >
+            Collision Bounds
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             checked={viewportHelperVisibility.polarGrid}

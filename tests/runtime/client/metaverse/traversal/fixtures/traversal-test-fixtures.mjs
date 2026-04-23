@@ -4,7 +4,6 @@ import {
   resolveMetaverseDynamicCuboidBodyConfigSnapshotFromSurfaceAsset,
   createMetaverseGroundedBodyRuntimeSnapshot,
   createMetaverseSurfaceDriveBodyRuntimeSnapshot,
-  metaversePlaygroundRangeBarrierEnvironmentAssetId,
   metaverseRealtimeWorldCadenceConfig,
   metaverseWorldSurfaceAssets,
   metaverseWorldGroundedSpawnPosition,
@@ -84,37 +83,6 @@ export function resolveLocalPlanarOffset(position, origin, rotationYRadians) {
 function requireValue(value, label) {
   assert.notEqual(value, null, `${label} should resolve`);
   return value;
-}
-
-export function resolveBarrierPlacement(targetX = 0, targetZ = -14.5) {
-  const barrierAsset = requireValue(
-    metaverseWorldSurfaceAssets.find(
-      (surfaceAsset) =>
-        surfaceAsset.environmentAssetId ===
-        metaversePlaygroundRangeBarrierEnvironmentAssetId
-    ),
-    "range barrier asset"
-  );
-
-  return requireValue(
-    barrierAsset.placements.reduce((closestPlacement, placement) => {
-      if (closestPlacement === null) {
-        return placement;
-      }
-
-      const closestDistanceSquared =
-        (closestPlacement.position.x - targetX) ** 2 +
-        (closestPlacement.position.z - targetZ) ** 2;
-      const nextDistanceSquared =
-        (placement.position.x - targetX) ** 2 +
-        (placement.position.z - targetZ) ** 2;
-
-      return nextDistanceSquared < closestDistanceSquared
-        ? placement
-        : closestPlacement;
-    }, null),
-    "range barrier placement"
-  );
 }
 
 function resolveSurfaceAsset(environmentAssetId) {

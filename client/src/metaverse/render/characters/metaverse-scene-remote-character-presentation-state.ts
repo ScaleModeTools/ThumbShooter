@@ -25,7 +25,10 @@ import type {
 } from "../../types/metaverse-runtime";
 
 interface MetaverseSceneRemoteCharacterPresentationStateDependencies {
-  readonly config: Pick<MetaverseRuntimeConfig, "orientation">;
+  readonly config: Pick<
+    MetaverseRuntimeConfig,
+    "bodyPresentation" | "orientation"
+  >;
   readonly interactivePresentationState: Pick<
     MetaverseSceneInteractivePresentationState,
     "attachmentProofRuntime" | "characterProofRuntime"

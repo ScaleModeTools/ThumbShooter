@@ -462,38 +462,7 @@ export const metaverseWorldSurfaceAssets = Object.freeze([
     dynamicBody: null,
     environmentAssetId: metaversePlaygroundRangeBarrierEnvironmentAssetId,
     placement: "instanced",
-    placements: Object.freeze([
-      Object.freeze({
-        position: freezeVector3(0, 0, -33),
-        rotationYRadians: 0,
-        scale: 1.8
-      }),
-      Object.freeze({
-        position: freezeVector3(-19, 0, -25),
-        rotationYRadians: Math.PI * 0.5,
-        scale: 1.2
-      }),
-      Object.freeze({
-        position: freezeVector3(19, 0, -25),
-        rotationYRadians: Math.PI * 0.5,
-        scale: 1.2
-      }),
-      Object.freeze({
-        position: freezeVector3(-11.5, 0, -5),
-        rotationYRadians: 0,
-        scale: 1
-      }),
-      Object.freeze({
-        position: freezeVector3(11.5, 0, -8.5),
-        rotationYRadians: 0,
-        scale: 1
-      }),
-      Object.freeze({
-        position: freezeVector3(0, 0, -14.5),
-        rotationYRadians: 0,
-        scale: 0.9
-      })
-    ]),
+    placements: Object.freeze([]),
     surfaceColliders: metaversePlaygroundRangeBarrierSurfaceColliders,
     traversalAffordance: "support"
   }),

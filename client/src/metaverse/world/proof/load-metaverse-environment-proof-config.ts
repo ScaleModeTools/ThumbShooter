@@ -666,10 +666,6 @@ export function loadMetaverseEnvironmentProofConfig(
     );
   });
 
-  if (!assets.some((asset) => asset.placement === "instanced")) {
-    throw new Error("Metaverse environment proof slice requires one instanced asset family.");
-  }
-
   if (!assets.some((asset) => asset.placement === "static")) {
     throw new Error("Metaverse environment proof slice requires one static asset family.");
   }

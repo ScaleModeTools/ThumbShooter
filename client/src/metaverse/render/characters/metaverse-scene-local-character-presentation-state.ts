@@ -1,3 +1,5 @@
+import type { MetaverseRealtimePlayerWeaponStateSnapshot } from "@webgpu-metaverse/shared";
+
 import {
   advanceLocalCharacterAnimation,
   syncLocalCharacterPresentation
@@ -79,7 +81,9 @@ export class MetaverseSceneLocalCharacterPresentationState {
     deltaSeconds: number,
     characterPresentation: MetaverseCharacterPresentationSnapshot | null = null,
     mountedPresentationSnapshot: MetaverseSceneMountedPresentationSnapshot | null =
-      null
+      null,
+    weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null = null,
+    weaponAdsBlend: number | null = null
   ): MetaverseCameraSnapshot {
     const {
       config,
@@ -122,6 +126,8 @@ export class MetaverseSceneLocalCharacterPresentationState {
           cameraSnapshot,
           characterPresentation,
           config.bodyPresentation,
+          weaponState,
+          weaponAdsBlend,
           localCharacterPresentationDependencies
         );
   }

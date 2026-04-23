@@ -447,6 +447,63 @@ export function updateMapEditorPlacement(
   });
 }
 
+export function removeMapEditorPlacement(
+  project: MapEditorProjectSnapshot,
+  placementId: string
+): MapEditorProjectSnapshot {
+  const placementIndex = project.placementDrafts.findIndex(
+    (placement) => placement.placementId === placementId
+  );
+
+  if (placementIndex < 0) {
+    return project;
+  }
+
+  const nextPlacementDrafts = Object.freeze(
+    project.placementDrafts.filter(
+      (placement) => placement.placementId !== placementId
+    )
+  );
+  const nextSelectedPlacementId =
+    project.selectedPlacementId === placementId
+      ? (nextPlacementDrafts[placementIndex]?.placementId ??
+        nextPlacementDrafts[placementIndex - 1]?.placementId ??
+        null)
+      : project.selectedPlacementId;
+
+  return Object.freeze({
+    ...project,
+    placementDrafts: nextPlacementDrafts,
+    selectedPlacementId: nextSelectedPlacementId
+  });
+}
+
+export function removeMapEditorPlacementsByAssetId(
+  project: MapEditorProjectSnapshot,
+  assetId: string
+): MapEditorProjectSnapshot {
+  const nextPlacementDrafts = Object.freeze(
+    project.placementDrafts.filter((placement) => placement.assetId !== assetId)
+  );
+
+  if (nextPlacementDrafts.length === project.placementDrafts.length) {
+    return project;
+  }
+
+  const nextSelectedPlacementId =
+    nextPlacementDrafts.some(
+      (placement) => placement.placementId === project.selectedPlacementId
+    )
+      ? project.selectedPlacementId
+      : (nextPlacementDrafts[0]?.placementId ?? null);
+
+  return Object.freeze({
+    ...project,
+    placementDrafts: nextPlacementDrafts,
+    selectedPlacementId: nextSelectedPlacementId
+  });
+}
+
 export function addMapEditorLaunchVariationDraft(
   project: MapEditorProjectSnapshot
 ): MapEditorProjectSnapshot {

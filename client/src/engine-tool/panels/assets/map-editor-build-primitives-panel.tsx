@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { Grid3X3Icon, PlusIcon, WandSparklesIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,7 @@ interface MapEditorBuildPrimitivesPanelProps {
   readonly onActivateBuildPrimitiveAssetId: (assetId: string) => void;
   readonly onAddPlacementFromAsset: (asset: EnvironmentAssetDescriptor) => void;
   readonly project: MapEditorProjectSnapshot;
+  readonly selectedAssetId: string | null;
 }
 
 const placedCountReserveTexts = createStableCountReserveTexts("placed", "placed");
@@ -41,8 +44,19 @@ export function MapEditorBuildPrimitivesPanel({
   entries,
   onActivateBuildPrimitiveAssetId,
   onAddPlacementFromAsset,
-  project
+  project,
+  selectedAssetId
 }: MapEditorBuildPrimitivesPanelProps) {
+  useEffect(() => {
+    if (selectedAssetId === null) {
+      return;
+    }
+
+    globalThis.document
+      .getElementById(`map-editor-build-primitive-${selectedAssetId}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedAssetId]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3 text-sm text-muted-foreground">
@@ -56,14 +70,23 @@ export function MapEditorBuildPrimitivesPanel({
           const placementCount = countPlacementsForAsset(project, entry.asset.id);
           const isActiveBuildPrimitive =
             activeBuildPrimitiveAssetId === entry.asset.id;
+          const isSelectedAsset = selectedAssetId === entry.asset.id;
 
           return (
             <Card
               className={
-                isActiveBuildPrimitive
-                  ? "border-sky-400/70 bg-sky-500/5 shadow-[0_0_0_1px_rgb(56_189_248/0.16)]"
-                  : undefined
+                [
+                  isActiveBuildPrimitive
+                    ? "border-sky-400/70 bg-sky-500/5 shadow-[0_0_0_1px_rgb(56_189_248/0.16)]"
+                    : "",
+                  isSelectedAsset
+                    ? "shadow-[0_0_0_1px_rgb(251_191_36/0.35)]"
+                    : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ") || undefined
               }
+              id={`map-editor-build-primitive-${entry.asset.id}`}
               key={entry.asset.id}
             >
               <CardHeader className="gap-3">
@@ -80,6 +103,14 @@ export function MapEditorBuildPrimitivesPanel({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {isSelectedAsset ? (
+                      <Badge variant="outline">
+                        <StableInlineText
+                          stabilizeNumbers={false}
+                          text="Selected"
+                        />
+                      </Badge>
+                    ) : null}
                     {isActiveBuildPrimitive ? (
                       <Badge variant="secondary">
                         <StableInlineText

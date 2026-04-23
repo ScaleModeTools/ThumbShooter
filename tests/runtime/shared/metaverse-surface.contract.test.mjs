@@ -68,7 +68,7 @@ test("shared metaverse surface authoring and queries expose placements, static c
   assert.equal(floorSurfaceAsset?.placement, "static");
   assert.equal(floorSurfaceAsset?.placements.length, 1);
   assert.equal(barrierSurfaceAsset?.placement, "instanced");
-  assert.equal(barrierSurfaceAsset?.placements.length, 6);
+  assert.equal(barrierSurfaceAsset?.placements.length, 0);
   assert.ok(staticSurfaceColliders.length > 0);
   assert.ok(metaverseWorldPlacedWaterRegions.length > 0);
 
@@ -109,14 +109,14 @@ test("shared metaverse surface authoring exposes the shipped range floor slice w
   );
 });
 
-test("shared metaverse barrier authoring stays instanced and support-authored", () => {
+test("shared metaverse barrier authoring remains hidden from the shipped map while keeping exact-match support geometry available", () => {
   const barrierSurfaceAsset = readMetaverseWorldSurfaceAssetAuthoring(
     metaversePlaygroundRangeBarrierEnvironmentAssetId
   );
 
   assert.notEqual(barrierSurfaceAsset, null);
   assert.equal(barrierSurfaceAsset?.placement, "instanced");
-  assert.equal(barrierSurfaceAsset?.placements.length, 6);
+  assert.equal(barrierSurfaceAsset?.placements.length, 0);
   assert.equal(
     barrierSurfaceAsset?.surfaceColliders.length,
     1

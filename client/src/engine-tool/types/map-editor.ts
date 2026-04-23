@@ -3,12 +3,14 @@ import type { MetaverseWorldSurfaceVector3Snapshot } from "@webgpu-metaverse/sha
 export type MapEditorViewportToolMode = "build" | "move" | "rotate" | "scale";
 export type MapEditorViewportHelperId =
   | "axes"
+  | "collisionBounds"
   | "grid"
   | "polarGrid"
   | "selectionBounds";
 
 export interface MapEditorViewportHelperVisibilitySnapshot {
   readonly axes: boolean;
+  readonly collisionBounds: boolean;
   readonly grid: boolean;
   readonly polarGrid: boolean;
   readonly selectionBounds: boolean;
@@ -17,6 +19,7 @@ export interface MapEditorViewportHelperVisibilitySnapshot {
 export const defaultMapEditorViewportHelperVisibility =
   Object.freeze<MapEditorViewportHelperVisibilitySnapshot>({
     axes: true,
+    collisionBounds: false,
     grid: true,
     polarGrid: false,
     selectionBounds: true

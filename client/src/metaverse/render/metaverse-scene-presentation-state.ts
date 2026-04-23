@@ -1,3 +1,5 @@
+import type { MetaverseRealtimePlayerWeaponStateSnapshot } from "@webgpu-metaverse/shared";
+
 import type { MetaverseSceneCameraPresentationState } from "./camera/metaverse-scene-camera-presentation-state";
 import type { MetaverseSceneLocalCharacterPresentationState } from "./characters/metaverse-scene-local-character-presentation-state";
 import type { MetaverseSceneRemoteCharacterPresentationState } from "./characters/metaverse-scene-remote-character-presentation-state";
@@ -59,6 +61,8 @@ export class MetaverseScenePresentationState {
     nowMs: number,
     deltaSeconds: number,
     characterPresentation: MetaverseCharacterPresentationSnapshot | null = null,
+    localWeaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null = null,
+    localWeaponAdsBlend: number | null = null,
     remoteCharacterPresentations: readonly MetaverseRemoteCharacterPresentationSnapshot[] = [],
     mountedEnvironment: MountedEnvironmentSnapshot | null = null,
     cameraFieldOfViewDegrees: number | null = null
@@ -75,7 +79,9 @@ export class MetaverseScenePresentationState {
       cameraSnapshot,
       deltaSeconds,
       characterPresentation,
-      mountedPresentationSnapshot
+      mountedPresentationSnapshot,
+      localWeaponState,
+      localWeaponAdsBlend
     );
     cameraPresentationState.syncPresentedCamera(
       presentedCameraSnapshot,

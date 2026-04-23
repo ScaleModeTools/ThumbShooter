@@ -2,6 +2,7 @@ import {
   PerspectiveCamera,
   Scene
 } from "three/webgpu";
+import type { MetaverseRealtimePlayerWeaponStateSnapshot } from "@webgpu-metaverse/shared";
 import {
   createMetaverseSceneCamera,
   createMetaverseSceneCameraSnapshot,
@@ -86,6 +87,8 @@ export function createMetaverseScene(
     nowMs: number,
     deltaSeconds: number,
     characterPresentation?: MetaverseCharacterPresentationSnapshot | null,
+    localWeaponState?: MetaverseRealtimePlayerWeaponStateSnapshot | null,
+    localWeaponAdsBlend?: number | null,
     remoteCharacterPresentations?: readonly MetaverseRemoteCharacterPresentationSnapshot[],
     mountedEnvironment?: MountedEnvironmentSnapshot | null,
     cameraFieldOfViewDegrees?: number | null
@@ -254,6 +257,8 @@ export function createMetaverseScene(
       nowMs,
       deltaSeconds,
       characterPresentation = null,
+      localWeaponState = null,
+      localWeaponAdsBlend = null,
       remoteCharacterPresentations = [],
       mountedEnvironment = null,
       cameraFieldOfViewDegrees = null
@@ -264,6 +269,8 @@ export function createMetaverseScene(
         nowMs,
         deltaSeconds,
         characterPresentation,
+        localWeaponState,
+        localWeaponAdsBlend,
         remoteCharacterPresentations,
         mountedEnvironment,
         cameraFieldOfViewDegrees

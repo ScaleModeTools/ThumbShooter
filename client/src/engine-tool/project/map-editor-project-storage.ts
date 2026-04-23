@@ -9,18 +9,20 @@ import { readMetaverseCharacterPresentationProfile } from "@/metaverse/render/ch
 import { readMetaverseEnvironmentPresentationProfile } from "@/metaverse/render/environment/profiles";
 import { readMetaverseHudProfile } from "@/metaverse/hud/profiles";
 import type { LoadedMetaverseMapBundleSnapshot } from "@/metaverse/world/map-bundles";
+import {
+  readStoredMetaverseWorldBundleStorageKey,
+  storedMetaverseWorldBundleRecordVersion
+} from "@/metaverse/world/map-bundles/stored-metaverse-world-bundle";
 
 import {
   createMapEditorProject,
+  removeMapEditorPlacementsByAssetId,
   selectMapEditorLaunchVariation,
   selectMapEditorPlacement,
   type MapEditorProjectSnapshot
 } from "./map-editor-project-state";
 import { exportMapEditorProjectToMetaverseMapBundle } from "../run/export-map-editor-project-to-metaverse-map-bundle";
-
-const storedMapEditorProjectRecordVersion = 2 as const;
-const mapEditorProjectStorageKeyPrefix =
-  "webgpu-metaverse:engine-tool:map-editor-project:";
+import { metaversePlaygroundRangeBarrierEnvironmentAssetId } from "@/assets/config/environment-prop-manifest";
 
 export interface MapEditorProjectStorageLike {
   getItem(key: string): string | null;
@@ -32,7 +34,7 @@ interface StoredMapEditorProjectRecord {
   readonly bundle: MetaverseMapBundleSnapshot;
   readonly selectedLaunchVariationId: string | null;
   readonly selectedPlacementId: string | null;
-  readonly version: typeof storedMapEditorProjectRecordVersion;
+  readonly version: typeof storedMetaverseWorldBundleRecordVersion;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -40,7 +42,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readStorageKey(bundleId: string): string {
-  return `${mapEditorProjectStorageKeyPrefix}${bundleId}`;
+  return readStoredMetaverseWorldBundleStorageKey(bundleId);
 }
 
 function isStoredMapEditorProjectRecord(
@@ -55,7 +57,7 @@ function isStoredMapEditorProjectRecord(
   const presentationProfileIds = bundle.presentationProfileIds;
 
   return (
-    value.version === storedMapEditorProjectRecordVersion &&
+    value.version === storedMetaverseWorldBundleRecordVersion &&
     bundle.mapId === bundleId &&
     typeof bundle.description === "string" &&
     (bundle.gameplayProfileId === undefined ||
@@ -135,6 +137,11 @@ export function loadStoredMapEditorProject(
     createLoadedMetaverseMapBundleFromBundle(storedRecord.bundle)
   );
 
+  project = removeMapEditorPlacementsByAssetId(
+    project,
+    metaversePlaygroundRangeBarrierEnvironmentAssetId
+  );
+
   if (storedRecord.selectedPlacementId !== null) {
     project = selectMapEditorPlacement(project, storedRecord.selectedPlacementId);
   }
@@ -161,7 +168,7 @@ export function saveMapEditorProject(
     bundle: exportMapEditorProjectToMetaverseMapBundle(project),
     selectedLaunchVariationId: project.selectedLaunchVariationId,
     selectedPlacementId: project.selectedPlacementId,
-    version: storedMapEditorProjectRecordVersion
+    version: storedMetaverseWorldBundleRecordVersion
   } satisfies StoredMapEditorProjectRecord);
 
   storage.setItem(readStorageKey(project.bundleId), JSON.stringify(storedRecord));

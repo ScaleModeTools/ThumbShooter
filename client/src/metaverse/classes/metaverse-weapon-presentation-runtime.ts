@@ -226,6 +226,10 @@ export class MetaverseWeaponPresentationRuntime {
     return this.#cameraFieldOfViewDegrees;
   }
 
+  get adsBlend(): number {
+    return this.#adsBlend;
+  }
+
   get fireTriggerHeld(): boolean {
     return this.#fireTriggerHeld;
   }

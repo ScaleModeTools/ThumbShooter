@@ -307,13 +307,11 @@ test("shared metaverse world bundles preserve mounted seat and entry authoring",
       environmentAsset.assetId === "metaverse-hub-pushable-crate-v1"
   );
 
-  assert.notEqual(barrierAsset, undefined);
+  assert.equal(barrierAsset, undefined);
   assert.notEqual(dockAsset, undefined);
   assert.notEqual(skiffAsset, undefined);
   assert.notEqual(diveBoatAsset, undefined);
   assert.notEqual(pushableCrateAsset, undefined);
-  assert.equal(barrierAsset?.traversalAffordance, "support");
-  assert.equal(barrierAsset?.surfaceColliders[0]?.traversalAffordance, "support");
   assert.equal(dockAsset?.traversalAffordance, "support");
   assert.equal(dockAsset?.placements[0]?.position.y, 0.26);
   assert.equal(dockAsset?.surfaceColliders.length, 1);

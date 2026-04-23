@@ -49,8 +49,10 @@ import {
 } from "./map-editor-viewport-orbit-controls";
 import {
   applyMapEditorViewportPreviewOpacity,
+  createMapEditorViewportPlacementCollisionAnchor,
   disposeMapEditorViewportPreviewGroup,
   MapEditorViewportPreviewAssetLibrary,
+  syncMapEditorViewportPlacementAnchorTransform,
   syncMapEditorViewportPlacementPreviewAnchor
 } from "./map-editor-viewport-preview-assets";
 import type { MapEditorViewportSceneDraftHandles } from "./map-editor-viewport-scene-drafts";
@@ -438,10 +440,12 @@ export function MapEditorViewport({
   const keyboardFlightControllerRef =
     useRef<MapEditorViewportKeyboardFlightController | null>(null);
   const placementGroupRef = useRef<Group | null>(null);
+  const collisionGroupRef = useRef<Group | null>(null);
   const previewAssetLibraryRef =
     useRef<MapEditorViewportPreviewAssetLibrary | null>(null);
   const sceneDraftHandlesRef = useRef<MapEditorViewportSceneDraftHandles | null>(null);
   const placementAnchorByIdRef = useRef(new Map<string, Group>());
+  const collisionAnchorByIdRef = useRef(new Map<string, Group>());
   const buildCursorAnchorRef = useRef<Group | null>(null);
   const buildCursorAssetIdRef = useRef<string | null>(null);
   const activeBuildPrimitiveAssetIdRef = useRef(activeBuildPrimitiveAssetId);
@@ -648,6 +652,10 @@ export function MapEditorViewport({
     const placementGroup = new Group();
     placementGroupRef.current = placementGroup;
     scene.add(placementGroup);
+    const collisionGroup = new Group();
+    collisionGroup.visible = helperVisibility.collisionBounds;
+    collisionGroupRef.current = collisionGroup;
+    scene.add(collisionGroup);
     const sceneDraftHandles = createMapEditorViewportSceneDraftHandles();
     sceneDraftHandlesRef.current = sceneDraftHandles;
     scene.add(sceneDraftHandles.rootGroup);
@@ -954,6 +962,11 @@ export function MapEditorViewport({
       canvasElement.removeEventListener("pointerleave", handlePointerLeave);
       canvasElement.removeEventListener("contextmenu", handleContextMenu);
       disposeMapEditorViewportPreviewGroup(placementGroup);
+      if (collisionGroupRef.current !== null) {
+        scene.remove(collisionGroupRef.current);
+        disposeMapEditorViewportPreviewGroup(collisionGroupRef.current);
+        collisionGroupRef.current = null;
+      }
       if (sceneDraftHandlesRef.current !== null) {
         scene.remove(sceneDraftHandlesRef.current.rootGroup);
         disposeMapEditorViewportSceneDraftHandles(sceneDraftHandlesRef.current);
@@ -967,6 +980,7 @@ export function MapEditorViewport({
         buildCursorAnchorRef.current = null;
       }
       placementAnchorByIdRef.current = new Map();
+      collisionAnchorByIdRef.current = new Map();
       previewAssetLibraryRef.current = null;
       transformController.dispose(scene);
       transformControllerRef.current = null;
@@ -979,6 +993,7 @@ export function MapEditorViewport({
       renderer.dispose();
       rendererRef.current = null;
       placementGroupRef.current = null;
+      collisionGroupRef.current = null;
       cameraRef.current = null;
       sceneRef.current = null;
     };
@@ -1044,8 +1059,45 @@ export function MapEditorViewport({
   }, [previewStructureSignature, syncPlacementPreviewAnchors, syncSelectionPresentation]);
 
   useEffect(() => {
+    const collisionGroup = collisionGroupRef.current;
+
+    if (collisionGroup === null) {
+      return;
+    }
+
+    const collisionAnchors = placementDrafts.map((placement) =>
+      createMapEditorViewportPlacementCollisionAnchor(placement)
+    );
+
+    disposeMapEditorViewportPreviewGroup(collisionGroup);
+    collisionAnchorByIdRef.current = new Map(
+      collisionAnchors.map((collisionAnchor) => [
+        collisionAnchor.userData.placementId as string,
+        collisionAnchor
+      ])
+    );
+
+    for (const collisionAnchor of collisionAnchors) {
+      collisionGroup.add(collisionAnchor);
+    }
+  }, [previewStructureSignature]);
+
+  useEffect(() => {
     syncPlacementPreviewAnchors(placementDrafts);
   }, [placementDrafts, previewPlacementSignature, syncPlacementPreviewAnchors]);
+
+  useEffect(() => {
+    for (const placement of placementDrafts) {
+      const collisionAnchor =
+        collisionAnchorByIdRef.current.get(placement.placementId) ?? null;
+
+      if (collisionAnchor === null) {
+        continue;
+      }
+
+      syncMapEditorViewportPlacementAnchorTransform(collisionAnchor, placement);
+    }
+  }, [placementDrafts, previewPlacementSignature]);
 
   useEffect(() => {
     const sceneDraftHandles = sceneDraftHandlesRef.current;
@@ -1161,12 +1213,17 @@ export function MapEditorViewport({
 
   useEffect(() => {
     const helperHandles = helperHandlesRef.current;
+    const collisionGroup = collisionGroupRef.current;
 
     if (helperHandles === null) {
       return;
     }
 
     syncMapEditorViewportHelperVisibility(helperHandles, helperVisibility);
+
+    if (collisionGroup !== null) {
+      collisionGroup.visible = helperVisibility.collisionBounds;
+    }
   }, [helperVisibility]);
 
   useEffect(() => {

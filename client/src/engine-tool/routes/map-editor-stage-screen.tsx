@@ -1,14 +1,17 @@
-import { startTransition, useMemo, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useState } from "react";
 
 import { ArrowLeftIcon, Layers3Icon, PlayIcon } from "lucide-react";
 
 import { environmentPropManifest } from "@/assets/config/environment-prop-manifest";
 import {
+  isMapEditorBuildPrimitiveAssetId,
   listMapEditorBuildPrimitiveCatalogEntries,
   readMapEditorBuildPrimitiveCatalogEntry
 } from "@/engine-tool/build/map-editor-build-primitives";
 import type { EnvironmentAssetDescriptor } from "@/assets/types/environment-asset-manifest";
 import {
+  applyStoredMetaverseWorldBundleOverride,
+  clearMetaverseWorldBundlePreviewEntry,
   listMetaverseWorldBundleRegistryEntries,
   resolveDefaultMetaverseWorldBundleId,
   resolveMetaverseWorldBundleSourceBundleId
@@ -41,6 +44,7 @@ import {
   createMapEditorProject,
   readSelectedMapEditorLaunchVariation,
   readSelectedMapEditorPlacement,
+  removeMapEditorPlacement,
   selectMapEditorLaunchVariation,
   selectMapEditorPlacement,
   updateMapEditorLaunchVariationDraft,
@@ -53,6 +57,13 @@ import {
   updateMapEditorWaterRegionDraft,
   type MapEditorProjectSnapshot
 } from "@/engine-tool/project/map-editor-project-state";
+import {
+  applyMapEditorProjectSessionChange,
+  createMapEditorProjectSession,
+  replaceMapEditorProjectSessionProject,
+  undoMapEditorProjectSessionChange,
+  updateMapEditorProjectSessionProject
+} from "@/engine-tool/project/map-editor-project-session";
 import {
   clearStoredMapEditorProject,
   loadStoredMapEditorProject,
@@ -131,6 +142,21 @@ function applyPlacementUpdate(
   );
 }
 
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable
+  );
+}
+
 const placementCountReserveTexts = createStableCountReserveTexts(
   "placement",
   "placements"
@@ -172,8 +198,10 @@ export function MapEditorStageScreen({
     readBrowserStorage()
   );
   const [selectedBundleId, setSelectedBundleId] = useState(defaultBundleId);
-  const [project, setProject] = useState(() =>
-    createProjectForBundle(defaultBundleId, browserStorage)
+  const [projectSession, setProjectSession] = useState(() =>
+    createMapEditorProjectSession(
+      createProjectForBundle(defaultBundleId, browserStorage)
+    )
   );
   const [activeBuildPrimitiveAssetId, setActiveBuildPrimitiveAssetId] = useState<
     string | null
@@ -185,17 +213,63 @@ export function MapEditorStageScreen({
     useState<MapEditorViewportToolMode>("move");
   const [runInProgress, setRunInProgress] = useState(false);
   const [runStatusMessage, setRunStatusMessage] = useState<string | null>(null);
+  const project = projectSession.project;
   const selectedLaunchVariation = readSelectedMapEditorLaunchVariation(project);
   const selectedPlacement = readSelectedMapEditorPlacement(project);
+  const canUndoProjectChange = projectSession.undoHistory.length > 0;
   const activeBuildPrimitive =
     activeBuildPrimitiveAssetId === null
       ? null
       : readMapEditorBuildPrimitiveCatalogEntry(activeBuildPrimitiveAssetId);
+  const handleProjectSelectionUpdate = useEffectEvent(
+    (
+      update: (
+        project: MapEditorProjectSnapshot
+      ) => MapEditorProjectSnapshot
+    ) => {
+      setProjectSession((currentSession) =>
+        updateMapEditorProjectSessionProject(currentSession, update)
+      );
+    }
+  );
+  const handleProjectAuthoringChange = useEffectEvent(
+    (
+      update: (
+        project: MapEditorProjectSnapshot
+      ) => MapEditorProjectSnapshot
+    ) => {
+      setProjectSession((currentSession) =>
+        applyMapEditorProjectSessionChange(currentSession, update)
+      );
+      setRunStatusMessage(null);
+    }
+  );
+  const handleUndoProjectChangeRequest = useEffectEvent(() => {
+    setProjectSession((currentSession) =>
+      undoMapEditorProjectSessionChange(currentSession)
+    );
+    setRunStatusMessage(null);
+  });
+  const handleDeleteSelectedPlacementRequest = useEffectEvent(() => {
+    handleProjectAuthoringChange((currentProject) =>
+      currentProject.selectedPlacementId === null
+        ? currentProject
+        : removeMapEditorPlacement(
+            currentProject,
+            currentProject.selectedPlacementId
+          )
+    );
+  });
 
   const handleBundleChange = (nextBundleId: string) => {
     startTransition(() => {
       setSelectedBundleId(nextBundleId);
-      setProject(createProjectForBundle(nextBundleId, browserStorage));
+      setProjectSession((currentSession) =>
+        replaceMapEditorProjectSessionProject(
+          currentSession,
+          createProjectForBundle(nextBundleId, browserStorage)
+        )
+      );
       setRunStatusMessage(null);
     });
   };
@@ -203,13 +277,20 @@ export function MapEditorStageScreen({
   const handleResetDraftRequest = () => {
     startTransition(() => {
       clearStoredMapEditorProject(browserStorage, selectedBundleId);
-      setProject(createMapEditorProject(loadMetaverseMapBundle(selectedBundleId)));
+      clearMetaverseWorldBundlePreviewEntry(selectedBundleId);
+      setProjectSession((currentSession) =>
+        replaceMapEditorProjectSessionProject(
+          currentSession,
+          createMapEditorProject(loadMetaverseMapBundle(selectedBundleId))
+        )
+      );
       setRunStatusMessage(null);
     });
   };
 
   const handleSaveDraftRequest = () => {
     saveMapEditorProject(browserStorage, project);
+    applyStoredMetaverseWorldBundleOverride(browserStorage, project.bundleId);
     setRunStatusMessage(
       `Saved ${project.bundleLabel} with ${
         project.launchVariationDrafts.length
@@ -218,13 +299,25 @@ export function MapEditorStageScreen({
   };
 
   const handleSelectPlacementId = (placementId: string) => {
-    setProject((currentProject) =>
+    const selectedPlacementAssetId =
+      project.placementDrafts.find(
+        (placement) => placement.placementId === placementId
+      )?.assetId ?? null;
+
+    if (
+      selectedPlacementAssetId !== null &&
+      isMapEditorBuildPrimitiveAssetId(selectedPlacementAssetId)
+    ) {
+      setActiveBuildPrimitiveAssetId(selectedPlacementAssetId);
+    }
+
+    handleProjectSelectionUpdate((currentProject) =>
       selectMapEditorPlacement(currentProject, placementId)
     );
   };
 
   const handleUpdateSelectedPlacement = (update: MapEditorPlacementUpdate) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       applySelectedPlacementUpdate(currentProject, update)
     );
   };
@@ -232,7 +325,7 @@ export function MapEditorStageScreen({
   const handleUpdateEnvironmentPresentationProfileId = (
     environmentPresentationProfileId: string | null
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorEnvironmentPresentationProfileId(
         currentProject,
         environmentPresentationProfileId
@@ -241,29 +334,37 @@ export function MapEditorStageScreen({
   };
 
   const handleUpdateGameplayProfileId = (gameplayProfileId: string) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorGameplayProfileId(currentProject, gameplayProfileId)
     );
   };
 
   const handleAddLaunchVariation = () => {
-    setProject((currentProject) => addMapEditorLaunchVariationDraft(currentProject));
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorLaunchVariationDraft(currentProject)
+    );
   };
 
   const handleAddPlayerSpawn = () => {
-    setProject((currentProject) => addMapEditorPlayerSpawnDraft(currentProject));
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorPlayerSpawnDraft(currentProject)
+    );
   };
 
   const handleAddSceneObject = () => {
-    setProject((currentProject) => addMapEditorSceneObjectDraft(currentProject));
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorSceneObjectDraft(currentProject)
+    );
   };
 
   const handleAddWaterRegion = () => {
-    setProject((currentProject) => addMapEditorWaterRegionDraft(currentProject));
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorWaterRegionDraft(currentProject)
+    );
   };
 
   const handleSelectLaunchVariation = (variationId: string) => {
-    setProject((currentProject) =>
+    handleProjectSelectionUpdate((currentProject) =>
       selectMapEditorLaunchVariation(currentProject, variationId)
     );
   };
@@ -274,7 +375,7 @@ export function MapEditorStageScreen({
       draft: MapEditorLaunchVariationDraftSnapshot
     ) => MapEditorLaunchVariationDraftSnapshot
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorLaunchVariationDraft(currentProject, variationId, update)
     );
   };
@@ -283,7 +384,7 @@ export function MapEditorStageScreen({
     placementId: string,
     update: MapEditorPlacementUpdate
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       applyPlacementUpdate(currentProject, placementId, update)
     );
   };
@@ -292,7 +393,7 @@ export function MapEditorStageScreen({
     spawnId: string,
     update: MapEditorPlayerSpawnTransformUpdate
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorPlayerSpawnDraft(currentProject, spawnId, (spawnDraft) => ({
         ...spawnDraft,
         position: update.position,
@@ -302,7 +403,7 @@ export function MapEditorStageScreen({
   };
 
   const handleResetSelectedTransformRequest = () => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       currentProject.selectedPlacementId === null
         ? currentProject
         : updateMapEditorPlacement(
@@ -329,7 +430,7 @@ export function MapEditorStageScreen({
   const handleAddPlacementFromAsset = (
     asset: EnvironmentAssetDescriptor
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       addMapEditorPlacementFromAsset(currentProject, asset)
     );
   };
@@ -349,7 +450,7 @@ export function MapEditorStageScreen({
       return;
     }
 
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       addMapEditorPlacementAtPositionFromAsset(
         currentProject,
         buildPrimitiveAsset,
@@ -380,7 +481,7 @@ export function MapEditorStageScreen({
       draft: MapEditorPlayerSpawnDraftSnapshot
     ) => MapEditorPlayerSpawnDraftSnapshot
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorPlayerSpawnDraft(currentProject, spawnId, update)
     );
   };
@@ -390,7 +491,7 @@ export function MapEditorStageScreen({
       draft: MapEditorPlayerSpawnSelectionDraftSnapshot
     ) => MapEditorPlayerSpawnSelectionDraftSnapshot
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorPlayerSpawnSelectionDraft(currentProject, update)
     );
   };
@@ -401,7 +502,7 @@ export function MapEditorStageScreen({
       draft: MapEditorSceneObjectDraftSnapshot
     ) => MapEditorSceneObjectDraftSnapshot
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorSceneObjectDraft(currentProject, objectId, update)
     );
   };
@@ -412,10 +513,47 @@ export function MapEditorStageScreen({
       draft: MapEditorWaterRegionDraftSnapshot
     ) => MapEditorWaterRegionDraftSnapshot
   ) => {
-    setProject((currentProject) =>
+    handleProjectAuthoringChange((currentProject) =>
       updateMapEditorWaterRegionDraft(currentProject, waterRegionId, update)
     );
   };
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (
+        event.repeat !== true &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "z"
+      ) {
+        event.preventDefault();
+        handleUndoProjectChangeRequest();
+        return;
+      }
+
+      if (
+        event.repeat !== true &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key === "Delete"
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedPlacementRequest();
+      }
+    };
+
+    globalThis.window.addEventListener("keydown", handleWindowKeyDown);
+
+    return () => {
+      globalThis.window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, []);
 
   const handleValidateAndRunRequest = async () => {
     setRunInProgress(true);
@@ -441,6 +579,7 @@ export function MapEditorStageScreen({
         : `Running ${selectedLaunchVariation.label} on ${runPreviewResult.launchSelection.bundleLabel}.`
     );
     saveMapEditorProject(browserStorage, project);
+    applyStoredMetaverseWorldBundleOverride(browserStorage, project.bundleId);
     onRunPreviewRequest(runPreviewResult.launchSelection);
   };
 
@@ -537,11 +676,17 @@ export function MapEditorStageScreen({
 
         <div className="border-t border-border/70 px-4 py-2">
           <MapEditorMenubar
+            canDeleteSelectedPlacement={selectedPlacement !== null}
             canResetSelectedTransform={selectedPlacement !== null}
+            canUndoProjectChange={canUndoProjectChange}
             onCloseRequest={onCloseRequest}
+            onDeleteSelectedPlacementRequest={
+              handleDeleteSelectedPlacementRequest
+            }
             onResetDraftRequest={handleResetDraftRequest}
             onResetSelectedTransformRequest={handleResetSelectedTransformRequest}
             onSaveDraftRequest={handleSaveDraftRequest}
+            onUndoProjectChangeRequest={handleUndoProjectChangeRequest}
             onValidateAndRunRequest={handleValidateAndRunRequest}
             onViewportHelperVisibilityChange={
               handleViewportHelperVisibilityChange
@@ -604,6 +749,8 @@ export function MapEditorStageScreen({
                   onAddWaterRegion={handleAddWaterRegion}
                   onSelectPlacementId={handleSelectPlacementId}
                   project={project}
+                  selectedPlacementId={project.selectedPlacementId}
+                  selectedPlacementAssetId={selectedPlacement?.assetId ?? null}
                 />
               </ResizablePanel>
 
@@ -611,11 +758,14 @@ export function MapEditorStageScreen({
 
               <ResizablePanel defaultSize={54} minSize={24}>
                 <MapEditorInspectorPane
-                onAddLaunchVariation={handleAddLaunchVariation}
-                onUpdateGameplayProfileId={handleUpdateGameplayProfileId}
-                onSelectLaunchVariation={handleSelectLaunchVariation}
-                onUpdateEnvironmentPresentationProfileId={
-                  handleUpdateEnvironmentPresentationProfileId
+                  onAddLaunchVariation={handleAddLaunchVariation}
+                  onDeleteSelectedPlacementRequest={
+                    handleDeleteSelectedPlacementRequest
+                  }
+                  onUpdateGameplayProfileId={handleUpdateGameplayProfileId}
+                  onSelectLaunchVariation={handleSelectLaunchVariation}
+                  onUpdateEnvironmentPresentationProfileId={
+                    handleUpdateEnvironmentPresentationProfileId
                   }
                   onUpdateSelectedPlacement={handleUpdateSelectedPlacement}
                   onUpdateLaunchVariation={handleUpdateLaunchVariation}

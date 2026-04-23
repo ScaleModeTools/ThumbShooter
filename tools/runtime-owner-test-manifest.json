@@ -74,6 +74,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/engine-tool/project/map-editor-project-session.ts",
+      "testPaths": [
+        "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/engine-tool/project/map-editor-project-scene-drafts.ts",
       "testPaths": [
         "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"

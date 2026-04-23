@@ -10,6 +10,7 @@ import {
 import { environmentPropManifest } from "@/assets/config/environment-prop-manifest";
 import type {
   EnvironmentAssetDescriptor,
+  EnvironmentPhysicsBoxColliderDescriptor,
   EnvironmentProceduralBoxLodDescriptor,
   EnvironmentRenderLodDescriptor
 } from "@/assets/types/environment-asset-manifest";
@@ -41,6 +42,30 @@ function createProceduralPreviewMaterial(
         roughness: 0.94
       });
   }
+}
+
+function createColliderPreviewMaterial(
+  colliderDescriptor:
+    | EnvironmentPhysicsBoxColliderDescriptor
+    | EnvironmentAssetDescriptor["collider"]
+): MeshStandardMaterial {
+  const colliderColor =
+    colliderDescriptor !== null &&
+    "traversalAffordance" in colliderDescriptor
+      ? colliderDescriptor.traversalAffordance === "support"
+        ? "#38bdf8"
+        : "#f97316"
+      : "#e879f9";
+
+  return new MeshStandardMaterial({
+    color: colliderColor,
+    emissive: colliderColor,
+    metalness: 0,
+    opacity: 0.28,
+    roughness: 0.25,
+    transparent: true,
+    wireframe: true
+  });
 }
 
 function createProceduralPreviewRoot(
@@ -157,23 +182,30 @@ export function applyMapEditorViewportPreviewOpacity(
   });
 }
 
-export function syncMapEditorViewportPlacementPreviewAnchor(
-  previewAnchor: Group,
+export function syncMapEditorViewportPlacementAnchorTransform(
+  anchor: Group,
   placement: MapEditorPlacementDraftSnapshot
 ): void {
-  previewAnchor.position.set(
+  anchor.position.set(
     placement.position.x,
     placement.position.y,
     placement.position.z
   );
-  previewAnchor.rotation.y = placement.rotationYRadians;
-  previewAnchor.scale.set(
+  anchor.rotation.y = placement.rotationYRadians;
+  anchor.scale.set(
     Math.max(0.1, placement.scale.x),
     Math.max(0.1, placement.scale.y),
     Math.max(0.1, placement.scale.z)
   );
+  anchor.updateMatrixWorld(true);
+}
+
+export function syncMapEditorViewportPlacementPreviewAnchor(
+  previewAnchor: Group,
+  placement: MapEditorPlacementDraftSnapshot
+): void {
+  syncMapEditorViewportPlacementAnchorTransform(previewAnchor, placement);
   applyPlacementPreviewAppearance(previewAnchor, placement);
-  previewAnchor.updateMatrixWorld(true);
 }
 
 function tagPlacementNodes(root: Object3D, placementId: string): void {
@@ -203,6 +235,47 @@ function createMissingAssetPreviewRoot(assetId: string): Group {
   previewRoot.add(mesh);
 
   return previewRoot;
+}
+
+export function createMapEditorViewportPlacementCollisionAnchor(
+  placement: MapEditorPlacementDraftSnapshot
+): Group {
+  const collisionAnchor = new Group();
+  const asset = readEnvironmentAssetDescriptor(placement.assetId);
+  const colliderDescriptors = [
+    ...(asset?.physicsColliders ?? []),
+    ...(asset?.collider === null || asset?.collider === undefined
+      ? []
+      : [asset.collider])
+  ];
+
+  collisionAnchor.name = `map_editor_collision/${placement.placementId}`;
+
+  for (const [colliderIndex, colliderDescriptor] of colliderDescriptors.entries()) {
+    const geometry = new BoxGeometry(
+      colliderDescriptor.size.x,
+      colliderDescriptor.size.y,
+      colliderDescriptor.size.z
+    );
+    const material = createColliderPreviewMaterial(colliderDescriptor);
+    const mesh = new Mesh(geometry, material);
+    const userData = mesh.userData as PreviewMeshUserData;
+
+    mesh.name = `${collisionAnchor.name}/${colliderIndex + 1}`;
+    mesh.position.set(
+      colliderDescriptor.center.x,
+      colliderDescriptor.center.y,
+      colliderDescriptor.center.z
+    );
+    userData.mapEditorOwnsGeometry = true;
+    userData.mapEditorOwnsMaterial = true;
+    collisionAnchor.add(mesh);
+  }
+
+  tagPlacementNodes(collisionAnchor, placement.placementId);
+  syncMapEditorViewportPlacementAnchorTransform(collisionAnchor, placement);
+
+  return collisionAnchor;
 }
 
 function disposePreviewMesh(mesh: Mesh): void {

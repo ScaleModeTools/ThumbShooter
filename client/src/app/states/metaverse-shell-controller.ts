@@ -4,6 +4,7 @@ import { BrowserAudioSession } from "../../audio";
 import type { GameplaySignal } from "../../experiences/duck-hunt";
 import { resolveControllerActionMatrix } from "../../input";
 import { WebGpuMetaverseCapabilityProbe } from "../../metaverse/classes/webgpu-metaverse-capability-probe";
+import { applyStoredMetaverseWorldBundleOverrides } from "../../metaverse/world/bundle-registry";
 import { LocalProfileStorage } from "../../network";
 import { WebcamPermissionGateway, resolveShellNavigation } from "../../navigation";
 import { HandTrackingRuntime, MouseGameplayInput } from "../../tracking";
@@ -50,6 +51,10 @@ export function useMetaverseShellController(): MetaverseShellController {
     },
     createInitialMetaverseShellControllerState
   );
+
+  useEffect(() => {
+    applyStoredMetaverseWorldBundleOverrides(browserStorage);
+  }, [browserStorage]);
 
   useEffect(() => {
     return () => {

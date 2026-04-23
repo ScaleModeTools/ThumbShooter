@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { PlusIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,7 @@ interface MapEditorAssetLibraryPanelProps {
   readonly assetCatalogEntries: readonly EnvironmentAssetDescriptor[];
   readonly onAddPlacementFromAsset: (asset: EnvironmentAssetDescriptor) => void;
   readonly project: MapEditorProjectSnapshot;
+  readonly selectedAssetId: string | null;
 }
 
 const placedCountReserveTexts = createStableCountReserveTexts("placed", "placed");
@@ -37,8 +40,19 @@ function countPlacementsForAsset(
 export function MapEditorAssetLibraryPanel({
   assetCatalogEntries,
   onAddPlacementFromAsset,
-  project
+  project,
+  selectedAssetId
 }: MapEditorAssetLibraryPanelProps) {
+  useEffect(() => {
+    if (selectedAssetId === null) {
+      return;
+    }
+
+    globalThis.document
+      .getElementById(`map-editor-library-asset-${selectedAssetId}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedAssetId]);
+
   if (assetCatalogEntries.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
@@ -61,9 +75,18 @@ export function MapEditorAssetLibraryPanel({
         <TableBody>
           {assetCatalogEntries.map((asset) => {
             const placementCount = countPlacementsForAsset(project, asset.id);
+            const isSelectedAsset = asset.id === selectedAssetId;
 
             return (
-              <TableRow key={asset.id}>
+              <TableRow
+                className={
+                  isSelectedAsset
+                    ? "bg-amber-500/10 shadow-[inset_0_0_0_1px_rgb(251_191_36/0.35)]"
+                    : undefined
+                }
+                id={`map-editor-library-asset-${asset.id}`}
+                key={asset.id}
+              >
                 <TableCell className="align-top">
                   <div className="flex flex-col gap-1">
                     <span className="font-medium">{asset.label}</span>
@@ -83,6 +106,14 @@ export function MapEditorAssetLibraryPanel({
                           text={asset.traversalAffordance}
                         />
                       </Badge>
+                      {isSelectedAsset ? (
+                        <Badge variant="outline">
+                          <StableInlineText
+                            stabilizeNumbers={false}
+                            text="Selected"
+                          />
+                        </Badge>
+                      ) : null}
                       {(asset.seats?.length ?? 0) > 0 ? (
                         <Badge variant="outline">
                           <StableInlineText

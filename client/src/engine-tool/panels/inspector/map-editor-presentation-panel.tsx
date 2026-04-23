@@ -1,7 +1,3 @@
-import {
-  listMetaverseGameplayProfiles
-} from "@webgpu-metaverse/shared/metaverse/world";
-
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -11,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -21,124 +16,34 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { mapEditorMaterialOptions } from "@/engine-tool/config/map-editor-material-options";
-import {
-  type MapEditorPlacementDraftSnapshot,
-  type MapEditorProjectSnapshot
-} from "@/engine-tool/project/map-editor-project-state";
+import { type MapEditorPlacementDraftSnapshot } from "@/engine-tool/project/map-editor-project-state";
 import type { MapEditorPlacementUpdate } from "@/engine-tool/types/map-editor";
-import { listMetaverseEnvironmentPresentationProfiles } from "@/metaverse/render/environment/profiles";
 
 interface MapEditorPresentationPanelProps {
-  readonly onUpdateGameplayProfileId: (gameplayProfileId: string) => void;
-  readonly onUpdateEnvironmentPresentationProfileId: (
-    environmentPresentationProfileId: string | null
-  ) => void;
   readonly onUpdateSelectedPlacement: (update: MapEditorPlacementUpdate) => void;
-  readonly project: MapEditorProjectSnapshot;
   readonly selectedPlacement: MapEditorPlacementDraftSnapshot | null;
 }
 
 export function MapEditorPresentationPanel({
-  onUpdateGameplayProfileId,
-  onUpdateEnvironmentPresentationProfileId,
   onUpdateSelectedPlacement,
-  project,
   selectedPlacement
 }: MapEditorPresentationPanelProps) {
-  const gameplayProfiles = listMetaverseGameplayProfiles();
+  if (selectedPlacement === null) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+        Select a placement to edit material and presentation overrides.
+      </div>
+    );
+  }
+
   const selectedMaterialReferenceId =
-    selectedPlacement?.materialReferenceId ?? "__default__";
-  const environmentPresentationProfiles =
-    listMetaverseEnvironmentPresentationProfiles();
-  const selectedEnvironmentPresentationProfileId =
-    project.environmentPresentationProfileId ?? "__none__";
+    selectedPlacement.materialReferenceId ?? "__default__";
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-muted/25 p-3">
-      <div className="grid gap-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">HUD</span>
-          <span className="font-medium">{project.hudProfileId ?? "None"}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Camera</span>
-          <span className="font-medium">{project.cameraProfileId ?? "None"}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Character</span>
-          <span className="font-medium">
-            {project.characterPresentationProfileId ?? "None"}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Gameplay</span>
-          <span className="font-medium">{project.gameplayProfileId}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Environment</span>
-          <span className="font-medium">
-            {project.environmentPresentationProfileId ?? "None"}
-          </span>
-        </div>
-      </div>
-
-      <Separator />
-
       <div className="flex flex-col gap-3">
-        <Label htmlFor="map-editor-gameplay-profile-select">
-          Gameplay profile
-        </Label>
-        <Select
-          onValueChange={onUpdateGameplayProfileId}
-          value={project.gameplayProfileId}
-        >
-          <SelectTrigger id="map-editor-gameplay-profile-select">
-            <SelectValue placeholder="Select gameplay profile" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {gameplayProfiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-
-        <Separator />
-
-        <Label htmlFor="map-editor-environment-presentation-select">
-          Environment presentation
-        </Label>
-        <Select
-          onValueChange={(nextValue) => {
-            onUpdateEnvironmentPresentationProfileId(
-              nextValue === "__none__" ? null : nextValue
-            );
-          }}
-          value={selectedEnvironmentPresentationProfileId}
-        >
-          <SelectTrigger id="map-editor-environment-presentation-select">
-            <SelectValue placeholder="Select environment presentation" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="__none__">None</SelectItem>
-              {environmentPresentationProfiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-
-        <Separator />
-
         <Label htmlFor="map-editor-material-select">Material reference</Label>
         <Select
-          disabled={selectedPlacement === null}
           onValueChange={(nextValue) => {
             onUpdateSelectedPlacement({
               materialReferenceId:

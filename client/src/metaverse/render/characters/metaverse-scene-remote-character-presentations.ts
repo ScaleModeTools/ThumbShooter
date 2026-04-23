@@ -92,7 +92,14 @@ export interface MetaverseRemoteCharacterPresentationDependencies<
     characterRuntime: TCharacterRuntime,
     heldWeaponPoseRuntime: NonNullable<TCharacterRuntime["heldWeaponPoseRuntime"]>,
     attachmentRuntime: TAttachmentRuntime,
-    aimCamera: NonNullable<MetaverseRemoteCharacterPresentationSnapshot["aimCamera"]>
+    aimCamera: NonNullable<MetaverseRemoteCharacterPresentationSnapshot["aimCamera"]>,
+    weaponState: MetaverseRemoteCharacterPresentationSnapshot["weaponState"],
+    weaponAdsBlend?: number | null,
+    bodyPresentation?: Pick<
+      MetaverseRuntimeConfig["bodyPresentation"],
+      | "groundedFirstPersonHeadClearanceMeters"
+      | "groundedFirstPersonHeadOcclusionRadiusMeters"
+    >
   ) => void;
   readonly syncMountedCharacterRuntime: (
     characterRuntime: TCharacterRuntime,
@@ -219,7 +226,10 @@ export function syncRemoteCharacterPresentations<
   scene: Scene,
   sourceCharacterRuntime: TCharacterRuntime | null,
   sourceAttachmentRuntime: TAttachmentRuntime | null,
-  config: Pick<MetaverseRuntimeConfig, "orientation">,
+  config: Pick<
+    MetaverseRuntimeConfig,
+    "bodyPresentation" | "orientation"
+  >,
   remoteCharacterRuntimesByPlayerId: Map<
     string,
     MetaverseRemoteCharacterPresentationRuntimeState<
@@ -414,7 +424,10 @@ export function syncRemoteCharacterPresentations<
         remoteCharacterRuntime.characterRuntime,
         remoteCharacterRuntime.characterRuntime.heldWeaponPoseRuntime,
         remoteCharacterRuntime.attachmentRuntime,
-        remoteCharacterPresentation.aimCamera
+        remoteCharacterPresentation.aimCamera,
+        remoteCharacterPresentation.weaponState,
+        null,
+        config.bodyPresentation
       );
     }
   }

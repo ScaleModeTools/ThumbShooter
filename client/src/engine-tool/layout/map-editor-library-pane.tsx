@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { FolderTreeIcon } from "lucide-react";
 
@@ -12,6 +12,7 @@ import {
   TabsTrigger
 } from "@/components/ui/tabs";
 import {
+  isMapEditorBuildPrimitiveAssetId,
   listMapEditorBuildPrimitiveCatalogEntries
 } from "@/engine-tool/build/map-editor-build-primitives";
 import { groupMapEditorLibraryAssets } from "@/engine-tool/library/map-editor-library-asset-groups";
@@ -32,7 +33,16 @@ interface MapEditorLibraryPaneProps {
   readonly onAddWaterRegion: () => void;
   readonly onSelectPlacementId: (placementId: string) => void;
   readonly project: MapEditorProjectSnapshot;
+  readonly selectedPlacementId: string | null;
+  readonly selectedPlacementAssetId: string | null;
 }
+
+type MapEditorLibraryTabId =
+  | "build"
+  | "placed"
+  | "props"
+  | "scene"
+  | "vehicles";
 
 function filterAssetCatalogEntries(
   assetCatalogEntries: readonly EnvironmentAssetDescriptor[],
@@ -63,9 +73,12 @@ export function MapEditorLibraryPane({
   onAddSceneObject,
   onAddWaterRegion,
   onSelectPlacementId,
-  project
+  project,
+  selectedPlacementId,
+  selectedPlacementAssetId
 }: MapEditorLibraryPaneProps) {
   const [assetSearchQuery, setAssetSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<MapEditorLibraryTabId>("scene");
   const deferredAssetSearchQuery = useDeferredValue(assetSearchQuery);
   const buildPrimitiveEntries = useMemo(
     () => listMapEditorBuildPrimitiveCatalogEntries(),
@@ -87,6 +100,42 @@ export function MapEditorLibraryPane({
       deferredAssetSearchQuery
     );
   }, [deferredAssetSearchQuery, libraryAssetGroups.vehicles]);
+  const selectedPlacementLibraryTab = useMemo(() => {
+    if (selectedPlacementAssetId === null) {
+      return null;
+    }
+
+    if (isMapEditorBuildPrimitiveAssetId(selectedPlacementAssetId)) {
+      return "build";
+    }
+
+    if (
+      libraryAssetGroups.vehicles.some(
+        (asset) => asset.id === selectedPlacementAssetId
+      )
+    ) {
+      return "vehicles";
+    }
+
+    if (
+      libraryAssetGroups.props.some((asset) => asset.id === selectedPlacementAssetId)
+    ) {
+      return "props";
+    }
+
+    return null;
+  }, [libraryAssetGroups.props, libraryAssetGroups.vehicles, selectedPlacementAssetId]);
+
+  useEffect(() => {
+    if (selectedPlacementId !== null) {
+      setActiveTab("placed");
+      return;
+    }
+
+    if (selectedPlacementLibraryTab !== null) {
+      setActiveTab(selectedPlacementLibraryTab);
+    }
+  }, [selectedPlacementId, selectedPlacementLibraryTab]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background/84 backdrop-blur-sm">
@@ -106,7 +155,18 @@ export function MapEditorLibraryPane({
 
       <Tabs
         className="flex min-h-0 flex-1 flex-col overflow-hidden p-4"
-        defaultValue="scene"
+        onValueChange={(nextTab) => {
+          if (
+            nextTab === "scene" ||
+            nextTab === "placed" ||
+            nextTab === "build" ||
+            nextTab === "props" ||
+            nextTab === "vehicles"
+          ) {
+            setActiveTab(nextTab);
+          }
+        }}
+        value={activeTab}
       >
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="scene">Scene</TabsTrigger>
@@ -132,6 +192,7 @@ export function MapEditorLibraryPane({
             <MapEditorSceneExplorerPanel
               onSelectPlacementId={onSelectPlacementId}
               project={project}
+              selectedPlacementId={selectedPlacementId}
             />
           </ScrollArea>
         </TabsContent>
@@ -144,6 +205,7 @@ export function MapEditorLibraryPane({
               onActivateBuildPrimitiveAssetId={onActivateBuildPrimitiveAssetId}
               onAddPlacementFromAsset={onAddPlacementFromAsset}
               project={project}
+              selectedAssetId={selectedPlacementAssetId}
             />
           </ScrollArea>
         </TabsContent>
@@ -161,6 +223,7 @@ export function MapEditorLibraryPane({
                 assetCatalogEntries={filteredPropAssets}
                 onAddPlacementFromAsset={onAddPlacementFromAsset}
                 project={project}
+                selectedAssetId={selectedPlacementAssetId}
               />
             </ScrollArea>
           </div>
@@ -179,6 +242,7 @@ export function MapEditorLibraryPane({
                 assetCatalogEntries={filteredVehicleAssets}
                 onAddPlacementFromAsset={onAddPlacementFromAsset}
                 project={project}
+                selectedAssetId={selectedPlacementAssetId}
               />
             </ScrollArea>
           </div>

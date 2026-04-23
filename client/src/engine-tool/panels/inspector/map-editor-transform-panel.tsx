@@ -1,3 +1,6 @@
+import { Trash2Icon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -8,6 +11,7 @@ import {
 import type { MapEditorPlacementUpdate } from "@/engine-tool/types/map-editor";
 
 interface MapEditorTransformPanelProps {
+  readonly onDeleteSelectedPlacementRequest: () => void;
   readonly onUpdateSelectedPlacement: (update: MapEditorPlacementUpdate) => void;
   readonly selectedPlacement: MapEditorPlacementDraftSnapshot | null;
 }
@@ -34,6 +38,7 @@ function createNextPlacementScale(
 }
 
 export function MapEditorTransformPanel({
+  onDeleteSelectedPlacementRequest,
   onUpdateSelectedPlacement,
   selectedPlacement
 }: MapEditorTransformPanelProps) {
@@ -290,6 +295,23 @@ export function MapEditorTransformPanel({
             />
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4">
+        <div className="min-w-0 text-xs text-muted-foreground">
+          Placement
+          <div className="truncate font-mono text-[11px] text-foreground/80">
+            {selectedPlacement.placementId}
+          </div>
+        </div>
+        <Button
+          onClick={onDeleteSelectedPlacementRequest}
+          type="button"
+          variant="destructive"
+        >
+          <Trash2Icon data-icon="inline-start" />
+          Delete Placement
+        </Button>
       </div>
     </div>
   );

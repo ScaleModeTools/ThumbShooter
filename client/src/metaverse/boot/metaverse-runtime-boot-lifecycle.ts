@@ -1,4 +1,5 @@
 import type { Camera, Scene } from "three/webgpu";
+import type { MetaverseRealtimePlayerWeaponStateSnapshot } from "@webgpu-metaverse/shared";
 
 import type { MetaverseRuntimeCameraPhaseState } from "../classes/metaverse-runtime-camera-phase-state";
 import type { MetaverseSceneRendererHost } from "../render/webgpu-metaverse-scene";
@@ -39,6 +40,8 @@ interface MetaverseRuntimeBootSceneRuntime {
     nowMs: number,
     deltaSeconds: number,
     localCharacterPresentation: MetaverseCharacterPresentationSnapshot | null,
+    localWeaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null,
+    localWeaponAdsBlend: number | null,
     remoteCharacterPresentations: readonly MetaverseRemoteCharacterPresentationSnapshot[],
     mountedEnvironment: MountedEnvironmentSnapshot | null
   ): void;
@@ -184,6 +187,8 @@ export class MetaverseRuntimeBootLifecycle {
       previewSnapshot.focusedPortal,
       nowMs,
       0,
+      null,
+      null,
       null,
       emptyRemoteCharacterPresentations,
       null

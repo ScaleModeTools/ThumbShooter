@@ -145,6 +145,8 @@ interface MetaverseRuntimeFrameSceneRuntime {
     nowMs: number,
     deltaSeconds: number,
     localCharacterPresentation: MetaverseCharacterPresentationSnapshot | null,
+    localWeaponState: MetaverseRealtimePlayerSnapshot["weaponState"] | null,
+    localWeaponAdsBlend: number | null,
     remoteCharacterPresentations: readonly MetaverseRemoteCharacterPresentationSnapshot[],
     mountedEnvironment: MountedEnvironmentSnapshot | null,
     cameraFieldOfViewDegrees?: number | null
@@ -182,6 +184,7 @@ interface MetaverseRuntimeFrameTraversalRuntime {
 }
 
 interface MetaverseRuntimeFrameWeaponPresentationRuntime {
+  readonly adsBlend: number;
   readonly cameraFieldOfViewDegrees: number;
   readonly weaponState: MetaverseRealtimePlayerSnapshot["weaponState"] | null;
   advance(input: {
@@ -465,6 +468,8 @@ export class MetaverseRuntimeFrameLoop {
       cameraPhaseState.hidesLocalCharacter
         ? null
         : this.#traversalRuntime.characterPresentationSnapshot,
+      weaponPresentationRuntime?.weaponState ?? null,
+      weaponPresentationRuntime?.adsBlend ?? null,
       remoteCharacterPresentations,
       mountedEnvironment,
       weaponPresentationRuntime?.cameraFieldOfViewDegrees ?? null
