@@ -110,6 +110,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/metaverse/classes/metaverse-runtime-combat-lifecycle.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse/runtime/metaverse-runtime-combat-lifecycle.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/metaverse/boot/metaverse-runtime-start-coordinator.ts",
       "testPaths": [
         "tests/runtime/client/metaverse/boot/metaverse-runtime-start-coordinator.runtime.test.mjs"
@@ -555,6 +561,12 @@
       "ownerPath": "server/src/metaverse/authority/mounted/metaverse-authoritative-mounted-occupancy-authority.ts",
       "testPaths": [
         "tests/runtime/server/metaverse/authoritative-world-mounted-occupancy.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "server/src/metaverse/authority/combat/metaverse-authoritative-combat-authority.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse-authoritative-combat-authority.test.mjs"
       ]
     },
     {

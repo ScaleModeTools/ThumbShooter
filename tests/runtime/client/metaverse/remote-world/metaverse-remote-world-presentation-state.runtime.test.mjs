@@ -216,6 +216,122 @@ test("MetaverseRemoteWorldPresentationState keeps remote character root on fresh
   );
 });
 
+test("MetaverseRemoteWorldPresentationState removes dead remote players and recreates them fresh on respawn", async () => {
+  const presentationState = await createPresentationState();
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-respawn-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Respawn Remote");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const aliveSnapshot = createRealtimeWorldSnapshot({
+    currentTick: 10,
+    includeVehicle: false,
+    localPlayerId,
+    localUsername,
+    remoteCombat: {
+      alive: true,
+      health: 100
+    },
+    remotePlayerId,
+    remotePlayerX: 8,
+    remoteUsername,
+    serverTimeMs: 1_000,
+    snapshotSequence: 1,
+    vehicleSeatOccupantPlayerId: null,
+    yawRadians: 0
+  });
+
+  presentationState.syncAuthoritativeSample({
+    deltaSeconds: 0.05,
+    localPlayerId,
+    sampledFrame: createSampledFrame({
+      baseSnapshot: aliveSnapshot
+    })
+  });
+
+  assert.equal(presentationState.remoteCharacterPresentations.length, 1);
+  assert.equal(
+    presentationState.remoteCharacterPresentations[0]?.presentation.position.x,
+    8
+  );
+
+  const deadSnapshot = createRealtimeWorldSnapshot({
+    currentTick: 11,
+    includeVehicle: false,
+    localPlayerId,
+    localUsername,
+    remoteCombat: {
+      alive: false,
+      health: 0,
+      respawnRemainingMs: 3_000
+    },
+    remotePlayerId,
+    remotePlayerX: 8,
+    remoteUsername,
+    serverTimeMs: 1_050,
+    snapshotSequence: 2,
+    vehicleSeatOccupantPlayerId: null,
+    yawRadians: 0
+  });
+
+  presentationState.syncAuthoritativeSample({
+    deltaSeconds: 0.05,
+    localPlayerId,
+    sampledFrame: createSampledFrame({
+      baseSnapshot: deadSnapshot
+    })
+  });
+
+  assert.equal(presentationState.remoteCharacterPresentations.length, 0);
+
+  const respawnedSnapshot = createRealtimeWorldSnapshot({
+    currentTick: 12,
+    includeVehicle: false,
+    localPlayerId,
+    localUsername,
+    remoteCombat: {
+      alive: true,
+      health: 100,
+      spawnProtectionRemainingMs: 1_000
+    },
+    remotePlayerId,
+    remotePlayerX: 19,
+    remotePlayerZ: 7,
+    remoteUsername,
+    serverTimeMs: 1_100,
+    snapshotSequence: 3,
+    vehicleSeatOccupantPlayerId: null,
+    yawRadians: Math.PI * 0.25
+  });
+
+  presentationState.syncAuthoritativeSample({
+    deltaSeconds: 0.05,
+    localPlayerId,
+    sampledFrame: createSampledFrame({
+      baseSnapshot: respawnedSnapshot
+    })
+  });
+
+  assert.equal(presentationState.remoteCharacterPresentations.length, 1);
+  assert.ok(
+    Math.abs(
+      (presentationState.remoteCharacterPresentations[0]?.presentation.position.x ??
+        0) - 19
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (presentationState.remoteCharacterPresentations[0]?.presentation.position.z ??
+        0) - 7
+    ) < 0.000001
+  );
+});
+
 test("MetaverseRemoteWorldPresentationState extrapolates remote airborne roots between authoritative snapshots", async () => {
   const presentationState = await createPresentationState();
   const localPlayerId = createMetaversePlayerId("harbor-pilot-1");

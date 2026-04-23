@@ -1,36 +1,33 @@
 import type { GameplayInputModeId } from "../gameplay-input-mode.js";
-import type {
-  GameplaySessionMode,
-  GameplayTickOwner
-} from "../experiences/duck-hunt/duck-hunt-room-contract.js";
+import type { GameplayTickOwner } from "../experiences/duck-hunt/duck-hunt-room-contract.js";
+import type { MetaverseMatchModeId } from "./metaverse-match-mode.js";
 
 import {
-  readExperienceTickOwner,
   type ExperienceId
 } from "./experience-catalog.js";
 
 export interface PortalLaunchSelectionSnapshot {
   readonly experienceId: ExperienceId;
   readonly inputMode: GameplayInputModeId;
-  readonly sessionMode: GameplaySessionMode;
+  readonly matchMode: MetaverseMatchModeId;
   readonly tickOwner: GameplayTickOwner;
 }
 
 export interface PortalLaunchSelectionSnapshotInput {
   readonly experienceId: ExperienceId;
   readonly inputMode: GameplayInputModeId;
-  readonly sessionMode: GameplaySessionMode;
+  readonly matchMode: MetaverseMatchModeId;
 }
 
 export function createPortalLaunchSelectionSnapshot({
   experienceId,
   inputMode,
-  sessionMode
+  matchMode
 }: PortalLaunchSelectionSnapshotInput): PortalLaunchSelectionSnapshot {
   return Object.freeze({
     experienceId,
     inputMode,
-    sessionMode,
-    tickOwner: readExperienceTickOwner(experienceId, sessionMode)
+    matchMode,
+    tickOwner: matchMode === "free-roam" ? "client" : "server"
   });
 }

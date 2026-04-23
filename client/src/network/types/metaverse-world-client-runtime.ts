@@ -17,6 +17,22 @@ import type {
 } from "@/network";
 import type { MetaversePlayerIssuedTraversalIntentSnapshot } from "./metaverse-player-issued-traversal-intent";
 
+export interface MetaverseWorldFireWeaponCommandInput {
+  readonly aimMode?: "ads" | "hip-fire";
+  readonly forwardDirection: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly muzzleOrigin: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly playerId: MetaversePlayerId;
+  readonly weaponId: string;
+}
+
 export interface MetaverseWorldClientRuntime {
   readonly currentPollIntervalMs: number;
   readonly driverVehicleControlDatagramStatusSnapshot: RealtimeDatagramTransportStatusSnapshot;
@@ -34,6 +50,7 @@ export interface MetaverseWorldClientRuntime {
   ensureConnected(
     playerId: MetaversePlayerId
   ): Promise<MetaverseRealtimeWorldSnapshot>;
+  fireWeapon?(commandInput: MetaverseWorldFireWeaponCommandInput): void;
   syncDriverVehicleControl(
     commandInput: MetaverseSyncDriverVehicleControlCommandInput | null
   ): void;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
 import {
+  createMetaverseFireWeaponCommand,
   createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseRealtimeWorldEvent,
   createMetaversePlayerId,
@@ -98,6 +99,95 @@ test("MetaverseWorldClient exposes driver-control datagram support as a separate
   client.dispose();
 
   assert.equal(datagramTransportDisposed, true);
+});
+
+test("MetaverseWorldClient sends fire-weapon commands over the reliable command transport", async () => {
+  const { MetaverseWorldClient } = await clientLoader.load("/src/network/index.ts");
+  const playerId = createMetaversePlayerId("fire-harbor-pilot-1");
+
+  assert.notEqual(playerId, null);
+
+  const sentCommands = [];
+  const initialWorldEvent = createWorldEvent({
+    currentTick: 10,
+    playerId,
+    serverTimeMs: 10_000,
+    snapshotSequence: 1,
+    vehicleX: 8
+  });
+  const client = new MetaverseWorldClient(
+    {
+      defaultCommandIntervalMs: createMilliseconds(50),
+      defaultPollIntervalMs: createMilliseconds(50),
+      maxBufferedSnapshots: 2,
+      serverOrigin: "http://127.0.0.1:3210",
+      worldCommandPath: "/metaverse/world/commands",
+      worldPath: "/metaverse/world"
+    },
+    {
+      snapshotStreamTransport: createPassiveSnapshotStreamTransport(
+        initialWorldEvent
+      ),
+      transport: {
+        async pollWorldSnapshot() {
+          return initialWorldEvent;
+        },
+        async sendCommand(command) {
+          sentCommands.push(command);
+          return createWorldEvent({
+            currentTick: 11,
+            playerId,
+            serverTimeMs: 10_150,
+            snapshotSequence: 2,
+            vehicleX: 8
+          });
+        }
+      },
+      readWallClockMs: () => 1_234
+    }
+  );
+
+  await client.ensureConnected(playerId);
+  client.fireWeapon({
+    aimMode: "hip-fire",
+    forwardDirection: {
+      x: 0,
+      y: 0,
+      z: -1
+    },
+    muzzleOrigin: {
+      x: 2,
+      y: 1.5,
+      z: 3
+    },
+    playerId,
+    weaponId: "metaverse-service-pistol-v2"
+  });
+  await flushAsyncWork();
+
+  assert.deepEqual(
+    sentCommands,
+    [
+      createMetaverseFireWeaponCommand({
+        aimMode: "hip-fire",
+        clientFireTimeMs: 1_234,
+        fireSequence: 1,
+        forwardDirection: {
+          x: 0,
+          y: 0,
+          z: -1
+        },
+        muzzleOrigin: {
+          x: 2,
+          y: 1.5,
+          z: 3
+        },
+        playerId,
+        weaponId: "metaverse-service-pistol-v2"
+      })
+    ]
+  );
+  assert.equal(client.worldSnapshotBuffer.at(-1)?.snapshotSequence, 2);
 });
 
 test("MetaverseWorldClient prefers latest-wins traversal intent datagrams over reliable commands when available", async () => {

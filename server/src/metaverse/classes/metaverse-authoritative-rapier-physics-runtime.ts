@@ -208,6 +208,57 @@ export class MetaverseAuthoritativeRapierPhysicsRuntime {
     });
   }
 
+  castRay(
+    origin: PhysicsVector3Snapshot,
+    direction: PhysicsVector3Snapshot,
+    maxDistanceMeters: number,
+    filterPredicate?: (
+      collider: RapierColliderHandle
+    ) => boolean
+  ): {
+    readonly collider: RapierColliderHandle;
+    readonly distanceMeters: number;
+    readonly point: PhysicsVector3Snapshot;
+  } | null {
+    const normalizedMaxDistance =
+      Number.isFinite(maxDistanceMeters) && maxDistanceMeters > 0
+        ? maxDistanceMeters
+        : 0;
+
+    if (normalizedMaxDistance <= 0) {
+      return null;
+    }
+
+    const ray = new RAPIER.Ray(
+      this.createVector3(origin.x, origin.y, origin.z),
+      this.createVector3(direction.x, direction.y, direction.z)
+    );
+    const rayHit = this.#world.castRay(
+      ray,
+      normalizedMaxDistance,
+      true,
+      undefined,
+      undefined,
+      null,
+      null,
+      filterPredicate
+    );
+
+    if (rayHit === null) {
+      return null;
+    }
+
+    return Object.freeze({
+      collider: rayHit.collider,
+      distanceMeters: rayHit.toi,
+      point: Object.freeze({
+        x: origin.x + direction.x * rayHit.toi,
+        y: origin.y + direction.y * rayHit.toi,
+        z: origin.z + direction.z * rayHit.toi
+      })
+    });
+  }
+
   stepSimulation(deltaSeconds: number): void {
     this.#world.timestep =
       Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 1 / 60;

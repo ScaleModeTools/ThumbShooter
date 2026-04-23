@@ -66,6 +66,32 @@ const hiddenWeaponHudSnapshot = Object.freeze({
   weaponId: null,
   weaponLabel: null
 } satisfies MetaverseHudSnapshot["weapon"]);
+const hiddenCombatHudSnapshot = Object.freeze({
+  accuracyRatio: null,
+  alive: true,
+  ammoInMagazine: 0,
+  ammoInReserve: 0,
+  assists: 0,
+  available: false,
+  deaths: 0,
+  enemyScore: null,
+  friendlyFireEnabled: false,
+  headshotKills: 0,
+  health: 100,
+  killFeed: Object.freeze([]),
+  kills: 0,
+  matchPhase: null,
+  maxHealth: 100,
+  reloadRemainingMs: 0,
+  respawnRemainingMs: 0,
+  scoreLimit: null,
+  shotsFired: 0,
+  shotsHit: 0,
+  spawnProtectionRemainingMs: 0,
+  teamScore: null,
+  timeRemainingMs: null,
+  weaponId: null
+} satisfies MetaverseHudSnapshot["combat"]);
 
 function createEmptyRadarSnapshot(
   localTeamId: MetaverseHudSnapshot["radar"]["localTeamId"] = null
@@ -137,6 +163,7 @@ function freezeHudSnapshot(
   focusedPortal: FocusedExperiencePortalSnapshot | null,
   mountedInteraction: MetaverseMountedInteractionSnapshot,
   controlMode: MetaverseHudSnapshot["controlMode"],
+  combat: MetaverseHudSnapshot["combat"],
   locomotionMode: MetaverseHudSnapshot["locomotionMode"],
   presence: MetaverseHudSnapshot["presence"],
   radar: MetaverseHudSnapshot["radar"],
@@ -147,6 +174,7 @@ function freezeHudSnapshot(
   return Object.freeze({
     boot,
     camera,
+    combat,
     controlMode,
     failureReason,
     focusedPortal,
@@ -214,6 +242,7 @@ export class MetaverseRuntimeHudPublisher {
       null,
       createMetaverseMountedInteractionSnapshot(null, null),
       initialControlMode,
+      hiddenCombatHudSnapshot,
       this.#traversalRuntime.locomotionMode,
       this.#presenceRuntime.resolveHudSnapshot(),
       createEmptyRadarSnapshot(this.#presenceRuntime.localTeamId),
@@ -277,6 +306,7 @@ export class MetaverseRuntimeHudPublisher {
       input.focusedPortal,
       input.mountedInteraction,
       input.controlMode,
+      this.#createCombatSnapshot(presenceSnapshot),
       this.#traversalRuntime.locomotionMode,
       presenceSnapshot,
       this.#createRadarSnapshot(presenceSnapshot),
@@ -355,6 +385,109 @@ export class MetaverseRuntimeHudPublisher {
 
   #createWeaponSnapshot(): MetaverseHudSnapshot["weapon"] {
     return this.#weaponPresentationRuntime?.hudSnapshot ?? hiddenWeaponHudSnapshot;
+  }
+
+  #createCombatSnapshot(
+    presenceSnapshot: MetaverseHudSnapshot["presence"]
+  ): MetaverseHudSnapshot["combat"] {
+    const worldSnapshot =
+      this.#remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot(
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+      );
+    const localPlayerSnapshot =
+      this.#remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot(
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+      );
+    const combatSnapshot = localPlayerSnapshot?.combat ?? null;
+
+    if (worldSnapshot === null || localPlayerSnapshot === null || combatSnapshot === null) {
+      return hiddenCombatHudSnapshot;
+    }
+
+    const activeWeaponSnapshot = combatSnapshot.activeWeapon;
+    const activeWeaponStats =
+      activeWeaponSnapshot === null
+        ? null
+        : combatSnapshot.weaponStats.find(
+            (weaponStats) => weaponStats.weaponId === activeWeaponSnapshot.weaponId
+          ) ?? null;
+    const localTeamId = localPlayerSnapshot.teamId ?? presenceSnapshot.localTeamId;
+    const matchSnapshot = worldSnapshot.combatMatch;
+    const localTeamSnapshot =
+      localTeamId === null || matchSnapshot === null
+        ? null
+        : matchSnapshot.teams.find((teamSnapshot) => teamSnapshot.teamId === localTeamId) ??
+          null;
+    const enemyTeamSnapshot =
+      localTeamId === null || matchSnapshot === null
+        ? null
+        : matchSnapshot.teams.find((teamSnapshot) => teamSnapshot.teamId !== localTeamId) ??
+          null;
+    const usernameByPlayerId = new Map(
+      worldSnapshot.players.map((playerSnapshot) => [
+        playerSnapshot.playerId,
+        playerSnapshot.username
+      ])
+    );
+    const summarizePlayer = (playerId: typeof localPlayerSnapshot.playerId): string =>
+      playerId === localPlayerSnapshot.playerId
+        ? "You"
+        : usernameByPlayerId.get(playerId) ?? playerId;
+    const killFeed = Object.freeze(
+      worldSnapshot.combatFeed.slice(-4).map((eventSnapshot) => {
+        switch (eventSnapshot.type) {
+          case "damage":
+            return Object.freeze({
+              sequence: eventSnapshot.sequence,
+              summary: `${summarizePlayer(eventSnapshot.attackerPlayerId)} hit ${summarizePlayer(eventSnapshot.targetPlayerId)} for ${eventSnapshot.damage}`,
+              type: eventSnapshot.type
+            });
+          case "kill":
+            return Object.freeze({
+              sequence: eventSnapshot.sequence,
+              summary: `${summarizePlayer(eventSnapshot.attackerPlayerId)} eliminated ${summarizePlayer(eventSnapshot.targetPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`,
+              type: eventSnapshot.type
+            });
+          case "spawn":
+            return Object.freeze({
+              sequence: eventSnapshot.sequence,
+              summary: `${summarizePlayer(eventSnapshot.playerId)} spawned`,
+              type: eventSnapshot.type
+            });
+        }
+      })
+    );
+    const shotsFired = activeWeaponStats?.shotsFired ?? 0;
+    const shotsHit = activeWeaponStats?.shotsHit ?? 0;
+
+    return Object.freeze({
+      accuracyRatio:
+        shotsFired > 0 ? Math.max(0, Math.min(1, shotsHit / shotsFired)) : null,
+      alive: combatSnapshot.alive,
+      ammoInMagazine: activeWeaponSnapshot?.ammoInMagazine ?? 0,
+      ammoInReserve: activeWeaponSnapshot?.ammoInReserve ?? 0,
+      assists: combatSnapshot.assists,
+      available: true,
+      deaths: combatSnapshot.deaths,
+      enemyScore: enemyTeamSnapshot?.score ?? null,
+      friendlyFireEnabled: matchSnapshot?.friendlyFireEnabled ?? false,
+      headshotKills: combatSnapshot.headshotKills,
+      health: combatSnapshot.health,
+      killFeed,
+      kills: combatSnapshot.kills,
+      matchPhase: matchSnapshot?.phase ?? null,
+      maxHealth: combatSnapshot.maxHealth,
+      reloadRemainingMs: Number(activeWeaponSnapshot?.reloadRemainingMs ?? 0),
+      respawnRemainingMs: Number(combatSnapshot.respawnRemainingMs),
+      scoreLimit: matchSnapshot?.scoreLimit ?? null,
+      shotsFired,
+      shotsHit,
+      spawnProtectionRemainingMs: Number(combatSnapshot.spawnProtectionRemainingMs),
+      teamScore: localTeamSnapshot?.score ?? null,
+      timeRemainingMs:
+        matchSnapshot === null ? null : Number(matchSnapshot.timeRemainingMs),
+      weaponId: activeWeaponSnapshot?.weaponId ?? null
+    });
   }
 
   #createRadarSnapshot(

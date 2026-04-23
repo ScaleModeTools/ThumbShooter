@@ -12,7 +12,7 @@ import {
 import type {
   ExperienceId,
   GameplayInputModeId,
-  GameplaySessionMode
+  MetaverseMatchModeId
 } from "@webgpu-metaverse/shared";
 
 import { metaverseActiveFullBodyCharacterAssetId } from "@/assets/config/character-model-manifest";
@@ -47,13 +47,13 @@ interface MetaverseStageScreenProps {
   readonly coopRoomIdDraft: string;
   readonly environmentProofConfig: MetaverseEnvironmentProofConfig | null;
   readonly gameplayInputMode: GameplayInputModeId;
+  readonly matchMode: MetaverseMatchModeId;
   readonly metaverseControlMode: MetaverseControlModeId;
   readonly onCoopRoomIdDraftChange: (coopRoomIdDraft: string) => void;
   readonly onExperienceLaunchRequest: (experienceId: ExperienceId) => void;
+  readonly onMatchModeChange: (mode: MetaverseMatchModeId) => void;
   readonly onRecalibrationRequest: () => void;
-  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
   readonly onSetupRequest: () => void;
-  readonly sessionMode: GameplaySessionMode;
   readonly username: string;
 }
 
@@ -130,13 +130,13 @@ export function MetaverseStageScreen({
   coopRoomIdDraft,
   environmentProofConfig,
   gameplayInputMode,
+  matchMode,
   metaverseControlMode,
   onCoopRoomIdDraftChange,
   onExperienceLaunchRequest,
+  onMatchModeChange,
   onRecalibrationRequest,
-  onSessionModeChange,
   onSetupRequest,
-  sessionMode,
   username
 }: MetaverseStageScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -308,6 +308,7 @@ export function MetaverseStageScreen({
       ? null
       : `${focusedPortal.distanceFromCamera.toFixed(1)}m from portal`;
   const mountedInteractionHud = hudSnapshot.mountedInteractionHud;
+  const combatSnapshot = hudSnapshot.combat;
   const showPortalScan =
     focusedPortal !== null ||
     hudSnapshot.presence.lastError !== null ||
@@ -456,6 +457,34 @@ export function MetaverseStageScreen({
                       teamId={hudSnapshot.presence.localTeamId}
                     />
                   ) : null}
+                  {combatSnapshot.available ? (
+                    <div className="grid grid-cols-2 gap-3 rounded-[var(--metaverse-hud-inset-radius)] bg-[rgb(15_23_42_/_0.08)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]">
+                      <div className="flex flex-col">
+                        <span className="type-shell-banner">Health</span>
+                        <span className="type-shell-heading">
+                          {combatSnapshot.health}/{combatSnapshot.maxHealth}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="type-shell-banner">Ammo</span>
+                        <span className="type-shell-heading">
+                          {combatSnapshot.ammoInMagazine}/{combatSnapshot.ammoInReserve}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="type-shell-banner">K/D/A</span>
+                        <span className="type-shell-body">
+                          {combatSnapshot.kills}/{combatSnapshot.deaths}/{combatSnapshot.assists}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="type-shell-banner">Headshots</span>
+                        <span className="type-shell-body">
+                          {combatSnapshot.headshotKills}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </MetaverseHudSurface>
 
@@ -472,11 +501,103 @@ export function MetaverseStageScreen({
                         onExperienceLaunchRequest("duck-hunt");
                       }}
                       onRecalibrationRequest={onRecalibrationRequest}
-                      onSessionModeChange={onSessionModeChange}
-                      sessionMode={sessionMode}
+                      onSessionModeChange={() => {}}
+                      sessionMode="single-player"
                     />
                   </div>
                 ) : null}
+
+                <div className="pointer-events-auto w-full max-w-[min(22rem,100%)]">
+                  <MetaverseHudSurface className="w-full">
+                    <p className="type-shell-banner">Shell combat</p>
+                    <p className="type-shell-heading mt-2">
+                      {matchMode === "team-deathmatch"
+                        ? "Authoritative team deathmatch"
+                        : "Free roam shell traversal"}
+                    </p>
+                    <p className="type-shell-body mt-3">
+                      Duck Hunt remains a separate mini-game. The main shell now owns the staged PvP path.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => {
+                          onMatchModeChange("team-deathmatch");
+                        }}
+                        type="button"
+                        variant={
+                          matchMode === "team-deathmatch" ? "default" : "outline"
+                        }
+                      >
+                        Team Deathmatch
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          onMatchModeChange("free-roam");
+                        }}
+                        type="button"
+                        variant={matchMode === "free-roam" ? "default" : "outline"}
+                      >
+                        Free Roam
+                      </Button>
+                    </div>
+
+                    {combatSnapshot.available ? (
+                      <div className="mt-4 flex flex-col gap-3 rounded-[var(--metaverse-hud-inset-radius)] bg-[rgb(15_23_42_/_0.08)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="type-shell-body">
+                            {combatSnapshot.matchPhase === "waiting-for-players"
+                              ? "Waiting for players"
+                              : combatSnapshot.matchPhase === "completed"
+                                ? "Match complete"
+                                : "Match active"}
+                          </span>
+                          <span className="type-shell-body">
+                            {combatSnapshot.teamScore ?? 0} - {combatSnapshot.enemyScore ?? 0}
+                            {combatSnapshot.scoreLimit === null
+                              ? ""
+                              : ` / ${combatSnapshot.scoreLimit}`}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="type-shell-body">
+                            {combatSnapshot.timeRemainingMs === null
+                              ? "No timer"
+                              : `${Math.ceil(combatSnapshot.timeRemainingMs / 1000)}s left`}
+                          </span>
+                          <span className="type-shell-body">
+                            {combatSnapshot.accuracyRatio === null
+                              ? "Accuracy --"
+                              : `Accuracy ${Math.round(combatSnapshot.accuracyRatio * 100)}%`}
+                          </span>
+                        </div>
+                        {!combatSnapshot.alive ? (
+                          <p className="type-shell-body">
+                            Respawn in {Math.ceil(combatSnapshot.respawnRemainingMs / 1000)}s
+                          </p>
+                        ) : combatSnapshot.spawnProtectionRemainingMs > 0 ? (
+                          <p className="type-shell-body">
+                            Spawn protection {Math.ceil(
+                              combatSnapshot.spawnProtectionRemainingMs / 1000
+                            )}s
+                          </p>
+                        ) : null}
+                        {combatSnapshot.killFeed.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {combatSnapshot.killFeed.map((entry) => (
+                              <p
+                                className="type-shell-body text-sm"
+                                key={entry.sequence}
+                              >
+                                {entry.summary}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </MetaverseHudSurface>
+                </div>
 
                 {hudSnapshot.boot.phase === "ready" && runtimeError === null ? (
                   <MetaversePlayerRadarHud radarSnapshot={hudSnapshot.radar} />

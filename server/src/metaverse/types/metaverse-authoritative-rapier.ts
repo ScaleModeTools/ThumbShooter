@@ -21,6 +21,15 @@ export interface RapierVectorConstructor {
   new (x: number, y: number, z: number): RapierVectorLike;
 }
 
+export interface RapierRayHandle {
+  readonly dir: RapierVectorLike;
+  readonly origin: RapierVectorLike;
+}
+
+export interface RapierRayConstructor {
+  new (origin: RapierVectorLike, dir: RapierVectorLike): RapierRayHandle;
+}
+
 export interface RapierRigidBodyDescHandle {
   lockRotations(): RapierRigidBodyDescHandle;
   setAdditionalMass(mass: number): RapierRigidBodyDescHandle;
@@ -99,7 +108,22 @@ export interface RapierCharacterControllerHandle {
   setCharacterMass(mass: number | null): void;
 }
 
+export interface RapierRayColliderHitHandle {
+  readonly collider: RapierColliderHandle;
+  readonly toi: number;
+}
+
 export interface RapierWorldHandle {
+  castRay(
+    ray: RapierRayHandle,
+    maxToi: number,
+    solid: boolean,
+    filterFlags?: number,
+    filterGroups?: number,
+    excludeCollider?: RapierColliderHandle | null,
+    excludeRigidBody?: RapierRigidBodyHandle | null,
+    filterPredicate?: RapierQueryFilterPredicate
+  ): RapierRayColliderHitHandle | null;
   createCharacterController(offset: number): RapierCharacterControllerHandle;
   createCollider(
     colliderDesc: RapierColliderDescHandle,
@@ -118,6 +142,7 @@ export interface RapierWorldConstructor {
 
 export interface RapierApiHandle {
   readonly ColliderDesc: RapierColliderDescFactory;
+  readonly Ray: RapierRayConstructor;
   readonly RigidBodyDesc: RapierRigidBodyDescFactory;
   readonly Vector3: RapierVectorConstructor;
   readonly World: RapierWorldConstructor;

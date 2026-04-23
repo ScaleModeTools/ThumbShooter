@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import {
   type GameplayInputModeId,
   type ExperienceId,
-  type GameplaySessionMode,
+  type MetaverseMatchModeId,
   type PlayerProfile
 } from "@webgpu-metaverse/shared";
 
@@ -82,7 +82,7 @@ interface ShellStageRouterProps {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
-  readonly sessionMode: GameplaySessionMode;
+  readonly matchMode: MetaverseMatchModeId;
   readonly selectedReticleLabel: string;
   readonly usernameDraft: string;
   readonly onCalibrationProgress: (
@@ -106,7 +106,7 @@ interface ShellStageRouterProps {
   readonly onRequestPermission: () => void;
   readonly onRecalibrationRequest: () => void;
   readonly onRetryCapabilityProbe: () => void;
-  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
+  readonly onMatchModeChange: (mode: MetaverseMatchModeId) => void;
   readonly onSetupRequest: () => void;
   readonly setUsernameDraft: (value: string) => void;
 }
@@ -148,7 +148,7 @@ export function ShellStageRouter({
   permissionError,
   permissionState,
   profile,
-  sessionMode,
+  matchMode,
   selectedReticleLabel,
   usernameDraft,
   onCalibrationProgress,
@@ -167,7 +167,7 @@ export function ShellStageRouter({
   onRequestPermission,
   onRecalibrationRequest,
   onRetryCapabilityProbe,
-  onSessionModeChange,
+  onMatchModeChange,
   onSetupRequest,
   setUsernameDraft
 }: ShellStageRouterProps) {
@@ -239,10 +239,10 @@ export function ShellStageRouter({
             metaverseControlMode={metaverseControlMode}
             onCoopRoomIdDraftChange={onCoopRoomIdDraftChange}
             onExperienceLaunchRequest={onExperienceLaunchRequest}
+            onMatchModeChange={onMatchModeChange}
             onRecalibrationRequest={onRecalibrationRequest}
-            onSessionModeChange={onSessionModeChange}
             onSetupRequest={onSetupRequest}
-            sessionMode={sessionMode}
+            matchMode={matchMode}
             username={profile.snapshot.username}
           />
         </Suspense>
@@ -284,7 +284,7 @@ export function ShellStageRouter({
             onGameplaySignal={onGameplaySignal}
             onOpenMenu={onOpenGameplayMenu}
             selectedReticleLabel={selectedReticleLabel}
-            sessionMode={sessionMode}
+            sessionMode="single-player"
             trackingSource={gameplayInputSource}
             triggerCalibration={profile.snapshot.triggerCalibration}
             username={profile.snapshot.username}

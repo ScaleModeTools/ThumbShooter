@@ -3,10 +3,6 @@ import {
   type ExperienceId
 } from "../../experience-catalog.js";
 import {
-  gameplaySessionModes,
-  type GameplaySessionMode
-} from "../../../experiences/duck-hunt/duck-hunt-room-contract.js";
-import {
   metaverseMountedVehicleCameraPolicyIds,
   metaverseMountedVehicleControlRoutingPolicyIds,
   metaverseMountedVehicleOccupancyAnimationIds
@@ -34,6 +30,10 @@ import {
   type MetaverseWorldWaterRegionAuthoring
 } from "../../metaverse-world-surface-query.js";
 import { readMetaverseGameplayProfile } from "../metaverse-gameplay-profiles.js";
+import {
+  metaverseMatchModeIds,
+  type MetaverseMatchModeId
+} from "../../metaverse-match-mode.js";
 
 import type {
   MetaverseMapBundleEnvironmentAssetSnapshot,
@@ -132,18 +132,18 @@ function readNullableExperienceId(
 function readNullableSessionMode(
   value: unknown,
   fieldName: string
-): GameplaySessionMode | null {
+): MetaverseMatchModeId | null {
   if (value === null) {
     return null;
   }
 
-  const sessionMode = readString(value, fieldName);
+  const matchMode = readString(value, fieldName);
 
-  if (!gameplaySessionModes.includes(sessionMode as GameplaySessionMode)) {
-    throw new Error(`Unsupported gameplay session mode for ${fieldName}: ${sessionMode}`);
+  if (!metaverseMatchModeIds.includes(matchMode as MetaverseMatchModeId)) {
+    throw new Error(`Unsupported metaverse match mode for ${fieldName}: ${matchMode}`);
   }
 
-  return sessionMode as GameplaySessionMode;
+  return matchMode as MetaverseMatchModeId;
 }
 
 function readVector3(
@@ -767,9 +767,9 @@ function readLaunchVariation(
       `${fieldName}.gameplayVariationId`
     ),
     label: readString(launchVariation.label, `${fieldName}.label`),
-    sessionMode: readNullableSessionMode(
-      launchVariation.sessionMode,
-      `${fieldName}.sessionMode`
+    matchMode: readNullableSessionMode(
+      launchVariation.matchMode ?? launchVariation.sessionMode ?? null,
+      `${fieldName}.matchMode`
     ),
     variationId: readString(
       launchVariation.variationId,

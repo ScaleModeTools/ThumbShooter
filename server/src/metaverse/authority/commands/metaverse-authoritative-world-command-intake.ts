@@ -14,6 +14,9 @@ import type {
   MetaverseSyncPlayerTraversalIntentCommand,
   MetaverseSyncPlayerWeaponStateCommand
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import type {
+  MetaverseFireWeaponCommand
+} from "@webgpu-metaverse/shared/metaverse";
 
 interface MetaverseAuthoritativePlayerPoseCommandHandler {
   acceptJoinCommand(command: MetaverseJoinPresenceCommand, nowMs: number): void;
@@ -42,6 +45,13 @@ interface MetaverseAuthoritativePlayerWeaponStateCommandHandler {
   ): void;
 }
 
+interface MetaverseAuthoritativeCombatCommandHandler {
+  acceptFireWeaponCommand(
+    command: MetaverseFireWeaponCommand,
+    nowMs: number
+  ): void;
+}
+
 interface MetaverseAuthoritativeMountedOccupancyCommandHandler {
   acceptSyncMountedOccupancyCommand(
     command: MetaverseSyncMountedOccupancyCommand,
@@ -58,6 +68,7 @@ interface MetaverseAuthoritativeVehicleDriveCommandHandler {
 
 interface MetaverseAuthoritativeWorldCommandIntakeDependencies {
   readonly advanceToTime: (nowMs: number) => void;
+  readonly combatAuthority: MetaverseAuthoritativeCombatCommandHandler;
   readonly mountedOccupancyAuthority:
     MetaverseAuthoritativeMountedOccupancyCommandHandler;
   readonly playerLifecycleAuthority:
@@ -134,6 +145,12 @@ export class MetaverseAuthoritativeWorldCommandIntake {
     this.#dependencies.advanceToTime(normalizedNowMs);
 
     switch (command.type) {
+      case "fire-weapon":
+        this.#dependencies.combatAuthority.acceptFireWeaponCommand(
+          command,
+          normalizedNowMs
+        );
+        break;
       case "sync-driver-vehicle-control":
         this.#dependencies.vehicleDriveAuthority.acceptSyncDriverVehicleControlCommand(
           command,

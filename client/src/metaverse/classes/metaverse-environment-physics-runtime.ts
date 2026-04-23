@@ -1137,7 +1137,8 @@ export class MetaverseEnvironmentPhysicsRuntime {
       !shouldTreatMetaversePlayerPoseAsTraversalBlocker(
         remotePlayerSnapshot.locomotionMode,
         remotePlayerSnapshot.mountedOccupancy
-      )
+      ) ||
+      remotePlayerSnapshot.combat?.alive === false
     ) {
       return null;
     }

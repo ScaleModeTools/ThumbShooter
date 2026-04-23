@@ -72,6 +72,7 @@ export function createRealtimeWorldSnapshot({
   includeRemotePlayer = true,
   includeVehicle = true,
   localAnimationVocabulary = "idle",
+  localCombat = undefined,
   localJumpAuthorityState,
   localJumpDebug,
   localGroundedBody,
@@ -98,6 +99,7 @@ export function createRealtimeWorldSnapshot({
   localUsername,
   localYawRadians = 0,
   remoteAnimationVocabulary,
+  remoteCombat = undefined,
   remoteLinearVelocity,
   remoteLocomotionMode,
   remoteLookPitchRadians = 0,
@@ -270,6 +272,7 @@ export function createRealtimeWorldSnapshot({
         angularVelocityRadiansPerSecond: 0,
         animationVocabulary: localAnimationVocabulary,
         characterId: "mesh2motion-humanoid-v1",
+        ...(localCombat === undefined ? {} : { combat: localCombat }),
         groundedBody: localCanonicalGroundedBody,
         look: {
           pitchRadians: localLookPitchRadians,
@@ -307,6 +310,7 @@ export function createRealtimeWorldSnapshot({
                 remotePlayerAngularVelocityRadiansPerSecond,
               animationVocabulary: resolvedRemoteAnimationVocabulary,
               characterId: "mesh2motion-humanoid-v1",
+              ...(remoteCombat === undefined ? {} : { combat: remoteCombat }),
               groundedBody: remoteCanonicalGroundedBody,
               look: {
                 pitchRadians: remoteLookPitchRadians,

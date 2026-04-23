@@ -84,6 +84,10 @@ interface MetaverseAuthoritativePlayerPoseAuthorityDependencies<
   readonly mountedOccupancyAuthority:
     MetaverseAuthoritativeMountedOccupancyResolver<MountedOccupancy>;
   readonly playersById: Map<MetaversePlayerId, PlayerRuntime>;
+  readonly resolveAcceptedTeamId: (
+    playerId: MetaversePlayerId,
+    requestedTeamId: MetaversePlayerTeamId
+  ) => MetaversePlayerTeamId;
   readonly resolveAuthoritativeSurfaceColliders:
     () => readonly MetaverseAuthoritativeSurfaceColliderSnapshot[];
   readonly resolveJoinPose: (
@@ -191,7 +195,12 @@ export class MetaverseAuthoritativePlayerPoseAuthority<
 
   acceptJoinCommand(command: MetaverseJoinPresenceCommand, nowMs: number): void {
     const currentPlayer = this.#dependencies.playersById.get(command.playerId);
-    const resolvedTeamId = currentPlayer?.teamId ?? command.teamId;
+    const resolvedTeamId =
+      currentPlayer?.teamId ??
+      this.#dependencies.resolveAcceptedTeamId(
+        command.playerId,
+        command.teamId
+      );
     const nextPose = this.#resolvePreAuthoritySpawnPose(
       command.playerId,
       resolvedTeamId,

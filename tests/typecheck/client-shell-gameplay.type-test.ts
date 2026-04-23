@@ -2,6 +2,7 @@ import type {
   Degrees,
   GameplaySessionMode,
   Milliseconds,
+  MetaverseMatchModeId,
   PlayerProfile,
   Radians
 } from "@webgpu-metaverse/shared";
@@ -80,7 +81,7 @@ type ExpectedShellActionType =
   | "profileCleared"
   | "profileConfirmed"
   | "profileEditRequested"
-  | "sessionModeChanged"
+  | "matchModeChanged"
   | "setupRequested"
   | "sfxVolumeChanged"
   | "usernameDraftChanged";
@@ -227,13 +228,13 @@ type GameplaySessionModeCatalogMatches = AssertTrue<
 type GameplayHudSessionModeMatches = AssertTrue<
   IsEqual<GameplayHudSnapshot["session"]["mode"], GameplaySessionMode>
 >;
-type SessionModeActionPayloadMatches = AssertTrue<
+type MatchModeActionPayloadMatches = AssertTrue<
   IsEqual<
     Extract<
       MetaverseShellControllerAction,
-      { readonly type: "sessionModeChanged" }
-    >["sessionMode"],
-    GameplaySessionMode
+      { readonly type: "matchModeChanged" }
+    >["matchMode"],
+    MetaverseMatchModeId
   >
 >;
 type GameplayTelemetryReticleStateMatches = AssertTrue<
@@ -421,7 +422,7 @@ export type ClientShellGameplayTypeTests =
   | GameplaySessionModeMatches
   | GameplaySessionModeCatalogMatches
   | GameplayHudSessionModeMatches
-  | SessionModeActionPayloadMatches
+  | MatchModeActionPayloadMatches
   | GameplayTelemetryReticleStateMatches
   | GameplayTelemetrySessionPhaseMatches
   | WeaponReadinessMatches

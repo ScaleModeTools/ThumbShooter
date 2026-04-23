@@ -156,7 +156,7 @@ export function useMetaverseShellController(): MetaverseShellController {
     permissionError: state.permissionError,
     permissionState: state.permissionState,
     profile: state.profile,
-    sessionMode: state.sessionMode,
+    matchMode: state.matchMode,
     shellView,
     usernameDraft: state.usernameDraft,
     setUsernameDraft: entryPolicy.setUsernameDraft,
@@ -199,10 +199,10 @@ export function useMetaverseShellController(): MetaverseShellController {
     onRequestPermission: entryPolicy.onRequestPermission,
     onReturnToMetaverseRequest: flowPolicy.onReturnToMetaverseRequest,
     onRetryCapabilityProbe: entryPolicy.onRetryCapabilityProbe,
-    onSessionModeChange: (sessionMode) => {
+    onMatchModeChange: (matchMode) => {
       dispatch({
-        sessionMode,
-        type: "sessionModeChanged"
+        matchMode,
+        type: "matchModeChanged"
       });
     },
     onSetupRequest: flowPolicy.onSetupRequest,

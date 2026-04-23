@@ -33,6 +33,12 @@ import {
   type MetaverseVehicleId
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 import type {
+  MetaverseCombatFeedEventSnapshot,
+  MetaverseCombatMatchSnapshot,
+  MetaverseCombatProjectileSnapshot,
+  MetaversePlayerCombatSnapshot
+} from "@webgpu-metaverse/shared/metaverse";
+import type {
   MetaverseAuthoritativeLastGroundedBodySnapshot
 } from "../players/metaverse-authoritative-last-grounded-body-snapshot.js";
 
@@ -122,10 +128,17 @@ export interface MetaverseAuthoritativeSnapshotEnvironmentBodyRuntimeState {
 }
 
 export interface MetaverseAuthoritativeWorldSnapshotAssemblyConfig {
+  readonly combatFeed: readonly MetaverseCombatFeedEventSnapshot[];
+  readonly combatMatch: MetaverseCombatMatchSnapshot | null;
   readonly currentTick: number;
   readonly lastAdvancedAtMs: number | null;
   readonly nowMs: number;
   readonly observerPlayerId?: MetaversePlayerId;
+  readonly playerCombatSnapshotsByPlayerId: ReadonlyMap<
+    MetaversePlayerId,
+    MetaversePlayerCombatSnapshot
+  >;
+  readonly projectiles: readonly MetaverseCombatProjectileSnapshot[];
   readonly snapshotSequence: number;
   readonly tickIntervalMs: number;
 }
@@ -245,6 +258,9 @@ export function createMetaverseAuthoritativeWorldSnapshot<
         angularVelocityRadiansPerSecond:
           playerRuntime.angularVelocityRadiansPerSecond,
         characterId: playerRuntime.characterId,
+        combat:
+          config.playerCombatSnapshotsByPlayerId.get(playerRuntime.playerId) ??
+          null,
         groundedBody: Object.freeze({
           contact: playerRuntime.lastGroundedBodySnapshot.contact,
           driveTarget: playerRuntime.lastGroundedBodySnapshot.driveTarget,
@@ -352,6 +368,8 @@ export function createMetaverseAuthoritativeWorldSnapshot<
     }));
 
   return createMetaverseRealtimeWorldSnapshot({
+    combatFeed: config.combatFeed,
+    combatMatch: config.combatMatch,
     environmentBodies,
     ...(observerPlayerRuntime === null
       ? {}
@@ -359,6 +377,7 @@ export function createMetaverseAuthoritativeWorldSnapshot<
           observerPlayer: createObserverPlayerSnapshot(observerPlayerRuntime)
         }),
     players,
+    projectiles: config.projectiles,
     snapshotSequence: config.snapshotSequence,
     tick: {
       currentTick: config.currentTick,

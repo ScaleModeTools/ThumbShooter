@@ -71,6 +71,10 @@ interface MetaverseRuntimeFrameBootLifecycle {
   };
 }
 
+interface MetaverseRuntimeFrameCombatLifecycle {
+  syncLocalCombatState(liveCameraSnapshot: MetaverseCameraSnapshot): void;
+}
+
 interface MetaverseRuntimeFrameAuthoritativeWorldSync {
   syncAuthoritativeWorldSnapshots(): void;
 }
@@ -119,6 +123,20 @@ interface MetaverseRuntimeFrameRemoteWorldRuntime {
     traversalIntentInput: MetaversePlayerTraversalIntentSnapshotInput | null
   ): unknown;
   sampleRemoteWorld(): void;
+  fireWeapon(input: {
+    readonly aimMode?: "ads" | "hip-fire";
+    readonly forwardDirection: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly muzzleOrigin: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly weaponId: string;
+  }): void;
   syncConnection(presenceJoined: boolean): void;
   syncLocalDriverVehicleControl(
     controlIntentSnapshot: RoutedDriverVehicleControlIntentSnapshot | null
@@ -186,6 +204,7 @@ interface MetaverseRuntimeFrameTraversalRuntime {
 interface MetaverseRuntimeFrameWeaponPresentationRuntime {
   readonly adsBlend: number;
   readonly cameraFieldOfViewDegrees: number;
+  readonly firePressedThisFrame: boolean;
   readonly weaponState: MetaverseRealtimePlayerSnapshot["weaponState"] | null;
   advance(input: {
     readonly deltaSeconds: number;
@@ -200,6 +219,7 @@ interface MetaverseRuntimeFrameWeaponPresentationRuntime {
 interface MetaverseRuntimeFrameLoopDependencies {
   readonly authoritativeWorldSync: MetaverseRuntimeFrameAuthoritativeWorldSync;
   readonly bootLifecycle: MetaverseRuntimeFrameBootLifecycle;
+  readonly combatLifecycle?: MetaverseRuntimeFrameCombatLifecycle;
   readonly devicePixelRatio: number;
   readonly environmentPhysicsRuntime: MetaverseRuntimeFrameEnvironmentPhysicsRuntime;
   readonly flightInputRuntime: MetaverseRuntimeFrameFlightInputRuntime;
@@ -218,9 +238,21 @@ interface MetaverseRuntimeFrameSyncRequest {
   readonly renderer: MetaverseRuntimeFrameRendererHost;
 }
 
+function createProjectedMuzzleOrigin(
+  cameraSnapshot: MetaverseCameraSnapshot,
+  distanceMeters = 0.35
+): MetaverseCameraSnapshot["position"] {
+  return Object.freeze({
+    x: cameraSnapshot.position.x + cameraSnapshot.lookDirection.x * distanceMeters,
+    y: cameraSnapshot.position.y + cameraSnapshot.lookDirection.y * distanceMeters,
+    z: cameraSnapshot.position.z + cameraSnapshot.lookDirection.z * distanceMeters
+  });
+}
+
 export class MetaverseRuntimeFrameLoop {
   readonly #authoritativeWorldSync: MetaverseRuntimeFrameAuthoritativeWorldSync;
   readonly #bootLifecycle: MetaverseRuntimeFrameBootLifecycle;
+  readonly #combatLifecycle: MetaverseRuntimeFrameCombatLifecycle | null;
   readonly #devicePixelRatio: number;
   readonly #environmentPhysicsRuntime: MetaverseRuntimeFrameEnvironmentPhysicsRuntime;
   readonly #flightInputRuntime: MetaverseRuntimeFrameFlightInputRuntime;
@@ -245,6 +277,7 @@ export class MetaverseRuntimeFrameLoop {
   constructor({
     authoritativeWorldSync,
     bootLifecycle,
+    combatLifecycle,
     devicePixelRatio,
     environmentPhysicsRuntime,
     flightInputRuntime,
@@ -258,6 +291,7 @@ export class MetaverseRuntimeFrameLoop {
   }: MetaverseRuntimeFrameLoopDependencies) {
     this.#authoritativeWorldSync = authoritativeWorldSync;
     this.#bootLifecycle = bootLifecycle;
+    this.#combatLifecycle = combatLifecycle ?? null;
     this.#devicePixelRatio = devicePixelRatio;
     this.#environmentPhysicsRuntime = environmentPhysicsRuntime;
     this.#flightInputRuntime = flightInputRuntime;
@@ -331,6 +365,7 @@ export class MetaverseRuntimeFrameLoop {
     this.#presenceRuntime.syncRemoteCharacterPresentations();
 
     const preAdvanceCameraSnapshot = this.#traversalRuntime.cameraSnapshot;
+    this.#combatLifecycle?.syncLocalCombatState(preAdvanceCameraSnapshot);
     const preAdvanceFocusedPortal = resolveFocusedPortalSnapshot(
       preAdvanceCameraSnapshot,
       this.#portals
@@ -437,6 +472,18 @@ export class MetaverseRuntimeFrameLoop {
     this.#remoteWorldRuntime.syncLocalPlayerWeaponState?.(
       weaponPresentationRuntime?.weaponState ?? null
     );
+    if (
+      weaponPresentationRuntime?.firePressedThisFrame === true &&
+      mountedEnvironment === null &&
+      weaponPresentationRuntime.weaponState !== null
+    ) {
+      this.#remoteWorldRuntime.fireWeapon({
+        aimMode: weaponPresentationRuntime.weaponState.aimMode,
+        forwardDirection: cameraSnapshot.lookDirection,
+        muzzleOrigin: createProjectedMuzzleOrigin(cameraSnapshot),
+        weaponId: weaponPresentationRuntime.weaponState.weaponId
+      });
+    }
     this.#remoteWorldRuntime.syncLocalDriverVehicleControl(
       this.#traversalRuntime.routedDriverVehicleControlIntentSnapshot
     );

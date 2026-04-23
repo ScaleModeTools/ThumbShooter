@@ -25,6 +25,9 @@ import {
   type MetaverseRealtimePlayerTraversalActionKindId,
   type MetaverseRealtimeWorldClientCommand
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import {
+  createMetaverseFireWeaponCommand
+} from "@webgpu-metaverse/shared/metaverse";
 
 import type { MetaverseAuthoritativeWorldRuntimeOwner } from "../types/metaverse-authoritative-world-runtime-owner.js";
 
@@ -402,6 +405,19 @@ function parseWorldLookIntent(lookIntentBody: Record<string, unknown>) {
   };
 }
 
+function parseWorldVector3(
+  body: unknown,
+  fieldName: string
+) {
+  const vector3 = readRecordField(body, fieldName);
+
+  return {
+    x: readNumberField(vector3.x, `${fieldName}.x`),
+    y: readNumberField(vector3.y, `${fieldName}.y`),
+    z: readNumberField(vector3.z, `${fieldName}.z`)
+  };
+}
+
 function parseWorldPlayerWeaponState(weaponStateBody: unknown) {
   if (weaponStateBody === null) {
     return null;
@@ -440,6 +456,32 @@ function parseWorldCommand(
   const commandType = readStringField(body.type, "type");
 
   switch (commandType) {
+    case "fire-weapon":
+      return createMetaverseFireWeaponCommand({
+        ...(body.aimMode === undefined
+          ? {}
+          : {
+              aimMode: readStringField(body.aimMode, "aimMode") as
+                | "ads"
+                | "hip-fire"
+            }),
+        ...(body.clientFireTimeMs === undefined
+          ? {}
+          : {
+              clientFireTimeMs: readNumberField(
+                body.clientFireTimeMs,
+                "clientFireTimeMs"
+              )
+            }),
+        fireSequence: readNumberField(body.fireSequence, "fireSequence"),
+        forwardDirection: parseWorldVector3(
+          body.forwardDirection,
+          "forwardDirection"
+        ),
+        muzzleOrigin: parseWorldVector3(body.muzzleOrigin, "muzzleOrigin"),
+        playerId: resolvePlayerId(readStringField(body.playerId, "playerId")),
+        weaponId: readStringField(body.weaponId, "weaponId")
+      });
     case "sync-mounted-occupancy":
       return createMetaverseSyncMountedOccupancyCommand({
         mountedOccupancy: parseWorldMountedOccupancy(

@@ -1,6 +1,6 @@
 import type {
   ExperienceId,
-  GameplaySessionMode,
+  MetaverseMatchModeId,
   MetaverseMapBundleLaunchVariationSnapshot,
   MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared";
@@ -10,7 +10,7 @@ export interface MetaverseWorldPreviewLaunchSelectionSnapshot {
   readonly bundleLabel: string;
   readonly experienceId: ExperienceId | null;
   readonly gameplayVariationId: string | null;
-  readonly sessionMode: GameplaySessionMode | null;
+  readonly matchMode: MetaverseMatchModeId | null;
   readonly sourceBundleId: string;
   readonly variationId: string | null;
   readonly variationLabel: string | null;
@@ -45,7 +45,7 @@ export function createMetaverseWorldPreviewLaunchSelection(
     bundleLabel: bundle.label,
     experienceId: launchVariation?.experienceId ?? null,
     gameplayVariationId: launchVariation?.gameplayVariationId ?? null,
-    sessionMode: launchVariation?.sessionMode ?? null,
+    matchMode: launchVariation?.matchMode ?? null,
     sourceBundleId,
     variationId: launchVariation?.variationId ?? null,
     variationLabel: launchVariation?.label ?? null,

@@ -259,6 +259,12 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
     return this.#latestAuthoritativeRemotePlayerSnapshots;
   }
 
+  readFreshAuthoritativeWorldSnapshot(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): MetaverseRealtimeWorldSnapshot | null {
+    return this.#readFreshLatestWorldSnapshot(maxAuthoritativeSnapshotAgeMs);
+  }
+
   #readFreshLatestWorldSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
   ): MetaverseRealtimeWorldSnapshot | null {

@@ -100,10 +100,21 @@ export const stagingGroundMapBundle = Object.freeze({
       experienceId: null,
       gameplayVariationId: null,
       label: "Free Roam",
-      sessionMode: null,
+      matchMode: "free-roam",
       variationId: "shell-free-roam",
       vehicleLayoutId: null,
       weaponLayoutId: null
+    }),
+    Object.freeze({
+      description:
+        "Boot the staging-ground instance into authoritative red-vs-blue team deathmatch.",
+      experienceId: null,
+      gameplayVariationId: "metaverse-shell-team-deathmatch-v1",
+      label: "Shell Team Deathmatch",
+      matchMode: "team-deathmatch",
+      variationId: "shell-team-deathmatch",
+      vehicleLayoutId: null,
+      weaponLayoutId: "duck-hunt-default-pistol-layout"
     }),
     Object.freeze({
       description:
@@ -111,7 +122,7 @@ export const stagingGroundMapBundle = Object.freeze({
       experienceId: "duck-hunt",
       gameplayVariationId: "duck-hunt-standard-preview",
       label: "Duck Hunt Preview",
-      sessionMode: "single-player",
+      matchMode: "free-roam",
       variationId: "duck-hunt-preview",
       vehicleLayoutId: "staging-ground-default-vehicle-layout",
       weaponLayoutId: "duck-hunt-default-pistol-layout"

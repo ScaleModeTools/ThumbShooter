@@ -4,6 +4,12 @@ import type {
   MetaversePresenceRosterSnapshot
 } from "@webgpu-metaverse/shared/metaverse/presence";
 import type {
+  MetaverseCombatFeedEventSnapshot,
+  MetaverseCombatMatchSnapshot,
+  MetaverseCombatProjectileSnapshot,
+  MetaversePlayerCombatSnapshot
+} from "@webgpu-metaverse/shared/metaverse";
+import type {
   MetaverseRealtimeWorldSnapshot,
   MetaverseVehicleId
 } from "@webgpu-metaverse/shared/metaverse/realtime";
@@ -42,10 +48,19 @@ interface MetaverseAuthoritativeWorldReadStateDependencies<
     EnvironmentBodyRuntime
   >;
   readonly playersById: Map<MetaversePlayerId, PlayerRuntime>;
+  readonly readCombatFeedSnapshots:
+    () => readonly MetaverseCombatFeedEventSnapshot[];
+  readonly readCombatMatchSnapshot: () => MetaverseCombatMatchSnapshot | null;
+  readonly readPlayerCombatSnapshot: (
+    playerId: MetaversePlayerId
+  ) => MetaversePlayerCombatSnapshot | null;
+  readonly readProjectileSnapshots:
+    () => readonly MetaverseCombatProjectileSnapshot[];
   readonly readCurrentTick: () => number;
   readonly readLastAdvancedAtMs: () => number | null;
   readonly readSnapshotSequence: () => number;
   readonly readTickIntervalMs: () => number;
+  readonly syncGameplayState: (nowMs: number) => void;
   readonly traversalIntentsByPlayerId: ReadonlyMap<
     MetaversePlayerId,
     MetaverseAuthoritativeSnapshotPlayerTraversalIntentRuntimeState
@@ -100,6 +115,10 @@ export class MetaverseAuthoritativeWorldReadState<
     observerPlayerId?: MetaversePlayerId
   ): MetaverseRealtimeWorldSnapshot {
     const normalizedNowMs = normalizeNowMs(nowMs);
+    const playerCombatSnapshotsByPlayerId = new Map<
+      MetaversePlayerId,
+      MetaversePlayerCombatSnapshot
+    >();
 
     if (
       observerPlayerId !== undefined &&
@@ -112,14 +131,33 @@ export class MetaverseAuthoritativeWorldReadState<
       this.#recordObserverHeartbeat(observerPlayerId, normalizedNowMs);
     }
 
+    this.#dependencies.syncGameplayState(normalizedNowMs);
+
+    for (const playerRuntime of this.#dependencies.playersById.values()) {
+      const combatSnapshot = this.#dependencies.readPlayerCombatSnapshot(
+        playerRuntime.playerId
+      );
+
+      if (combatSnapshot !== null) {
+        playerCombatSnapshotsByPlayerId.set(
+          playerRuntime.playerId,
+          combatSnapshot
+        );
+      }
+    }
+
     return createMetaverseAuthoritativeWorldSnapshot({
+      combatFeed: this.#dependencies.readCombatFeedSnapshots(),
+      combatMatch: this.#dependencies.readCombatMatchSnapshot(),
       currentTick: this.#dependencies.readCurrentTick(),
       environmentBodies:
         this.#dependencies.environmentBodiesByEnvironmentAssetId.values(),
       lastAdvancedAtMs: this.#dependencies.readLastAdvancedAtMs(),
       nowMs: normalizedNowMs,
       ...(observerPlayerId === undefined ? {} : { observerPlayerId }),
+      playerCombatSnapshotsByPlayerId,
       players: this.#dependencies.playersById.values(),
+      projectiles: this.#dependencies.readProjectileSnapshots(),
       snapshotSequence: this.#dependencies.readSnapshotSequence(),
       tickIntervalMs: this.#dependencies.readTickIntervalMs(),
       traversalIntentsByPlayerId: this.#dependencies.traversalIntentsByPlayerId,

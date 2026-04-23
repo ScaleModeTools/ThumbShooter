@@ -9,7 +9,7 @@ test("MetaverseSessionRuntime exposes the shared hub session snapshot", () => {
 
   assert.equal(sessionSnapshot.activeExperienceId, null);
   assert.deepEqual(sessionSnapshot.availableExperienceIds, ["duck-hunt"]);
-  assert.equal(sessionSnapshot.selectedSessionMode, null);
+  assert.equal(sessionSnapshot.selectedMatchMode, "team-deathmatch");
   assert.equal(sessionSnapshot.tickOwner, "server");
   assert.ok(Object.isFrozen(sessionSnapshot.availableExperienceIds));
 });

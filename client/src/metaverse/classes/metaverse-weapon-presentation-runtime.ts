@@ -205,6 +205,7 @@ export class MetaverseWeaponPresentationRuntime {
   #adsBlend = 0;
   #aimMode: MetaverseRealtimePlayerWeaponAimModeId = "hip-fire";
   #cameraFieldOfViewDegrees: number;
+  #firePressedThisFrame = false;
   #fireTriggerHeld = false;
   #hudSnapshot: MetaverseWeaponHudSnapshot = hiddenWeaponHudSnapshot;
   #secondaryActionHeld = false;
@@ -234,6 +235,10 @@ export class MetaverseWeaponPresentationRuntime {
     return this.#fireTriggerHeld;
   }
 
+  get firePressedThisFrame(): boolean {
+    return this.#firePressedThisFrame;
+  }
+
   get hudSnapshot(): MetaverseWeaponHudSnapshot {
     return this.#hudSnapshot;
   }
@@ -255,6 +260,7 @@ export class MetaverseWeaponPresentationRuntime {
     this.#adsBlend = 0;
     this.#aimMode = "hip-fire";
     this.#cameraFieldOfViewDegrees = this.#baseFieldOfViewDegrees;
+    this.#firePressedThisFrame = false;
     this.#fireTriggerHeld = false;
     this.#secondaryActionHeld = false;
     this.#syncPublishedState(false, "hip-fire");
@@ -267,6 +273,8 @@ export class MetaverseWeaponPresentationRuntime {
   }: AdvanceWeaponPresentationInput): void {
     const resolvedWeapon = this.#resolvedWeapon;
     const visible = resolvedWeapon !== null && mountedEnvironment === null;
+    const primaryActionPressedThisFrame =
+      visible && flightInput.primaryAction && !this.#fireTriggerHeld;
     const secondaryActionPressedThisFrame =
       flightInput.secondaryAction && !this.#secondaryActionHeld;
 
@@ -288,6 +296,7 @@ export class MetaverseWeaponPresentationRuntime {
         : clamp(deltaSeconds / adsTransitionSeconds, 0, 1);
 
     this.#aimMode = targetAimMode;
+    this.#firePressedThisFrame = primaryActionPressedThisFrame;
     this.#fireTriggerHeld = visible && flightInput.primaryAction;
     this.#adsBlend = moveToward(
       this.#adsBlend,

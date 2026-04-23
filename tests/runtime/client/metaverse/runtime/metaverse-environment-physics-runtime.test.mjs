@@ -697,6 +697,92 @@ test("MetaverseEnvironmentPhysicsRuntime keeps authoritative remote player block
   environmentPhysicsRuntime.dispose();
 });
 
+test("MetaverseEnvironmentPhysicsRuntime removes dead remote player blocker colliders immediately", async () => {
+  const [
+    { Group },
+    { metaverseRuntimeConfig },
+    { MetaverseEnvironmentPhysicsRuntime },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/classes/metaverse-environment-physics-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { physicsRuntime, world } =
+    createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime);
+  const environmentPhysicsRuntime = new MetaverseEnvironmentPhysicsRuntime(
+    metaverseRuntimeConfig,
+    {
+      createSceneAssetLoader: () => ({
+        async loadAsync() {
+          return {
+            animations: [],
+            scene: new Group()
+          };
+        }
+      }),
+      environmentProofConfig: null,
+      groundedBodyRuntime: {
+        async init() {},
+        dispose() {},
+        syncInteractionSnapshot() {}
+      },
+      physicsRuntime,
+      sceneRuntime: {
+        scene: new Group(),
+        setDynamicEnvironmentPose() {}
+      },
+      showPhysicsDebug: false
+    }
+  );
+
+  await environmentPhysicsRuntime.boot(0);
+
+  environmentPhysicsRuntime.syncAuthoritativeRemotePlayerBlockers([
+    Object.freeze({
+      combat: Object.freeze({
+        alive: true,
+        health: 100
+      }),
+      groundedBody: Object.freeze({
+        linearVelocity: Object.freeze({ x: 0, y: 0, z: 0 }),
+        position: Object.freeze({ x: 2.4, y: 0.68, z: -5.2 }),
+        yawRadians: 0
+      }),
+      locomotionMode: "grounded",
+      mountedOccupancy: null,
+      playerId: "remote-deckhand-1",
+      swimBody: null
+    })
+  ]);
+
+  assert.equal(world.colliders.length, 1);
+
+  environmentPhysicsRuntime.syncAuthoritativeRemotePlayerBlockers([
+    Object.freeze({
+      combat: Object.freeze({
+        alive: false,
+        health: 0,
+        respawnRemainingMs: 3_000
+      }),
+      groundedBody: Object.freeze({
+        linearVelocity: Object.freeze({ x: 0, y: 0, z: 0 }),
+        position: Object.freeze({ x: 2.4, y: 0.68, z: -5.2 }),
+        yawRadians: 0
+      }),
+      locomotionMode: "grounded",
+      mountedOccupancy: null,
+      playerId: "remote-deckhand-1",
+      swimBody: null
+    })
+  ]);
+
+  assert.equal(world.colliders.length, 0);
+
+  environmentPhysicsRuntime.dispose();
+});
+
 test("MetaverseEnvironmentPhysicsRuntime keeps authoritative environment-body collision sync separate from scene presentation for the current frame", async () => {
   const [
     { Group },

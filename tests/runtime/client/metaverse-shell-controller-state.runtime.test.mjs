@@ -62,7 +62,7 @@ test("createInitialMetaverseShellControllerState seeds typed shell policy from h
   assert.equal(state.shellStage, "main-menu");
   assert.equal(state.activeExperienceId, null);
   assert.equal(state.permissionState, "prompt");
-  assert.equal(state.sessionMode, "single-player");
+  assert.equal(state.matchMode, "team-deathmatch");
 });
 
 test("metaverse entry and tool preview auto-confirm a guest profile when none is stored", async () => {
@@ -117,7 +117,7 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
       bundleLabel: "Custom Preview",
       experienceId: null,
       gameplayVariationId: null,
-      sessionMode: null,
+      matchMode: null,
       sourceBundleId: "staging-ground",
       variationId: "custom-free-roam",
       variationLabel: "Custom Free Roam",
@@ -145,7 +145,7 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
       bundleLabel: "Staging Ground",
       experienceId: null,
       gameplayVariationId: null,
-      sessionMode: null,
+      matchMode: null,
       sourceBundleId: "staging-ground",
       variationId: "shell-free-roam",
       variationLabel: "Free Roam",
@@ -228,8 +228,8 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
     open: true
   });
   state = reduceMetaverseShellControllerState(state, {
-    type: "sessionModeChanged",
-    sessionMode: "co-op"
+    type: "matchModeChanged",
+    matchMode: "free-roam"
   });
   state = reduceMetaverseShellControllerState(state, {
     type: "bestScoreRaised",
@@ -252,7 +252,7 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.profile?.snapshot.bestScore, 300);
   assert.equal(state.profile?.snapshot.audioSettings.mix.musicVolume, 0.2);
   assert.equal(state.profile?.snapshot.audioSettings.mix.sfxVolume, 0.45);
-  assert.equal(state.sessionMode, "co-op");
+  assert.equal(state.matchMode, "free-roam");
 
   state = reduceMetaverseShellControllerState(state, {
     controlMode: "mouse",
@@ -361,7 +361,7 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.controllerConfiguration.metaverseControllerSchemeId, "keyboard");
   assert.equal(state.usernameDraft, "");
   assert.equal(state.isMenuOpen, false);
-  assert.equal(state.sessionMode, "single-player");
+  assert.equal(state.matchMode, "team-deathmatch");
   assert.equal(state.shellStage, "main-menu");
   assert.equal(state.activeExperienceId, null);
 });

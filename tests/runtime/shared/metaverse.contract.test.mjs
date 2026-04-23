@@ -123,12 +123,12 @@ test("createPortalLaunchSelectionSnapshot resolves the authority model from the 
   const singlePlayerLaunch = createPortalLaunchSelectionSnapshot({
     experienceId: "duck-hunt",
     inputMode: "mouse",
-    sessionMode: "single-player"
+    matchMode: "free-roam"
   });
   const coopLaunch = createPortalLaunchSelectionSnapshot({
     experienceId: "duck-hunt",
     inputMode: "camera-thumb-trigger",
-    sessionMode: "co-op"
+    matchMode: "team-deathmatch"
   });
 
   assert.equal(singlePlayerLaunch.tickOwner, "client");
@@ -140,7 +140,7 @@ test("createMetaverseSessionSnapshot freezes the available experience ids", () =
   const sessionSnapshot = createMetaverseSessionSnapshot({
     activeExperienceId: null,
     availableExperienceIds: inputExperienceIds,
-    selectedSessionMode: "single-player",
+    selectedMatchMode: "team-deathmatch",
     tickOwner: "server"
   });
 

@@ -1,6 +1,6 @@
 import type {
   ExperienceId,
-  GameplaySessionMode
+  MetaverseMatchModeId
 } from "@webgpu-metaverse/shared";
 
 import type { LoadedMetaverseMapBundleSnapshot } from "@/metaverse/world/map-bundles";
@@ -10,7 +10,7 @@ export interface MapEditorLaunchVariationDraftSnapshot {
   readonly experienceId: ExperienceId | null;
   readonly gameplayVariationId: string | null;
   readonly label: string;
-  readonly sessionMode: GameplaySessionMode | null;
+  readonly matchMode: MetaverseMatchModeId | null;
   readonly variationId: string;
   readonly vehicleLayoutId: string | null;
   readonly weaponLayoutId: string | null;
@@ -24,7 +24,7 @@ export function freezeLaunchVariationDraft(
     experienceId: draft.experienceId,
     gameplayVariationId: draft.gameplayVariationId,
     label: draft.label,
-    sessionMode: draft.sessionMode,
+    matchMode: draft.matchMode,
     variationId: draft.variationId,
     vehicleLayoutId: draft.vehicleLayoutId,
     weaponLayoutId: draft.weaponLayoutId
@@ -41,7 +41,7 @@ export function createLaunchVariationDrafts(
         experienceId: launchVariation.experienceId,
         gameplayVariationId: launchVariation.gameplayVariationId,
         label: launchVariation.label,
-        sessionMode: launchVariation.sessionMode,
+        matchMode: launchVariation.matchMode,
         variationId: launchVariation.variationId,
         vehicleLayoutId: launchVariation.vehicleLayoutId,
         weaponLayoutId: launchVariation.weaponLayoutId

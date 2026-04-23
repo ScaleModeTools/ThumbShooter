@@ -2,9 +2,6 @@ import type {
   ExperienceId
 } from "../../experience-catalog.js";
 import type {
-  GameplaySessionMode
-} from "../../../experiences/duck-hunt/duck-hunt-room-contract.js";
-import type {
   MetaverseWorldEnvironmentDynamicBodyAuthoring,
   MetaverseWorldEnvironmentTraversalAffordanceId,
   MetaverseWorldMountedEntryAuthoring,
@@ -18,6 +15,7 @@ import type {
 } from "../../metaverse-world-surface-query.js";
 import type { MetaversePlayerTeamId } from "../../metaverse-player-team.js";
 import { metaversePlayerTeamIds } from "../../metaverse-player-team.js";
+import type { MetaverseMatchModeId } from "../../metaverse-match-mode.js";
 
 export interface MetaverseMapBundlePlacementSnapshot {
   readonly collisionEnabled: boolean;
@@ -115,7 +113,7 @@ export interface MetaverseMapBundleLaunchVariationSnapshot {
   readonly experienceId: ExperienceId | null;
   readonly gameplayVariationId: string | null;
   readonly label: string;
-  readonly sessionMode: GameplaySessionMode | null;
+  readonly matchMode: MetaverseMatchModeId | null;
   readonly variationId: string;
   readonly vehicleLayoutId: string | null;
   readonly weaponLayoutId: string | null;

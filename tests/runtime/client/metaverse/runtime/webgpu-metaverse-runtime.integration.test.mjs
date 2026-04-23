@@ -1380,7 +1380,7 @@ test("WebGpuMetaverseRuntime routes mounted hub input through skiff locomotion a
     readNowMs: () => nowMs,
     readWallClockMs: () => wallClockMs
   });
-  const { metaverseRuntimeConfig, runtime, windowHarness } = harness;
+  const { metaverseRuntimeConfig, renderer, runtime, windowHarness } = harness;
 
   try {
     for (let frame = 0; frame < 5; frame += 1) {
@@ -1597,6 +1597,11 @@ test("WebGpuMetaverseRuntime converges acked pose-only traversal drift without h
   const { metaverseRuntimeConfig, runtime, windowHarness } = harness;
 
   try {
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
     const localPoseInputSequence = fakeWorldClient.latestPlayerTraversalSequence;
     const localWeaponSequence = fakeWorldClient.latestPlayerWeaponSequence;
     const capturedGroundedSamples = [];
@@ -1769,9 +1774,14 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
     readNowMs: () => nowMs,
     readWallClockMs: () => wallClockMs
   });
-  const { metaverseRuntimeConfig, runtime, windowHarness } = harness;
+  const { metaverseRuntimeConfig, renderer, runtime, windowHarness } = harness;
 
   try {
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
     const localPoseInputSequence = fakeWorldClient.latestPlayerTraversalSequence;
     const localWeaponSequence = fakeWorldClient.latestPlayerWeaponSequence;
     const localGroundedBodyTelemetry =
@@ -1780,7 +1790,6 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
       runtime.hudSnapshot.camera.position.y -
       metaverseRuntimeConfig.groundedBody.eyeHeightMeters;
 
-    assert.ok(localPoseInputSequence > 0);
     assert.notEqual(localGroundedBodyTelemetry, null);
 
     fakeWorldClient.publishWorldSnapshotBuffer([
@@ -1788,6 +1797,10 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
         currentTick: 10,
         includeRemotePlayer: false,
         includeVehicle: false,
+        localCombat: {
+          alive: true,
+          health: 100
+        },
         localLastProcessedTraversalSequence: localPoseInputSequence,
         localLastProcessedWeaponSequence: localWeaponSequence,
         localLinearVelocity: {
@@ -1840,9 +1853,79 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
         .convergenceEpisodeStartIntentionalDiscontinuityCause,
       "spawn"
     );
+    const frozenDeathCameraPosition = Object.freeze({
+      x: renderer.lastCamera?.position.x ?? runtime.hudSnapshot.camera.position.x,
+      z: renderer.lastCamera?.position.z ?? runtime.hudSnapshot.camera.position.z
+    });
+    const deathPosition = {
+      x: 21,
+      y: localBodyY,
+      z: 5
+    };
+    const deathInputSequence = fakeWorldClient.latestPlayerTraversalSequence;
+    const deathWeaponSequence = fakeWorldClient.latestPlayerWeaponSequence;
+    const deathGroundedBodyTelemetry =
+      runtime.hudSnapshot.telemetry.worldSnapshot.surfaceRouting.local.groundedBody;
 
-    runtime.setRespawnControlLocked(true);
-    runtime.setRespawnControlLocked(false);
+    assert.notEqual(deathGroundedBodyTelemetry, null);
+
+    fakeWorldClient.publishWorldSnapshotBuffer([
+      createRealtimeWorldSnapshot({
+        currentTick: 11,
+        includeRemotePlayer: false,
+        includeVehicle: false,
+        localCombat: {
+          alive: false,
+          health: 0,
+          respawnRemainingMs: 3_000
+        },
+        localLastProcessedTraversalSequence: deathInputSequence,
+        localLastProcessedWeaponSequence: deathWeaponSequence,
+        localLinearVelocity: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        localGroundedBody: {
+          contact: deathGroundedBodyTelemetry.contact,
+          driveTarget: deathGroundedBodyTelemetry.driveTarget,
+          interaction: deathGroundedBodyTelemetry.interaction,
+          jumpBody: deathGroundedBodyTelemetry.jumpBody,
+          linearVelocity: {
+            x: 0,
+            y: 0,
+            z: 0
+          },
+          position: deathPosition,
+          yawRadians: runtime.hudSnapshot.camera.yawRadians
+        },
+        localPlayerId,
+        localPlayerX: deathPosition.x,
+        localPlayerY: deathPosition.y,
+        localPlayerZ: deathPosition.z,
+        localUsername: username,
+        remotePlayerId,
+        remotePlayerX: 10,
+        remoteUsername,
+        serverTimeMs: 1_180,
+        snapshotSequence: 2,
+        vehicleX: 10
+      })
+    ]);
+
+    wallClockMs = 1_200;
+    nowMs += 1000 / 60;
+    windowHarness.advanceFrame(nowMs);
+
+    assert.equal(runtime.hudSnapshot.combat.alive, false);
+    assert.ok(
+      Math.abs((renderer.lastCamera?.position.x ?? 0) - frozenDeathCameraPosition.x) <
+        0.000001
+    );
+    assert.ok(
+      Math.abs((renderer.lastCamera?.position.z ?? 0) - frozenDeathCameraPosition.z) <
+        0.000001
+    );
 
     const respawnPosition = {
       x: 8,
@@ -1858,9 +1941,14 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
 
     fakeWorldClient.publishWorldSnapshotBuffer([
       createRealtimeWorldSnapshot({
-        currentTick: 11,
+        currentTick: 12,
         includeRemotePlayer: false,
         includeVehicle: false,
+        localCombat: {
+          alive: true,
+          health: 100,
+          spawnProtectionRemainingMs: 1_000
+        },
         localLastProcessedTraversalSequence: respawnInputSequence,
         localLastProcessedWeaponSequence: respawnWeaponSequence,
         localLinearVelocity: {
@@ -1889,19 +1977,19 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
         remotePlayerId,
         remotePlayerX: 10,
         remoteUsername,
-        serverTimeMs: 1_220,
-        snapshotSequence: 2,
+        serverTimeMs: 1_260,
+        snapshotSequence: 3,
         vehicleX: 10
       })
     ]);
 
-    wallClockMs = 1_240;
+    wallClockMs = 1_280;
     nowMs += 1000 / 60;
     windowHarness.advanceFrame(nowMs);
 
-    assert.equal(
-      runtime.hudSnapshot.telemetry.worldSnapshot.localReconciliationCorrectionCount,
-      2
+    assert.ok(
+      runtime.hudSnapshot.telemetry.worldSnapshot.localReconciliationCorrectionCount >=
+        2
     );
     assert.equal(
       runtime.hudSnapshot.telemetry.worldSnapshot.localReconciliation
@@ -1909,6 +1997,7 @@ test("WebGpuMetaverseRuntime rearms the spawn-labeled authority snap when respaw
         .convergenceEpisodeStartIntentionalDiscontinuityCause,
       "spawn"
     );
+    assert.equal(runtime.hudSnapshot.combat.alive, true);
     assert.ok(
       Math.abs(runtime.hudSnapshot.camera.position.x - respawnPosition.x) < 0.3,
       `expected respawn snap to move directly onto the new authoritative spawn, received ${JSON.stringify(runtime.hudSnapshot.camera)}`

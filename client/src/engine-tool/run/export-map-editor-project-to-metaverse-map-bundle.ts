@@ -299,7 +299,7 @@ function resolveLaunchVariations(
         experienceId: launchVariationDraft.experienceId,
         gameplayVariationId: launchVariationDraft.gameplayVariationId,
         label: launchVariationDraft.label,
-        sessionMode: launchVariationDraft.sessionMode,
+        matchMode: launchVariationDraft.matchMode,
         variationId: launchVariationDraft.variationId,
         vehicleLayoutId: launchVariationDraft.vehicleLayoutId,
         weaponLayoutId: launchVariationDraft.weaponLayoutId

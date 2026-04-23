@@ -40,6 +40,7 @@ import { MetaverseEnvironmentPhysicsRuntime } from "./metaverse-environment-phys
 import { MetaverseFlightInputRuntime } from "./metaverse-flight-input-runtime";
 import { MetaverseMountedInteractionRuntime } from "./metaverse-mounted-interaction-runtime";
 import { MetaverseRuntimeCameraPhaseState } from "./metaverse-runtime-camera-phase-state";
+import { MetaverseRuntimeCombatLifecycle } from "./metaverse-runtime-combat-lifecycle";
 import {
   MetaversePresenceRuntime,
   type MetaverseLocalPlayerIdentity,
@@ -324,6 +325,12 @@ export class WebGpuMetaverseRuntime {
       sceneRuntime
     });
     this.#bootLifecycle = bootLifecycle;
+    const combatLifecycle = new MetaverseRuntimeCombatLifecycle({
+      authoritativeWorldSync,
+      bootLifecycle,
+      remoteWorldRuntime,
+      weaponPresentationRuntime: this.#weaponPresentationRuntime
+    });
 
     this.#hudPublisher = new MetaverseRuntimeHudPublisher({
       config,
@@ -340,6 +347,7 @@ export class WebGpuMetaverseRuntime {
     const frameLoop = new MetaverseRuntimeFrameLoop({
       authoritativeWorldSync,
       bootLifecycle,
+      combatLifecycle,
       devicePixelRatio,
       environmentPhysicsRuntime,
       flightInputRuntime: this.#flightInputRuntime,
@@ -372,6 +380,7 @@ export class WebGpuMetaverseRuntime {
     const serviceLifecycle = new MetaverseRuntimeServiceLifecycle({
       authoritativeWorldSync,
       bootLifecycle,
+      combatLifecycle,
       environmentPhysicsRuntime,
       ensureAuthoritativeWorldBundleSynchronized:
         dependencies.ensureAuthoritativeWorldBundleSynchronized ?? null,

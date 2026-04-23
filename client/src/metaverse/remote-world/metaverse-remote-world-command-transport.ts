@@ -162,4 +162,37 @@ export class MetaverseRemoteWorldCommandTransport {
       weaponState
     });
   }
+
+  fireWeapon(input: {
+    readonly aimMode?: "ads" | "hip-fire";
+    readonly forwardDirection: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly muzzleOrigin: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly weaponId: string;
+  }): void {
+    const worldClient = this.#readWorldClient();
+
+    if (worldClient === null || this.#localPlayerIdentity === null) {
+      return;
+    }
+
+    worldClient.fireWeapon?.({
+      ...(input.aimMode === undefined
+        ? {}
+        : {
+            aimMode: input.aimMode
+          }),
+      forwardDirection: input.forwardDirection,
+      muzzleOrigin: input.muzzleOrigin,
+      playerId: this.#localPlayerIdentity.playerId,
+      weaponId: input.weaponId
+    });
+  }
 }

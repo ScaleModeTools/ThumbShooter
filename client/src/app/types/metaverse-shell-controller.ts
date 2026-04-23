@@ -1,8 +1,8 @@
 import type { FormEvent } from "react";
 import type {
   ExperienceId,
-  GameplaySessionMode,
   GameplayInputModeId,
+  MetaverseMatchModeId,
   PlayerProfile
 } from "@webgpu-metaverse/shared";
 
@@ -54,7 +54,7 @@ export interface MetaverseShellController {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
-  readonly sessionMode: GameplaySessionMode;
+  readonly matchMode: MetaverseMatchModeId;
   readonly shellView: MetaverseShellViewModel;
   readonly usernameDraft: string;
   readonly setUsernameDraft: (value: string) => void;
@@ -97,7 +97,7 @@ export interface MetaverseShellController {
   readonly onRequestPermission: () => void;
   readonly onReturnToMetaverseRequest: () => void;
   readonly onRetryCapabilityProbe: () => void;
-  readonly onSessionModeChange: (mode: GameplaySessionMode) => void;
+  readonly onMatchModeChange: (mode: MetaverseMatchModeId) => void;
   readonly onSetupRequest: () => void;
   readonly onSfxVolumeChange: (nextValue: number) => void;
 }
@@ -120,7 +120,7 @@ export interface MetaverseShellControllerState {
   readonly permissionError: string | null;
   readonly permissionState: WebcamPermissionState;
   readonly profile: PlayerProfile | null;
-  readonly sessionMode: GameplaySessionMode;
+  readonly matchMode: MetaverseMatchModeId;
   readonly shellStage: ShellStageState;
   readonly usernameDraft: string;
 }
@@ -179,8 +179,8 @@ export type MetaverseShellControllerAction =
       readonly type: "metaverseEntryRequested";
     }
   | {
-      readonly type: "sessionModeChanged";
-      readonly sessionMode: GameplaySessionMode;
+      readonly type: "matchModeChanged";
+      readonly matchMode: MetaverseMatchModeId;
     }
   | {
       readonly type: "gameplayExited";

@@ -35,7 +35,7 @@ export class MetaverseSessionRuntime {
     return createMetaverseSessionSnapshot({
       activeExperienceId: null,
       availableExperienceIds: this.#availableExperienceIds,
-      selectedSessionMode: null,
+      selectedMatchMode: "team-deathmatch",
       tickOwner: "server"
     });
   }

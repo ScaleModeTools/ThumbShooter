@@ -333,4 +333,28 @@ export class MetaverseRemoteWorldRuntime {
   ): void {
     this.#commandTransport.syncLocalPlayerWeaponState(weaponState);
   }
+
+  fireWeapon(input: {
+    readonly aimMode?: "ads" | "hip-fire";
+    readonly forwardDirection: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly muzzleOrigin: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    };
+    readonly weaponId: string;
+  }): void {
+    this.#commandTransport.fireWeapon(input);
+  }
+
+  readFreshAuthoritativeWorldSnapshot(
+    maxAuthoritativeSnapshotAgeMs: number
+  ): MetaverseRealtimeWorldSnapshot | null {
+    return this.#remoteWorldAuthoritativeSnapshotState
+      .readFreshAuthoritativeWorldSnapshot(maxAuthoritativeSnapshotAgeMs);
+  }
 }

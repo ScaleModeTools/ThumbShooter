@@ -1,6 +1,10 @@
 import { MetaverseAuthoritativeRapierPhysicsRuntime } from "../../classes/metaverse-authoritative-rapier-physics-runtime.js";
 
 interface MetaverseAuthoritativeWorldTickStateDependencies {
+  readonly advanceCombatRuntimes: (
+    tickIntervalSeconds: number,
+    nowMs: number
+  ) => void;
   readonly physicsRuntime: MetaverseAuthoritativeRapierPhysicsRuntime;
   readonly readTickIntervalMs: () => number;
   readonly syncMountedPlayerWorldStateFromVehicles: (nowMs: number) => void;
@@ -69,6 +73,10 @@ export class MetaverseAuthoritativeWorldTickState {
         this.#lastAdvancedAtMs
       );
       this.#dependencies.syncMountedPlayerWorldStateFromVehicles(
+        this.#lastAdvancedAtMs
+      );
+      this.#dependencies.advanceCombatRuntimes(
+        tickIntervalSeconds,
         this.#lastAdvancedAtMs
       );
       this.#currentTick += 1;

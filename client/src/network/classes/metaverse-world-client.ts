@@ -7,12 +7,18 @@ import type {
   MetaverseSyncPlayerWeaponStateCommandInput,
   MetaverseSyncPlayerTraversalIntentCommandInput
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import type {
+  MetaverseFireWeaponCommand
+} from "@webgpu-metaverse/shared/metaverse";
 import type { MetaversePlayerId } from "@webgpu-metaverse/shared/metaverse/presence";
 import {
   createMetaverseSyncPlayerWeaponStateCommand,
   createMetaverseSyncPlayerLookIntentCommand,
   createMetaverseSyncPlayerTraversalIntentCommand
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import {
+  createMetaverseFireWeaponCommand
+} from "@webgpu-metaverse/shared/metaverse";
 
 import { createMetaverseWorldHttpTransport } from "../adapters/metaverse-world-http-transport";
 import type { MetaverseWorldSnapshotStreamTransport } from "../types/metaverse-world-snapshot-stream-transport";
@@ -22,6 +28,9 @@ import type {
   MetaverseWorldClientTelemetrySnapshot,
   MetaverseWorldClientStatusSnapshot
 } from "../types/metaverse-world-client";
+import type {
+  MetaverseWorldFireWeaponCommandInput
+} from "../types/metaverse-world-client-runtime";
 import type { MetaversePlayerIssuedTraversalIntentSnapshot } from "../types/metaverse-player-issued-traversal-intent";
 import type { MetaverseWorldTransport } from "../types/metaverse-world-transport";
 import {
@@ -69,6 +78,7 @@ type PendingPlayerLookIntentCommand = ReturnType<
 type PendingPlayerWeaponStateCommand = ReturnType<
   typeof createMetaverseSyncPlayerWeaponStateCommand
 >;
+type PendingFireWeaponCommand = MetaverseFireWeaponCommand;
 
 function resolveMembershipLossMessage(message: string): string | null {
   if (message.startsWith("Unknown metaverse player:")) {
@@ -133,6 +143,9 @@ export class MetaverseWorldClient {
   readonly #snapshotState: MetaverseWorldSnapshotState;
   readonly #transport: MetaverseWorldTransport;
   readonly #updateListeners = new Set<() => void>();
+
+  #latestFireSequence = 0;
+  #queuedFireWeaponCommandPromise: Promise<void> = Promise.resolve();
 
   constructor(
     config: MetaverseWorldClientConfig,
@@ -486,6 +499,28 @@ export class MetaverseWorldClient {
     this.#mountedOccupancySync.syncMountedOccupancy(commandInput);
   }
 
+  fireWeapon(commandInput: MetaverseWorldFireWeaponCommandInput): void {
+    this.#assertNotDisposed();
+    this.#connectionLifecycle.bindPlayer(commandInput.playerId);
+    this.#latestFireSequence += 1;
+    this.#enqueueFireWeaponCommand(
+      createMetaverseFireWeaponCommand({
+        ...(commandInput.aimMode === undefined
+          ? {}
+          : {
+              aimMode: commandInput.aimMode
+            }),
+        clientFireTimeMs: this.#readWallClockMs(),
+        fireSequence: this.#latestFireSequence,
+        forwardDirection: commandInput.forwardDirection,
+        muzzleOrigin: commandInput.muzzleOrigin,
+        playerId: commandInput.playerId,
+        weaponId: commandInput.weaponId
+      }),
+      "Metaverse fire weapon command failed."
+    );
+  }
+
   async ensureConnected(
     playerId: MetaversePlayerId
   ): Promise<MetaverseRealtimeWorldSnapshot> {
@@ -561,6 +596,31 @@ export class MetaverseWorldClient {
     }
 
     return this.#transport.sendCommand(command);
+  }
+
+  #enqueueFireWeaponCommand(
+    command: PendingFireWeaponCommand,
+    fallbackMessage: string
+  ): void {
+    const queuedCommandPromise = this.#queuedFireWeaponCommandPromise
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.#statusSnapshot.state === "disposed") {
+          return;
+        }
+
+        this.#snapshotState.acceptWorldEvent(
+          command.playerId,
+          await this.#transport.sendCommand(command),
+          "command"
+        );
+        this.#notifyUpdates();
+      })
+      .catch((error: unknown) => {
+        this.#applyWorldAccessError(error, fallbackMessage);
+      });
+
+    this.#queuedFireWeaponCommandPromise = queuedCommandPromise;
   }
 
 

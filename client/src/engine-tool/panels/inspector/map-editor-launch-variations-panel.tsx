@@ -1,6 +1,6 @@
 import type {
   ExperienceId,
-  GameplaySessionMode
+  MetaverseMatchModeId
 } from "@webgpu-metaverse/shared";
 import { PlusIcon } from "lucide-react";
 
@@ -44,8 +44,8 @@ function readExperienceId(value: string): ExperienceId | null {
   return value === "duck-hunt" ? "duck-hunt" : null;
 }
 
-function readGameplaySessionMode(value: string): GameplaySessionMode | null {
-  if (value === "single-player" || value === "co-op") {
+function readMetaverseMatchMode(value: string): MetaverseMatchModeId | null {
+  if (value === "free-roam" || value === "team-deathmatch") {
     return value;
   }
 
@@ -79,7 +79,7 @@ export function MapEditorLaunchVariationsPanel({
           <TableRow>
             <TableHead>Variation</TableHead>
             <TableHead>Experience</TableHead>
-            <TableHead>Session</TableHead>
+            <TableHead>Mode</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -107,7 +107,7 @@ export function MapEditorLaunchVariationsPanel({
                 </div>
               </TableCell>
               <TableCell>{launchVariation.experienceId ?? "Shell"}</TableCell>
-              <TableCell>{launchVariation.sessionMode ?? "None"}</TableCell>
+              <TableCell>{launchVariation.matchMode ?? "None"}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -147,8 +147,8 @@ export function MapEditorLaunchVariationsPanel({
                   onUpdateLaunchVariation(selectedLaunchVariation.variationId, (draft) => ({
                     ...draft,
                     experienceId: nextExperienceId,
-                    sessionMode:
-                      nextExperienceId === null ? null : draft.sessionMode ?? "single-player"
+                    matchMode:
+                      nextExperienceId === null ? "free-roam" : draft.matchMode ?? "free-roam"
                   }));
                 }}
                 value={selectedLaunchVariation.experienceId ?? "none"}
@@ -169,27 +169,26 @@ export function MapEditorLaunchVariationsPanel({
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${selectedLaunchVariation.variationId}-session`}>
-                Session
+                Match Mode
               </Label>
               <Select
                 onValueChange={(nextValue) => {
-                  const nextSessionMode = readGameplaySessionMode(nextValue);
+                  const nextMatchMode = readMetaverseMatchMode(nextValue);
 
                   onUpdateLaunchVariation(selectedLaunchVariation.variationId, (draft) => ({
                     ...draft,
-                    sessionMode: draft.experienceId === null ? null : nextSessionMode
+                    matchMode: nextMatchMode
                   }));
                 }}
-                value={selectedLaunchVariation.sessionMode ?? "none"}
+                value={selectedLaunchVariation.matchMode ?? "free-roam"}
               >
                 <SelectTrigger id={`${selectedLaunchVariation.variationId}-session`}>
-                  <SelectValue placeholder="Select session mode" />
+                  <SelectValue placeholder="Select match mode" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="none">No session</SelectItem>
-                    <SelectItem value="single-player">Single-player</SelectItem>
-                    <SelectItem value="co-op">Co-op</SelectItem>
+                    <SelectItem value="free-roam">Free roam</SelectItem>
+                    <SelectItem value="team-deathmatch">Team deathmatch</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

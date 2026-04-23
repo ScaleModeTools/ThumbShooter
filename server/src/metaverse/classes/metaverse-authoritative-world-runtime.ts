@@ -51,6 +51,7 @@ import {
   MetaverseAuthoritativePlayerTraversalAuthority,
   type MetaverseAuthoritativePlayerTraversalIntentRuntimeState
 } from "../authority/traversal/metaverse-authoritative-player-traversal-authority.js";
+import { MetaverseAuthoritativeCombatAuthority } from "../authority/combat/metaverse-authoritative-combat-authority.js";
 import { MetaverseAuthoritativeUnmountedPlayerSimulation } from "../authority/traversal/metaverse-authoritative-unmounted-player-simulation.js";
 import { MetaverseAuthoritativeWorldSurfaceState } from "../authority/traversal/metaverse-authoritative-world-surface-state.js";
 import { MetaverseAuthoritativeWorldTickState } from "../authority/world/metaverse-authoritative-world-tick-state.js";
@@ -302,6 +303,8 @@ export class MetaverseAuthoritativeWorldRuntime
   >;
   readonly #playerWeaponStateAuthority:
     MetaverseAuthoritativePlayerWeaponStateAuthority<MetaversePlayerWorldRuntimeState>;
+  readonly #combatAuthority:
+    MetaverseAuthoritativeCombatAuthority<MetaversePlayerWorldRuntimeState>;
   readonly #unmountedPlayerSimulation:
     MetaverseAuthoritativeUnmountedPlayerSimulation<
       MetaversePlayerWorldRuntimeState,
@@ -548,6 +551,8 @@ export class MetaverseAuthoritativeWorldRuntime
       },
       mountedOccupancyAuthority: this.#mountedOccupancyAuthority,
       playersById: this.#playersById,
+      resolveAcceptedTeamId: (_playerId, requestedTeamId) =>
+        this.#resolveAcceptedPlayerTeamId(requestedTeamId),
       resolveAuthoritativeSurfaceColliders: () =>
         this.#surfaceState.resolveAuthoritativeSurfaceColliders(),
       resolveJoinPose: (playerId, teamId, nextPose) =>
@@ -635,6 +640,34 @@ export class MetaverseAuthoritativeWorldRuntime
         },
         playersById: this.#playersById
       });
+    this.#combatAuthority = new MetaverseAuthoritativeCombatAuthority({
+      clearDriverVehicleControl: (playerId) =>
+        this.#playerLifecycleAuthority.clearDriverVehicleControl(playerId),
+      clearPlayerTraversalIntent: (playerId) =>
+        this.#playerLifecycleAuthority.clearPlayerTraversalIntent(playerId),
+      clearPlayerVehicleOccupancy: (playerId) =>
+        this.#playerLifecycleAuthority.clearPlayerVehicleOccupancy(playerId),
+      incrementSnapshotSequence: () => {
+        this.#tickState.incrementSnapshotSequence();
+      },
+      physicsRuntime: this.#physicsRuntime,
+      playerTraversalColliderHandles: this.#playerTraversalColliderHandles,
+      playersById: this.#playersById,
+      readTickIntervalMs: () => Number(this.#config.tickIntervalMs),
+      resolveRespawnPose: (playerId, teamId) =>
+        this.#resolveRespawnPose(playerId, teamId, bundleInputs),
+      syncAuthoritativePlayerLookToCurrentFacing: (playerRuntime) =>
+        this.#playerStateSync.syncAuthoritativePlayerLookToCurrentFacing(
+          playerRuntime
+        ),
+      syncPlayerTraversalAuthorityState: (playerRuntime) =>
+        this.#playerStateSync.syncPlayerTraversalAuthorityState(playerRuntime),
+      syncPlayerTraversalBodyRuntimes: (playerRuntime, groundedOverride) =>
+        this.#playerStateSync.syncPlayerTraversalBodyRuntimes(
+          playerRuntime,
+          groundedOverride
+        )
+    });
     this.#unmountedPlayerSimulation =
       new MetaverseAuthoritativeUnmountedPlayerSimulation({
         createWaterborneTraversalColliderPredicate: (
@@ -698,6 +731,11 @@ export class MetaverseAuthoritativeWorldRuntime
       waterRegionSnapshots: bundleInputs.waterRegionSnapshots
     });
     this.#tickState = new MetaverseAuthoritativeWorldTickState({
+      advanceCombatRuntimes: (tickIntervalSeconds, nowMs) =>
+        this.#combatAuthority.advanceCombatRuntimes(
+          tickIntervalSeconds,
+          nowMs
+        ),
       physicsRuntime: this.#physicsRuntime,
       readTickIntervalMs: () => Number(this.#config.tickIntervalMs),
       syncMountedPlayerWorldStateFromVehicles: (nowMs) =>
@@ -719,15 +757,22 @@ export class MetaverseAuthoritativeWorldRuntime
       environmentBodiesByEnvironmentAssetId:
         this.#environmentBodiesByEnvironmentAssetId,
       playersById: this.#playersById,
+      readCombatFeedSnapshots: () => this.#combatAuthority.readCombatFeedSnapshots(),
+      readCombatMatchSnapshot: () => this.#combatAuthority.readCombatMatchSnapshot(),
+      readPlayerCombatSnapshot: (playerId) =>
+        this.#combatAuthority.readPlayerCombatSnapshot(playerId),
+      readProjectileSnapshots: () => this.#combatAuthority.readProjectileSnapshots(),
       readCurrentTick: () => this.#tickState.currentTick,
       readLastAdvancedAtMs: () => this.#tickState.lastAdvancedAtMs,
       readSnapshotSequence: () => this.#tickState.snapshotSequence,
       readTickIntervalMs: () => Number(this.#config.tickIntervalMs),
+      syncGameplayState: (nowMs) => this.#combatAuthority.syncCombatState(nowMs),
       traversalIntentsByPlayerId: this.#playerTraversalIntentsByPlayerId,
       vehiclesById: this.#vehiclesById
     });
     this.#commandIntake = new MetaverseAuthoritativeWorldCommandIntake({
       advanceToTime: (nowMs) => this.advanceToTime(nowMs),
+      combatAuthority: this.#combatAuthority,
       mountedOccupancyAuthority: this.#mountedOccupancyAuthority,
       playerLifecycleAuthority: this.#playerLifecycleAuthority,
       playerPoseAuthority: this.#playerPoseAuthority,
@@ -820,6 +865,27 @@ export class MetaverseAuthoritativeWorldRuntime
     );
   }
 
+  #resolveAcceptedPlayerTeamId(
+    requestedTeamId: MetaversePlayerTeamId
+  ): MetaversePlayerTeamId {
+    let redCount = 0;
+    let blueCount = 0;
+
+    for (const playerRuntime of this.#playersById.values()) {
+      if (playerRuntime.teamId === "red") {
+        redCount += 1;
+      } else if (playerRuntime.teamId === "blue") {
+        blueCount += 1;
+      }
+    }
+
+    if (redCount === blueCount) {
+      return requestedTeamId;
+    }
+
+    return redCount < blueCount ? "red" : "blue";
+  }
+
   #shouldResolveJoinSpawnPose(
     requestedPose: MetaversePresencePoseSnapshot,
     bundleInputs: ReturnType<typeof createMetaverseAuthoritativeWorldBundleInputs>
@@ -878,6 +944,29 @@ export class MetaverseAuthoritativeWorldRuntime
       mountedOccupancy: requestedPose.mountedOccupancy,
       position: selectedSpawnNode.position,
       stateSequence: requestedPose.stateSequence,
+      yawRadians: selectedSpawnNode.yawRadians
+    });
+  }
+
+  #resolveRespawnPose(
+    playerId: MetaversePlayerId,
+    playerTeamId: MetaversePlayerTeamId,
+    bundleInputs: ReturnType<typeof createMetaverseAuthoritativeWorldBundleInputs>
+  ): {
+    readonly position: PhysicsVector3Snapshot;
+    readonly yawRadians: number;
+  } {
+    const selectedSpawnNode =
+      resolveMetaverseMapPlayerSpawnNode({
+        occupiedPlayerSnapshots: this.#createOccupiedPlayerSpawnSnapshots(),
+        playerId,
+        playerSpawnNodes: bundleInputs.bundle.playerSpawnNodes,
+        playerSpawnSelection: bundleInputs.bundle.playerSpawnSelection,
+        playerTeamId
+      }) ?? bundleInputs.defaultSpawn;
+
+    return Object.freeze({
+      position: selectedSpawnNode.position,
       yawRadians: selectedSpawnNode.yawRadians
     });
   }

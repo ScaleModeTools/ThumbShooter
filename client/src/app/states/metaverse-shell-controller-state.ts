@@ -1,6 +1,6 @@
-import type { GameplaySessionMode } from "@webgpu-metaverse/shared";
 import {
   AudioSettings,
+  type MetaverseMatchModeId,
   PlayerProfile,
   createUsername,
   defaultGameplayInputMode
@@ -29,7 +29,7 @@ export const initialCapabilitySnapshot = Object.freeze({
   status: "checking",
   reason: "pending"
 }) satisfies WebGpuMetaverseCapabilitySnapshot;
-const defaultSessionMode: GameplaySessionMode = "single-player";
+const defaultMatchMode: MetaverseMatchModeId = "team-deathmatch";
 const guestShellUsername = createUsername("Unknown")!;
 
 function resolveActiveMetaverseBundleId(bundleId: string): string {
@@ -121,7 +121,7 @@ export function createInitialMetaverseShellControllerState({
     permissionError: null,
     permissionState: "prompt",
     profile: hydratedProfile.profile,
-    sessionMode: defaultSessionMode,
+    matchMode: defaultMatchMode,
     shellStage: "main-menu",
     usernameDraft: hydratedProfile.profile?.snapshot.username ?? ""
   };
@@ -252,8 +252,8 @@ export function reduceMetaverseShellControllerState(
               shellStage: "metaverse"
             };
       }
-    case "sessionModeChanged":
-      return action.sessionMode === state.sessionMode &&
+    case "matchModeChanged":
+      return action.matchMode === state.matchMode &&
         state.shellStage === "main-menu" &&
         !state.isMenuOpen
         ? state
@@ -262,7 +262,7 @@ export function reduceMetaverseShellControllerState(
             activeExperienceId: null,
             debugPanelMode: "hidden",
             isMenuOpen: false,
-            sessionMode: action.sessionMode,
+            matchMode: action.matchMode,
             shellStage: resolveNextShellStageAfterModeChange(state)
           };
     case "gameplayExited":
@@ -368,7 +368,7 @@ export function reduceMetaverseShellControllerState(
         permissionError: null,
         permissionState: "prompt",
         profile: null,
-        sessionMode: defaultSessionMode,
+        matchMode: defaultMatchMode,
         coopRoomIdDraft: defaultDuckHuntCoopRoomId,
         shellStage: "main-menu",
         usernameDraft: "",

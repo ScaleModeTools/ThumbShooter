@@ -90,6 +90,9 @@ interface MetaverseRuntimeServiceLifecycleTraversalRuntime {
 interface MetaverseRuntimeServiceLifecycleDependencies {
   readonly authoritativeWorldSync: MetaverseRuntimeServiceLifecycleAuthoritativeWorldSync;
   readonly bootLifecycle: MetaverseRuntimeServiceLifecycleBootLifecycle;
+  readonly combatLifecycle?: {
+    reset(): void;
+  } | null;
   readonly environmentPhysicsRuntime: MetaverseRuntimeServiceLifecycleEnvironmentPhysicsRuntime;
   readonly ensureAuthoritativeWorldBundleSynchronized?:
     | (() => Promise<void>)
@@ -129,6 +132,9 @@ interface MetaverseRuntimeServiceBootCleanupRequest {
 export class MetaverseRuntimeServiceLifecycle {
   readonly #authoritativeWorldSync: MetaverseRuntimeServiceLifecycleAuthoritativeWorldSync;
   readonly #bootLifecycle: MetaverseRuntimeServiceLifecycleBootLifecycle;
+  readonly #combatLifecycle: {
+    reset(): void;
+  } | null;
   readonly #environmentPhysicsRuntime: MetaverseRuntimeServiceLifecycleEnvironmentPhysicsRuntime;
   readonly #ensureAuthoritativeWorldBundleSynchronized: () => Promise<void>;
   readonly #flightInputRuntime: MetaverseRuntimeServiceLifecycleFlightInputRuntime;
@@ -147,6 +153,7 @@ export class MetaverseRuntimeServiceLifecycle {
   constructor({
     authoritativeWorldSync,
     bootLifecycle,
+    combatLifecycle,
     environmentPhysicsRuntime,
     ensureAuthoritativeWorldBundleSynchronized,
     flightInputRuntime,
@@ -161,6 +168,7 @@ export class MetaverseRuntimeServiceLifecycle {
   }: MetaverseRuntimeServiceLifecycleDependencies) {
     this.#authoritativeWorldSync = authoritativeWorldSync;
     this.#bootLifecycle = bootLifecycle;
+    this.#combatLifecycle = combatLifecycle ?? null;
     this.#environmentPhysicsRuntime = environmentPhysicsRuntime;
     this.#ensureAuthoritativeWorldBundleSynchronized =
       ensureAuthoritativeWorldBundleSynchronized ?? (async () => {});
@@ -176,6 +184,7 @@ export class MetaverseRuntimeServiceLifecycle {
   }
 
   resetForStart(): void {
+    this.#combatLifecycle?.reset();
     this.#weaponPresentationRuntime?.reset();
     this.#traversalRuntime.reset();
     this.#frameLoop.reset();
@@ -250,6 +259,7 @@ export class MetaverseRuntimeServiceLifecycle {
   disposeRuntimeServices(): void {
     this.#flightInputRuntime.dispose();
     this.#authoritativeWorldSync.reset();
+    this.#combatLifecycle?.reset();
     this.#frameLoop.reset();
     this.#environmentPhysicsRuntime.dispose();
     this.#presenceRuntime.dispose();

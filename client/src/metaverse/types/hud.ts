@@ -86,6 +86,39 @@ export interface MetaverseHudRadarSnapshot {
   readonly rangeMeters: number;
 }
 
+export interface MetaverseHudCombatFeedEntrySnapshot {
+  readonly sequence: number;
+  readonly summary: string;
+  readonly type: "damage" | "kill" | "spawn";
+}
+
+export interface MetaverseHudCombatSnapshot {
+  readonly accuracyRatio: number | null;
+  readonly alive: boolean;
+  readonly ammoInMagazine: number;
+  readonly ammoInReserve: number;
+  readonly assists: number;
+  readonly available: boolean;
+  readonly deaths: number;
+  readonly enemyScore: number | null;
+  readonly friendlyFireEnabled: boolean;
+  readonly headshotKills: number;
+  readonly health: number;
+  readonly killFeed: readonly MetaverseHudCombatFeedEntrySnapshot[];
+  readonly kills: number;
+  readonly matchPhase: "active" | "completed" | "waiting-for-players" | null;
+  readonly maxHealth: number;
+  readonly reloadRemainingMs: number;
+  readonly respawnRemainingMs: number;
+  readonly scoreLimit: number | null;
+  readonly shotsFired: number;
+  readonly shotsHit: number;
+  readonly spawnProtectionRemainingMs: number;
+  readonly teamScore: number | null;
+  readonly timeRemainingMs: number | null;
+  readonly weaponId: string | null;
+}
+
 export interface MetaverseHudSnapshot {
   readonly boot: {
     readonly authoritativeWorldConnected: boolean;
@@ -96,6 +129,7 @@ export interface MetaverseHudSnapshot {
   };
   readonly camera: MetaverseCameraSnapshot;
   readonly controlMode: MetaverseControlModeId;
+  readonly combat: MetaverseHudCombatSnapshot;
   readonly failureReason: string | null;
   readonly focusedPortal: FocusedExperiencePortalSnapshot | null;
   readonly lifecycle: MetaverseRuntimeLifecycleState;

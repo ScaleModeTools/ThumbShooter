@@ -37,7 +37,7 @@ export function MetaverseShell() {
       permissionError={controller.permissionError}
       permissionState={controller.permissionState}
       profile={controller.profile}
-      sessionMode={controller.sessionMode}
+      matchMode={controller.matchMode}
       selectedReticleLabel={controller.shellView.selectedReticleLabel}
       usernameDraft={controller.usernameDraft}
       nextMetaverseStep={controller.navigationSnapshot.nextMetaverseStep}
@@ -57,7 +57,7 @@ export function MetaverseShell() {
       onRequestPermission={controller.onRequestPermission}
       onRecalibrationRequest={controller.onRecalibrationRequest}
       onRetryCapabilityProbe={controller.onRetryCapabilityProbe}
-      onSessionModeChange={controller.onSessionModeChange}
+      onMatchModeChange={controller.onMatchModeChange}
       onSetupRequest={controller.onSetupRequest}
       setUsernameDraft={controller.setUsernameDraft}
     />
@@ -110,9 +110,7 @@ export function MetaverseShell() {
           calibrationQualityLabel={controller.shellView.calibrationQualityLabel}
           debugPanelMode={controller.debugPanelMode}
           gameplayStatusLabel={
-            controller.sessionMode === "co-op"
-              ? "Co-op room sync live"
-              : "Local combat progression live"
+            "Duck Hunt mini-game session active"
           }
           inputMode={controller.inputMode}
           musicVolume={controller.shellView.musicVolumeSliderValue}
@@ -122,12 +120,12 @@ export function MetaverseShell() {
           onOpenChange={controller.onGameplayMenuOpen}
           onRecalibrationRequest={controller.onRecalibrationRequest}
           onReturnToMetaverseRequest={controller.onReturnToMetaverseRequest}
-          onSessionModeChange={controller.onSessionModeChange}
+          onSessionModeChange={() => {}}
           onSfxVolumeChange={controller.onSfxVolumeChange}
           open={
             activeStep === "gameplay" && controller.isMenuOpen
           }
-          sessionMode={controller.sessionMode}
+          sessionMode="single-player"
           showDebugControls={showDeveloperUi}
           sfxVolume={controller.shellView.sfxVolumeSliderValue}
         />

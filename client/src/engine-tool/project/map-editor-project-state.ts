@@ -512,7 +512,7 @@ export function addMapEditorLaunchVariationDraft(
     experienceId: null,
     gameplayVariationId: null,
     label: "New Variation",
-    sessionMode: null,
+    matchMode: "free-roam",
     variationId: createMapEditorLaunchVariationId(project),
     vehicleLayoutId: null,
     weaponLayoutId: null

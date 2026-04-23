@@ -8,6 +8,9 @@ import {
   createMetaverseSyncPlayerTraversalIntentCommand,
   createMetaverseSyncPlayerWeaponStateCommand
 } from "./realtime/metaverse-realtime-world-commands.js";
+import {
+  createMetaverseFireWeaponCommand
+} from "./metaverse-combat.js";
 import type {
   MetaverseRealtimeWorldClientCommand
 } from "./realtime/metaverse-realtime-world-commands.js";
@@ -108,6 +111,8 @@ function normalizeMetaverseRealtimeWorldClientCommand(
   command: MetaverseRealtimeWorldClientCommand
 ): MetaverseRealtimeWorldClientCommand {
   switch (command.type) {
+    case "fire-weapon":
+      return createMetaverseFireWeaponCommand(command);
     case "sync-driver-vehicle-control":
       return createMetaverseSyncDriverVehicleControlCommand(command);
     case "sync-mounted-occupancy":

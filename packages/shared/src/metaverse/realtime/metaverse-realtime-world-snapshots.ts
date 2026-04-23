@@ -66,6 +66,22 @@ import type {
 import {
   createMetaverseRealtimePlayerWeaponStateSnapshot
 } from "./metaverse-realtime-player-weapon-state.js";
+import type {
+  MetaverseCombatFeedEventSnapshot,
+  MetaverseCombatFeedEventSnapshotInput,
+  MetaverseCombatMatchSnapshot,
+  MetaverseCombatMatchSnapshotInput,
+  MetaverseCombatProjectileSnapshot,
+  MetaverseCombatProjectileSnapshotInput,
+  MetaversePlayerCombatSnapshot,
+  MetaversePlayerCombatSnapshotInput
+} from "../metaverse-combat.js";
+import {
+  createMetaverseCombatFeedEventSnapshot,
+  createMetaverseCombatMatchSnapshot,
+  createMetaverseCombatProjectileSnapshot,
+  createMetaversePlayerCombatSnapshot
+} from "../metaverse-combat.js";
 
 export const metaverseRealtimeWorldServerEventTypes = [
   "world-snapshot"
@@ -196,6 +212,7 @@ export type MetaverseRealtimePlayerTraversalAuthoritySnapshotInput =
 export interface MetaverseRealtimePlayerSnapshot {
   readonly angularVelocityRadiansPerSecond: number;
   readonly characterId: string;
+  readonly combat: MetaversePlayerCombatSnapshot | null;
   readonly groundedBody: MetaverseRealtimePlayerGroundedBodySnapshot;
   readonly look: MetaverseRealtimePlayerLookSnapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
@@ -213,6 +230,7 @@ export interface MetaverseRealtimePlayerSnapshot {
 export interface MetaverseRealtimePlayerSnapshotInput {
   readonly angularVelocityRadiansPerSecond?: number;
   readonly characterId: string;
+  readonly combat?: MetaversePlayerCombatSnapshotInput | null;
   readonly groundedBody?: MetaverseRealtimePlayerGroundedBodySnapshotInput;
   readonly look?: MetaverseRealtimePlayerLookSnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
@@ -278,19 +296,25 @@ export interface MetaverseRealtimeEnvironmentBodySnapshotInput {
 }
 
 export interface MetaverseRealtimeWorldSnapshot {
+  readonly combatFeed: readonly MetaverseCombatFeedEventSnapshot[];
+  readonly combatMatch: MetaverseCombatMatchSnapshot | null;
   readonly environmentBodies: readonly MetaverseRealtimeEnvironmentBodySnapshot[];
   readonly observerPlayer: MetaverseRealtimeObserverPlayerSnapshot | null;
   readonly players: readonly MetaverseRealtimePlayerSnapshot[];
+  readonly projectiles: readonly MetaverseCombatProjectileSnapshot[];
   readonly snapshotSequence: number;
   readonly tick: MetaverseRealtimeTickSnapshot;
   readonly vehicles: readonly MetaverseRealtimeVehicleSnapshot[];
 }
 
 export interface MetaverseRealtimeWorldSnapshotInput {
+  readonly combatFeed?: readonly MetaverseCombatFeedEventSnapshotInput[];
+  readonly combatMatch?: MetaverseCombatMatchSnapshotInput | null;
   readonly environmentBodies?:
     readonly MetaverseRealtimeEnvironmentBodySnapshotInput[];
   readonly observerPlayer?: MetaverseRealtimeObserverPlayerSnapshotInput | null;
   readonly players: readonly MetaverseRealtimePlayerSnapshotInput[];
+  readonly projectiles?: readonly MetaverseCombatProjectileSnapshotInput[];
   readonly snapshotSequence?: number;
   readonly tick: MetaverseRealtimeTickSnapshotInput;
   readonly vehicles: readonly MetaverseRealtimeVehicleSnapshotInput[];
@@ -689,12 +713,17 @@ function freezePlayerSnapshot(
     input.weaponState === undefined || input.weaponState === null
       ? null
       : createMetaverseRealtimePlayerWeaponStateSnapshot(input.weaponState);
+  const combat =
+    input.combat === undefined || input.combat === null
+      ? null
+      : createMetaversePlayerCombatSnapshot(input.combat);
 
   return Object.freeze({
     angularVelocityRadiansPerSecond: normalizeFiniteNumber(
       input.angularVelocityRadiansPerSecond ?? 0
     ),
     characterId: normalizeCharacterId(input.characterId),
+    combat,
     groundedBody,
     look: lookSnapshot,
     locomotionMode,
@@ -916,8 +945,18 @@ export function createMetaverseRealtimeWorldSnapshot(
   input: MetaverseRealtimeWorldSnapshotInput
 ): MetaverseRealtimeWorldSnapshot {
   const tick = createMetaverseRealtimeTickSnapshot(input.tick);
+  const combatMatch =
+    input.combatMatch === undefined || input.combatMatch === null
+      ? null
+      : createMetaverseCombatMatchSnapshot(input.combatMatch);
+  const combatFeed = (input.combatFeed ?? []).map(
+    createMetaverseCombatFeedEventSnapshot
+  );
   const environmentBodies = (input.environmentBodies ?? []).map(
     freezeEnvironmentBodySnapshot
+  );
+  const projectiles = (input.projectiles ?? []).map(
+    createMetaverseCombatProjectileSnapshot
   );
   const vehicles = input.vehicles.map(freezeVehicleSnapshot);
   const environmentBodySnapshotByEnvironmentAssetId = new Map<
@@ -1028,9 +1067,12 @@ export function createMetaverseRealtimeWorldSnapshot(
   }
 
   return Object.freeze({
+    combatFeed: Object.freeze(combatFeed),
+    combatMatch,
     environmentBodies: Object.freeze(environmentBodies),
     observerPlayer,
     players: Object.freeze(players),
+    projectiles: Object.freeze(projectiles),
     snapshotSequence: normalizeFiniteNonNegativeInteger(input.snapshotSequence ?? 0),
     tick,
     vehicles: Object.freeze(vehicles)
