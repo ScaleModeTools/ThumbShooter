@@ -70,6 +70,27 @@ function sanitizeQuaternion(
   });
 }
 
+function createRapierHeightfieldSamples(
+  sampleCountX: number,
+  sampleCountZ: number,
+  heightSamples: ArrayLike<number>
+): Float32Array {
+  const width = Math.max(2, Math.round(toFiniteNumber(sampleCountX, 2)));
+  const depth = Math.max(2, Math.round(toFiniteNumber(sampleCountZ, 2)));
+  const samples = new Float32Array(width * depth);
+
+  for (let sampleX = 0; sampleX < width; sampleX += 1) {
+    for (let sampleZ = 0; sampleZ < depth; sampleZ += 1) {
+      const sourceIndex = sampleZ * width + sampleX;
+      const targetIndex = sampleX * depth + sampleZ;
+
+      samples[targetIndex] = toFiniteNumber(heightSamples[sourceIndex] ?? 0);
+    }
+  }
+
+  return samples;
+}
+
 async function createDefaultPhysicsAddon(): Promise<RapierPhysicsAddon> {
   const rapierModule = (await import("@dimforge/rapier3d")) as unknown as
     RapierApiHandle;
@@ -195,6 +216,39 @@ export class RapierPhysicsRuntime {
     rotation?: PhysicsQuaternionSnapshot
   ): RapierColliderHandle {
     return this.createFixedCuboidCollider(halfExtents, translation, rotation);
+  }
+
+  createHeightfieldCollider(
+    sampleCountX: number,
+    sampleCountZ: number,
+    sampleSpacingMeters: number,
+    heightSamples: ArrayLike<number>,
+    translation: PhysicsVector3Snapshot,
+    rotation: PhysicsQuaternionSnapshot = identityQuaternion
+  ): RapierColliderHandle {
+    const addon = this.#requireAddon();
+    const width = Math.max(2, Math.round(toFiniteNumber(sampleCountX, 2)));
+    const depth = Math.max(2, Math.round(toFiniteNumber(sampleCountZ, 2)));
+    const spacing = Math.max(0.01, toFiniteNumber(sampleSpacingMeters, 1));
+    const colliderDesc = addon.RAPIER.ColliderDesc.heightfield(
+      width - 1,
+      depth - 1,
+      createRapierHeightfieldSamples(width, depth, heightSamples),
+      new addon.RAPIER.Vector3(
+        (width - 1) * spacing,
+        1,
+        (depth - 1) * spacing
+      )
+    );
+
+    colliderDesc.setTranslation(
+      toFiniteNumber(translation.x),
+      toFiniteNumber(translation.y),
+      toFiniteNumber(translation.z)
+    );
+    colliderDesc.setRotation(sanitizeQuaternion(rotation));
+
+    return addon.world.createCollider(colliderDesc);
   }
 
   createFixedTriMeshCollider(

@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot,
   createMetaverseWorldMountedEntryOccupancyPolicySnapshot,
   createMetaverseWorldMountedSeatOccupancyPolicySnapshot,
+  createMetaverseWorldPlacedSurfaceTriMeshSnapshot,
   createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot,
+  constrainMetaverseWorldPlanarPositionAgainstBlockers,
   readMetaverseWorldMountedEntryAuthoring,
   readMetaverseWorldMountedSeatAuthoring,
+  resolveMetaverseWorldAutomaticSurfaceLocomotion,
+  resolveMetaverseWorldGroundedAutostepHeightMeters,
   resolveMetaverseTraversalStateFromWorldAffordances,
   resolveMetaverseWorldMountedOccupancyPolicySnapshotFromAuthoring,
   resolveMetaverseWorldPlacedSurfaceColliders,
@@ -121,6 +126,113 @@ test("shared world surface query derives support height from authored tri-mesh c
   );
 });
 
+test("shared world surface blockers treat visible tri-mesh tops as solid only below the walkable surface", () => {
+  const triMeshBlockerSnapshot = createMetaverseWorldPlacedSurfaceTriMeshSnapshot(
+    "test-trimesh-blocker",
+    {
+      indices: Uint32Array.from([0, 1, 2, 0, 2, 3]),
+      vertices: Float32Array.from([
+        -1, 1, -1,
+        1, 1, -1,
+        1, 1, 1,
+        -1, 1, 1
+      ])
+    },
+    {
+      position: Object.freeze({ x: 0, y: 0, z: 0 }),
+      yawRadians: 0
+    },
+    "blocker"
+  );
+
+  assert.notEqual(triMeshBlockerSnapshot, null);
+  assert.deepEqual(
+    constrainMetaverseWorldPlanarPositionAgainstBlockers(
+      Object.freeze([triMeshBlockerSnapshot]),
+      Object.freeze({ x: -2, y: 0, z: 0 }),
+      Object.freeze({ x: 0, y: 0, z: 0 }),
+      0,
+      0,
+      1.6
+    ),
+    {
+      x: -2,
+      y: 0,
+      z: 0
+    }
+  );
+  assert.deepEqual(
+    constrainMetaverseWorldPlanarPositionAgainstBlockers(
+      Object.freeze([triMeshBlockerSnapshot]),
+      Object.freeze({ x: -2, y: 1, z: 0 }),
+      Object.freeze({ x: 0, y: 1, z: 0 }),
+      0,
+      1,
+      2.6
+    ),
+    {
+      x: 0,
+      y: 1,
+      z: 0
+    }
+  );
+});
+
+test("shared world surface query derives support height from authored heightfield collision and ignores out-of-bounds probes", () => {
+  const heightfieldSupportSnapshot =
+    createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+      "test-heightfield-surface",
+      {
+        heightSamples: Object.freeze([0, 1, 2, 3]),
+        sampleCountX: 2,
+        sampleCountZ: 2,
+        sampleSpacingMeters: 4
+      },
+      {
+        position: Object.freeze({ x: 10, y: 2, z: -5 }),
+        yawRadians: 0
+      }
+    );
+
+  assert.notEqual(heightfieldSupportSnapshot, null);
+  assert.equal(heightfieldSupportSnapshot?.shape, "heightfield");
+  assert.ok(
+    Math.abs(
+      (resolveMetaverseWorldSurfaceHeightMeters(
+        Object.freeze({
+          capsuleHalfHeightMeters: 0.48,
+          capsuleRadiusMeters: 0.34,
+          gravityUnitsPerSecond: 18,
+          jumpImpulseUnitsPerSecond: 6.8,
+          oceanHeightMeters: 0,
+          stepHeightMeters: 0.28
+        }),
+        Object.freeze([heightfieldSupportSnapshot]),
+        Object.freeze([]),
+        10,
+        -5
+      ) ?? 0) - 3.5
+    ) < 0.0001
+  );
+  assert.equal(
+    resolveMetaverseWorldSurfaceHeightMeters(
+      Object.freeze({
+        capsuleHalfHeightMeters: 0.48,
+        capsuleRadiusMeters: 0.34,
+        gravityUnitsPerSecond: 18,
+        jumpImpulseUnitsPerSecond: 6.8,
+        oceanHeightMeters: 0,
+        stepHeightMeters: 0.28
+      }),
+      Object.freeze([heightfieldSupportSnapshot]),
+      Object.freeze([]),
+      20,
+      -5
+    ),
+    null
+  );
+});
+
 test("shared traversal state resolver keeps direct grounded support height above water when step probes are absent", () => {
   const supportHeightMeters = 0.8;
   const traversalState = resolveMetaverseTraversalStateFromWorldAffordances(
@@ -220,6 +332,123 @@ test("shared world surface query can cap support selection at the active capsule
       floorSurfaceHeightMeters
     ),
     floorSurfaceHeightMeters
+  );
+});
+
+test("shared automatic surface locomotion keeps grounded support on the lower floor under overlapping overhead support", () => {
+  const config = Object.freeze({
+    capsuleHalfHeightMeters: 0.48,
+    capsuleRadiusMeters: 0.34,
+    gravityUnitsPerSecond: 18,
+    jumpImpulseUnitsPerSecond: 6.8,
+    oceanHeightMeters: 0,
+    stepHeightMeters: 0.28
+  });
+  const surfaceColliders = Object.freeze([
+    Object.freeze({
+      halfExtents: Object.freeze({ x: 2, y: 0.25, z: 2 }),
+      ownerEnvironmentAssetId: "test-basement-floor",
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      rotationYRadians: 0,
+      translation: Object.freeze({ x: 0, y: -0.25, z: 0 }),
+      traversalAffordance: "support"
+    }),
+    Object.freeze({
+      halfExtents: Object.freeze({ x: 2, y: 0.25, z: 2 }),
+      ownerEnvironmentAssetId: "test-overhead-floor",
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      rotationYRadians: 0,
+      translation: Object.freeze({ x: 0, y: 2.75, z: 0 }),
+      traversalAffordance: "support"
+    })
+  ]);
+  const locomotion = resolveMetaverseWorldAutomaticSurfaceLocomotion(
+    config,
+    surfaceColliders,
+    Object.freeze([]),
+    Object.freeze({ x: 0, y: 0, z: 0 }),
+    0,
+    "grounded"
+  );
+
+  assert.equal(locomotion.decision.locomotionMode, "grounded");
+  assert.equal(locomotion.decision.supportHeightMeters, 0);
+  assert.equal(locomotion.debug.centerStepSupportHeightMeters, 0);
+  assert.equal(locomotion.debug.resolvedSupportHeightMeters, 0);
+  assert.equal(locomotion.debug.centerStepBlocked, true);
+});
+
+test("shared grounded autostep stays on the current support band during stacked-surface jumps", () => {
+  const config = Object.freeze({
+    capsuleHalfHeightMeters: 0.48,
+    capsuleRadiusMeters: 0.34,
+    gravityUnitsPerSecond: 18,
+    jumpImpulseUnitsPerSecond: 6.8,
+    oceanHeightMeters: 0,
+    stepHeightMeters: 0.28
+  });
+  const surfaceColliders = Object.freeze([
+    Object.freeze({
+      halfExtents: Object.freeze({ x: 3, y: 0.1, z: 3 }),
+      ownerEnvironmentAssetId: "test-floor",
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      rotationYRadians: 0,
+      translation: Object.freeze({ x: 0, y: -0.1, z: 0 }),
+      traversalAffordance: "support"
+    }),
+    Object.freeze({
+      halfExtents: Object.freeze({ x: 3, y: 0.11, z: 3 }),
+      ownerEnvironmentAssetId: "test-low-step",
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      rotationYRadians: 0,
+      translation: Object.freeze({ x: 0, y: 0.11, z: 0 }),
+      traversalAffordance: "support"
+    }),
+    Object.freeze({
+      halfExtents: Object.freeze({ x: 3, y: 0.1, z: 3 }),
+      ownerEnvironmentAssetId: "test-overhead-roof",
+      rotation: Object.freeze({ x: 0, y: 0, z: 0, w: 1 }),
+      rotationYRadians: 0,
+      translation: Object.freeze({ x: 0, y: 0.8, z: 0 }),
+      traversalAffordance: "support"
+    })
+  ]);
+
+  assert.equal(
+    resolveMetaverseWorldGroundedAutostepHeightMeters(
+      config,
+      surfaceColliders,
+      Object.freeze({ x: 0, y: 0, z: 0 }),
+      0,
+      1,
+      0
+    ),
+    config.stepHeightMeters
+  );
+  assert.equal(
+    resolveMetaverseWorldGroundedAutostepHeightMeters(
+      config,
+      surfaceColliders,
+      Object.freeze({ x: 0, y: 0, z: 0 }),
+      0,
+      1,
+      0,
+      0,
+      true
+    ),
+    null
+  );
+  assert.equal(
+    resolveMetaverseWorldGroundedAutostepHeightMeters(
+      config,
+      surfaceColliders,
+      Object.freeze({ x: 0, y: 0, z: 0 }),
+      0,
+      1,
+      0,
+      0.2
+    ),
+    null
   );
 });
 

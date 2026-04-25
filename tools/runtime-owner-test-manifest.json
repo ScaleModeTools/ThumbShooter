@@ -56,6 +56,12 @@
       ]
     },
     {
+      "ownerPath": "client/src/engine-tool/project/map-editor-terrain-generation.ts",
+      "testPaths": [
+        "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/engine-tool/project/map-editor-project-launch-variations.ts",
       "testPaths": [
         "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
@@ -86,7 +92,19 @@
       ]
     },
     {
+      "ownerPath": "client/src/engine-tool/project/map-editor-project-semantic-drafts.ts",
+      "testPaths": [
+        "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "client/src/engine-tool/project/map-editor-project-storage.ts",
+      "testPaths": [
+        "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/engine-tool/project/map-editor-ui-storage.ts",
       "testPaths": [
         "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
       ]
@@ -185,6 +203,12 @@
       "ownerPath": "client/src/metaverse/remote-world/metaverse-remote-world-authoritative-snapshot-state.ts",
       "testPaths": [
         "tests/runtime/client/metaverse/remote-world/metaverse-remote-world-authoritative-snapshot-state.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/metaverse/remote-world/metaverse-fire-weapon-action-policy.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse/remote-world/metaverse-fire-weapon-action-policy.runtime.test.mjs"
       ]
     },
     {
@@ -339,6 +363,18 @@
       "ownerPath": "client/src/network/classes/metaverse-world-connection-lifecycle.ts",
       "testPaths": [
         "tests/runtime/client/metaverse-world-connection-lifecycle.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/classes/metaverse-world-player-action-sync.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-player-action-sync.runtime.test.mjs"
+      ]
+    },
+    {
+      "ownerPath": "client/src/network/classes/metaverse-world-player-sync.ts",
+      "testPaths": [
+        "tests/runtime/client/metaverse-world-player-sync.runtime.test.mjs"
       ]
     },
     {

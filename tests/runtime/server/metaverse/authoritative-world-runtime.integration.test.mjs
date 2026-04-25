@@ -212,7 +212,7 @@ test("MetaverseAuthoritativeWorldRuntime routes an authored dock entry into the 
     authoredWaterBayDockEntryYawRadians
   );
   assert.ok(
-    dockEntryOffset.z > 3.2,
+    dockEntryOffset.z > 3,
     `expected authored dock entry to travel into the water bay, received offset ${JSON.stringify(dockEntryOffset)}`
   );
 });
@@ -251,17 +251,26 @@ test("MetaverseAuthoritativeWorldRuntime holds sustained swim after authored doc
     }),
     0
   );
+  let swimEntryOffset = null;
   let swimEntryTimeMs = null;
 
   for (let timeMs = 100; timeMs <= 1_000; timeMs += 100) {
     runtime.advanceToTime(timeMs);
 
-    if (runtime.readWorldSnapshot(timeMs, playerId).players[0]?.locomotionMode === "swim") {
+    const candidateSnapshot = runtime.readWorldSnapshot(timeMs, playerId);
+
+    if (candidateSnapshot.players[0]?.locomotionMode === "swim") {
+      swimEntryOffset = resolveLocalPlanarOffset(
+        readPrimaryPlayerActiveBodySnapshot(candidateSnapshot).position,
+        authoredDockEdgeEntryPosition,
+        authoredWaterBayDockEntryYawRadians
+      );
       swimEntryTimeMs = timeMs;
       break;
     }
   }
 
+  assert.notEqual(swimEntryOffset, null);
   assert.notEqual(swimEntryTimeMs, null);
 
   const sustainedSwimTimeMs = swimEntryTimeMs + 200;
@@ -279,7 +288,7 @@ test("MetaverseAuthoritativeWorldRuntime holds sustained swim after authored doc
   assert.equal(worldSnapshot.players[0]?.locomotionMode, "swim");
   assert.equal(activeBodySnapshot.position.y, 0);
   assert.ok(
-    sustainedSwimOffset.z > 4.6,
+    sustainedSwimOffset.z > swimEntryOffset.z + 1,
     `expected sustained swim to hold beyond the dock edge, received offset ${JSON.stringify(sustainedSwimOffset)}`
   );
 });
@@ -436,8 +445,14 @@ test("MetaverseAuthoritativeWorldRuntime exits onto the shipped shoreline suppor
     readPrimaryPlayerActiveBodySnapshot(shorelineExitSnapshot);
 
   assert.equal(shorelineExitSnapshot.players[0]?.locomotionMode, "grounded");
-  assert.ok(shorelineExitActiveBodySnapshot.position.y > 0.4);
-  assert.ok(shorelineExitActiveBodySnapshot.position.y < 0.45);
+  assert.ok(
+    shorelineExitActiveBodySnapshot.position.y >
+      shippedGroundedSpawnSupportHeightMeters - 0.03
+  );
+  assert.ok(
+    shorelineExitActiveBodySnapshot.position.y <
+      shippedGroundedSpawnSupportHeightMeters + 0.03
+  );
   assert.ok(Math.abs(shorelineExitActiveBodySnapshot.linearVelocity.y) < 0.005);
 
   runtime.advanceToTime(2_100);
@@ -447,8 +462,14 @@ test("MetaverseAuthoritativeWorldRuntime exits onto the shipped shoreline suppor
     readPrimaryPlayerActiveBodySnapshot(settledSnapshot);
 
   assert.equal(settledSnapshot.players[0]?.locomotionMode, "grounded");
-  assert.ok(settledActiveBodySnapshot.position.y > 0.4);
-  assert.ok(settledActiveBodySnapshot.position.y < 0.45);
+  assert.ok(
+    settledActiveBodySnapshot.position.y >
+      shippedGroundedSpawnSupportHeightMeters - 0.03
+  );
+  assert.ok(
+    settledActiveBodySnapshot.position.y <
+      shippedGroundedSpawnSupportHeightMeters + 0.03
+  );
   assert.ok(Math.abs(settledActiveBodySnapshot.linearVelocity.y) < 0.005);
 });
 

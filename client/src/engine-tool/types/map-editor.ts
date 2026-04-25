@@ -1,18 +1,58 @@
-import type { MetaverseWorldSurfaceVector3Snapshot } from "@webgpu-metaverse/shared/metaverse/world";
+import type {
+  MetaverseMapBundleSemanticLightKind,
+  MetaverseMapBundleSemanticMaterialId,
+  MetaverseWorldSurfaceVector3Snapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
 
-export type MapEditorViewportToolMode =
-  | "module"
+export type MapEditorViewportTransformToolMode =
   | "move"
-  | "path"
   | "rotate"
   | "scale"
-  | "select"
+  | "select";
+
+export type MapEditorBuildToolMode =
+  | "cover"
+  | "delete"
+  | "floor"
+  | "lane"
+  | "light"
+  | "module"
+  | "paint"
+  | "path"
+  | "player-spawn"
+  | "portal"
   | "terrain"
+  | "vehicle-route"
   | "wall"
+  | "zone"
   | "water";
 
-export type MapEditorTerrainBrushMode = "lower" | "raise" | "smooth";
-export type MapEditorTerrainBrushSizeCells = 1 | 2 | 4 | 8;
+export type MapEditorViewportToolMode =
+  | MapEditorBuildToolMode
+  | MapEditorViewportTransformToolMode;
+
+export type MapEditorTerrainBrushMode =
+  | "cliff"
+  | "flatten"
+  | "flatten-pad"
+  | "lower"
+  | "material"
+  | "noise"
+  | "plateau"
+  | "raise"
+  | "ridge"
+  | "smooth"
+  | "valley";
+export type MapEditorTerrainBrushSizeCells = number;
+export type MapEditorGameplayTeamId = "blue" | "neutral" | "red";
+export type MapEditorPathElevationMode =
+  | "bridge-slope"
+  | "down"
+  | "flat"
+  | "up";
+export type MapEditorFloorRole = "floor" | "roof";
+export type MapEditorFloorShapeMode = "polygon" | "rectangle";
+export type MapEditorSurfaceMode = "flat" | "slope";
 export type MapEditorWallToolPresetId =
   | "curb"
   | "fence"
@@ -20,11 +60,59 @@ export type MapEditorWallToolPresetId =
   | "retaining-wall"
   | "wall";
 
+export const defaultMapEditorMaterialPaletteIds =
+  Object.freeze<readonly string[]>([
+    "concrete",
+    "metal",
+    "warning",
+    "glass",
+    "team-blue",
+    "team-red",
+    "terrain-rock",
+    "terrain-ash",
+    "terrain-grass"
+  ]);
+
 export interface MapEditorBuilderToolStateSnapshot {
+  readonly activeMaterialId: MetaverseMapBundleSemanticMaterialId;
+  readonly activeMaterialReferenceId: string;
+  readonly coverFootprintCellsX: number;
+  readonly coverFootprintCellsZ: number;
+  readonly coverHeightCells: number;
+  readonly floorElevationMeters: number;
+  readonly floorFootprintCellsX: number;
+  readonly floorFootprintCellsZ: number;
+  readonly floorRole: MapEditorFloorRole;
+  readonly floorShapeMode: MapEditorFloorShapeMode;
+  readonly gameplayVolumeTeamId: MapEditorGameplayTeamId;
+  readonly gameplayVolumeWidthCells: number;
+  readonly lightColor: readonly [number, number, number];
+  readonly lightIntensity: number;
+  readonly lightKind: MetaverseMapBundleSemanticLightKind;
+  readonly lightRangeMeters: number;
+  readonly materialPaletteIds: readonly string[];
+  readonly pathElevationMode: MapEditorPathElevationMode;
+  readonly pathSlopeLengthCells: number;
+  readonly pathSlopeRotationDegrees: number;
+  readonly pathWidthCells: number;
+  readonly riseLayers: number;
+  readonly surfaceMode: MapEditorSurfaceMode;
   readonly terrainBrushMode: MapEditorTerrainBrushMode;
+  readonly terrainBrushStrengthMeters: number;
   readonly terrainBrushSizeCells: MapEditorTerrainBrushSizeCells;
+  readonly terrainBrushTargetHeightMeters: number;
+  readonly terrainMaterialId: MetaverseMapBundleSemanticMaterialId;
+  readonly terrainGenerationFrequency: number;
+  readonly terrainGenerationMaxElevationMeters: number;
+  readonly terrainGenerationMinElevationMeters: number;
+  readonly terrainGenerationOctaves: number;
+  readonly terrainGenerationWarpFrequency: number;
+  readonly terrainGenerationWarpStrengthMeters: number;
+  readonly terrainNoiseSeed: number;
   readonly terrainSmoothEdges: boolean;
+  readonly wallHeightMeters: number;
   readonly wallPresetId: MapEditorWallToolPresetId;
+  readonly wallThicknessMeters: number;
   readonly waterDepthMeters: number;
   readonly waterFootprintCellsX: number;
   readonly waterFootprintCellsZ: number;
@@ -33,13 +121,48 @@ export interface MapEditorBuilderToolStateSnapshot {
 
 export const defaultMapEditorBuilderToolState =
   Object.freeze<MapEditorBuilderToolStateSnapshot>({
+    activeMaterialId: "concrete",
+    activeMaterialReferenceId: "concrete",
+    coverFootprintCellsX: 1,
+    coverFootprintCellsZ: 1,
+    coverHeightCells: 1,
+    floorElevationMeters: 0,
+    floorFootprintCellsX: 1,
+    floorFootprintCellsZ: 1,
+    floorRole: "floor",
+    floorShapeMode: "rectangle",
+    gameplayVolumeTeamId: "neutral",
+    gameplayVolumeWidthCells: 3,
+    lightColor: Object.freeze([1, 0.86, 0.62] as const),
+    lightIntensity: 2.5,
+    lightKind: "point",
+    lightRangeMeters: 20,
+    materialPaletteIds: defaultMapEditorMaterialPaletteIds,
+    pathElevationMode: "flat",
+    pathSlopeLengthCells: 2,
+    pathSlopeRotationDegrees: 0,
+    pathWidthCells: 1,
+    riseLayers: 1,
+    surfaceMode: "flat",
     terrainBrushMode: "raise",
+    terrainBrushStrengthMeters: 0.5,
     terrainBrushSizeCells: 2,
+    terrainBrushTargetHeightMeters: 0,
+    terrainMaterialId: "terrain-grass",
+    terrainGenerationFrequency: 0.08,
+    terrainGenerationMaxElevationMeters: 8,
+    terrainGenerationMinElevationMeters: -8,
+    terrainGenerationOctaves: 5,
+    terrainGenerationWarpFrequency: 0.22,
+    terrainGenerationWarpStrengthMeters: 8,
+    terrainNoiseSeed: 1337,
     terrainSmoothEdges: true,
+    wallHeightMeters: 4,
     wallPresetId: "wall",
+    wallThicknessMeters: 0.5,
     waterDepthMeters: 4,
-    waterFootprintCellsX: 6,
-    waterFootprintCellsZ: 6,
+    waterFootprintCellsX: 1,
+    waterFootprintCellsZ: 1,
     waterTopElevationMeters: 0
   });
 export type MapEditorViewportHelperId =
@@ -64,6 +187,36 @@ export const defaultMapEditorViewportHelperVisibility =
     grid: true,
     polarGrid: false,
     selectionBounds: true
+  });
+
+export type MapEditorSceneVisibilityLayerId =
+  | "authoredLights"
+  | "authoredModules"
+  | "authoredSurfaces"
+  | "gameplayMarkers"
+  | "terrain"
+  | "waterRegions"
+  | "worldSun";
+
+export interface MapEditorSceneVisibilitySnapshot {
+  readonly authoredLights: boolean;
+  readonly authoredModules: boolean;
+  readonly authoredSurfaces: boolean;
+  readonly gameplayMarkers: boolean;
+  readonly terrain: boolean;
+  readonly waterRegions: boolean;
+  readonly worldSun: boolean;
+}
+
+export const defaultMapEditorSceneVisibility =
+  Object.freeze<MapEditorSceneVisibilitySnapshot>({
+    authoredLights: true,
+    authoredModules: true,
+    authoredSurfaces: true,
+    gameplayMarkers: true,
+    terrain: true,
+    waterRegions: true,
+    worldSun: true
   });
 
 export interface MapEditorMaterialOption {
@@ -92,4 +245,33 @@ export interface MapEditorPlayerSpawnTransformUpdate {
     readonly z: number;
   };
   readonly yawRadians: number;
+}
+
+export type MapEditorViewportTransformTargetKind =
+  | "connector"
+  | "edge"
+  | "gameplay-volume"
+  | "light"
+  | "placement"
+  | "player-spawn"
+  | "region"
+  | "scene-object"
+  | "structure"
+  | "surface"
+  | "terrain-patch"
+  | "water-region";
+
+export interface MapEditorViewportTransformTargetRef {
+  readonly id: string;
+  readonly kind: MapEditorViewportTransformTargetKind;
+}
+
+export interface MapEditorEntityTransformUpdate {
+  readonly position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+  readonly rotationYRadians: number;
+  readonly scale: MetaverseWorldSurfaceVector3Snapshot;
 }

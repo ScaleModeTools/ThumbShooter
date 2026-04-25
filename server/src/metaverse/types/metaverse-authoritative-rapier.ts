@@ -21,6 +21,10 @@ export interface RapierVectorConstructor {
   new (x: number, y: number, z: number): RapierVectorLike;
 }
 
+export interface RapierCharacterCollisionHandle {
+  readonly normal1: RapierVectorLike;
+}
+
 export interface RapierRayHandle {
   readonly dir: RapierVectorLike;
   readonly origin: RapierVectorLike;
@@ -60,6 +64,12 @@ export interface RapierColliderDescFactory {
     halfExtentY: number,
     halfExtentZ: number
   ): RapierColliderDescHandle;
+  heightfield(
+    rows: number,
+    cols: number,
+    heights: Float32Array,
+    scale: RapierVectorLike
+  ): RapierColliderDescHandle;
   trimesh(
     vertices: Float32Array,
     indices: Uint32Array
@@ -86,6 +96,7 @@ export type RapierQueryFilterPredicate = (
 export interface RapierCharacterControllerHandle {
   computedGrounded(): boolean;
   computedMovement(): RapierVectorLike;
+  computedCollision?(index: number): RapierCharacterCollisionHandle | null;
   computeColliderMovement(
     collider: RapierColliderHandle,
     desiredTranslationDelta: RapierVectorLike,
@@ -101,6 +112,7 @@ export interface RapierCharacterControllerHandle {
   ): void;
   enableSnapToGround(distance: number): void;
   free?(): void;
+  numComputedCollisions?(): number;
   setUp?(up: RapierVectorLike): void;
   setMaxSlopeClimbAngle?(angle: number): void;
   setMinSlopeSlideAngle?(angle: number): void;

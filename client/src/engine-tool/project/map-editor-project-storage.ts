@@ -1,15 +1,13 @@
 import {
   defaultMetaverseGameplayProfileId,
   parseMetaverseMapBundleSnapshot,
-  resolveMetaverseGameplayProfile,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
-import { readMetaverseCameraProfile } from "@/metaverse/render/camera/profiles";
-import { readMetaverseCharacterPresentationProfile } from "@/metaverse/render/characters/presentation-profiles";
-import { readMetaverseEnvironmentPresentationProfile } from "@/metaverse/render/environment/profiles";
-import { readMetaverseHudProfile } from "@/metaverse/hud/profiles";
 import type { LoadedMetaverseMapBundleSnapshot } from "@/metaverse/world/map-bundles";
+import {
+  createLoadedMetaverseMapBundleSnapshot
+} from "@/metaverse/world/map-bundles";
 import {
   readStoredMetaverseWorldBundleStorageKey,
   storedMetaverseWorldBundleRecordVersion
@@ -50,22 +48,15 @@ function readStorageKey(bundleId: string): string {
 function createLoadedMetaverseMapBundleFromBundle(
   bundle: MetaverseMapBundleSnapshot
 ): LoadedMetaverseMapBundleSnapshot {
-  return Object.freeze({
-    bundle,
-    cameraProfile: readMetaverseCameraProfile(
-      bundle.presentationProfileIds.cameraProfileId
-    ),
-    characterPresentationProfile: readMetaverseCharacterPresentationProfile(
-      bundle.presentationProfileIds.characterPresentationProfileId
-    ),
-    environmentPresentationProfile: readMetaverseEnvironmentPresentationProfile(
-      bundle.presentationProfileIds.environmentPresentationProfileId
-    ),
-    gameplayProfile: resolveMetaverseGameplayProfile(
-      bundle.gameplayProfileId ?? defaultMetaverseGameplayProfileId
-    ),
-    hudProfile: readMetaverseHudProfile(bundle.presentationProfileIds.hudProfileId)
-  });
+  const bundleWithResolvedGameplayProfileId =
+    bundle.gameplayProfileId === undefined
+      ? Object.freeze({
+          ...bundle,
+          gameplayProfileId: defaultMetaverseGameplayProfileId
+        })
+      : bundle;
+
+  return createLoadedMetaverseMapBundleSnapshot(bundleWithResolvedGameplayProfileId);
 }
 
 function readSelectedEntityRef(

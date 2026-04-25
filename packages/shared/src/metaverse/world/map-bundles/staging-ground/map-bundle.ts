@@ -85,6 +85,35 @@ function resolveScaledColliderSize(
   });
 }
 
+function resolveSurfaceSupportTopElevationMeters(
+  surfaceAsset: MetaverseWorldSurfaceAssetAuthoring,
+  placement: {
+    readonly position: MetaverseWorldSurfaceVector3Snapshot;
+    readonly scale:
+      | number
+      | {
+          readonly x: number;
+          readonly y: number;
+          readonly z: number;
+        };
+  }
+): number {
+  const scale = resolveMetaverseWorldSurfaceScaleVector(placement.scale);
+  const supportCollider =
+    surfaceAsset.surfaceColliders.find(
+      (collider) => collider.traversalAffordance === "support"
+    ) ?? surfaceAsset.surfaceColliders[0] ?? null;
+
+  if (supportCollider === null) {
+    return placement.position.y;
+  }
+
+  return (
+    placement.position.y +
+    (supportCollider.center.y + supportCollider.size.y * 0.5) * scale.y
+  );
+}
+
 function createSemanticSurface(
   surfaceId: string,
   label: string,
@@ -99,23 +128,25 @@ function createSemanticSurface(
           readonly z: number;
         };
   },
-  surfaceAsset: MetaverseWorldSurfaceAssetAuthoring
+  surfaceAsset: MetaverseWorldSurfaceAssetAuthoring,
+  elevationMeters = placement.position.y
 ): MetaverseMapBundleSemanticSurfaceSnapshot {
   const size = resolveScaledColliderSize(surfaceAsset, placement);
 
   return Object.freeze({
     center: Object.freeze({
       x: placement.position.x,
-      y: placement.position.y,
+      y: elevationMeters,
       z: placement.position.z
     }),
-    elevation: placement.position.y,
+    elevation: elevationMeters,
     kind: "flat-slab",
     label,
     rotationYRadians: placement.rotationYRadians,
     size,
+    slopeRiseMeters: 0,
     surfaceId,
-    terrainChunkId: null
+    terrainPatchId: null
   });
 }
 
@@ -243,7 +274,8 @@ function createSemanticWorldFromSurfaceAssets(): MetaverseMapBundleSemanticWorld
             surfaceId,
             "Playground Surface",
             placement,
-            surfaceAsset
+            surfaceAsset,
+            resolveSurfaceSupportTopElevationMeters(surfaceAsset, placement)
           )
         );
         regions.push(createFloorRegion(`region:${semanticId}`, surfaceId, scaledColliderSize));
@@ -282,10 +314,14 @@ function createSemanticWorldFromSurfaceAssets(): MetaverseMapBundleSemanticWorld
     }),
     connectors: Object.freeze([]),
     edges: Object.freeze(edges),
+    gameplayVolumes: Object.freeze([]),
+    lights: Object.freeze([]),
+    materialDefinitions: Object.freeze([]),
     modules: Object.freeze(modules),
     regions: Object.freeze(regions),
     surfaces: Object.freeze(surfaces),
-    terrainChunks: Object.freeze([])
+    structures: Object.freeze([]),
+    terrainPatches: Object.freeze([])
   });
 }
 

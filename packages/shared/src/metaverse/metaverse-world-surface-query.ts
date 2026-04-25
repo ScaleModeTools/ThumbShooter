@@ -141,12 +141,16 @@ export interface MetaverseWorldWaterRegionAuthoring {
 }
 
 export interface MetaverseWorldPlacedSurfaceColliderSnapshot {
-  readonly shape?: "box" | "trimesh";
+  readonly shape?: "box" | "heightfield" | "trimesh";
   readonly halfExtents: MetaverseWorldSurfaceVector3Snapshot;
+  readonly heightSamples?: Float32Array;
   readonly indices?: Uint32Array;
   readonly ownerEnvironmentAssetId: string | null;
   readonly rotation: MetaverseWorldSurfaceQuaternionSnapshot;
   readonly rotationYRadians: number;
+  readonly sampleCountX?: number;
+  readonly sampleCountZ?: number;
+  readonly sampleSpacingMeters?: number;
   readonly translation: MetaverseWorldSurfaceVector3Snapshot;
   readonly traversalAffordance: MetaverseWorldSurfaceTraversalAffordanceId;
   readonly vertices?: Float32Array;
@@ -321,12 +325,34 @@ export function createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
     readonly yawRadians: number;
   }
 ): MetaverseWorldPlacedSurfaceColliderSnapshot | null {
+  return createMetaverseWorldPlacedSurfaceTriMeshSnapshot(
+    ownerEnvironmentAssetId,
+    triMesh,
+    poseSnapshot,
+    "support"
+  );
+}
+
+export function createMetaverseWorldPlacedSurfaceTriMeshSnapshot(
+  ownerEnvironmentAssetId: string | null,
+  triMesh: {
+    readonly indices: Uint32Array;
+    readonly vertices: Float32Array;
+  },
+  poseSnapshot: {
+    readonly position: MetaverseWorldSurfaceVector3Snapshot;
+    readonly yawRadians: number;
+  },
+  traversalAffordance: MetaverseWorldSurfaceTraversalAffordanceId
+): MetaverseWorldPlacedSurfaceColliderSnapshot | null {
   const supportIndices = resolveMetaverseWorldSupportTriMeshIndices(
     triMesh.vertices,
     triMesh.indices
   );
+  const indices =
+    traversalAffordance === "support" ? supportIndices : triMesh.indices;
 
-  if (supportIndices.length === 0) {
+  if (indices.length === 0 || triMesh.vertices.length < 9) {
     return null;
   }
 
@@ -334,7 +360,7 @@ export function createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
 
   return Object.freeze({
     halfExtents: resolveMetaverseWorldTriMeshBoundsHalfExtents(triMesh.vertices),
-    indices: supportIndices,
+    indices,
     ownerEnvironmentAssetId,
     rotation: freezeQuaternion(0, Math.sin(halfAngle), 0, Math.cos(halfAngle)),
     rotationYRadians: poseSnapshot.yawRadians,
@@ -344,8 +370,89 @@ export function createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
       poseSnapshot.position.y,
       poseSnapshot.position.z
     ),
-    traversalAffordance: "support",
+    traversalAffordance,
     vertices: triMesh.vertices
+  });
+}
+
+function resolveHeightSampleBounds(heights: ArrayLike<number>): {
+  readonly max: number;
+  readonly min: number;
+} {
+  let max = Number.NEGATIVE_INFINITY;
+  let min = Number.POSITIVE_INFINITY;
+
+  for (let heightIndex = 0; heightIndex < heights.length; heightIndex += 1) {
+    const height = heights[heightIndex] ?? 0;
+
+    if (!Number.isFinite(height)) {
+      continue;
+    }
+
+    max = Math.max(max, height);
+    min = Math.min(min, height);
+  }
+
+  return Object.freeze({
+    max: max === Number.NEGATIVE_INFINITY ? 0 : max,
+    min: min === Number.POSITIVE_INFINITY ? 0 : min
+  });
+}
+
+export function createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+  ownerEnvironmentAssetId: string | null,
+  heightfield: {
+    readonly heightSamples: readonly number[];
+    readonly sampleCountX: number;
+    readonly sampleCountZ: number;
+    readonly sampleSpacingMeters: number;
+  },
+  poseSnapshot: {
+    readonly position: MetaverseWorldSurfaceVector3Snapshot;
+    readonly yawRadians: number;
+  }
+): MetaverseWorldPlacedSurfaceColliderSnapshot | null {
+  const sampleCountX = Math.max(0, Math.round(heightfield.sampleCountX));
+  const sampleCountZ = Math.max(0, Math.round(heightfield.sampleCountZ));
+  const sampleSpacingMeters = Number.isFinite(heightfield.sampleSpacingMeters)
+    ? heightfield.sampleSpacingMeters
+    : 0;
+
+  if (
+    sampleCountX < 2 ||
+    sampleCountZ < 2 ||
+    sampleSpacingMeters <= 0 ||
+    heightfield.heightSamples.length < sampleCountX * sampleCountZ
+  ) {
+    return null;
+  }
+
+  const heights = Float32Array.from(
+    heightfield.heightSamples.slice(0, sampleCountX * sampleCountZ)
+  );
+  const heightBounds = resolveHeightSampleBounds(heights);
+  const halfAngle = poseSnapshot.yawRadians * 0.5;
+
+  return Object.freeze({
+    halfExtents: freezeVector3(
+      (sampleCountX - 1) * sampleSpacingMeters * 0.5,
+      Math.max(0.01, (heightBounds.max - heightBounds.min) * 0.5),
+      (sampleCountZ - 1) * sampleSpacingMeters * 0.5
+    ),
+    heightSamples: heights,
+    ownerEnvironmentAssetId,
+    rotation: freezeQuaternion(0, Math.sin(halfAngle), 0, Math.cos(halfAngle)),
+    rotationYRadians: poseSnapshot.yawRadians,
+    sampleCountX,
+    sampleCountZ,
+    sampleSpacingMeters,
+    shape: "heightfield",
+    translation: freezeVector3(
+      poseSnapshot.position.x,
+      poseSnapshot.position.y,
+      poseSnapshot.position.z
+    ),
+    traversalAffordance: "support"
   });
 }
 

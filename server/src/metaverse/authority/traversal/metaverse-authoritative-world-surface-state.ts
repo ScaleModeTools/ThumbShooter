@@ -221,11 +221,34 @@ export class MetaverseAuthoritativeWorldSurfaceState<
     ];
 
     for (const staticSurfaceCollider of this.#dependencies.staticSurfaceColliders) {
-      const collider = this.#dependencies.physicsRuntime.createCuboidCollider(
-        staticSurfaceCollider.halfExtents,
-        staticSurfaceCollider.translation,
-        staticSurfaceCollider.rotation
-      );
+      const collider =
+        staticSurfaceCollider.shape === "heightfield" &&
+        staticSurfaceCollider.heightSamples !== undefined &&
+        staticSurfaceCollider.sampleCountX !== undefined &&
+        staticSurfaceCollider.sampleCountZ !== undefined &&
+        staticSurfaceCollider.sampleSpacingMeters !== undefined
+          ? this.#dependencies.physicsRuntime.createHeightfieldCollider(
+              staticSurfaceCollider.sampleCountX,
+              staticSurfaceCollider.sampleCountZ,
+              staticSurfaceCollider.sampleSpacingMeters,
+              staticSurfaceCollider.heightSamples,
+              staticSurfaceCollider.translation,
+              staticSurfaceCollider.rotation
+            )
+          : staticSurfaceCollider.shape === "trimesh" &&
+              staticSurfaceCollider.vertices !== undefined &&
+              staticSurfaceCollider.indices !== undefined
+            ? this.#dependencies.physicsRuntime.createTriMeshCollider(
+                staticSurfaceCollider.vertices,
+                staticSurfaceCollider.indices,
+                staticSurfaceCollider.translation,
+                staticSurfaceCollider.rotation
+              )
+            : this.#dependencies.physicsRuntime.createCuboidCollider(
+                staticSurfaceCollider.halfExtents,
+                staticSurfaceCollider.translation,
+                staticSurfaceCollider.rotation
+              );
 
       this.#surfaceColliderMetadataByHandle.set(
         collider,

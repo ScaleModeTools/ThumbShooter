@@ -54,7 +54,7 @@ const mapEditorBuildPrimitiveCatalogEntries = Object.freeze([
   }),
   Object.freeze({
     asset: requireBuildPrimitiveAsset(metaverseBuilderStepTileEnvironmentAssetId),
-    description: "Raised support tile for stairs, trim levels, and stepped cover.",
+    description: "Raised support tile for trim levels, path landings, and stepped cover.",
     footprint: Object.freeze({
       x: 4,
       y: 1,

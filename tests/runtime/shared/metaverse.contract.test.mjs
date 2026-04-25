@@ -302,6 +302,153 @@ test("shared metaverse world bundles carry validated gameplay profile ids", () =
   );
 });
 
+test("shared metaverse world bundles preserve authored environment presentation snapshots", () => {
+  const parsedBundle = parseMetaverseMapBundleSnapshot({
+    ...stagingGroundMapBundle,
+    environmentPresentation: {
+      environment: {
+        cloudCoverage: 0.42,
+        cloudDensity: 0.33,
+        cloudElevation: 0.58,
+        cloudScale: 0.00019,
+        cloudSpeed: 0.00007,
+        domeRadius: 420,
+        fogColor: [0.6, 0.7, 0.8],
+        fogDensity: 0.0018,
+        fogEnabled: true,
+        groundColor: [0.18, 0.22, 0.28],
+        groundFalloff: 1.3,
+        horizonColor: [0.84, 0.78, 0.7],
+        horizonSoftness: 0.26,
+        mieCoefficient: 0.006,
+        mieDirectionalG: 0.81,
+        rayleigh: 2.6,
+        skyExposure: 0.33,
+        skyExposureCurve: 0.8,
+        sunAzimuthDegrees: 148,
+        sunColor: [1, 0.88, 0.72],
+        sunElevationDegrees: 18,
+        toneMappingExposure: 0.31,
+        turbidity: 11
+      },
+      ocean: {
+        emissiveColor: [0.1, 0.2, 0.3],
+        farColor: [0.08, 0.16, 0.22],
+        height: 0,
+        nearColor: [0.16, 0.3, 0.44],
+        planeDepth: 72,
+        planeWidth: 72,
+        roughness: 0.18,
+        segmentCount: 96,
+        waveAmplitude: 0.24,
+        waveFrequencies: {
+          primary: 0.11,
+          ripple: 0.32,
+          secondary: 0.19
+        },
+        waveSpeeds: {
+          primary: 0.52,
+          ripple: 0.94,
+          secondary: 0.71
+        }
+      }
+    }
+  });
+
+  assert.equal(parsedBundle.environmentPresentation?.environment.fogEnabled, true);
+  assert.equal(parsedBundle.environmentPresentation?.environment.turbidity, 11);
+  assert.equal(parsedBundle.environmentPresentation?.environment.cloudScale, 0.00019);
+  assert.equal(parsedBundle.environmentPresentation?.environment.cloudSpeed, 0.00007);
+  assert.equal(parsedBundle.environmentPresentation?.environment.groundFalloff, 1.3);
+  assert.equal(parsedBundle.environmentPresentation?.environment.horizonSoftness, 0.26);
+  assert.equal(parsedBundle.environmentPresentation?.environment.skyExposure, 0.33);
+  assert.equal(
+    parsedBundle.environmentPresentation?.environment.skyExposureCurve,
+    0.8
+  );
+  assert.deepEqual(parsedBundle.environmentPresentation?.environment.fogColor, [
+    0.6,
+    0.7,
+    0.8
+  ]);
+  assert.deepEqual(parsedBundle.environmentPresentation?.environment.groundColor, [
+    0.18,
+    0.22,
+    0.28
+  ]);
+  assert.deepEqual(parsedBundle.environmentPresentation?.environment.horizonColor, [
+    0.84,
+    0.78,
+    0.7
+  ]);
+});
+
+test("shared metaverse world bundles default legacy environment cloud motion fields", () => {
+  const parsedBundle = parseMetaverseMapBundleSnapshot({
+    ...stagingGroundMapBundle,
+    environmentPresentation: {
+      environment: {
+        cloudCoverage: 0.3,
+        cloudDensity: 0.2,
+        cloudElevation: 0.5,
+        domeRadius: 360,
+        fogColor: [0.63, 0.76, 0.88],
+        fogDensity: 0.0023,
+        fogEnabled: false,
+        mieCoefficient: 0.005,
+        mieDirectionalG: 0.8,
+        rayleigh: 2.1,
+        sunAzimuthDegrees: 132,
+        sunColor: [1, 0.91, 0.74],
+        sunElevationDegrees: 28,
+        toneMappingExposure: 0.42,
+        turbidity: 9.5
+      },
+      ocean: {
+        emissiveColor: [0.08, 0.28, 0.37],
+        farColor: [0.05, 0.22, 0.34],
+        height: 0,
+        nearColor: [0.12, 0.45, 0.58],
+        planeDepth: 72,
+        planeWidth: 72,
+        roughness: 0.16,
+        segmentCount: 96,
+        waveAmplitude: 0.32,
+        waveFrequencies: {
+          primary: 0.11,
+          ripple: 0.38,
+          secondary: 0.18
+        },
+        waveSpeeds: {
+          primary: 0.62,
+          ripple: 1.28,
+          secondary: 0.87
+        }
+      }
+    }
+  });
+
+  assert.equal(parsedBundle.environmentPresentation?.environment.cloudScale, 0.0002);
+  assert.equal(parsedBundle.environmentPresentation?.environment.cloudSpeed, 0.0001);
+  assert.equal(parsedBundle.environmentPresentation?.environment.groundFalloff, 1.2);
+  assert.equal(parsedBundle.environmentPresentation?.environment.horizonSoftness, 0.22);
+  assert.equal(parsedBundle.environmentPresentation?.environment.skyExposure, 0.42);
+  assert.equal(
+    parsedBundle.environmentPresentation?.environment.skyExposureCurve,
+    1
+  );
+  assert.deepEqual(parsedBundle.environmentPresentation?.environment.groundColor, [
+    0.05,
+    0.22,
+    0.34
+  ]);
+  assert.deepEqual(parsedBundle.environmentPresentation?.environment.horizonColor, [
+    0.63,
+    0.76,
+    0.88
+  ]);
+});
+
 test("shared gameplay profiles expose one grounded jump physics snapshot", () => {
   assert.deepEqual(shellArcadeGameplayProfile.groundedJumpPhysics, {
     airborneMovementDampingFactor:

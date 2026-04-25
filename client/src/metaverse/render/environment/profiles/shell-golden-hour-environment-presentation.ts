@@ -1,26 +1,33 @@
 import {
   createMetaverseEnvironmentPresentationRgbTuple,
-  createMetaverseEnvironmentPresentationVector3,
   type MetaverseEnvironmentPresentationProfileSnapshot
 } from "./shell-default-environment-presentation";
 
 export const shellGoldenHourEnvironmentPresentationProfile = Object.freeze({
   environment: Object.freeze({
     domeRadius: 380,
+    cloudCoverage: 0.24,
+    cloudDensity: 0.34,
+    cloudElevation: 0.62,
+    cloudScale: 0.00017,
+    cloudSpeed: 0.00005,
     fogColor: createMetaverseEnvironmentPresentationRgbTuple(0.78, 0.6, 0.48),
     fogDensity: 0.0031,
-    horizonColor: createMetaverseEnvironmentPresentationRgbTuple(
-      0.94,
-      0.67,
-      0.47
-    ),
+    fogEnabled: false,
+    groundColor: createMetaverseEnvironmentPresentationRgbTuple(0.19, 0.16, 0.2),
+    groundFalloff: 1.35,
+    horizonColor: createMetaverseEnvironmentPresentationRgbTuple(0.96, 0.66, 0.46),
+    horizonSoftness: 0.28,
+    mieCoefficient: 0.0065,
+    mieDirectionalG: 0.82,
+    rayleigh: 2.4,
+    skyExposure: 0.3,
+    skyExposureCurve: 1,
+    sunAzimuthDegrees: 156,
     sunColor: createMetaverseEnvironmentPresentationRgbTuple(1, 0.78, 0.56),
-    sunDirection: createMetaverseEnvironmentPresentationVector3(
-      -0.24,
-      0.42,
-      -0.62
-    ),
-    zenithColor: createMetaverseEnvironmentPresentationRgbTuple(0.18, 0.19, 0.34)
+    sunElevationDegrees: 12,
+    toneMappingExposure: 0.34,
+    turbidity: 12
   }),
   id: "shell-golden-hour-environment-presentation",
   label: "Shell Golden Hour Environment",

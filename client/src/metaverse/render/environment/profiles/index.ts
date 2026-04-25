@@ -1,4 +1,5 @@
 import {
+  createMetaverseEnvironmentPresentationSnapshotFromProfile,
   shellDefaultEnvironmentPresentationProfile,
   type MetaverseEnvironmentPresentationProfileSnapshot
 } from "./shell-default-environment-presentation";
@@ -17,6 +18,10 @@ const metaverseEnvironmentPresentationProfilesById = new Map<
 );
 
 export type { MetaverseEnvironmentPresentationProfileSnapshot } from "./shell-default-environment-presentation";
+export {
+  cloneMetaverseEnvironmentPresentationSnapshot,
+  createMetaverseEnvironmentPresentationSnapshotFromProfile
+} from "./shell-default-environment-presentation";
 export { shellDefaultEnvironmentPresentationProfile } from "./shell-default-environment-presentation";
 export { shellGoldenHourEnvironmentPresentationProfile } from "./shell-golden-hour-environment-presentation";
 
@@ -32,4 +37,13 @@ export function readMetaverseEnvironmentPresentationProfile(
   }
 
   return metaverseEnvironmentPresentationProfilesById.get(profileId) ?? null;
+}
+
+export function resolveMetaverseEnvironmentPresentationSnapshot(
+  profileId: string | null
+) {
+  return createMetaverseEnvironmentPresentationSnapshotFromProfile(
+    readMetaverseEnvironmentPresentationProfile(profileId) ??
+      shellDefaultEnvironmentPresentationProfile
+  );
 }

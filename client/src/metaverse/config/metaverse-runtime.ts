@@ -4,11 +4,11 @@ import {
   type MetaversePlayerTeamId
 } from "@webgpu-metaverse/shared";
 import {
+  resolveMetaverseMapPlayerSpawnSupportPosition,
   resolveMetaverseMapPlayerSpawnNode,
   resolveMetaverseWorldPlacedWaterRegions,
   type MetaverseMapBundleSpawnNodeSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
-import { shellDefaultEnvironmentPresentationProfile } from "../render/environment/profiles";
 import { resolveDefaultMetaverseWorldBundleId } from "../world/bundle-registry";
 import { loadMetaverseMapBundle, resolveMetaversePortalConfigsFromBundle } from "../world/map-bundles";
 import type { MetaverseRuntimeConfig } from "../types/runtime-config";
@@ -31,9 +31,7 @@ function createMetaverseRuntimeSharedConfig(
       loadedBundle
     }
   );
-  const environmentPresentationProfile =
-    loadedBundle.environmentPresentationProfile ??
-    shellDefaultEnvironmentPresentationProfile;
+  const environmentPresentation = loadedBundle.environmentPresentation;
   const gameplayProfile = loadedBundle.gameplayProfile;
   const groundedJumpPhysics = gameplayProfile.groundedJumpPhysics;
 
@@ -69,7 +67,7 @@ function createMetaverseRuntimeSharedConfig(
       swimThirdPersonHeightOffsetMeters: 0.52
     },
     environment: {
-      ...environmentPresentationProfile.environment
+      ...environmentPresentation.environment
     },
     movement: {
       baseSpeedUnitsPerSecond: 14,
@@ -106,7 +104,7 @@ function createMetaverseRuntimeSharedConfig(
       }
     },
     ocean: {
-      ...environmentPresentationProfile.ocean
+      ...environmentPresentation.ocean
     },
     skiff: {
       ...gameplayProfile.vehicleTraversal,
@@ -144,8 +142,22 @@ function resolveClientDefaultSpawnNode(
     return null;
   }
 
+  const resolveSupportedSpawnNode = (
+    spawnNode: MetaverseMapBundleSpawnNodeSnapshot
+  ): MetaverseMapBundleSpawnNodeSnapshot => {
+    const position = resolveMetaverseMapPlayerSpawnSupportPosition({
+      compiledWorld: loadedBundle.bundle.compiledWorld,
+      spawnPosition: spawnNode.position
+    });
+
+    return Object.freeze({
+      ...spawnNode,
+      position
+    });
+  };
+
   if (localPlayerTeamId === null) {
-    return (
+    return resolveSupportedSpawnNode(
       loadedBundle.bundle.playerSpawnNodes.find(
         (spawnNode) => spawnNode.teamId === "neutral"
       ) ?? fallbackSpawnNode
@@ -153,10 +165,10 @@ function resolveClientDefaultSpawnNode(
   }
 
   if (localPlayerId === null) {
-    return fallbackSpawnNode;
+    return resolveSupportedSpawnNode(fallbackSpawnNode);
   }
 
-  return (
+  return resolveSupportedSpawnNode(
     resolveMetaverseMapPlayerSpawnNode({
       occupiedPlayerSnapshots: Object.freeze([]),
       playerId: localPlayerId,

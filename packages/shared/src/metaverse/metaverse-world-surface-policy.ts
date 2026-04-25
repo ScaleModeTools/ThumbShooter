@@ -165,6 +165,24 @@ function isSurfaceTriMeshCollider(
   );
 }
 
+function isSurfaceHeightfieldCollider(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot
+): collider is MetaverseWorldPlacedSurfaceColliderSnapshot & {
+  readonly heightSamples: Float32Array;
+  readonly sampleCountX: number;
+  readonly sampleCountZ: number;
+  readonly sampleSpacingMeters: number;
+  readonly shape: "heightfield";
+} {
+  return (
+    collider.shape === "heightfield" &&
+    collider.heightSamples instanceof Float32Array &&
+    typeof collider.sampleCountX === "number" &&
+    typeof collider.sampleCountZ === "number" &&
+    typeof collider.sampleSpacingMeters === "number"
+  );
+}
+
 function dotPlanar(
   leftX: number,
   leftZ: number,
@@ -374,12 +392,212 @@ function resolveTriMeshSupportHeightMeters(
   return highestSurfaceY;
 }
 
+function isPlanarPositionBlockedByTriMeshCollider(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+  x: number,
+  z: number,
+  paddingMeters: number,
+  minHeightMeters: number,
+  maxHeightMeters: number
+): boolean {
+  if (!isSurfaceTriMeshCollider(collider)) {
+    return false;
+  }
+
+  const localPoint = rotatePlanarPoint(
+    x - collider.translation.x,
+    z - collider.translation.z,
+    -collider.rotationYRadians
+  );
+
+  if (
+    Math.abs(localPoint.x) > collider.halfExtents.x + paddingMeters ||
+    Math.abs(localPoint.z) > collider.halfExtents.z + paddingMeters
+  ) {
+    return false;
+  }
+
+  const localMinHeightMeters = minHeightMeters - collider.translation.y;
+  const localMaxHeightMeters = maxHeightMeters - collider.translation.y;
+  const maxDistanceSquared = paddingMeters * paddingMeters;
+  const closestPoint = {
+    pointX: 0,
+    pointZ: 0,
+    u: 0,
+    v: 0,
+    w: 0
+  };
+
+  for (let index = 0; index + 2 < collider.indices.length; index += 3) {
+    const vertexAIndex = (collider.indices[index] ?? 0) * 3;
+    const vertexBIndex = (collider.indices[index + 1] ?? 0) * 3;
+    const vertexCIndex = (collider.indices[index + 2] ?? 0) * 3;
+    const ax = collider.vertices[vertexAIndex] ?? 0;
+    const ay = collider.vertices[vertexAIndex + 1] ?? 0;
+    const az = collider.vertices[vertexAIndex + 2] ?? 0;
+    const bx = collider.vertices[vertexBIndex] ?? 0;
+    const by = collider.vertices[vertexBIndex + 1] ?? 0;
+    const bz = collider.vertices[vertexBIndex + 2] ?? 0;
+    const cx = collider.vertices[vertexCIndex] ?? 0;
+    const cy = collider.vertices[vertexCIndex + 1] ?? 0;
+    const cz = collider.vertices[vertexCIndex + 2] ?? 0;
+    resolveClosestPlanarPointOnTriangle(
+      closestPoint,
+      localPoint.x,
+      localPoint.z,
+      ax,
+      az,
+      bx,
+      bz,
+      cx,
+      cz
+    );
+    const deltaX = closestPoint.pointX - localPoint.x;
+    const deltaZ = closestPoint.pointZ - localPoint.z;
+
+    if (
+      paddingMeters > 0 &&
+      deltaX * deltaX + deltaZ * deltaZ > maxDistanceSquared
+    ) {
+      continue;
+    }
+
+    if (
+      paddingMeters <= 0 &&
+      (Math.abs(deltaX) > 0.0001 || Math.abs(deltaZ) > 0.0001)
+    ) {
+      continue;
+    }
+
+    const localTriangleMinY = Math.min(ay, by, cy);
+    const localTriangleMaxY = Math.max(ay, by, cy);
+
+    if (
+      localTriangleMaxY < localMinHeightMeters ||
+      localTriangleMinY > localMaxHeightMeters
+    ) {
+      continue;
+    }
+
+    const abx = bx - ax;
+    const abz = bz - az;
+    const acx = cx - ax;
+    const acz = cz - az;
+    const normalY = abz * acx - abx * acz;
+
+    if (Math.abs(normalY) <= 0.0001) {
+      return true;
+    }
+
+    const localSurfaceY =
+      ay * closestPoint.u + by * closestPoint.v + cy * closestPoint.w;
+
+    if (
+      localSurfaceY > localMinHeightMeters + automaticSurfaceBlockingHeightToleranceMeters &&
+      localSurfaceY <=
+        localMaxHeightMeters + automaticSurfaceBlockingHeightToleranceMeters
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function resolveHeightfieldSampleHeight(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot & {
+    readonly heightSamples: Float32Array;
+    readonly sampleCountX: number;
+    readonly sampleCountZ: number;
+    readonly sampleSpacingMeters: number;
+    readonly shape: "heightfield";
+  },
+  sampleX: number,
+  sampleZ: number
+): number {
+  return collider.heightSamples[sampleZ * collider.sampleCountX + sampleX] ?? 0;
+}
+
+function resolveHeightfieldSupportHeightMeters(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+  x: number,
+  z: number,
+  paddingMeters: number
+): number | null {
+  if (!isSurfaceHeightfieldCollider(collider)) {
+    return null;
+  }
+
+  if (
+    collider.sampleCountX < 2 ||
+    collider.sampleCountZ < 2 ||
+    collider.sampleSpacingMeters <= 0
+  ) {
+    return null;
+  }
+
+  const localPoint = rotatePlanarPoint(
+    x - collider.translation.x,
+    z - collider.translation.z,
+    -collider.rotationYRadians
+  );
+  const halfX = (collider.sampleCountX - 1) * collider.sampleSpacingMeters * 0.5;
+  const halfZ = (collider.sampleCountZ - 1) * collider.sampleSpacingMeters * 0.5;
+
+  if (
+    Math.abs(localPoint.x) > halfX + paddingMeters ||
+    Math.abs(localPoint.z) > halfZ + paddingMeters
+  ) {
+    return null;
+  }
+
+  const sampleXFloat = Math.min(
+    collider.sampleCountX - 1,
+    Math.max(0, localPoint.x / collider.sampleSpacingMeters + (collider.sampleCountX - 1) * 0.5)
+  );
+  const sampleZFloat = Math.min(
+    collider.sampleCountZ - 1,
+    Math.max(0, localPoint.z / collider.sampleSpacingMeters + (collider.sampleCountZ - 1) * 0.5)
+  );
+  const cellX = Math.min(
+    collider.sampleCountX - 2,
+    Math.max(0, Math.floor(sampleXFloat))
+  );
+  const cellZ = Math.min(
+    collider.sampleCountZ - 2,
+    Math.max(0, Math.floor(sampleZFloat))
+  );
+  const localX = sampleXFloat - cellX;
+  const localZ = sampleZFloat - cellZ;
+  const topLeft = resolveHeightfieldSampleHeight(collider, cellX, cellZ);
+  const topRight = resolveHeightfieldSampleHeight(collider, cellX + 1, cellZ);
+  const bottomLeft = resolveHeightfieldSampleHeight(collider, cellX, cellZ + 1);
+  const bottomRight = resolveHeightfieldSampleHeight(
+    collider,
+    cellX + 1,
+    cellZ + 1
+  );
+
+  const localSurfaceY =
+    localX + localZ <= 1
+      ? topLeft + (topRight - topLeft) * localX + (bottomLeft - topLeft) * localZ
+      : topRight * (1 - localZ) +
+        bottomLeft * (1 - localX) +
+        bottomRight * (localX + localZ - 1);
+
+  return collider.translation.y + localSurfaceY;
+}
+
 function resolveColliderSupportHeightMeters(
   collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
   x: number,
   z: number,
   paddingMeters: number
 ): number | null {
+  if (isSurfaceHeightfieldCollider(collider)) {
+    return resolveHeightfieldSupportHeightMeters(collider, x, z, paddingMeters);
+  }
+
   if (isSurfaceTriMeshCollider(collider)) {
     return resolveTriMeshSupportHeightMeters(collider, x, z, paddingMeters);
   }
@@ -473,7 +691,18 @@ function isPlanarPositionBlocked(
       continue;
     }
 
-    if (isPlanarPositionInsideCollider(collider, x, z, paddingMeters)) {
+    if (
+      collider.shape === "trimesh"
+        ? isPlanarPositionBlockedByTriMeshCollider(
+            collider,
+            x,
+            z,
+            paddingMeters,
+            minHeightMeters,
+            maxHeightMeters
+          )
+        : isPlanarPositionInsideCollider(collider, x, z, paddingMeters)
+    ) {
       return true;
     }
   }
@@ -488,7 +717,8 @@ function resolveAutomaticSurfaceProbeSupport(
   x: number,
   z: number,
   paddingMeters = 0,
-  excludedOwnerEnvironmentAssetId: string | null = null
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  maxStepSupportHeightMeters: number | null = null
 ): AutomaticSurfaceProbeSupportSnapshot {
   let highestStepSupportHeightMeters: number | null = null;
   let highestSupportHeightMeters: number | null = null;
@@ -534,8 +764,12 @@ function resolveAutomaticSurfaceProbeSupport(
       }
 
       if (
-        highestStepSupportHeightMeters === null ||
-        surfaceY > highestStepSupportHeightMeters
+        (maxStepSupportHeightMeters === null ||
+          surfaceY <=
+            maxStepSupportHeightMeters +
+              automaticSurfaceBlockingHeightToleranceMeters) &&
+        (highestStepSupportHeightMeters === null ||
+          surfaceY > highestStepSupportHeightMeters)
       ) {
         highestStepSupportHeightMeters = surfaceY;
       }
@@ -558,6 +792,10 @@ function resolveAutomaticSurfaceProbeSupport(
 
       if (
         riseAboveWaterMeters <= highestStepRiseAboveWaterMeters &&
+        (maxStepSupportHeightMeters === null ||
+          surfaceY <=
+            maxStepSupportHeightMeters +
+              automaticSurfaceBlockingHeightToleranceMeters) &&
         (highestStepSupportHeightMeters === null ||
           surfaceY > highestStepSupportHeightMeters)
       ) {
@@ -591,7 +829,8 @@ function sampleAutomaticSurfaceSupport(
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   paddingMeters: number,
-  excludedOwnerEnvironmentAssetId: string | null = null
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  maxStepSupportHeightMeters: number | null = null
 ): AutomaticSurfaceSupportSnapshot {
   const probeForwardDistanceMeters =
     config.capsuleRadiusMeters * automaticSurfaceProbeForwardDistanceFactor;
@@ -604,7 +843,8 @@ function sampleAutomaticSurfaceSupport(
     position.x,
     position.z,
     paddingMeters,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    maxStepSupportHeightMeters
   );
   const forwardProbeOffset = resolvePlanarProbeOffset(
     probeForwardDistanceMeters,
@@ -618,7 +858,8 @@ function sampleAutomaticSurfaceSupport(
     position.x + forwardProbeOffset.x,
     position.z + forwardProbeOffset.z,
     paddingMeters,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    maxStepSupportHeightMeters
   );
   const forwardLeftProbeOffset = resolvePlanarProbeOffset(
     probeForwardDistanceMeters * 0.72,
@@ -632,7 +873,8 @@ function sampleAutomaticSurfaceSupport(
     position.x + forwardLeftProbeOffset.x,
     position.z + forwardLeftProbeOffset.z,
     paddingMeters,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    maxStepSupportHeightMeters
   );
   const forwardRightProbeOffset = resolvePlanarProbeOffset(
     probeForwardDistanceMeters * 0.72,
@@ -646,7 +888,8 @@ function sampleAutomaticSurfaceSupport(
     position.x + forwardRightProbeOffset.x,
     position.z + forwardRightProbeOffset.z,
     paddingMeters,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    maxStepSupportHeightMeters
   );
   const rearProbeOffset = resolvePlanarProbeOffset(
     -probeForwardDistanceMeters * 0.48,
@@ -660,7 +903,8 @@ function sampleAutomaticSurfaceSupport(
     position.x + rearProbeOffset.x,
     position.z + rearProbeOffset.z,
     paddingMeters,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    maxStepSupportHeightMeters
   );
   let highestStepSupportHeightMeters: number | null = null;
   let stepSupportedProbeCount = 0;
@@ -810,6 +1054,14 @@ export function resolveMetaverseWorldGroundedAutostepHeightMeters(
     return null;
   }
 
+  if (
+    jumpRequested ||
+    toFiniteNumber(verticalSpeedUnitsPerSecond, 0) >
+      automaticSurfaceBlockingHeightToleranceMeters
+  ) {
+    return null;
+  }
+
   const normalizedMoveAxis = clampedMoveAxis / inputMagnitude;
   const normalizedStrafeAxis = clampedStrafeAxis / inputMagnitude;
   const forwardX = Math.sin(yawRadians);
@@ -822,21 +1074,10 @@ export function resolveMetaverseWorldGroundedAutostepHeightMeters(
     forwardZ * normalizedMoveAxis + rightZ * normalizedStrafeAxis;
   const movementYawRadians = Math.atan2(movementDirectionX, -movementDirectionZ);
   const currentSupportHeightMeters = position.y;
-  const effectiveUpwardSpeedUnitsPerSecond = Math.max(
-    0,
-    toFiniteNumber(verticalSpeedUnitsPerSecond, 0),
-    jumpRequested ? config.jumpImpulseUnitsPerSecond : 0
-  );
-  const maxJumpRiseMeters =
-    effectiveUpwardSpeedUnitsPerSecond <= 0
-      ? 0
-      : (effectiveUpwardSpeedUnitsPerSecond *
-          effectiveUpwardSpeedUnitsPerSecond) /
-        Math.max(0.001, config.gravityUnitsPerSecond * 2);
-  const maxEligibleStepRiseMeters = Math.max(
-    config.stepHeightMeters + automaticSurfaceStepHeightLeewayMeters,
-    maxJumpRiseMeters + automaticSurfaceStepHeightLeewayMeters
-  );
+  const maxEligibleStepRiseMeters =
+    config.stepHeightMeters + automaticSurfaceStepHeightLeewayMeters;
+  const maxStepSupportHeightMeters =
+    currentSupportHeightMeters + maxEligibleStepRiseMeters;
   const probeForwardDistanceMeters =
     config.capsuleRadiusMeters * automaticSurfaceProbeForwardDistanceFactor;
   const probeLateralDistanceMeters =
@@ -861,7 +1102,8 @@ export function resolveMetaverseWorldGroundedAutostepHeightMeters(
       position.x + probeOffset.x,
       position.z + probeOffset.z,
       0,
-      excludedOwnerEnvironmentAssetId
+      excludedOwnerEnvironmentAssetId,
+      maxStepSupportHeightMeters
     );
 
     if (supportHeightMeters === null) {
@@ -903,7 +1145,12 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
     currentLocomotionMode === "grounded"
       ? config.capsuleRadiusMeters * automaticSurfaceGroundedHoldPaddingFactor
       : 0,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    currentLocomotionMode === "grounded"
+      ? position.y +
+          config.stepHeightMeters +
+          automaticSurfaceStepHeightLeewayMeters
+      : null
   );
   const resolvedSupportHeightMeters =
     resolveMetaverseWorldSurfaceHeightMeters(

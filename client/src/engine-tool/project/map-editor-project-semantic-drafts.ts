@@ -1,42 +1,60 @@
 import type {
   MetaverseMapBundleSemanticConnectorSnapshot,
   MetaverseMapBundleSemanticEdgeSnapshot,
+  MetaverseMapBundleSemanticGameplayVolumeSnapshot,
+  MetaverseMapBundleSemanticGridRectSnapshot,
+  MetaverseMapBundleSemanticLightSnapshot,
+  MetaverseMapBundleSemanticMaterialDefinitionSnapshot,
+  MetaverseMapBundleSemanticMaterialId,
   MetaverseMapBundleSemanticPlanarLoopSnapshot,
+  MetaverseMapBundleSemanticPlanarPointSnapshot,
   MetaverseMapBundleSemanticRegionSnapshot,
+  MetaverseMapBundleSemanticStructureKind,
+  MetaverseMapBundleSemanticStructureSnapshot,
   MetaverseMapBundleSemanticSurfaceSnapshot,
-  MetaverseMapBundleSemanticTerrainChunkSnapshot,
+  MetaverseMapBundleSemanticTerrainMaterialLayerSnapshot,
+  MetaverseMapBundleSemanticTerrainPatchSnapshot,
   MetaverseMapBundleSemanticWorldSnapshot,
   MetaverseWorldSurfaceVector3Snapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
-export interface MapEditorTerrainChunkDraftSnapshot {
-  readonly chunkId: string;
-  readonly heights: readonly number[];
+export interface MapEditorTerrainPatchDraftSnapshot {
+  readonly grid: MetaverseMapBundleSemanticGridRectSnapshot;
+  readonly heightSamples: readonly number[];
   readonly label: string;
+  readonly materialLayers:
+    readonly MetaverseMapBundleSemanticTerrainMaterialLayerSnapshot[];
   readonly origin: MetaverseWorldSurfaceVector3Snapshot;
+  readonly rotationYRadians: number;
   readonly sampleCountX: number;
   readonly sampleCountZ: number;
-  readonly sampleStrideMeters: number;
+  readonly sampleSpacingMeters: number;
+  readonly terrainPatchId: string;
   readonly waterLevelMeters: number | null;
 }
+
+export interface MapEditorMaterialDefinitionDraftSnapshot
+  extends MetaverseMapBundleSemanticMaterialDefinitionSnapshot {}
 
 export interface MapEditorSurfaceDraftSnapshot {
   readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly elevation: number;
-  readonly kind: "flat-slab" | "terrain-patch";
+  readonly kind: "flat-slab" | "sloped-plane" | "terrain-patch";
   readonly label: string;
   readonly rotationYRadians: number;
   readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly slopeRiseMeters: number;
   readonly surfaceId: string;
-  readonly terrainChunkId: string | null;
+  readonly terrainPatchId: string | null;
 }
 
 export interface MapEditorRegionDraftSnapshot {
   readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly label: string;
   readonly materialReferenceId: string | null;
+  readonly outerLoop: MetaverseMapBundleSemanticPlanarLoopSnapshot;
   readonly regionId: string;
-  readonly regionKind: "arena" | "floor" | "path";
+  readonly regionKind: "arena" | "floor" | "path" | "roof";
   readonly rotationYRadians: number;
   readonly size: MetaverseWorldSurfaceVector3Snapshot;
   readonly surfaceId: string;
@@ -54,6 +72,7 @@ export interface MapEditorEdgeDraftSnapshot {
   readonly heightMeters: number;
   readonly label: string;
   readonly lengthMeters: number;
+  readonly path: readonly MetaverseMapBundleSemanticPlanarPointSnapshot[];
   readonly rotationYRadians: number;
   readonly surfaceId: string;
   readonly thicknessMeters: number;
@@ -62,12 +81,55 @@ export interface MapEditorEdgeDraftSnapshot {
 export interface MapEditorConnectorDraftSnapshot {
   readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly connectorId: string;
-  readonly connectorKind: "door" | "gate" | "ramp" | "stairs";
+  readonly connectorKind: "door" | "gate" | "ramp";
   readonly fromSurfaceId: string;
   readonly label: string;
   readonly rotationYRadians: number;
   readonly size: MetaverseWorldSurfaceVector3Snapshot;
   readonly toSurfaceId: string;
+}
+
+export interface MapEditorStructuralDraftSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly grid: MetaverseMapBundleSemanticGridRectSnapshot;
+  readonly label: string;
+  readonly materialId: MetaverseMapBundleSemanticMaterialId;
+  readonly materialReferenceId: string | null;
+  readonly rotationYRadians: number;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly structureId: string;
+  readonly structureKind: MetaverseMapBundleSemanticStructureKind;
+  readonly traversalAffordance: "blocker" | "support";
+}
+
+export interface MapEditorGameplayVolumeDraftSnapshot {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly label: string;
+  readonly priority: number;
+  readonly rotationYRadians: number;
+  readonly routePoints: readonly MetaverseWorldSurfaceVector3Snapshot[];
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly tags: readonly string[];
+  readonly teamId: "blue" | "neutral" | "red" | null;
+  readonly volumeId: string;
+  readonly volumeKind:
+    | "combat-lane"
+    | "cover-volume"
+    | "spawn-room"
+    | "team-zone"
+    | "vehicle-route";
+}
+
+export interface MapEditorLightDraftSnapshot {
+  readonly color: readonly [number, number, number];
+  readonly intensity: number;
+  readonly label: string;
+  readonly lightId: string;
+  readonly lightKind: "ambient" | "area" | "point" | "spot" | "sun";
+  readonly position: MetaverseWorldSurfaceVector3Snapshot;
+  readonly rangeMeters: number | null;
+  readonly rotationYRadians: number;
+  readonly target: MetaverseWorldSurfaceVector3Snapshot | null;
 }
 
 function freezeVector3(
@@ -83,6 +145,7 @@ function freezeVector3(
 function resolveLoopBounds(
   loop: MetaverseMapBundleSemanticPlanarLoopSnapshot
 ): {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly size: MetaverseWorldSurfaceVector3Snapshot;
 } {
   let minX = Number.POSITIVE_INFINITY;
@@ -99,6 +162,11 @@ function resolveLoopBounds(
 
   if (!Number.isFinite(minX) || !Number.isFinite(minZ)) {
     return Object.freeze({
+      center: Object.freeze({
+        x: 0,
+        y: 0,
+        z: 0
+      }),
       size: Object.freeze({
         x: 4,
         y: 0.5,
@@ -108,6 +176,11 @@ function resolveLoopBounds(
   }
 
   return Object.freeze({
+    center: Object.freeze({
+      x: (minX + maxX) * 0.5,
+      y: 0,
+      z: (minZ + maxZ) * 0.5
+    }),
     size: Object.freeze({
       x: Math.max(0.5, maxX - minX),
       y: 0.5,
@@ -116,13 +189,49 @@ function resolveLoopBounds(
   });
 }
 
-function freezeTerrainChunkDraft(
-  draft: MapEditorTerrainChunkDraftSnapshot
-): MapEditorTerrainChunkDraftSnapshot {
+export function freezeTerrainPatchDraft(
+  draft: MapEditorTerrainPatchDraftSnapshot
+): MapEditorTerrainPatchDraftSnapshot {
   return Object.freeze({
     ...draft,
-    heights: Object.freeze([...draft.heights]),
+    grid: Object.freeze({
+      cellX: draft.grid.cellX,
+      cellZ: draft.grid.cellZ,
+      cellsX: draft.grid.cellsX,
+      cellsZ: draft.grid.cellsZ,
+      layer: draft.grid.layer
+    }),
+    heightSamples: Object.freeze([...draft.heightSamples]),
+    materialLayers: Object.freeze(
+      draft.materialLayers.map((layer) =>
+        Object.freeze({
+          layerId: layer.layerId,
+          materialId: layer.materialId,
+          weightSamples: Object.freeze([...layer.weightSamples])
+        })
+      )
+    ),
     origin: freezeVector3(draft.origin)
+  });
+}
+
+export function freezeMaterialDefinitionDraft(
+  draft: MapEditorMaterialDefinitionDraftSnapshot
+): MapEditorMaterialDefinitionDraftSnapshot {
+  return Object.freeze({
+    accentColorHex: draft.accentColorHex,
+    baseColorHex: draft.baseColorHex,
+    baseMaterialId: draft.baseMaterialId,
+    label: draft.label,
+    materialId: draft.materialId,
+    metalness: draft.metalness,
+    opacity: draft.opacity,
+    roughness: draft.roughness,
+    textureBrightness: draft.textureBrightness,
+    textureContrast: draft.textureContrast,
+    textureImageDataUrl: draft.textureImageDataUrl,
+    texturePatternStrength: draft.texturePatternStrength,
+    textureRepeat: draft.textureRepeat
   });
 }
 
@@ -142,6 +251,16 @@ export function freezeRegionDraft(
   return Object.freeze({
     ...draft,
     center: freezeVector3(draft.center),
+    outerLoop: Object.freeze({
+      points: Object.freeze(
+        draft.outerLoop.points.map((point) =>
+          Object.freeze({
+            x: point.x,
+            z: point.z
+          })
+        )
+      )
+    }),
     size: freezeVector3(draft.size)
   });
 }
@@ -151,7 +270,15 @@ export function freezeEdgeDraft(
 ): MapEditorEdgeDraftSnapshot {
   return Object.freeze({
     ...draft,
-    center: freezeVector3(draft.center)
+    center: freezeVector3(draft.center),
+    path: Object.freeze(
+      draft.path.map((point) =>
+        Object.freeze({
+          x: point.x,
+          z: point.z
+        })
+      )
+    )
   });
 }
 
@@ -165,21 +292,78 @@ export function freezeConnectorDraft(
   });
 }
 
-export function createMapEditorTerrainChunkDrafts(
+export function freezeStructuralDraft(
+  draft: MapEditorStructuralDraftSnapshot
+): MapEditorStructuralDraftSnapshot {
+  return Object.freeze({
+    ...draft,
+    center: freezeVector3(draft.center),
+    grid: Object.freeze({
+      cellX: draft.grid.cellX,
+      cellZ: draft.grid.cellZ,
+      cellsX: draft.grid.cellsX,
+      cellsZ: draft.grid.cellsZ,
+      layer: draft.grid.layer
+    }),
+    size: freezeVector3(draft.size)
+  });
+}
+
+export function freezeGameplayVolumeDraft(
+  draft: MapEditorGameplayVolumeDraftSnapshot
+): MapEditorGameplayVolumeDraftSnapshot {
+  return Object.freeze({
+    ...draft,
+    center: freezeVector3(draft.center),
+    routePoints: Object.freeze(draft.routePoints.map(freezeVector3)),
+    size: freezeVector3(draft.size),
+    tags: Object.freeze([...draft.tags])
+  });
+}
+
+export function freezeLightDraft(
+  draft: MapEditorLightDraftSnapshot
+): MapEditorLightDraftSnapshot {
+  return Object.freeze({
+    ...draft,
+    color: Object.freeze([
+      draft.color[0],
+      draft.color[1],
+      draft.color[2]
+    ] as const),
+    position: freezeVector3(draft.position),
+    target: draft.target === null ? null : freezeVector3(draft.target)
+  });
+}
+
+export function createMapEditorTerrainPatchDrafts(
   semanticWorld: MetaverseMapBundleSemanticWorldSnapshot
-): readonly MapEditorTerrainChunkDraftSnapshot[] {
+): readonly MapEditorTerrainPatchDraftSnapshot[] {
   return Object.freeze(
-    semanticWorld.terrainChunks.map((terrainChunk) =>
-      freezeTerrainChunkDraft({
-        chunkId: terrainChunk.chunkId,
-        heights: terrainChunk.heights,
-        label: terrainChunk.chunkId,
-        origin: terrainChunk.origin,
-        sampleCountX: terrainChunk.sampleCountX,
-        sampleCountZ: terrainChunk.sampleCountZ,
-        sampleStrideMeters: terrainChunk.sampleStrideMeters,
-        waterLevelMeters: terrainChunk.waterLevelMeters
+    semanticWorld.terrainPatches.map((terrainPatch) =>
+      freezeTerrainPatchDraft({
+        grid: terrainPatch.grid,
+        heightSamples: terrainPatch.heightSamples,
+        label: terrainPatch.label,
+        materialLayers: terrainPatch.materialLayers,
+        origin: terrainPatch.origin,
+        rotationYRadians: terrainPatch.rotationYRadians,
+        sampleCountX: terrainPatch.sampleCountX,
+        sampleCountZ: terrainPatch.sampleCountZ,
+        sampleSpacingMeters: terrainPatch.sampleSpacingMeters,
+        terrainPatchId: terrainPatch.terrainPatchId,
+        waterLevelMeters: terrainPatch.waterLevelMeters
       })
+    )
+  );
+}
+
+export function createMapEditorMaterialDefinitionDrafts(
+  semanticWorld: MetaverseMapBundleSemanticWorldSnapshot
+): readonly MapEditorMaterialDefinitionDraftSnapshot[] {
+  return Object.freeze(
+    semanticWorld.materialDefinitions.map((materialDefinition) =>
+      freezeMaterialDefinitionDraft(materialDefinition)
     )
   );
 }
@@ -196,8 +380,9 @@ export function createMapEditorSurfaceDrafts(
         label: surface.label,
         rotationYRadians: surface.rotationYRadians,
         size: surface.size,
+        slopeRiseMeters: surface.slopeRiseMeters,
         surfaceId: surface.surfaceId,
-        terrainChunkId: surface.terrainChunkId
+        terrainPatchId: surface.terrainPatchId
       })
     )
   );
@@ -218,13 +403,14 @@ export function createMapEditorRegionDrafts(
         center:
           surface === null
             ? Object.freeze({
-                x: 0,
+                x: bounds.center.x,
                 y: 0,
-                z: 0
+                z: bounds.center.z
               })
             : surface.center,
         label: region.label,
         materialReferenceId: region.materialReferenceId,
+        outerLoop: region.outerLoop,
         regionId: region.regionId,
         regionKind: region.regionKind,
         rotationYRadians: surface?.rotationYRadians ?? 0,
@@ -272,6 +458,7 @@ export function createMapEditorEdgeDrafts(
           0.5,
           Math.hypot(endPoint.x - startPoint.x, endPoint.z - startPoint.z)
         ),
+        path: edge.path,
         rotationYRadians: surface?.rotationYRadians ?? 0,
         surfaceId: edge.surfaceId,
         thicknessMeters: edge.thicknessMeters
@@ -299,6 +486,68 @@ export function createMapEditorConnectorDrafts(
   );
 }
 
+export function createMapEditorStructuralDrafts(
+  semanticWorld: MetaverseMapBundleSemanticWorldSnapshot
+): readonly MapEditorStructuralDraftSnapshot[] {
+  return Object.freeze(
+    semanticWorld.structures.map((structure) =>
+      freezeStructuralDraft({
+        center: structure.center,
+        grid: structure.grid,
+        label: structure.label,
+        materialId: structure.materialId,
+        materialReferenceId: structure.materialReferenceId,
+        rotationYRadians: structure.rotationYRadians,
+        size: structure.size,
+        structureId: structure.structureId,
+        structureKind: structure.structureKind,
+        traversalAffordance: structure.traversalAffordance
+      })
+    )
+  );
+}
+
+export function createMapEditorGameplayVolumeDrafts(
+  semanticWorld: MetaverseMapBundleSemanticWorldSnapshot
+): readonly MapEditorGameplayVolumeDraftSnapshot[] {
+  return Object.freeze(
+    semanticWorld.gameplayVolumes.map((volume) =>
+      freezeGameplayVolumeDraft({
+        center: volume.center,
+        label: volume.label,
+        priority: volume.priority,
+        rotationYRadians: volume.rotationYRadians,
+        routePoints: volume.routePoints,
+        size: volume.size,
+        tags: volume.tags,
+        teamId: volume.teamId,
+        volumeId: volume.volumeId,
+        volumeKind: volume.volumeKind
+      })
+    )
+  );
+}
+
+export function createMapEditorLightDrafts(
+  semanticWorld: MetaverseMapBundleSemanticWorldSnapshot
+): readonly MapEditorLightDraftSnapshot[] {
+  return Object.freeze(
+    semanticWorld.lights.map((light) =>
+      freezeLightDraft({
+        color: light.color,
+        intensity: light.intensity,
+        label: light.label,
+        lightId: light.lightId,
+        lightKind: light.lightKind,
+        position: light.position,
+        rangeMeters: light.rangeMeters,
+        rotationYRadians: light.rotationYRadians,
+        target: light.target
+      })
+    )
+  );
+}
+
 export function createSemanticSurfaceSnapshotFromDraft(
   draft: MapEditorSurfaceDraftSnapshot
 ): MetaverseMapBundleSemanticSurfaceSnapshot {
@@ -309,8 +558,9 @@ export function createSemanticSurfaceSnapshotFromDraft(
     label: draft.label,
     rotationYRadians: draft.rotationYRadians,
     size: freezeVector3(draft.size),
+    slopeRiseMeters: draft.slopeRiseMeters,
     surfaceId: draft.surfaceId,
-    terrainChunkId: draft.terrainChunkId
+    terrainPatchId: draft.terrainPatchId
   });
 }
 
@@ -346,7 +596,16 @@ export function createSemanticRegionSnapshotFromDraft(
     holes: Object.freeze([]),
     label: draft.label,
     materialReferenceId: draft.materialReferenceId,
-    outerLoop: createRectangularLoop(draft.size),
+    outerLoop: Object.freeze({
+      points: Object.freeze(
+        draft.outerLoop.points.map((point) =>
+          Object.freeze({
+            x: point.x,
+            z: point.z
+          })
+        )
+      )
+    }),
     regionId: draft.regionId,
     regionKind: draft.regionKind,
     surfaceId: draft.surfaceId
@@ -361,16 +620,14 @@ export function createSemanticEdgeSnapshotFromDraft(
     edgeKind: draft.edgeKind,
     heightMeters: draft.heightMeters,
     label: draft.label,
-    path: Object.freeze([
-      Object.freeze({
-        x: -draft.lengthMeters * 0.5,
-        z: 0
-      }),
-      Object.freeze({
-        x: draft.lengthMeters * 0.5,
-        z: 0
-      })
-    ]),
+    path: Object.freeze(
+      draft.path.map((point) =>
+        Object.freeze({
+          x: point.x,
+          z: point.z
+        })
+      )
+    ),
     surfaceId: draft.surfaceId,
     thicknessMeters: draft.thicknessMeters
   });
@@ -391,16 +648,100 @@ export function createSemanticConnectorSnapshotFromDraft(
   });
 }
 
-export function createSemanticTerrainChunkSnapshotFromDraft(
-  draft: MapEditorTerrainChunkDraftSnapshot
-): MetaverseMapBundleSemanticTerrainChunkSnapshot {
+export function createSemanticStructureSnapshotFromDraft(
+  draft: MapEditorStructuralDraftSnapshot
+): MetaverseMapBundleSemanticStructureSnapshot {
   return Object.freeze({
-    chunkId: draft.chunkId,
-    heights: Object.freeze([...draft.heights]),
+    center: freezeVector3(draft.center),
+    grid: Object.freeze({
+      cellX: draft.grid.cellX,
+      cellZ: draft.grid.cellZ,
+      cellsX: draft.grid.cellsX,
+      cellsZ: draft.grid.cellsZ,
+      layer: draft.grid.layer
+    }),
+    label: draft.label,
+    materialId: draft.materialId,
+    materialReferenceId: draft.materialReferenceId,
+    rotationYRadians: draft.rotationYRadians,
+    size: freezeVector3(draft.size),
+    structureId: draft.structureId,
+    structureKind: draft.structureKind,
+    traversalAffordance: draft.traversalAffordance
+  });
+}
+
+export function createSemanticGameplayVolumeSnapshotFromDraft(
+  draft: MapEditorGameplayVolumeDraftSnapshot
+): MetaverseMapBundleSemanticGameplayVolumeSnapshot {
+  return Object.freeze({
+    center: freezeVector3(draft.center),
+    label: draft.label,
+    priority: draft.priority,
+    rotationYRadians: draft.rotationYRadians,
+    routePoints: Object.freeze(draft.routePoints.map(freezeVector3)),
+    size: freezeVector3(draft.size),
+    tags: Object.freeze([...draft.tags]),
+    teamId: draft.teamId,
+    volumeId: draft.volumeId,
+    volumeKind: draft.volumeKind
+  });
+}
+
+export function createSemanticLightSnapshotFromDraft(
+  draft: MapEditorLightDraftSnapshot
+): MetaverseMapBundleSemanticLightSnapshot {
+  return Object.freeze({
+    color: Object.freeze([
+      draft.color[0],
+      draft.color[1],
+      draft.color[2]
+    ] as const),
+    intensity: draft.intensity,
+    label: draft.label,
+    lightId: draft.lightId,
+    lightKind: draft.lightKind,
+    position: freezeVector3(draft.position),
+    rangeMeters: draft.rangeMeters,
+    rotationYRadians: draft.rotationYRadians,
+    target: draft.target === null ? null : freezeVector3(draft.target)
+  });
+}
+
+export function createSemanticMaterialDefinitionSnapshotFromDraft(
+  draft: MapEditorMaterialDefinitionDraftSnapshot
+): MetaverseMapBundleSemanticMaterialDefinitionSnapshot {
+  return freezeMaterialDefinitionDraft(draft);
+}
+
+export function createSemanticTerrainPatchSnapshotFromDraft(
+  draft: MapEditorTerrainPatchDraftSnapshot
+): MetaverseMapBundleSemanticTerrainPatchSnapshot {
+  return Object.freeze({
+    grid: Object.freeze({
+      cellX: draft.grid.cellX,
+      cellZ: draft.grid.cellZ,
+      cellsX: draft.grid.cellsX,
+      cellsZ: draft.grid.cellsZ,
+      layer: draft.grid.layer
+    }),
+    heightSamples: Object.freeze([...draft.heightSamples]),
+    label: draft.label,
+    materialLayers: Object.freeze(
+      draft.materialLayers.map((layer) =>
+        Object.freeze({
+          layerId: layer.layerId,
+          materialId: layer.materialId,
+          weightSamples: Object.freeze([...layer.weightSamples])
+        })
+      )
+    ),
     origin: freezeVector3(draft.origin),
+    rotationYRadians: draft.rotationYRadians,
     sampleCountX: draft.sampleCountX,
     sampleCountZ: draft.sampleCountZ,
-    sampleStrideMeters: draft.sampleStrideMeters,
+    sampleSpacingMeters: draft.sampleSpacingMeters,
+    terrainPatchId: draft.terrainPatchId,
     waterLevelMeters: draft.waterLevelMeters
   });
 }

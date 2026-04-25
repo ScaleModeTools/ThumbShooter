@@ -1,4 +1,3 @@
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -9,6 +8,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
 import type {
   MapEditorPlayerSpawnSelectionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-player-spawn-selection";
@@ -16,12 +16,6 @@ import type {
   MapEditorPlayerSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
-
-function resolveFiniteNumber(value: string): number | null {
-  const nextValue = Number(value);
-
-  return Number.isFinite(nextValue) ? nextValue : null;
-}
 
 interface MapEditorSceneAnchorsPanelProps {
   readonly onUpdatePlayerSpawnSelection: (
@@ -73,36 +67,28 @@ export function MapEditorSceneAnchorsPanel({
             <Label htmlFor="map-editor-spawn-enemy-radius">
               Enemy Avoidance Radius
             </Label>
-            <Input
+            <MapEditorEditableNumberInput
               id="map-editor-spawn-enemy-radius"
-              onChange={(event) => {
-                const nextValue = resolveFiniteNumber(event.target.value);
-
-                if (nextValue !== null) {
-                  onUpdatePlayerSpawnSelection((draft) => ({
-                    ...draft,
-                    enemyAvoidanceRadiusMeters: Math.max(0, nextValue)
-                  }));
-                }
+              onValueChange={(nextValue) => {
+                onUpdatePlayerSpawnSelection((draft) => ({
+                  ...draft,
+                  enemyAvoidanceRadiusMeters: Math.max(0, nextValue)
+                }));
               }}
-              value={playerSpawnSelectionDraft.enemyAvoidanceRadiusMeters.toFixed(2)}
+              value={playerSpawnSelectionDraft.enemyAvoidanceRadiusMeters}
             />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="map-editor-spawn-home-bias">Home Team Bias</Label>
-            <Input
+            <MapEditorEditableNumberInput
               id="map-editor-spawn-home-bias"
-              onChange={(event) => {
-                const nextValue = resolveFiniteNumber(event.target.value);
-
-                if (nextValue !== null) {
-                  onUpdatePlayerSpawnSelection((draft) => ({
-                    ...draft,
-                    homeTeamBiasMeters: Math.max(0, nextValue)
-                  }));
-                }
+              onValueChange={(nextValue) => {
+                onUpdatePlayerSpawnSelection((draft) => ({
+                  ...draft,
+                  homeTeamBiasMeters: Math.max(0, nextValue)
+                }));
               }}
-              value={playerSpawnSelectionDraft.homeTeamBiasMeters.toFixed(2)}
+              value={playerSpawnSelectionDraft.homeTeamBiasMeters}
             />
           </div>
         </div>
@@ -143,81 +129,65 @@ export function MapEditorSceneAnchorsPanel({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${spawnDraft.spawnId}-yaw`}>Spawn Yaw</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${spawnDraft.spawnId}-yaw`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
-                      ...draft,
-                      yawRadians: nextValue
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
+                    ...draft,
+                    yawRadians: nextValue
+                  }));
                 }}
-                value={spawnDraft.yawRadians.toFixed(2)}
+                value={spawnDraft.yawRadians}
               />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${spawnDraft.spawnId}-x`}>Spawn X</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${spawnDraft.spawnId}-x`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        x: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      x: nextValue
+                    }
+                  }));
                 }}
-                value={spawnDraft.position.x.toFixed(2)}
+                value={spawnDraft.position.x}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${spawnDraft.spawnId}-y`}>Spawn Y</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${spawnDraft.spawnId}-y`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        y: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      y: nextValue
+                    }
+                  }));
                 }}
-                value={spawnDraft.position.y.toFixed(2)}
+                value={spawnDraft.position.y}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${spawnDraft.spawnId}-z`}>Spawn Z</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${spawnDraft.spawnId}-z`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        z: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdatePlayerSpawn(spawnDraft.spawnId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      z: nextValue
+                    }
+                  }));
                 }}
-                value={spawnDraft.position.z.toFixed(2)}
+                value={spawnDraft.position.z}
               />
             </div>
           </div>
@@ -233,68 +203,56 @@ export function MapEditorSceneAnchorsPanel({
             <p className="text-xs text-muted-foreground">
               {sceneObjectDraft.launchTarget === null
                 ? sceneObjectDraft.objectId
-                : `Launch object to ${sceneObjectDraft.launchTarget.experienceId}`}
+                : `Portal to ${sceneObjectDraft.launchTarget.experienceId}`}
             </p>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${sceneObjectDraft.objectId}-x`}>Object X</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${sceneObjectDraft.objectId}-x`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        x: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      x: nextValue
+                    }
+                  }));
                 }}
-                value={sceneObjectDraft.position.x.toFixed(2)}
+                value={sceneObjectDraft.position.x}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${sceneObjectDraft.objectId}-y`}>Object Y</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${sceneObjectDraft.objectId}-y`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        y: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      y: nextValue
+                    }
+                  }));
                 }}
-                value={sceneObjectDraft.position.y.toFixed(2)}
+                value={sceneObjectDraft.position.y}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${sceneObjectDraft.objectId}-z`}>Object Z</Label>
-              <Input
+              <MapEditorEditableNumberInput
                 id={`${sceneObjectDraft.objectId}-z`}
-                onChange={(event) => {
-                  const nextValue = resolveFiniteNumber(event.target.value);
-
-                  if (nextValue !== null) {
-                    onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
-                      ...draft,
-                      position: {
-                        ...draft.position,
-                        z: nextValue
-                      }
-                    }));
-                  }
+                onValueChange={(nextValue) => {
+                  onUpdateSceneObject(sceneObjectDraft.objectId, (draft) => ({
+                    ...draft,
+                    position: {
+                      ...draft.position,
+                      z: nextValue
+                    }
+                  }));
                 }}
-                value={sceneObjectDraft.position.z.toFixed(2)}
+                value={sceneObjectDraft.position.z}
               />
             </div>
           </div>

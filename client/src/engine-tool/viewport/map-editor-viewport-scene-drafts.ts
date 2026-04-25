@@ -182,6 +182,8 @@ function createSceneObjectDraftGroup(
 
   portalGroup.name = `map_editor_scene_object/${sceneObjectDraft.objectId}`;
   userData.sceneObjectId = sceneObjectDraft.objectId;
+  portalGroup.rotation.y = sceneObjectDraft.rotationYRadians;
+  portalGroup.scale.setScalar(sceneObjectDraft.scale);
 
   return portalGroup;
 }

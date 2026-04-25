@@ -5,16 +5,13 @@ import {
   MenubarItem,
   MenubarLabel,
   MenubarMenu,
-  MenubarRadioGroup,
-  MenubarRadioItem,
   MenubarSeparator,
   MenubarShortcut,
   MenubarTrigger
 } from "@/components/ui/menubar";
 import type {
   MapEditorViewportHelperId,
-  MapEditorViewportHelperVisibilitySnapshot,
-  MapEditorViewportToolMode
+  MapEditorViewportHelperVisibilitySnapshot
 } from "@/engine-tool/types/map-editor";
 
 interface MapEditorMenubarProps {
@@ -32,31 +29,7 @@ interface MapEditorMenubarProps {
     helperId: MapEditorViewportHelperId,
     visible: boolean
   ) => void;
-  readonly viewportToolMode: MapEditorViewportToolMode;
   readonly viewportHelperVisibility: MapEditorViewportHelperVisibilitySnapshot;
-  readonly onViewportToolModeChange: (
-    viewportToolMode: MapEditorViewportToolMode
-  ) => void;
-}
-
-function readViewportToolMode(
-  nextValue: string
-): MapEditorViewportToolMode | null {
-  if (
-    nextValue === "select" ||
-    nextValue === "terrain" ||
-    nextValue === "wall" ||
-    nextValue === "path" ||
-    nextValue === "water" ||
-    nextValue === "module" ||
-    nextValue === "move" ||
-    nextValue === "rotate" ||
-    nextValue === "scale"
-  ) {
-    return nextValue;
-  }
-
-  return null;
 }
 
 export function MapEditorMenubar({
@@ -71,9 +44,7 @@ export function MapEditorMenubar({
   onUndoProjectChangeRequest,
   onValidateAndRunRequest,
   onViewportHelperVisibilityChange,
-  viewportHelperVisibility,
-  viewportToolMode,
-  onViewportToolModeChange
+  viewportHelperVisibility
 }: MapEditorMenubarProps) {
   return (
     <Menubar className="h-auto min-h-8 border-border/70 bg-muted/35">
@@ -175,29 +146,6 @@ export function MapEditorMenubar({
           >
             Selection Bounds
           </MenubarCheckboxItem>
-
-          <MenubarSeparator />
-          <MenubarLabel>Viewport Tool</MenubarLabel>
-          <MenubarRadioGroup
-            onValueChange={(nextValue) => {
-              const nextViewportToolMode = readViewportToolMode(nextValue);
-
-              if (nextViewportToolMode !== null) {
-                onViewportToolModeChange(nextViewportToolMode);
-              }
-            }}
-            value={viewportToolMode}
-          >
-            <MenubarRadioItem value="select">Select</MenubarRadioItem>
-            <MenubarRadioItem value="terrain">Terrain</MenubarRadioItem>
-            <MenubarRadioItem value="wall">Wall</MenubarRadioItem>
-            <MenubarRadioItem value="path">Path</MenubarRadioItem>
-            <MenubarRadioItem value="water">Water</MenubarRadioItem>
-            <MenubarRadioItem value="module">Module</MenubarRadioItem>
-            <MenubarRadioItem value="move">Move</MenubarRadioItem>
-            <MenubarRadioItem value="rotate">Rotate</MenubarRadioItem>
-            <MenubarRadioItem value="scale">Scale</MenubarRadioItem>
-          </MenubarRadioGroup>
         </MenubarContent>
       </MenubarMenu>
 

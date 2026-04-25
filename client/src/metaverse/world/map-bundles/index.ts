@@ -1,4 +1,9 @@
-export type { LoadedMetaverseMapBundleSnapshot } from "./load-metaverse-map-bundle";
+export type {
+  LoadedMetaverseMapBundleSnapshot
+} from "./create-loaded-metaverse-map-bundle-snapshot";
+export {
+  createLoadedMetaverseMapBundleSnapshot
+} from "./create-loaded-metaverse-map-bundle-snapshot";
 export { loadMetaverseMapBundle } from "./load-metaverse-map-bundle";
 export type {
   MetaverseWorldPreviewLaunchSelectionSnapshot

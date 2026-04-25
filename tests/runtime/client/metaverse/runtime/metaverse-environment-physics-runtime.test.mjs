@@ -6,6 +6,9 @@ import {
   createFakePhysicsRuntimeWithWorld
 } from "../../fake-rapier-runtime.mjs";
 import {
+  createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
+import {
   createPushableCrateProofSlice,
   createSkiffMountProofSlice
 } from "../../metaverse-runtime-proof-slice-fixtures.mjs";
@@ -232,6 +235,224 @@ test("MetaverseEnvironmentPhysicsRuntime clears and restores dynamic skiff colli
     ).length,
     1
   );
+
+  environmentPhysicsRuntime.dispose();
+});
+
+test("MetaverseEnvironmentPhysicsRuntime boots authored terrain as heightfield collision and support", async () => {
+  const [
+    { Group },
+    { metaverseRuntimeConfig },
+    { MetaverseEnvironmentPhysicsRuntime },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/classes/metaverse-environment-physics-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { physicsRuntime, world } =
+    createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime);
+  const terrainSurfaceCollider =
+    createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+      null,
+      {
+        heightSamples: [0, 1, 2, 3],
+        sampleCountX: 2,
+        sampleCountZ: 2,
+        sampleSpacingMeters: 4
+      },
+      {
+        position: { x: 24, y: 0, z: -16 },
+        yawRadians: 0
+      }
+    );
+
+  assert.notEqual(terrainSurfaceCollider, null);
+
+  const environmentPhysicsRuntime = new MetaverseEnvironmentPhysicsRuntime(
+    metaverseRuntimeConfig,
+    {
+      createSceneAssetLoader: () => ({
+        async loadAsync() {
+          throw new Error("Terrain-only boot should not load collision meshes.");
+        }
+      }),
+      environmentProofConfig: {
+        assets: [],
+        gameplayVolumes: [],
+        lights: [],
+        proceduralStructures: [],
+        surfaceColliders: [terrainSurfaceCollider],
+        terrainPatches: [
+          {
+            heightSamples: [0, 1, 2, 3],
+            materialLayers: [
+              {
+                layerId: "terrain-test:terrain-grass",
+                materialId: "terrain-grass",
+                weightSamples: [1, 1, 1, 1]
+              }
+            ],
+            origin: { x: 24, y: 0, z: -16 },
+            rotationYRadians: 0,
+            sampleCountX: 2,
+            sampleCountZ: 2,
+            sampleSpacingMeters: 4,
+            terrainPatchId: "terrain-test",
+            waterLevelMeters: null
+          }
+        ]
+      },
+      groundedBodyRuntime: {
+        async init() {},
+        dispose() {},
+        syncInteractionSnapshot() {}
+      },
+      physicsRuntime,
+      sceneRuntime: {
+        scene: new Group(),
+        setDynamicEnvironmentPose() {}
+      },
+      showPhysicsDebug: false
+    }
+  );
+
+  await environmentPhysicsRuntime.boot(0);
+
+  assert.equal(
+    world.colliders.filter((collider) => collider.shape === "heightfield").length,
+    1
+  );
+  const terrainCollider = world.colliders.find(
+    (collider) => collider.shape === "heightfield"
+  );
+  const terrainSupportSnapshot =
+    environmentPhysicsRuntime.surfaceColliderSnapshots.find(
+      (collider) =>
+        collider.ownerEnvironmentAssetId === null &&
+        collider.shape === "heightfield" &&
+        collider.translation.x === 24 &&
+        collider.translation.z === -16
+    );
+
+  assert.ok(terrainCollider);
+  assert.equal(terrainCollider.payload.rows, 1);
+  assert.equal(terrainCollider.payload.cols, 1);
+  assert.equal(terrainSupportSnapshot?.sampleCountX, 2);
+  assert.equal(terrainSupportSnapshot?.sampleCountZ, 2);
+  assert.equal(terrainSupportSnapshot?.heightSamples?.length, 4);
+
+  environmentPhysicsRuntime.dispose();
+});
+
+test("MetaverseEnvironmentPhysicsRuntime does not add render surface meshes as duplicate support colliders", async () => {
+  const [
+    { Group },
+    { metaverseRuntimeConfig },
+    { MetaverseEnvironmentPhysicsRuntime },
+    { RapierPhysicsRuntime }
+  ] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load("/src/metaverse/config/metaverse-runtime.ts"),
+    clientLoader.load("/src/metaverse/classes/metaverse-environment-physics-runtime.ts"),
+    clientLoader.load("/src/physics/index.ts")
+  ]);
+  const { physicsRuntime, world } =
+    createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime);
+  const terrainSurfaceCollider =
+    createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+      null,
+      {
+        heightSamples: [0, 0, 0, 0],
+        sampleCountX: 2,
+        sampleCountZ: 2,
+        sampleSpacingMeters: 4
+      },
+      {
+        position: { x: 0, y: 0, z: 0 },
+        yawRadians: 0
+      }
+    );
+
+  assert.notEqual(terrainSurfaceCollider, null);
+
+  const environmentPhysicsRuntime = new MetaverseEnvironmentPhysicsRuntime(
+    metaverseRuntimeConfig,
+    {
+      createSceneAssetLoader: () => ({
+        async loadAsync() {
+          throw new Error("Render surface mesh collision should not load assets.");
+        }
+      }),
+      environmentProofConfig: {
+        assets: [],
+        gameplayVolumes: [],
+        lights: [],
+        proceduralStructures: [],
+        surfaceColliders: [terrainSurfaceCollider],
+        surfaceMeshes: [
+          {
+            indices: [0, 1, 2, 0, 2, 3],
+            materialId: "terrain-grass",
+            materialReferenceId: null,
+            regionId: "terrain-path-region",
+            regionKind: "path",
+            rotationYRadians: 0,
+            translation: { x: 0, y: 0, z: 0 },
+            vertices: [
+              -2, 0, -2,
+              2, 0, -2,
+              2, 0, 2,
+              -2, 0, 2
+            ]
+          }
+        ],
+        terrainPatches: [
+          {
+            heightSamples: [0, 0, 0, 0],
+            materialLayers: [
+              {
+                layerId: "flat-terrain:terrain-grass",
+                materialId: "terrain-grass",
+                weightSamples: [1, 1, 1, 1]
+              }
+            ],
+            origin: { x: 0, y: 0, z: 0 },
+            rotationYRadians: 0,
+            sampleCountX: 2,
+            sampleCountZ: 2,
+            sampleSpacingMeters: 4,
+            terrainPatchId: "flat-terrain",
+            waterLevelMeters: null
+          }
+        ]
+      },
+      groundedBodyRuntime: {
+        async init() {},
+        dispose() {},
+        syncInteractionSnapshot() {}
+      },
+      physicsRuntime,
+      sceneRuntime: {
+        scene: new Group(),
+        setDynamicEnvironmentPose() {}
+      },
+      showPhysicsDebug: false
+    }
+  );
+
+  await environmentPhysicsRuntime.boot(0);
+
+  assert.equal(
+    world.colliders.filter((collider) => collider.shape === "heightfield").length,
+    1
+  );
+  assert.equal(
+    world.colliders.filter((collider) => collider.shape === "trimesh").length,
+    0
+  );
+  assert.equal(environmentPhysicsRuntime.surfaceColliderSnapshots.length, 1);
 
   environmentPhysicsRuntime.dispose();
 });
@@ -466,7 +687,7 @@ test("MetaverseEnvironmentPhysicsRuntime uses proof-authored collisionPath for s
   environmentPhysicsRuntime.dispose();
 });
 
-test("MetaverseEnvironmentPhysicsRuntime derives static barrier colliders from the active proof placements instead of the legacy world layout", async () => {
+test("MetaverseEnvironmentPhysicsRuntime boots static barrier colliders from compiled proof collision", async () => {
   const [
     { Group },
     { metaverseRuntimeConfig },
@@ -520,6 +741,22 @@ test("MetaverseEnvironmentPhysicsRuntime derives static barrier colliders from t
             seats: null,
             traversalAffordance: "blocker"
           }
+        ],
+        surfaceColliders: [
+          {
+            halfExtents: { x: 2, y: 2, z: 1.5 },
+            ownerEnvironmentAssetId: null,
+            rotation: {
+              x: 0,
+              y: Math.sin(Math.PI * 0.25),
+              z: 0,
+              w: Math.cos(Math.PI * 0.25)
+            },
+            rotationYRadians: Math.PI * 0.5,
+            shape: "box",
+            translation: { x: 37, y: 3, z: -21 },
+            traversalAffordance: "blocker"
+          }
         ]
       },
       groundedBodyRuntime: {
@@ -542,7 +779,7 @@ test("MetaverseEnvironmentPhysicsRuntime derives static barrier colliders from t
   assert.equal(environmentPhysicsRuntime.surfaceColliderSnapshots.length, 1);
   assert.deepEqual(environmentPhysicsRuntime.surfaceColliderSnapshots[0], {
     halfExtents: { x: 2, y: 2, z: 1.5 },
-    ownerEnvironmentAssetId: "metaverse-playground-range-barrier-v1",
+    ownerEnvironmentAssetId: null,
     rotation: {
       x: 0,
       y: Math.sin(Math.PI * 0.25),

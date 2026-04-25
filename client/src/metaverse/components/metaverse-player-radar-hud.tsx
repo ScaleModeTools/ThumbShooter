@@ -9,14 +9,14 @@ const radarCenter = radarViewSize / 2;
 const radarRadius = 68;
 
 const radarFriendlyAccent = Object.freeze({
-  fill: "#38bdf8",
-  glow: "rgba(56, 189, 248, 0.42)",
+  fill: "rgba(56, 189, 248, 0.45)",
+  glow: "rgba(56, 189, 248, 0.34)",
   stroke: "#7dd3fc"
 });
 
 const radarEnemyAccent = Object.freeze({
-  fill: "#fb7185",
-  glow: "rgba(251, 113, 133, 0.45)",
+  fill: "rgba(251, 113, 133, 0.45)",
+  glow: "rgba(251, 113, 133, 0.34)",
   stroke: "#fda4af"
 });
 

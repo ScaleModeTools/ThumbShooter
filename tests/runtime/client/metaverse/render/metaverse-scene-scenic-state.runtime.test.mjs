@@ -35,8 +35,8 @@ test("MetaverseSceneScenicState installs atmosphere, portals, and viewport dirty
   bundleGroup.name = "viewport_bundle";
   scene.add(bundleGroup);
 
-  assert.equal(scene.background?.r, metaverseRuntimeConfig.environment.horizonColor[0]);
-  assert.equal(scene.fog?.density, metaverseRuntimeConfig.environment.fogDensity);
+  assert.equal(scene.background?.r, metaverseRuntimeConfig.environment.fogColor[0]);
+  assert.equal(scene.fog, null);
   assert.equal(scenicState.portalMeshes.length, metaverseRuntimeConfig.portals.length);
 
   for (const portalMesh of scenicState.portalMeshes) {

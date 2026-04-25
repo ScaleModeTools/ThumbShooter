@@ -63,6 +63,8 @@ test("metaverse map bundle loader resolves the staging-ground authored slice and
     loadedBundle.environmentPresentationProfile?.id,
     "shell-default-environment-presentation"
   );
+  assert.equal(loadedBundle.environmentPresentation.environment.fogEnabled, false);
+  assert.equal(loadedBundle.environmentPresentation.environment.turbidity, 9.5);
 });
 
 test("metaverse runtime config chooses the authored home-team spawn for the local player lane", async () => {
@@ -225,12 +227,14 @@ test("map editor viewport scene draft handles keep player spawns addressable for
 
 test("map editor collision preview anchors expose authored physics boxes for placed assets", async () => {
   const {
-    createMapEditorViewportPlacementCollisionAnchor
+    createMapEditorViewportPlacementCollisionAnchor,
+    resolveMapEditorViewportPlacementRenderYawRadians
   } = await clientLoader.load(
     "/src/engine-tool/viewport/map-editor-viewport-preview-assets.ts"
   );
   const {
     metaverseHubPushableCrateEnvironmentAssetId,
+    metaverseHubSkiffEnvironmentAssetId,
     metaversePlaygroundRangeFloorEnvironmentAssetId
   } = await clientLoader.load("/src/assets/config/environment-prop-manifest.ts");
 
@@ -276,13 +280,787 @@ test("map editor collision preview anchors expose authored physics boxes for pla
       z: 1
     })
   });
+  const skiffPlacement = Object.freeze({
+    assetId: metaverseHubSkiffEnvironmentAssetId,
+    colliderCount: 1,
+    collisionEnabled: true,
+    isVisible: true,
+    materialReferenceId: null,
+    notes: "",
+    placementId: "skiff-collision-preview",
+    placementMode: "dynamic",
+    position: Object.freeze({
+      x: 0,
+      y: 0.12,
+      z: 0
+    }),
+    rotationYRadians: 0.3,
+    scale: Object.freeze({
+      x: 1,
+      y: 1,
+      z: 1
+    })
+  });
+  const skiffCollisionAnchor =
+    createMapEditorViewportPlacementCollisionAnchor(skiffPlacement);
 
   assert.equal(floorCollisionAnchor.children.length, 1);
   assert.equal(crateCollisionAnchor.children.length, 1);
+  assert.equal(skiffCollisionAnchor.rotation.y, skiffPlacement.rotationYRadians);
+  assert.ok(
+    Math.abs(
+      resolveMapEditorViewportPlacementRenderYawRadians(skiffPlacement) -
+        (Math.PI * 0.5 - skiffPlacement.rotationYRadians)
+    ) < 0.0001
+  );
   assert.equal(floorCollisionAnchor.position.x, 4);
   assert.equal(floorCollisionAnchor.children[0]?.position.y, 0.3);
   assert.equal(crateCollisionAnchor.position.y, 0.46);
   assert.equal(crateCollisionAnchor.children[0]?.position.y, 0);
+});
+
+test("map editor UI prefs persist build-tool floor, path, and terrain brush settings", async () => {
+  const {
+    loadMapEditorUiPrefs,
+    saveMapEditorUiPrefs
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-ui-storage.ts"
+  );
+  const {
+    defaultMapEditorBuilderToolState
+  } = await clientLoader.load("/src/engine-tool/types/map-editor.ts");
+
+  const storageValues = new Map();
+  const storage = {
+    getItem(key) {
+      return storageValues.get(key) ?? null;
+    },
+    setItem(key, value) {
+      storageValues.set(key, value);
+    }
+  };
+  const prefs = Object.freeze({
+    builderToolState: Object.freeze({
+      ...defaultMapEditorBuilderToolState,
+      floorElevationMeters: 1.25,
+      floorFootprintCellsX: 3,
+      floorFootprintCellsZ: 5,
+      pathSlopeLengthCells: 3,
+      pathSlopeRotationDegrees: 135.5,
+      pathWidthCells: 2,
+      terrainBrushMode: "flatten",
+      terrainBrushSizeCells: 5,
+      terrainGenerationMaxElevationMeters: 7.5,
+      terrainGenerationMinElevationMeters: -2.5,
+      terrainMaterialId: "terrain-rock",
+      terrainSmoothEdges: false,
+      waterDepthMeters: 4,
+      waterFootprintCellsX: 7,
+      waterFootprintCellsZ: 9,
+      waterTopElevationMeters: -0.5
+    }),
+    sceneRailCollapsed: true,
+    sectionOpenState: Object.freeze({
+      "builder:floor": true,
+      "builder:terrain": false
+    })
+  });
+
+  saveMapEditorUiPrefs(storage, prefs);
+
+  const restoredPrefs = loadMapEditorUiPrefs(storage);
+
+  assert.deepEqual(restoredPrefs.builderToolState, prefs.builderToolState);
+  assert.equal(restoredPrefs.sceneRailCollapsed, true);
+  assert.deepEqual(restoredPrefs.sectionOpenState, prefs.sectionOpenState);
+});
+
+test("map editor semantic drafts resolve surface-backed region bounds from authored loops", async () => {
+  const {
+    createMapEditorRegionDrafts,
+    createMapEditorSurfaceDrafts
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-semantic-drafts.ts"
+  );
+  const semanticWorld = Object.freeze({
+    connectors: Object.freeze([]),
+    edges: Object.freeze([]),
+    gameplayVolumes: Object.freeze([]),
+    lights: Object.freeze([]),
+    regions: Object.freeze([
+      Object.freeze({
+        label: "Raised Arena Floor",
+        materialReferenceId: "shell-floor-grid",
+        outerLoop: Object.freeze({
+          points: Object.freeze([
+            Object.freeze({ x: -4, z: -6 }),
+            Object.freeze({ x: 4, z: -6 }),
+            Object.freeze({ x: 4, z: 6 }),
+            Object.freeze({ x: -4, z: 6 })
+          ])
+        }),
+        regionId: "raised-arena-floor-region",
+        regionKind: "floor",
+        surfaceId: "raised-arena-floor"
+      })
+    ]),
+    structures: Object.freeze([]),
+    surfaces: Object.freeze([
+      Object.freeze({
+        center: Object.freeze({
+          x: 16,
+          y: 1,
+          z: -12
+        }),
+        elevation: 1,
+        kind: "flat-slab",
+        label: "Raised Arena Floor",
+        rotationYRadians: Math.PI * 0.5,
+        size: Object.freeze({
+          x: 8,
+          y: 0.5,
+          z: 12
+        }),
+        surfaceId: "raised-arena-floor",
+        terrainPatchId: null
+      })
+    ]),
+    terrainPatches: Object.freeze([])
+  });
+
+  const surfaceDrafts = createMapEditorSurfaceDrafts(semanticWorld);
+  const regionDrafts = createMapEditorRegionDrafts(semanticWorld, surfaceDrafts);
+
+  assert.equal(Object.isFrozen(surfaceDrafts[0]), true);
+  assert.equal(Object.isFrozen(regionDrafts[0]), true);
+  assert.deepEqual(regionDrafts[0]?.center, {
+    x: 16,
+    y: 1,
+    z: -12
+  });
+  assert.deepEqual(regionDrafts[0]?.size, {
+    x: 8,
+    y: 0.5,
+    z: 12
+  });
+  assert.equal(regionDrafts[0]?.regionKind, "floor");
+  assert.equal(regionDrafts[0]?.rotationYRadians, Math.PI * 0.5);
+});
+
+test("map editor semantic draft handles keep procedural structures, volumes, and lights pickable", async () => {
+  const {
+    createMapEditorViewportSemanticDraftHandles,
+    disposeMapEditorViewportSemanticDraftHandles,
+    syncMapEditorViewportSemanticDrafts
+  } = await clientLoader.load(
+    "/src/engine-tool/viewport/map-editor-viewport-semantic-drafts.ts"
+  );
+  const handles = createMapEditorViewportSemanticDraftHandles();
+
+  try {
+    syncMapEditorViewportSemanticDrafts(handles, {
+      connectorDrafts: Object.freeze([]),
+      edgeDrafts: Object.freeze([]),
+      gameplayVolumeDrafts: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 0, y: 1.5, z: 0 }),
+          label: "Blue Zone",
+          priority: 2,
+          rotationYRadians: 0,
+          routePoints: Object.freeze([]),
+          size: Object.freeze({ x: 8, y: 3, z: 8 }),
+          tags: Object.freeze(["team-control"]),
+          teamId: "blue",
+          volumeId: "blue-zone",
+          volumeKind: "team-zone"
+        })
+      ]),
+      lightDrafts: Object.freeze([
+        Object.freeze({
+          color: Object.freeze([1, 0.8, 0.5]),
+          intensity: 2,
+          label: "Arena Light",
+          lightId: "arena-light",
+          lightKind: "point",
+          position: Object.freeze({ x: 2, y: 6, z: 2 }),
+          rangeMeters: 20,
+          rotationYRadians: 0,
+          target: null
+        })
+      ]),
+      regionDrafts: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 0, y: 0, z: -16 }),
+          label: "Roof Region",
+          materialReferenceId: "shell-floor-grid",
+          outerLoop: Object.freeze({
+            points: Object.freeze([
+              Object.freeze({ x: -4, z: -4 }),
+              Object.freeze({ x: 4, z: -4 }),
+              Object.freeze({ x: 4, z: 4 }),
+              Object.freeze({ x: -4, z: 4 })
+            ])
+          }),
+          regionId: "roof-region",
+          regionKind: "roof",
+          rotationYRadians: 0,
+          size: Object.freeze({ x: 8, y: 0.5, z: 8 }),
+          surfaceId: "roof-surface"
+        })
+      ]),
+      structuralDrafts: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 0, y: 0, z: 0 }),
+          grid: Object.freeze({
+            cellX: -1,
+            cellZ: -1,
+            cellsX: 2,
+            cellsZ: 2,
+            layer: 0
+          }),
+          label: "Floor",
+          materialId: "concrete",
+          rotationYRadians: 0,
+          size: Object.freeze({ x: 8, y: 0.5, z: 8 }),
+          structureId: "floor-1",
+          structureKind: "floor",
+          traversalAffordance: "support"
+        })
+      ]),
+      surfaceDrafts: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 0, y: 0, z: -16 }),
+          elevation: 0,
+          kind: "flat-slab",
+          label: "Roof Surface",
+          rotationYRadians: 0,
+          size: Object.freeze({ x: 8, y: 0.5, z: 8 }),
+          slopeRiseMeters: 0,
+          surfaceId: "roof-surface",
+          terrainPatchId: null
+        })
+      ]),
+      terrainPatchDrafts: Object.freeze([
+        Object.freeze({
+          grid: Object.freeze({
+            cellX: -1,
+            cellZ: -1,
+            cellsX: 2,
+            cellsZ: 2,
+            layer: 0
+          }),
+          heightSamples: Object.freeze([0, 0.5, -0.2, 0.1]),
+          label: "Terrain Patch",
+          materialLayers: Object.freeze([
+            Object.freeze({
+              layerId: "terrain-patch:terrain-grass",
+              materialId: "terrain-grass",
+              weightSamples: Object.freeze([1, 1, 1, 1])
+            })
+          ]),
+          origin: Object.freeze({ x: 0, y: 0, z: 16 }),
+          rotationYRadians: 0,
+          sampleCountX: 2,
+          sampleCountZ: 2,
+          sampleSpacingMeters: 4,
+          terrainPatchId: "terrain-patch",
+          waterLevelMeters: null
+        })
+      ])
+    });
+
+    assert.equal(handles.structureGroupsById.get("floor-1")?.userData.structureId, "floor-1");
+    assert.equal(handles.regionGroupsById.get("roof-region")?.userData.regionId, "roof-region");
+    assert.equal(
+      handles.gameplayVolumeGroupsById.get("blue-zone")?.userData.gameplayVolumeId,
+      "blue-zone"
+    );
+    assert.equal(handles.lightGroupsById.get("arena-light")?.userData.lightId, "arena-light");
+    assert.equal(
+      handles.terrainPatchGroupsById.get("terrain-patch")?.userData.terrainPatchId,
+      "terrain-patch"
+    );
+    assert.equal(
+      handles.lightGroupsById.get("arena-light")?.children.some(
+        (child) => child.type === "PointLight"
+      ),
+      true
+    );
+    assert.equal(
+      handles.lightGroupsById
+        .get("arena-light")
+        ?.children.find((child) => child.type === "Mesh")
+        ?.geometry?.type,
+      "SphereGeometry"
+    );
+    assert.notEqual(
+      handles.structureGroupsById.get("floor-1")?.children[0]?.material.map ?? null,
+      null
+    );
+    assert.notEqual(
+      handles.regionGroupsById.get("roof-region")?.children[0]?.material.map ?? null,
+      null
+    );
+    assert.notEqual(
+      handles.terrainPatchGroupsById.get("terrain-patch")?.children[0]?.material.map ?? null,
+      null
+    );
+    assert.notEqual(
+      handles.regionGroupsById
+        .get("roof-region")
+        ?.children[0]
+        ?.geometry
+        .getAttribute("uv") ?? null,
+      null
+    );
+    assert.notEqual(
+      handles.terrainPatchGroupsById
+        .get("terrain-patch")
+        ?.children[0]
+        ?.geometry
+        .getAttribute("uv") ?? null,
+      null
+    );
+  } finally {
+    disposeMapEditorViewportSemanticDraftHandles(handles);
+  }
+});
+
+test("map editor wall deletion removes its generated backing surface", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    addMapEditorWallSegment,
+    createMapEditorProject,
+    removeMapEditorEntity,
+    updateMapEditorSurfaceDraft
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  let project = addMapEditorWallSegment(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 0, y: 0, z: 0 }),
+    Object.freeze({ x: 8, y: 0, z: 0 }),
+    "wall",
+    Object.freeze({
+      heightMeters: 4,
+      thicknessMeters: 0.5
+    })
+  );
+  const edge = project.edgeDrafts.at(-1);
+
+  assert.notEqual(edge, undefined);
+  assert.equal(edge.center.y, 2);
+
+  const surface = project.surfaceDrafts.find(
+    (surfaceDraft) => surfaceDraft.surfaceId === edge.surfaceId
+  );
+
+  assert.notEqual(surface, undefined);
+  assert.equal(surface.elevation, 0);
+
+  project = updateMapEditorSurfaceDraft(project, edge.surfaceId, (draft) =>
+    Object.freeze({
+      ...draft,
+      center: Object.freeze({
+        ...draft.center,
+        y: edge.center.y
+      }),
+      elevation: edge.center.y
+    })
+  );
+
+  const nextProject = removeMapEditorEntity(
+    project,
+    Object.freeze({
+      id: edge.edgeId,
+      kind: "edge"
+    })
+  );
+
+  assert.equal(
+    nextProject.edgeDrafts.some((edgeDraft) => edgeDraft.edgeId === edge.edgeId),
+    false
+  );
+  assert.equal(
+    nextProject.surfaceDrafts.some(
+      (surfaceDraft) => surfaceDraft.surfaceId === edge.surfaceId
+    ),
+    false
+  );
+});
+
+test("map editor terrain brush seeds new terrain patches on footprint-aligned helper grid centers", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    applyMapEditorTerrainBrush,
+    createMapEditorProject
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+
+  const project = applyMapEditorTerrainBrush(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 5.1, y: 0, z: 5.1 }),
+    "raise",
+    1,
+    true,
+    1,
+    0,
+    "terrain-grass",
+    11
+  );
+  const terrainPatch = project.terrainPatchDrafts.at(-1);
+
+  assert.notEqual(terrainPatch, undefined);
+  assert.deepEqual(terrainPatch.origin, {
+    x: 4,
+    y: 0,
+    z: 4
+  });
+});
+
+test("map editor terrain patch creation supports dragged floor-style footprints", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    addMapEditorTerrainPatchDraft,
+    createMapEditorProject
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+
+  const project = addMapEditorTerrainPatchDraft(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 0.4, y: 0, z: 0.4 }),
+    "terrain-rock",
+    {
+      endPosition: Object.freeze({ x: 12.4, y: 0, z: 20.4 })
+    }
+  );
+  const terrainPatch = project.terrainPatchDrafts.at(-1);
+
+  assert.notEqual(terrainPatch, undefined);
+  assert.deepEqual(terrainPatch.origin, {
+    x: 8,
+    y: 0,
+    z: 12
+  });
+  assert.equal(terrainPatch.sampleCountX, 5);
+  assert.equal(terrainPatch.sampleCountZ, 7);
+  assert.equal(terrainPatch.heightSamples.length, 35);
+  assert.equal(terrainPatch.materialLayers[0]?.materialId, "terrain-rock");
+  assert.equal(terrainPatch.materialLayers[0]?.weightSamples.length, 35);
+});
+
+test("map editor terrain edits weld shared border heights and material layers across neighboring patches", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    addMapEditorTerrainPatchDraft,
+    applyMapEditorTerrainBrush,
+    createMapEditorProject
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+
+  let project = addMapEditorTerrainPatchDraft(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 0, y: 0, z: 0 }),
+    "terrain-grass"
+  );
+  project = addMapEditorTerrainPatchDraft(
+    project,
+    Object.freeze({ x: 32, y: 0, z: 0 }),
+    "terrain-ash"
+  );
+  project = applyMapEditorTerrainBrush(
+    project,
+    Object.freeze({ x: 16, y: 0, z: 0 }),
+    "raise",
+    1,
+    true,
+    2,
+    0,
+    "terrain-rock",
+    17
+  );
+  project = applyMapEditorTerrainBrush(
+    project,
+    Object.freeze({ x: 16, y: 0, z: 0 }),
+    "material",
+    1,
+    true,
+    1,
+    0,
+    "terrain-rock",
+    17
+  );
+
+  const leftTerrainPatch = project.terrainPatchDrafts[0];
+  const rightTerrainPatch = project.terrainPatchDrafts[1];
+
+  assert.notEqual(leftTerrainPatch, undefined);
+  assert.notEqual(rightTerrainPatch, undefined);
+
+  const middleRowIndex = Math.floor(leftTerrainPatch.sampleCountZ * 0.5);
+  const leftEdgeIndex =
+    middleRowIndex * leftTerrainPatch.sampleCountX + (leftTerrainPatch.sampleCountX - 1);
+  const rightEdgeIndex = middleRowIndex * rightTerrainPatch.sampleCountX;
+  const rightRockLayer =
+    rightTerrainPatch.materialLayers.find(
+      (layer) => layer.materialId === "terrain-rock"
+    ) ?? null;
+
+  assert.equal(leftTerrainPatch.heightSamples[leftEdgeIndex], 2);
+  assert.equal(rightTerrainPatch.heightSamples[rightEdgeIndex], 2);
+  assert.notEqual(rightRockLayer, null);
+  assert.equal(rightRockLayer.weightSamples[rightEdgeIndex], 1);
+});
+
+test("map editor terrain generation bakes deterministic height and material samples", async () => {
+  const {
+    addMapEditorTerrainPatchDraft,
+    createMapEditorProject
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const {
+    bakeMapEditorProceduralTerrainPatch,
+    defaultMapEditorTerrainGenerationConfig
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-terrain-generation.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const project = addMapEditorTerrainPatchDraft(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 0, y: 0, z: 0 })
+  );
+  const terrainDraft = project.terrainPatchDrafts.at(-1);
+
+  assert.notEqual(terrainDraft, undefined);
+
+  const generationConfig = Object.freeze({
+    ...defaultMapEditorTerrainGenerationConfig,
+    frequency: 0.12,
+    groundElevationMeters: 2,
+    maxElevationMeters: 6,
+    minElevationMeters: -3,
+    octaves: 4,
+    seed: 4242,
+    warpFrequency: 0.18,
+    warpStrengthMeters: 5
+  });
+  const bakedTerrainA = bakeMapEditorProceduralTerrainPatch(
+    terrainDraft,
+    generationConfig
+  );
+  const bakedTerrainB = bakeMapEditorProceduralTerrainPatch(
+    terrainDraft,
+    generationConfig
+  );
+
+  assert.deepEqual(bakedTerrainA.heightSamples, bakedTerrainB.heightSamples);
+  assert.deepEqual(bakedTerrainA.materialLayers, bakedTerrainB.materialLayers);
+  assert.equal(bakedTerrainA.origin.y, 2);
+  assert.equal(bakedTerrainA.waterLevelMeters, null);
+  assert.equal(
+    bakedTerrainA.heightSamples.every(
+      (heightSample) => heightSample + bakedTerrainA.origin.y >= -3 &&
+        heightSample + bakedTerrainA.origin.y <= 6
+    ),
+    true
+  );
+  assert.equal(
+    bakedTerrainA.heightSamples.some(
+      (heightSample) => Math.abs(heightSample) > 0.01
+    ),
+    true
+  );
+  assert.equal(bakedTerrainA.materialLayers.length >= 3, true);
+});
+
+test("map editor terrain naturalization conforms overlapping samples to authored support surfaces", async () => {
+  const {
+    addMapEditorTerrainPatchDraft,
+    conformMapEditorTerrainPatchDraftToSupportSurfaces,
+    createMapEditorProject,
+    createNaturalTerrainHeightSamples
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+
+  project = addMapEditorTerrainPatchDraft(
+    project,
+    Object.freeze({ x: 0, y: 0, z: 0 })
+  );
+
+  const terrainPatch = project.terrainPatchDrafts.at(-1);
+
+  assert.notEqual(terrainPatch, undefined);
+
+  const naturalizedTerrainPatch = conformMapEditorTerrainPatchDraftToSupportSurfaces(
+    project,
+    {
+      ...terrainPatch,
+      heightSamples: createNaturalTerrainHeightSamples(terrainPatch)
+    }
+  );
+  const playgroundFloorRegion = project.regionDrafts.find(
+    (regionDraft) => regionDraft.regionKind === "floor"
+  );
+  const playgroundFloorSurface =
+    playgroundFloorRegion === undefined
+      ? undefined
+      : project.surfaceDrafts.find(
+          (surfaceDraft) => surfaceDraft.surfaceId === playgroundFloorRegion.surfaceId
+        );
+  const centerSampleIndex =
+    Math.floor(naturalizedTerrainPatch.sampleCountZ * 0.5) *
+      naturalizedTerrainPatch.sampleCountX +
+    Math.floor(naturalizedTerrainPatch.sampleCountX * 0.5);
+
+  assert.notEqual(playgroundFloorRegion, undefined);
+  assert.notEqual(playgroundFloorSurface, undefined);
+  assert.equal(
+    naturalizedTerrainPatch.heightSamples[centerSampleIndex],
+    playgroundFloorSurface.elevation
+  );
+});
+
+test("map editor path helpers resolve arbitrary flat and explicit sloped endpoints", async () => {
+  const {
+    resolveMapEditorBuildPathDirectedSlopeSegmentEnd,
+    resolveMapEditorBuildPathSegmentEnd,
+    resolveMapEditorBuildPathSlopeSegmentEnd
+  } = await clientLoader.load("/src/engine-tool/build/map-editor-build-placement.ts");
+
+  const flatEndpoint = resolveMapEditorBuildPathSegmentEnd(
+    Object.freeze({ x: 0, y: 2, z: 0 }),
+    Object.freeze({ x: 12, y: 9, z: 4 }),
+    2
+  );
+  const eastEndpoint = resolveMapEditorBuildPathSlopeSegmentEnd(
+    Object.freeze({ x: 0, y: 2, z: 0 }),
+    2,
+    90
+  );
+  const diagonalEndpoint = resolveMapEditorBuildPathSlopeSegmentEnd(
+    Object.freeze({ x: 4, y: 2, z: -4 }),
+    1,
+    45
+  );
+  const cursorDirectedEndpoint = resolveMapEditorBuildPathDirectedSlopeSegmentEnd(
+    Object.freeze({ x: 0, y: 2, z: 0 }),
+    Object.freeze({ x: 4, y: 0, z: 4 }),
+    2,
+    0
+  );
+
+  assert.deepEqual(flatEndpoint, {
+    x: 12,
+    y: 2,
+    z: 4
+  });
+  assert.equal(Math.round(eastEndpoint.x * 1000) / 1000, 8);
+  assert.equal(Math.round(eastEndpoint.z * 1000) / 1000, 0);
+  assert.equal(Math.round(diagonalEndpoint.x * 1000) / 1000, 6.828);
+  assert.equal(Math.round(diagonalEndpoint.z * 1000) / 1000, -1.172);
+  assert.equal(Math.round(cursorDirectedEndpoint.x * 1000) / 1000, 5.657);
+  assert.equal(Math.round(cursorDirectedEndpoint.y * 1000) / 1000, 2);
+  assert.equal(Math.round(cursorDirectedEndpoint.z * 1000) / 1000, 5.657);
+});
+
+test("map editor flat path segments preserve arbitrary endpoint angles", async () => {
+  const {
+    addMapEditorPathSegment,
+    createMapEditorProject
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+
+  project = addMapEditorPathSegment(
+    project,
+    Object.freeze({ x: 12, y: 0, z: 4 }),
+    0,
+    Object.freeze({
+      center: Object.freeze({ x: 0, y: 0, z: 0 }),
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+
+  const pathRegion = project.regionDrafts.at(-1);
+  const pathSurface =
+    pathRegion === undefined
+      ? undefined
+      : project.surfaceDrafts.find(
+          (surfaceDraft) => surfaceDraft.surfaceId === pathRegion.surfaceId
+        );
+
+  assert.notEqual(pathRegion, undefined);
+  assert.notEqual(pathSurface, undefined);
+  assert.equal(pathRegion.regionKind, "path");
+  assert.equal(pathSurface.kind, "flat-slab");
+  assert.deepEqual(pathSurface.center, {
+    x: 6,
+    y: 0,
+    z: 2
+  });
+  assert.equal(pathSurface.size.x, 8);
+  assert.equal(pathSurface.size.z, Math.hypot(12, 4));
+  assert.equal(pathSurface.rotationYRadians, Math.atan2(12, 4));
+  assert.equal(pathRegion.rotationYRadians, pathSurface.rotationYRadians);
+});
+
+test("map editor removing a generated path region removes its orphan support surface", async () => {
+  const {
+    addMapEditorPathSegment,
+    createMapEditorProject,
+    removeMapEditorEntity
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+
+  project = addMapEditorPathSegment(
+    project,
+    Object.freeze({ x: 12, y: 0, z: 4 }),
+    0,
+    Object.freeze({
+      center: Object.freeze({ x: 0, y: 0, z: 0 }),
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+
+  const pathRegion = project.regionDrafts.at(-1);
+
+  assert.notEqual(pathRegion, undefined);
+
+  const pathSurfaceId = pathRegion.surfaceId;
+
+  project = removeMapEditorEntity(project, {
+    id: pathRegion.regionId,
+    kind: "region"
+  });
+
+  assert.equal(
+    project.regionDrafts.some((region) => region.regionId === pathRegion.regionId),
+    false
+  );
+  assert.equal(
+    project.surfaceDrafts.some((surface) => surface.surfaceId === pathSurfaceId),
+    false
+  );
 });
 
 test("map editor project flattens authored placements and updates selected placement drafts immutably", async () => {
@@ -294,6 +1072,7 @@ test("map editor project flattens authored placements and updates selected place
     addMapEditorSceneObjectDraft,
     addMapEditorWaterRegionDraft,
     addMapEditorLaunchVariationDraft,
+    addMapEditorFloorRegionDraft,
     addMapEditorPlacementAtPositionFromAsset,
     addMapEditorPlacementFromAsset,
     createMapEditorProject,
@@ -317,7 +1096,8 @@ test("map editor project flattens authored placements and updates selected place
     "/src/engine-tool/build/map-editor-build-primitives.ts"
   );
   const {
-    resolveMapEditorBuildGroundPlacementPosition
+    resolveMapEditorBuildGroundPlacementPosition,
+    resolveMapEditorBuildWallSegment
   } = await clientLoader.load(
     "/src/engine-tool/build/map-editor-build-placement.ts"
   );
@@ -336,6 +1116,7 @@ test("map editor project flattens authored placements and updates selected place
     initialProject.environmentPresentationProfileId,
     "shell-default-environment-presentation"
   );
+  assert.equal(initialProject.environmentPresentation.environment.fogEnabled, false);
   assert.equal(initialProject.launchVariationDrafts.length, 3);
   assert.equal(initialProject.playerSpawnDrafts.length, 5);
   assert.equal(initialProject.playerSpawnDrafts[0].teamId, "neutral");
@@ -388,6 +1169,43 @@ test("map editor project flattens authored placements and updates selected place
     selectedProject,
     buildPrimitiveEntries[1].asset,
     snappedBuildPosition
+  );
+  const floorRegionProject = addMapEditorFloorRegionDraft(
+    selectedProject,
+    Object.freeze({
+      x: 1.2,
+      y: 0,
+      z: 2.9
+    }),
+    Object.freeze({
+      x: 9.6,
+      y: 0,
+      z: 12.1
+    })
+  );
+  const horizontalWallSegment = resolveMapEditorBuildWallSegment(
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    Object.freeze({
+      x: 12,
+      y: 0,
+      z: 4
+    })
+  );
+  const diagonalWallSegment = resolveMapEditorBuildWallSegment(
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    Object.freeze({
+      x: 11.2,
+      y: 0,
+      z: 11.9
+    })
   );
   const addedProject = addMapEditorPlacementFromAsset(
     selectedProject,
@@ -493,10 +1311,39 @@ test("map editor project flattens authored placements and updates selected place
     "region"
   );
   assert.deepEqual(snappedBuildPosition, {
-    x: 4,
+    x: 6,
     y: 0,
-    z: 8
+    z: 6
   });
+  assert.notEqual(horizontalWallSegment, null);
+  assert.deepEqual(horizontalWallSegment.end, {
+    x: 12,
+    y: 0,
+    z: 4
+  });
+  assert.equal(horizontalWallSegment.lengthMeters, Math.hypot(12, 4));
+  assert.equal(
+    horizontalWallSegment.rotationYRadians,
+    Math.atan2(12, 4) - Math.PI * 0.5
+  );
+  assert.notEqual(diagonalWallSegment, null);
+  assert.deepEqual(diagonalWallSegment.end, {
+    x: 12,
+    y: 0,
+    z: 12
+  });
+  assert.equal(diagonalWallSegment.lengthMeters, Math.hypot(12, 12));
+  assert.equal(diagonalWallSegment.rotationYRadians, -Math.PI * 0.25);
+  assert.deepEqual(
+    floorRegionProject.regionDrafts[
+      floorRegionProject.regionDrafts.length - 1
+    ].size,
+    {
+      x: 12,
+      y: 0.5,
+      z: 12
+    }
+  );
   assert.equal(
     explicitlyPlacedPrimitiveProject.edgeDrafts.length,
     selectedProject.edgeDrafts.length + 1
@@ -595,7 +1442,7 @@ test("map editor project flattens authored placements and updates selected place
     addedWaterRegionProject.waterRegionDrafts[
       addedWaterRegionProject.waterRegionDrafts.length - 1
     ].footprint.sizeCellsX,
-    6
+    1
   );
   assert.equal(
     addedLaunchVariationProject.selectedLaunchVariationId,
@@ -682,6 +1529,56 @@ test("map editor project session undoes authored changes without treating select
   );
 });
 
+test("map editor environment proof preserves authored placement material references", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    createLoadedMetaverseMapBundleSnapshot
+  } = await clientLoader.load("/src/metaverse/world/map-bundles/index.ts");
+  const {
+    createMapEditorProject,
+    updateMapEditorPlacement
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const { exportMapEditorProjectToMetaverseMapBundle } = await clientLoader.load(
+    "/src/engine-tool/run/export-map-editor-project-to-metaverse-map-bundle.ts"
+  );
+  const {
+    createMetaverseEnvironmentProofConfig
+  } = await clientLoader.load(
+    "/src/metaverse/world/proof/create-metaverse-environment-proof-config.ts"
+  );
+  const initialProject = createMapEditorProject(
+    loadMetaverseMapBundle("staging-ground")
+  );
+  const placementId = initialProject.placementDrafts[0]?.placementId;
+
+  assert.notEqual(placementId, undefined);
+
+  const project = updateMapEditorPlacement(
+    initialProject,
+    placementId,
+    (placement) => ({
+      ...placement,
+      materialReferenceId: "glass"
+    })
+  );
+  const proofConfig = createMetaverseEnvironmentProofConfig(
+    createLoadedMetaverseMapBundleSnapshot(
+      exportMapEditorProjectToMetaverseMapBundle(project)
+    )
+  );
+
+  assert.equal(
+    proofConfig.assets.some((asset) =>
+      asset.placements.some(
+        (placement) => placement.materialReferenceId === "glass"
+      )
+    ),
+    true
+  );
+});
+
 test("map editor export preserves authored spawn teams and team-proximity selection settings", async () => {
   const { loadMetaverseMapBundle } = await clientLoader.load(
     "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
@@ -718,6 +1615,218 @@ test("map editor export preserves authored spawn teams and team-proximity select
   assert.equal(exportedBundle.playerSpawnNodes[0]?.teamId, "blue");
   assert.equal(exportedBundle.playerSpawnSelection.enemyAvoidanceRadiusMeters, 22);
   assert.equal(exportedBundle.playerSpawnSelection.homeTeamBiasMeters, 14);
+});
+
+test("map editor procedural build helpers export grid-canonical structures, gameplay volumes, and lights", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    addMapEditorCombatLaneDraft,
+    addMapEditorCoverDraft,
+    addMapEditorFloorRegionDraft,
+    addMapEditorLightDraft,
+    addMapEditorMaterialDefinitionDraft,
+    addMapEditorPathSegment,
+    addMapEditorTerrainPatchDraft,
+    addMapEditorTeamZoneDraft,
+    addMapEditorVehicleRouteDraft,
+    applyMapEditorTerrainBrush,
+    createMapEditorProject,
+    paintMapEditorEntityMaterial
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const { exportMapEditorProjectToMetaverseMapBundle } = await clientLoader.load(
+    "/src/engine-tool/run/export-map-editor-project-to-metaverse-map-bundle.ts"
+  );
+
+  const origin = Object.freeze({ x: 0, y: 0, z: 0 });
+  const customMaterialId = "staging-ground:material:test-panel";
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+
+  project = addMapEditorMaterialDefinitionDraft(project, {
+    baseColorHex: "#123456",
+    baseMaterialId: "metal",
+    label: "Test Panel",
+    materialId: customMaterialId,
+    metalness: 0.38,
+    roughness: 0.52,
+    textureBrightness: 1.18,
+    textureContrast: 1.12,
+    textureImageDataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    texturePatternStrength: 0.42,
+    textureRepeat: 2
+  });
+  project = addMapEditorTerrainPatchDraft(project, origin);
+  project = applyMapEditorTerrainBrush(
+    project,
+    origin,
+    "plateau",
+    4,
+    true,
+    1,
+    2,
+    "terrain-rock",
+    77
+  );
+  project = addMapEditorFloorRegionDraft(
+    project,
+    origin,
+    Object.freeze({ x: 8, y: 0, z: 8 }),
+    { materialId: "metal", materialReferenceId: customMaterialId }
+  );
+  project = addMapEditorPathSegment(
+    project,
+    Object.freeze({ x: 12, y: 0, z: 0 }),
+    0,
+    null,
+    2,
+    "warning"
+  );
+  project = addMapEditorPathSegment(
+    project,
+    Object.freeze({ x: 16, y: 4, z: 0 }),
+    4,
+    Object.freeze({
+      center: Object.freeze({ x: 12, y: 0, z: 0 }),
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+  project = addMapEditorCoverDraft(
+    project,
+    Object.freeze({ x: -8, y: 0, z: 0 }),
+    {
+      footprintCellsX: 1,
+      footprintCellsZ: 2,
+      heightCells: 1,
+      materialId: "metal",
+      materialReferenceId: customMaterialId
+    }
+  );
+  project = addMapEditorTeamZoneDraft(
+    project,
+    Object.freeze({ x: -16, y: 0, z: -8 }),
+    Object.freeze({ x: -8, y: 0, z: 8 }),
+    "blue"
+  );
+  project = addMapEditorCombatLaneDraft(
+    project,
+    Object.freeze({ x: -12, y: 0, z: 0 }),
+    Object.freeze({ x: 12, y: 0, z: 0 }),
+    3
+  );
+  project = addMapEditorVehicleRouteDraft(
+    project,
+    Object.freeze({ x: -20, y: 0, z: 12 }),
+    Object.freeze({ x: 20, y: 0, z: 12 }),
+    4
+  );
+  project = addMapEditorLightDraft(
+    project,
+    Object.freeze({ x: 0, y: 6, z: 0 }),
+    { intensity: 3, rangeMeters: 24 }
+  );
+  const paintedProject = paintMapEditorEntityMaterial(
+    project,
+    project.structuralDrafts[0] === undefined
+      ? null
+      : Object.freeze({
+          id: project.structuralDrafts[0].structureId,
+          kind: "structure"
+        }),
+    "team-blue"
+  );
+  const exportedBundle = exportMapEditorProjectToMetaverseMapBundle(paintedProject);
+
+  assert.deepEqual(exportedBundle.semanticWorld.materialDefinitions[0], {
+    accentColorHex: null,
+    baseColorHex: "#123456",
+    baseMaterialId: "metal",
+    label: "Test Panel",
+    materialId: customMaterialId,
+    metalness: 0.38,
+    opacity: 1,
+    roughness: 0.52,
+    textureBrightness: 1.18,
+    textureContrast: 1.12,
+    textureImageDataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    texturePatternStrength: 0.42,
+    textureRepeat: 2
+  });
+  assert.equal(
+    exportedBundle.semanticWorld.structures.some(
+      (structure) =>
+        structure.structureKind === "cover" &&
+        structure.materialId === "team-blue" &&
+        structure.materialReferenceId === "team-blue"
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.regions.some(
+      (region) =>
+        region.regionKind === "floor" &&
+        region.materialReferenceId === customMaterialId
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.regions.some(
+      (region) => region.regionKind === "path"
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.surfaces.some(
+      (surface) => surface.kind === "sloped-plane" && surface.slopeRiseMeters === 4
+    ),
+    true
+  );
+  assert.equal(exportedBundle.semanticWorld.terrainPatches.length, 1);
+  assert.equal(
+    exportedBundle.compiledWorld.chunks.some((chunk) =>
+      chunk.collision.heightfields.some(
+        (heightfield) => heightfield.ownerKind === "terrain-patch"
+      )
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.compiledWorld.chunks.some((chunk) =>
+      chunk.collision.triMeshes.some(
+        (triMesh) => triMesh.ownerKind === "region"
+      )
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.gameplayVolumes.some(
+      (volume) => volume.volumeKind === "team-zone" && volume.teamId === "blue"
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.gameplayVolumes.some(
+      (volume) => volume.volumeKind === "combat-lane"
+    ),
+    true
+  );
+  assert.equal(
+    exportedBundle.semanticWorld.gameplayVolumes.some(
+      (volume) => volume.volumeKind === "vehicle-route"
+    ),
+    true
+  );
+  assert.equal(exportedBundle.semanticWorld.lights.at(-1)?.intensity, 3);
+  assert.equal(
+    exportedBundle.compiledWorld.chunks.some((chunk) =>
+      chunk.collision.boxes.some((box) => box.ownerKind === "structure")
+    ),
+    true
+  );
 });
 
 test("map editor project save/load persists authored launch variations and environment presentation through project storage", async () => {
@@ -827,6 +1936,76 @@ test("stored staging-ground bundle overrides can become the default runtime map 
       )?.label,
       "Saved Staging Ground Free Roam"
     );
+  } finally {
+    clearMetaverseWorldBundlePreviewEntry("staging-ground");
+  }
+});
+
+test("stored staging-ground bundle overrides that fail metaverse environment proof are ignored", async () => {
+  const {
+    applyStoredMetaverseWorldBundleOverride,
+    clearMetaverseWorldBundlePreviewEntry
+  } = await clientLoader.load("/src/metaverse/world/bundle-registry/index.ts");
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const { loadMetaverseEnvironmentProofConfig } = await clientLoader.load(
+    "/src/metaverse/world/proof/load-metaverse-environment-proof-config.ts"
+  );
+  const {
+    readStoredMetaverseWorldBundleStorageKey,
+    storedMetaverseWorldBundleRecordVersion
+  } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/stored-metaverse-world-bundle.ts"
+  );
+  const storageValues = new Map();
+  const storage = {
+    getItem(key) {
+      return storageValues.get(key) ?? null;
+    },
+    removeItem(key) {
+      storageValues.delete(key);
+    },
+    setItem(key, value) {
+      storageValues.set(key, value);
+    }
+  };
+  const brokenStoredBundle = structuredClone(stagingGroundMapBundle);
+  const floorAsset = brokenStoredBundle.environmentAssets.find(
+    (environmentAsset) =>
+      environmentAsset.assetId === "metaverse-builder-floor-tile-v1"
+  );
+
+  assert.notEqual(floorAsset, undefined);
+
+  brokenStoredBundle.label = "Broken Stored Override";
+  floorAsset.surfaceColliders = Object.freeze([
+    ...floorAsset.surfaceColliders,
+    structuredClone(floorAsset.surfaceColliders[0])
+  ]);
+  delete brokenStoredBundle.semanticWorld;
+  brokenStoredBundle.compiledWorld = Object.freeze({
+    ...brokenStoredBundle.compiledWorld,
+    compatibilityEnvironmentAssets: Object.freeze(
+      brokenStoredBundle.environmentAssets
+    )
+  });
+
+  storage.setItem(
+    readStoredMetaverseWorldBundleStorageKey("staging-ground"),
+    JSON.stringify({
+      bundle: brokenStoredBundle,
+      version: storedMetaverseWorldBundleRecordVersion
+    })
+  );
+
+  try {
+    assert.equal(
+      applyStoredMetaverseWorldBundleOverride(storage, "staging-ground"),
+      false
+    );
+    assert.equal(loadMetaverseMapBundle("staging-ground").bundle.label, stagingGroundMapBundle.label);
+    assert.doesNotThrow(() => loadMetaverseEnvironmentProofConfig("staging-ground"));
   } finally {
     clearMetaverseWorldBundlePreviewEntry("staging-ground");
   }
@@ -1177,6 +2356,129 @@ test("map editor validate-and-run exports a bundle-backed preview through the ru
   assert.equal(
     previewBundle.bundle.sceneObjects[0]?.capabilities[0]?.kind,
     "launch-target"
+  );
+});
+
+test("map editor validate-and-run accepts terrain-only authored exports without environment asset families", async () => {
+  const {
+    addMapEditorTerrainPatchDraft,
+    createMapEditorProject
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { validateAndRegisterMapEditorPreviewBundle } = await clientLoader.load(
+    "/src/engine-tool/run/map-editor-run-preview.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    createMetaverseEnvironmentProofConfig
+  } = await clientLoader.load(
+    "/src/metaverse/world/proof/create-metaverse-environment-proof-config.ts"
+  );
+  const loadedBundle = loadMetaverseMapBundle("staging-ground");
+  const terrainProject = addMapEditorTerrainPatchDraft(
+    createMapEditorProject(loadedBundle),
+    Object.freeze({ x: 0, y: 0, z: 0 })
+  );
+  const previewProject = Object.freeze({
+    ...terrainProject,
+    placementDrafts: Object.freeze(
+      []
+    ),
+    selectedPlacementId: null
+  });
+  let fetchCalls = 0;
+  const previewResult = await validateAndRegisterMapEditorPreviewBundle(
+    previewProject,
+    {
+      async fetch() {
+        fetchCalls += 1;
+
+        return {
+          async json() {
+            return {
+              status: "registered"
+            };
+          },
+          ok: true
+        };
+      }
+    }
+  );
+
+  assert.equal(previewResult.validation.valid, true);
+  assert.notEqual(previewResult.launchSelection, null);
+  assert.equal(previewResult.registrationError, null);
+  assert.equal(fetchCalls, 1);
+  assert.doesNotThrow(() =>
+    createMetaverseEnvironmentProofConfig(
+      loadMetaverseMapBundle(previewResult.launchSelection.bundleId)
+    )
+  );
+});
+
+test("map editor validation rejects invalid terrain sample and material layer exports", async () => {
+  const {
+    addMapEditorTerrainPatchDraft,
+    createMapEditorProject,
+    updateMapEditorTerrainPatchDraft
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const { validateMapEditorProject } = await clientLoader.load(
+    "/src/engine-tool/run/map-editor-project-validation.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const projectWithTerrain = addMapEditorTerrainPatchDraft(
+    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
+    Object.freeze({ x: 0, y: 0, z: 0 })
+  );
+  const terrainId = projectWithTerrain.terrainPatchDrafts.at(-1)?.terrainPatchId;
+
+  assert.notEqual(terrainId, undefined);
+
+  const invalidProject = updateMapEditorTerrainPatchDraft(
+    projectWithTerrain,
+    terrainId,
+    (terrainDraft) => ({
+      ...terrainDraft,
+      heightSamples: Object.freeze([0, 1, Number.NaN, 2]),
+      materialLayers: Object.freeze([
+        ...terrainDraft.materialLayers,
+        Object.freeze({
+          layerId:
+            terrainDraft.materialLayers[0]?.layerId ?? "terrain:duplicate",
+          materialId: "terrain-rock",
+          weightSamples: Object.freeze([1, 1])
+        })
+      ]),
+      sampleSpacingMeters: 0
+    })
+  );
+  const validation = validateMapEditorProject(invalidProject);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((error) =>
+      /must have positive sample spacing/.test(error)
+    ),
+    true
+  );
+  assert.equal(
+    validation.errors.some((error) => /non-finite height samples/.test(error)),
+    true
+  );
+  assert.equal(
+    validation.errors.some((error) =>
+      /material layer id .* is duplicated/.test(error)
+    ),
+    true
+  );
+  assert.equal(
+    validation.errors.some((error) => /weights must match its sample grid/.test(error)),
+    true
   );
 });
 

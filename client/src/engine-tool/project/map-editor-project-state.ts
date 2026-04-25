@@ -1,4 +1,9 @@
 import type { LoadedMetaverseMapBundleSnapshot } from "@/metaverse/world/map-bundles";
+import {
+  cloneMetaverseEnvironmentPresentationSnapshot,
+  createMetaverseEnvironmentPresentationSnapshotFromProfile,
+  readMetaverseEnvironmentPresentationProfile
+} from "@/metaverse/render/environment/profiles";
 import type { EnvironmentAssetDescriptor } from "@/assets/types/environment-asset-manifest";
 import {
   environmentPropManifest,
@@ -7,8 +12,15 @@ import {
   metaverseBuilderWallTileEnvironmentAssetId
 } from "@/assets/config/environment-prop-manifest";
 import {
+  resolveMapEditorBuildAssetPlacementPosition,
   mapEditorBuildGridUnitMeters,
+  resolveMapEditorBuildFootprintCenterPosition,
+  resolveMapEditorBuildGroundPosition,
+  resolveMapEditorBuildRectangleFromGridPoints,
+  resolveMapEditorBuildSizedCenterPosition,
+  resolveMapEditorBuildWallSegment,
   snapMapEditorBuildCoordinateToGrid,
+  snapMapEditorBuildCoordinateToCellCenter,
   type MapEditorBuildPlacementPositionSnapshot
 } from "@/engine-tool/build/map-editor-build-placement";
 import { readMapEditorBuildPrimitiveCatalogEntry } from "@/engine-tool/build/map-editor-build-primitives";
@@ -25,23 +37,40 @@ import {
 import {
   createMapEditorConnectorDrafts,
   createMapEditorEdgeDrafts,
+  createMapEditorGameplayVolumeDrafts,
+  createMapEditorLightDrafts,
+  createMapEditorMaterialDefinitionDrafts,
   createMapEditorRegionDrafts,
+  createMapEditorStructuralDrafts,
   createMapEditorSurfaceDrafts,
-  createMapEditorTerrainChunkDrafts,
+  createMapEditorTerrainPatchDrafts,
   createSemanticConnectorSnapshotFromDraft,
   createSemanticEdgeSnapshotFromDraft,
+  createSemanticGameplayVolumeSnapshotFromDraft,
+  createSemanticLightSnapshotFromDraft,
+  createSemanticMaterialDefinitionSnapshotFromDraft,
   createSemanticRegionSnapshotFromDraft,
+  createSemanticStructureSnapshotFromDraft,
   createSemanticSurfaceSnapshotFromDraft,
-  createSemanticTerrainChunkSnapshotFromDraft,
+  createSemanticTerrainPatchSnapshotFromDraft,
   freezeConnectorDraft,
   freezeEdgeDraft,
+  freezeGameplayVolumeDraft,
+  freezeLightDraft,
+  freezeMaterialDefinitionDraft,
   freezeRegionDraft,
+  freezeStructuralDraft,
   freezeSurfaceDraft,
+  freezeTerrainPatchDraft,
   type MapEditorConnectorDraftSnapshot,
   type MapEditorEdgeDraftSnapshot,
+  type MapEditorGameplayVolumeDraftSnapshot,
+  type MapEditorLightDraftSnapshot,
+  type MapEditorMaterialDefinitionDraftSnapshot,
   type MapEditorRegionDraftSnapshot,
+  type MapEditorStructuralDraftSnapshot,
   type MapEditorSurfaceDraftSnapshot,
-  type MapEditorTerrainChunkDraftSnapshot
+  type MapEditorTerrainPatchDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-semantic-drafts";
 import {
   createPlayerSpawnDrafts,
@@ -58,6 +87,9 @@ import {
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
 import {
   type MetaverseMapBundleSemanticCompatibilityAssetIdsSnapshot,
+  type MetaverseMapBundleEnvironmentPresentationSnapshot,
+  type MetaverseMapBundleSemanticPlanarLoopSnapshot,
+  type MetaverseMapBundleSemanticPlanarPointSnapshot,
   type MetaverseMapBundleSemanticModuleSnapshot,
   type MetaverseWorldEnvironmentColliderAuthoring,
   type MetaverseWorldEnvironmentDynamicBodyAuthoring,
@@ -68,6 +100,8 @@ import {
   type MetaverseWorldSurfacePlacementId,
   type MetaverseWorldSurfaceScaleSnapshot,
   type MetaverseWorldSurfaceVector3Snapshot,
+  resolveMetaverseMapBundleSemanticSurfaceLocalHeightMeters,
+  resolveMetaverseWorldPlacedSurfaceColliders,
   resolveMetaverseWorldSurfaceScaleVector
 } from "@webgpu-metaverse/shared/metaverse/world";
 import type {
@@ -78,9 +112,13 @@ import type {
 export type {
   MapEditorConnectorDraftSnapshot,
   MapEditorEdgeDraftSnapshot,
+  MapEditorGameplayVolumeDraftSnapshot,
+  MapEditorLightDraftSnapshot,
+  MapEditorMaterialDefinitionDraftSnapshot,
   MapEditorRegionDraftSnapshot,
+  MapEditorStructuralDraftSnapshot,
   MapEditorSurfaceDraftSnapshot,
-  MapEditorTerrainChunkDraftSnapshot
+  MapEditorTerrainPatchDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-semantic-drafts";
 export type {
   MapEditorPlayerSpawnDraftSnapshot,
@@ -116,12 +154,18 @@ export interface MapEditorPlacementDraftSnapshot {
 export type MapEditorEntityKind =
   | "connector"
   | "edge"
+  | "gameplay-volume"
+  | "light"
   | "module"
   | "player-spawn"
   | "region"
   | "scene-object"
+  | "structure"
   | "surface"
-  | "terrain-chunk"
+  | "terrain-patch"
+  | "world-atmosphere"
+  | "world-sky"
+  | "world-sun"
   | "water-region";
 
 export interface MapEditorSelectedEntityRef {
@@ -137,10 +181,16 @@ export interface MapEditorProjectSnapshot {
   readonly connectorDrafts: readonly MapEditorConnectorDraftSnapshot[];
   readonly description: string;
   readonly edgeDrafts: readonly MapEditorEdgeDraftSnapshot[];
+  readonly environmentPresentation:
+    MetaverseMapBundleEnvironmentPresentationSnapshot;
   readonly environmentPresentationProfileId: string | null;
   readonly gameplayProfileId: string;
+  readonly gameplayVolumeDrafts: readonly MapEditorGameplayVolumeDraftSnapshot[];
   readonly hudProfileId: string | null;
   readonly launchVariationDrafts: readonly MapEditorLaunchVariationDraftSnapshot[];
+  readonly lightDrafts: readonly MapEditorLightDraftSnapshot[];
+  readonly materialDefinitionDrafts:
+    readonly MapEditorMaterialDefinitionDraftSnapshot[];
   readonly placementDrafts: readonly MapEditorPlacementDraftSnapshot[];
   readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
   readonly playerSpawnSelectionDraft: MapEditorPlayerSpawnSelectionDraftSnapshot;
@@ -152,7 +202,8 @@ export interface MapEditorProjectSnapshot {
   readonly semanticCompatibilityAssetIds:
     MetaverseMapBundleSemanticCompatibilityAssetIdsSnapshot;
   readonly surfaceDrafts: readonly MapEditorSurfaceDraftSnapshot[];
-  readonly terrainChunkDrafts: readonly MapEditorTerrainChunkDraftSnapshot[];
+  readonly structuralDrafts: readonly MapEditorStructuralDraftSnapshot[];
+  readonly terrainPatchDrafts: readonly MapEditorTerrainPatchDraftSnapshot[];
   readonly waterRegionDrafts: readonly MapEditorWaterRegionDraftSnapshot[];
 }
 
@@ -276,11 +327,15 @@ function createLegacySemanticDrafts(
   MapEditorProjectSnapshot,
   | "connectorDrafts"
   | "edgeDrafts"
+  | "gameplayVolumeDrafts"
+  | "lightDrafts"
+  | "materialDefinitionDrafts"
   | "placementDrafts"
   | "regionDrafts"
   | "semanticCompatibilityAssetIds"
+  | "structuralDrafts"
   | "surfaceDrafts"
-  | "terrainChunkDrafts"
+  | "terrainPatchDrafts"
 > {
   const surfaces: MapEditorSurfaceDraftSnapshot[] = [];
   const regions: MapEditorRegionDraftSnapshot[] = [];
@@ -306,8 +361,9 @@ function createLegacySemanticDrafts(
             label: environmentAsset.assetId,
             rotationYRadians: placement.rotationYRadians,
             size,
+            slopeRiseMeters: 0,
             surfaceId,
-            terrainChunkId: null
+            terrainPatchId: null
           })
         );
         regions.push(
@@ -315,6 +371,7 @@ function createLegacySemanticDrafts(
             center: placement.position,
             label: environmentAsset.assetId,
             materialReferenceId: placement.materialReferenceId,
+            outerLoop: createRectangularSurfaceLoop(size),
             regionId: `region:${placement.placementId}`,
             regionKind: "floor",
             rotationYRadians: placement.rotationYRadians,
@@ -342,8 +399,9 @@ function createLegacySemanticDrafts(
             label: environmentAsset.assetId,
             rotationYRadians: placement.rotationYRadians,
             size,
+            slopeRiseMeters: 0,
             surfaceId,
-            terrainChunkId: null
+            terrainPatchId: null
           })
         );
         edges.push(
@@ -358,6 +416,10 @@ function createLegacySemanticDrafts(
             heightMeters: size.y,
             label: environmentAsset.assetId,
             lengthMeters: size.x,
+            path: Object.freeze([
+              createPlanarPoint(-size.x * 0.5, 0),
+              createPlanarPoint(size.x * 0.5, 0)
+            ]),
             rotationYRadians: placement.rotationYRadians,
             surfaceId,
             thicknessMeters: size.z
@@ -373,6 +435,11 @@ function createLegacySemanticDrafts(
   return Object.freeze({
     connectorDrafts: Object.freeze([]),
     edgeDrafts: Object.freeze(edges),
+    gameplayVolumeDrafts: Object.freeze([]),
+    lightDrafts: Object.freeze([]),
+    materialDefinitionDrafts: createMapEditorMaterialDefinitionDrafts(
+      loadedBundle.bundle.semanticWorld
+    ),
     placementDrafts: Object.freeze(modules),
     regionDrafts: Object.freeze(regions),
     semanticCompatibilityAssetIds: Object.freeze({
@@ -380,8 +447,9 @@ function createLegacySemanticDrafts(
       floorAssetId: metaverseBuilderFloorTileEnvironmentAssetId,
       wallAssetId: metaverseBuilderWallTileEnvironmentAssetId
     }),
+    structuralDrafts: Object.freeze([]),
     surfaceDrafts: Object.freeze(surfaces),
-    terrainChunkDrafts: Object.freeze([])
+    terrainPatchDrafts: Object.freeze([])
   });
 }
 
@@ -391,20 +459,27 @@ function createSemanticDraftsFromBundle(
   MapEditorProjectSnapshot,
   | "connectorDrafts"
   | "edgeDrafts"
+  | "gameplayVolumeDrafts"
+  | "lightDrafts"
+  | "materialDefinitionDrafts"
   | "placementDrafts"
   | "regionDrafts"
   | "semanticCompatibilityAssetIds"
+  | "structuralDrafts"
   | "surfaceDrafts"
-  | "terrainChunkDrafts"
+  | "terrainPatchDrafts"
 > {
   const semanticWorld = loadedBundle.bundle.semanticWorld;
 
   if (
-    semanticWorld.terrainChunks.length === 0 &&
+    semanticWorld.terrainPatches.length === 0 &&
     semanticWorld.surfaces.length === 0 &&
     semanticWorld.regions.length === 0 &&
     semanticWorld.edges.length === 0 &&
     semanticWorld.connectors.length === 0 &&
+    semanticWorld.structures.length === 0 &&
+    semanticWorld.gameplayVolumes.length === 0 &&
+    semanticWorld.lights.length === 0 &&
     semanticWorld.modules.length === 0
   ) {
     return createLegacySemanticDrafts(loadedBundle);
@@ -415,13 +490,18 @@ function createSemanticDraftsFromBundle(
   return Object.freeze({
     connectorDrafts: createMapEditorConnectorDrafts(semanticWorld),
     edgeDrafts: createMapEditorEdgeDrafts(semanticWorld, surfaceDrafts),
+    gameplayVolumeDrafts: createMapEditorGameplayVolumeDrafts(semanticWorld),
+    lightDrafts: createMapEditorLightDrafts(semanticWorld),
+    materialDefinitionDrafts:
+      createMapEditorMaterialDefinitionDrafts(semanticWorld),
     placementDrafts: Object.freeze(
       semanticWorld.modules.map(createModuleDraftFromSemanticModule)
     ),
     regionDrafts: createMapEditorRegionDrafts(semanticWorld, surfaceDrafts),
     semanticCompatibilityAssetIds: semanticWorld.compatibilityAssetIds,
+    structuralDrafts: createMapEditorStructuralDrafts(semanticWorld),
     surfaceDrafts,
-    terrainChunkDrafts: createMapEditorTerrainChunkDrafts(semanticWorld)
+    terrainPatchDrafts: createMapEditorTerrainPatchDrafts(semanticWorld)
   });
 }
 
@@ -436,10 +516,13 @@ function resolveInitialSelectedEntityRef(
     MapEditorProjectSnapshot,
     | "connectorDrafts"
     | "edgeDrafts"
+    | "gameplayVolumeDrafts"
+    | "lightDrafts"
     | "placementDrafts"
     | "regionDrafts"
+    | "structuralDrafts"
     | "surfaceDrafts"
-    | "terrainChunkDrafts"
+    | "terrainPatchDrafts"
   >
 ): MapEditorSelectedEntityRef | null {
   return (
@@ -448,7 +531,12 @@ function resolveInitialSelectedEntityRef(
           id: semanticDrafts.regionDrafts[0].regionId,
           kind: "region" as const
         })
-      : semanticDrafts.edgeDrafts[0] !== undefined
+      : semanticDrafts.structuralDrafts[0] !== undefined
+        ? Object.freeze({
+            id: semanticDrafts.structuralDrafts[0].structureId,
+            kind: "structure" as const
+          })
+        : semanticDrafts.edgeDrafts[0] !== undefined
         ? Object.freeze({
             id: semanticDrafts.edgeDrafts[0].edgeId,
             kind: "edge" as const
@@ -463,10 +551,10 @@ function resolveInitialSelectedEntityRef(
                 id: semanticDrafts.surfaceDrafts[0].surfaceId,
                 kind: "surface" as const
               })
-            : semanticDrafts.terrainChunkDrafts[0] !== undefined
+            : semanticDrafts.terrainPatchDrafts[0] !== undefined
               ? Object.freeze({
-                  id: semanticDrafts.terrainChunkDrafts[0].chunkId,
-                  kind: "terrain-chunk" as const
+                  id: semanticDrafts.terrainPatchDrafts[0].terrainPatchId,
+                  kind: "terrain-patch" as const
                 })
               : semanticDrafts.connectorDrafts[0] !== undefined
                 ? Object.freeze({
@@ -515,8 +603,46 @@ function createMapEditorConnectorId(project: MapEditorProjectSnapshot): string {
   return `${project.bundleId}:connector:${project.connectorDrafts.length + 1}`;
 }
 
-function createMapEditorTerrainChunkId(project: MapEditorProjectSnapshot): string {
-  return `${project.bundleId}:terrain:${project.terrainChunkDrafts.length + 1}`;
+function createMapEditorTerrainPatchId(project: MapEditorProjectSnapshot): string {
+  return `${project.bundleId}:terrain:${project.terrainPatchDrafts.length + 1}`;
+}
+
+function createMapEditorStructureId(project: MapEditorProjectSnapshot): string {
+  return `${project.bundleId}:structure:${project.structuralDrafts.length + 1}`;
+}
+
+function createMapEditorGameplayVolumeId(project: MapEditorProjectSnapshot): string {
+  return `${project.bundleId}:gameplay-volume:${project.gameplayVolumeDrafts.length + 1}`;
+}
+
+function createMapEditorLightId(project: MapEditorProjectSnapshot): string {
+  return `${project.bundleId}:light:${project.lightDrafts.length + 1}`;
+}
+
+export function createNextMapEditorMaterialDefinitionId(
+  project: Pick<
+    MapEditorProjectSnapshot,
+    "bundleId" | "materialDefinitionDrafts"
+  >
+): string {
+  const prefix = `${project.bundleId}:material:`;
+  let nextNumber = project.materialDefinitionDrafts.length + 1;
+
+  for (const materialDefinition of project.materialDefinitionDrafts) {
+    if (!materialDefinition.materialId.startsWith(prefix)) {
+      continue;
+    }
+
+    const numericSuffix = Number(
+      materialDefinition.materialId.slice(prefix.length)
+    );
+
+    if (Number.isFinite(numericSuffix)) {
+      nextNumber = Math.max(nextNumber, Math.round(numericSuffix) + 1);
+    }
+  }
+
+  return `${prefix}${nextNumber}`;
 }
 
 function createMapEditorPlayerSpawnId(project: MapEditorProjectSnapshot): string {
@@ -567,15 +693,32 @@ function readSelectedEntityPosition(
           (connector) => connector.connectorId === selectedEntityRef.id
         )?.center ?? null
       );
+    case "structure":
+      return (
+        project.structuralDrafts.find(
+          (structure) => structure.structureId === selectedEntityRef.id
+        )?.center ?? null
+      );
+    case "gameplay-volume":
+      return (
+        project.gameplayVolumeDrafts.find(
+          (volume) => volume.volumeId === selectedEntityRef.id
+        )?.center ?? null
+      );
+    case "light":
+      return (
+        project.lightDrafts.find((light) => light.lightId === selectedEntityRef.id)
+          ?.position ?? null
+      );
     case "surface":
       return (
         project.surfaceDrafts.find((surface) => surface.surfaceId === selectedEntityRef.id)
           ?.center ?? null
       );
-    case "terrain-chunk":
+    case "terrain-patch":
       return (
-        project.terrainChunkDrafts.find(
-          (terrainChunk) => terrainChunk.chunkId === selectedEntityRef.id
+        project.terrainPatchDrafts.find(
+          (terrainPatch) => terrainPatch.terrainPatchId === selectedEntityRef.id
         )?.origin ?? null
       );
     case "player-spawn":
@@ -601,6 +744,10 @@ function readSelectedEntityPosition(
         ? null
         : resolveMapEditorWaterRegionTopCenter(waterRegionDraft);
     }
+    case "world-atmosphere":
+    case "world-sky":
+    case "world-sun":
+      return null;
   }
 }
 
@@ -694,9 +841,10 @@ type MapEditorOutlinerGroupId =
   | "modules"
   | "terrain"
   | "walls-boundaries"
+  | "world"
   | "water";
 
-const defaultTerrainChunkSampleCount = 9;
+const defaultTerrainPatchSampleCount = 9;
 const defaultTerrainBrushHeightDeltaMeters = 1;
 const defaultPathSurfaceSize = Object.freeze({
   x: mapEditorBuildGridUnitMeters,
@@ -705,6 +853,41 @@ const defaultPathSurfaceSize = Object.freeze({
 });
 const defaultWallThicknessMeters = 0.5;
 const defaultWallHeightMeters = 4;
+
+function resolveWallPresetDimensions(
+  edgeKind: MapEditorEdgeDraftSnapshot["edgeKind"]
+): {
+  readonly heightMeters: number;
+  readonly thicknessMeters: number;
+} {
+  switch (edgeKind) {
+    case "curb":
+      return Object.freeze({
+        heightMeters: 0.75,
+        thicknessMeters: 0.75
+      });
+    case "rail":
+      return Object.freeze({
+        heightMeters: 1.25,
+        thicknessMeters: 0.3
+      });
+    case "fence":
+      return Object.freeze({
+        heightMeters: 2.5,
+        thicknessMeters: 0.35
+      });
+    case "retaining-wall":
+      return Object.freeze({
+        heightMeters: 5,
+        thicknessMeters: 0.75
+      });
+    case "wall":
+      return Object.freeze({
+        heightMeters: defaultWallHeightMeters,
+        thicknessMeters: defaultWallThicknessMeters
+      });
+  }
+}
 
 function freezeBuildPosition(
   position: MetaverseWorldSurfaceVector3Snapshot
@@ -716,6 +899,26 @@ function freezeBuildPosition(
   });
 }
 
+function createPlanarPoint(
+  x: number,
+  z: number
+): MetaverseMapBundleSemanticPlanarPointSnapshot {
+  return Object.freeze({ x, z });
+}
+
+function createRectangularSurfaceLoop(
+  size: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">
+): MetaverseMapBundleSemanticPlanarLoopSnapshot {
+  return Object.freeze({
+    points: Object.freeze([
+      createPlanarPoint(-size.x * 0.5, -size.z * 0.5),
+      createPlanarPoint(size.x * 0.5, -size.z * 0.5),
+      createPlanarPoint(size.x * 0.5, size.z * 0.5),
+      createPlanarPoint(-size.x * 0.5, size.z * 0.5)
+    ])
+  });
+}
+
 function snapMapEditorPositionToGrid(
   position: MetaverseWorldSurfaceVector3Snapshot
 ): MetaverseWorldSurfaceVector3Snapshot {
@@ -723,6 +926,16 @@ function snapMapEditorPositionToGrid(
     x: snapMapEditorBuildCoordinateToGrid(position.x),
     y: position.y,
     z: snapMapEditorBuildCoordinateToGrid(position.z)
+  });
+}
+
+function snapMapEditorPositionToCellCenter(
+  position: MetaverseWorldSurfaceVector3Snapshot
+): MetaverseWorldSurfaceVector3Snapshot {
+  return Object.freeze({
+    x: snapMapEditorBuildCoordinateToCellCenter(position.x),
+    y: position.y,
+    z: snapMapEditorBuildCoordinateToCellCenter(position.z)
   });
 }
 
@@ -801,26 +1014,52 @@ export function readNearestMapEditorPathAnchor(
       continue;
     }
 
-    const deltaX = region.center.x - position.x;
-    const deltaZ = region.center.z - position.z;
-    const distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
+    const localHalfLength = Math.max(
+      mapEditorBuildGridUnitMeters * 0.5,
+      surface.size.z * 0.5
+    );
+    const candidateAnchors = [
+      Object.freeze({
+        center: Object.freeze({
+          x: region.center.x + Math.sin(surface.rotationYRadians) * -localHalfLength,
+          y: surface.elevation - surface.slopeRiseMeters * 0.5,
+          z: region.center.z + Math.cos(surface.rotationYRadians) * -localHalfLength
+        }),
+        elevation: surface.elevation - surface.slopeRiseMeters * 0.5
+      }),
+      Object.freeze({
+        center: Object.freeze({
+          x: region.center.x + Math.sin(surface.rotationYRadians) * localHalfLength,
+          y: surface.elevation + surface.slopeRiseMeters * 0.5,
+          z: region.center.z + Math.cos(surface.rotationYRadians) * localHalfLength
+        }),
+        elevation: surface.elevation + surface.slopeRiseMeters * 0.5
+      })
+    ];
 
-    if (
-      distanceSquared > horizontalToleranceMeters * horizontalToleranceMeters ||
-      Math.abs(surface.elevation - position.y) > verticalToleranceMeters
-    ) {
-      continue;
-    }
+    for (const candidateAnchor of candidateAnchors) {
+      const deltaX = candidateAnchor.center.x - position.x;
+      const deltaZ = candidateAnchor.center.z - position.z;
+      const distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
 
-    if (
-      nearestAnchor === null ||
-      distanceSquared < nearestAnchor.distanceSquared
-    ) {
-      nearestAnchor = Object.freeze({
-        center: freezeBuildPosition(region.center),
-        distanceSquared,
-        elevation: surface.elevation
-      });
+      if (
+        distanceSquared >
+          horizontalToleranceMeters * horizontalToleranceMeters ||
+        Math.abs(candidateAnchor.elevation - position.y) > verticalToleranceMeters
+      ) {
+        continue;
+      }
+
+      if (
+        nearestAnchor === null ||
+        distanceSquared < nearestAnchor.distanceSquared
+      ) {
+        nearestAnchor = Object.freeze({
+          center: freezeBuildPosition(candidateAnchor.center),
+          distanceSquared,
+          elevation: candidateAnchor.elevation
+        });
+      }
     }
   }
 
@@ -832,7 +1071,7 @@ export function readNearestMapEditorPathAnchor(
       });
 }
 
-function createTerrainChunkHeights(
+function createTerrainPatchHeights(
   sampleCountX: number,
   sampleCountZ: number
 ): readonly number[] {
@@ -841,38 +1080,55 @@ function createTerrainChunkHeights(
   );
 }
 
-function resolveTerrainHalfSpanMeters(
-  sampleCount: number,
-  sampleStrideMeters: number
-): number {
-  return sampleCount * sampleStrideMeters * 0.5;
+function createTerrainPatchMaterialLayers(
+  terrainPatchId: string,
+  sampleCountX: number,
+  sampleCountZ: number,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"] = "terrain-grass"
+): MapEditorTerrainPatchDraftSnapshot["materialLayers"] {
+  return Object.freeze([
+    Object.freeze({
+      layerId: `${terrainPatchId}:${materialId}`,
+      materialId,
+      weightSamples: Object.freeze(
+        Array.from({ length: sampleCountX * sampleCountZ }, () => 1)
+      )
+    })
+  ]);
 }
 
-function isPointInsideTerrainChunk(
-  terrainChunk: MapEditorTerrainChunkDraftSnapshot,
+function resolveTerrainHalfSpanMeters(
+  sampleCount: number,
+  sampleSpacingMeters: number
+): number {
+  return Math.max(0, sampleCount - 1) * sampleSpacingMeters * 0.5;
+}
+
+function isPointInsideTerrainPatch(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
   position: MetaverseWorldSurfaceVector3Snapshot
 ): boolean {
   return (
-    Math.abs(position.x - terrainChunk.origin.x) <=
+    Math.abs(position.x - terrainPatch.origin.x) <=
       resolveTerrainHalfSpanMeters(
-        terrainChunk.sampleCountX,
-        terrainChunk.sampleStrideMeters
+        terrainPatch.sampleCountX,
+        terrainPatch.sampleSpacingMeters
       ) &&
-    Math.abs(position.z - terrainChunk.origin.z) <=
+    Math.abs(position.z - terrainPatch.origin.z) <=
       resolveTerrainHalfSpanMeters(
-        terrainChunk.sampleCountZ,
-        terrainChunk.sampleStrideMeters
+        terrainPatch.sampleCountZ,
+        terrainPatch.sampleSpacingMeters
       )
   );
 }
 
-function findTerrainChunkAtPosition(
+function findTerrainPatchAtPosition(
   project: MapEditorProjectSnapshot,
   position: MetaverseWorldSurfaceVector3Snapshot
-): MapEditorTerrainChunkDraftSnapshot | null {
+): MapEditorTerrainPatchDraftSnapshot | null {
   return (
-    project.terrainChunkDrafts.find((terrainChunk) =>
-      isPointInsideTerrainChunk(terrainChunk, position)
+    project.terrainPatchDrafts.find((terrainPatch) =>
+      isPointInsideTerrainPatch(terrainPatch, position)
     ) ?? null
   );
 }
@@ -881,36 +1137,36 @@ function resolveTerrainCellIndex(
   coordinate: number,
   centerCoordinate: number,
   sampleCount: number,
-  sampleStrideMeters: number
+  sampleSpacingMeters: number
 ): number | null {
   const halfSpan = (sampleCount - 1) * 0.5;
   const localCoordinate =
-    (coordinate - centerCoordinate) / sampleStrideMeters + halfSpan;
+    (coordinate - centerCoordinate) / sampleSpacingMeters + halfSpan;
   const snappedIndex = Math.round(localCoordinate);
 
   return snappedIndex >= 0 && snappedIndex < sampleCount ? snappedIndex : null;
 }
 
 export function resolveMapEditorTerrainCellPosition(
-  terrainChunk: MapEditorTerrainChunkDraftSnapshot,
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
   cellX: number,
   cellZ: number
 ): MetaverseWorldSurfaceVector3Snapshot {
   return Object.freeze({
     x:
-      terrainChunk.origin.x +
-      (cellX - (terrainChunk.sampleCountX - 1) * 0.5) *
-        terrainChunk.sampleStrideMeters,
-    y: terrainChunk.origin.y,
+      terrainPatch.origin.x +
+      (cellX - (terrainPatch.sampleCountX - 1) * 0.5) *
+        terrainPatch.sampleSpacingMeters,
+    y: terrainPatch.origin.y,
     z:
-      terrainChunk.origin.z +
-      (cellZ - (terrainChunk.sampleCountZ - 1) * 0.5) *
-        terrainChunk.sampleStrideMeters
+      terrainPatch.origin.z +
+      (cellZ - (terrainPatch.sampleCountZ - 1) * 0.5) *
+        terrainPatch.sampleSpacingMeters
   });
 }
 
 function resolveTerrainCellIndices(
-  terrainChunk: MapEditorTerrainChunkDraftSnapshot,
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
   position: MetaverseWorldSurfaceVector3Snapshot
 ): {
   readonly cellX: number;
@@ -918,15 +1174,15 @@ function resolveTerrainCellIndices(
 } | null {
   const cellX = resolveTerrainCellIndex(
     position.x,
-    terrainChunk.origin.x,
-    terrainChunk.sampleCountX,
-    terrainChunk.sampleStrideMeters
+    terrainPatch.origin.x,
+    terrainPatch.sampleCountX,
+    terrainPatch.sampleSpacingMeters
   );
   const cellZ = resolveTerrainCellIndex(
     position.z,
-    terrainChunk.origin.z,
-    terrainChunk.sampleCountZ,
-    terrainChunk.sampleStrideMeters
+    terrainPatch.origin.z,
+    terrainPatch.sampleCountZ,
+    terrainPatch.sampleSpacingMeters
   );
 
   return cellX === null || cellZ === null
@@ -938,11 +1194,565 @@ function resolveTerrainCellIndices(
 }
 
 function createTerrainHeightIndex(
-  terrainChunk: MapEditorTerrainChunkDraftSnapshot,
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
   cellX: number,
   cellZ: number
 ): number {
-  return cellZ * terrainChunk.sampleCountX + cellX;
+  return cellZ * terrainPatch.sampleCountX + cellX;
+}
+
+export function createNaturalTerrainHeightSamples(
+  draft: MapEditorTerrainPatchDraftSnapshot
+): readonly number[] {
+  const halfX = (draft.sampleCountX - 1) * 0.5;
+  const halfZ = (draft.sampleCountZ - 1) * 0.5;
+
+  return Object.freeze(
+    Array.from(
+      { length: draft.sampleCountX * draft.sampleCountZ },
+      (_entry, sampleIndex) => {
+        const sampleX = sampleIndex % draft.sampleCountX;
+        const sampleZ = Math.floor(sampleIndex / draft.sampleCountX);
+        const x = (sampleX - halfX) / Math.max(1, halfX);
+        const z = (sampleZ - halfZ) / Math.max(1, halfZ);
+        const ridge =
+          Math.sin((x + draft.origin.x * 0.01) * 4.1) * 0.9 +
+          Math.cos((z + draft.origin.z * 0.01) * 3.7) * 0.7;
+        const basin = Math.max(0, 1 - Math.hypot(x, z)) * 1.1;
+
+        return Math.round((ridge + basin) * 100) / 100;
+      }
+    )
+  );
+}
+
+const terrainSupportAlignmentHeightToleranceMeters = mapEditorBuildGridUnitMeters;
+const terrainSurfaceAlignmentEpsilon = 0.001;
+
+function resolveLocalPlanarPosition(
+  center: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">,
+  rotationYRadians: number,
+  position: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">
+): {
+  readonly x: number;
+  readonly z: number;
+} {
+  const deltaX = position.x - center.x;
+  const deltaZ = position.z - center.z;
+  const sine = Math.sin(rotationYRadians);
+  const cosine = Math.cos(rotationYRadians);
+
+  return Object.freeze({
+    x: deltaX * cosine - deltaZ * sine,
+    z: deltaX * sine + deltaZ * cosine
+  });
+}
+
+function isPointOnPlanarSegment(
+  position: Pick<MetaverseMapBundleSemanticPlanarPointSnapshot, "x" | "z">,
+  start: MetaverseMapBundleSemanticPlanarPointSnapshot,
+  end: MetaverseMapBundleSemanticPlanarPointSnapshot
+): boolean {
+  const deltaX = end.x - start.x;
+  const deltaZ = end.z - start.z;
+  const cross =
+    (position.x - start.x) * deltaZ - (position.z - start.z) * deltaX;
+
+  if (Math.abs(cross) > terrainSurfaceAlignmentEpsilon) {
+    return false;
+  }
+
+  const dot =
+    (position.x - start.x) * deltaX + (position.z - start.z) * deltaZ;
+
+  if (dot < -terrainSurfaceAlignmentEpsilon) {
+    return false;
+  }
+
+  const squaredLength = deltaX * deltaX + deltaZ * deltaZ;
+
+  return dot <= squaredLength + terrainSurfaceAlignmentEpsilon;
+}
+
+function isPointInsidePlanarLoop(
+  loop: MetaverseMapBundleSemanticPlanarLoopSnapshot,
+  position: Pick<MetaverseMapBundleSemanticPlanarPointSnapshot, "x" | "z">
+): boolean {
+  const points = loop.points;
+
+  if (points.length < 3) {
+    return false;
+  }
+
+  let isInside = false;
+
+  for (let index = 0, previousIndex = points.length - 1; index < points.length; index += 1) {
+    const point = points[index]!;
+    const previousPoint = points[previousIndex]!;
+
+    if (isPointOnPlanarSegment(position, previousPoint, point)) {
+      return true;
+    }
+
+    const intersects =
+      (point.z > position.z) !== (previousPoint.z > position.z) &&
+      position.x <
+        ((previousPoint.x - point.x) * (position.z - point.z)) /
+          (previousPoint.z - point.z + terrainSurfaceAlignmentEpsilon) +
+          point.x;
+
+    if (intersects) {
+      isInside = !isInside;
+    }
+
+    previousIndex = index;
+  }
+
+  return isInside;
+}
+
+function resolvePlacedSupportSurfaceHeight(
+  collider: {
+    readonly halfExtents: MetaverseWorldSurfaceVector3Snapshot;
+    readonly rotationYRadians: number;
+    readonly translation: MetaverseWorldSurfaceVector3Snapshot;
+  },
+  position: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">
+): number | null {
+  const localPosition = resolveLocalPlanarPosition(
+    collider.translation,
+    collider.rotationYRadians,
+    position
+  );
+
+  if (
+    Math.abs(localPosition.x) > collider.halfExtents.x + terrainSurfaceAlignmentEpsilon ||
+    Math.abs(localPosition.z) > collider.halfExtents.z + terrainSurfaceAlignmentEpsilon
+  ) {
+    return null;
+  }
+
+  return collider.translation.y + collider.halfExtents.y;
+}
+
+function resolveSemanticSupportSurfaceHeight(
+  region: Pick<MapEditorRegionDraftSnapshot, "outerLoop">,
+  surface: Pick<
+    MapEditorSurfaceDraftSnapshot,
+    "center" | "elevation" | "kind" | "rotationYRadians" | "size" | "slopeRiseMeters"
+  >,
+  position: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">
+): number | null {
+  const localPosition = resolveLocalPlanarPosition(
+    surface.center,
+    surface.rotationYRadians,
+    position
+  );
+
+  if (
+    !isPointInsidePlanarLoop(region.outerLoop, {
+      x: localPosition.x,
+      z: localPosition.z
+    })
+  ) {
+    return null;
+  }
+
+  return (
+    surface.elevation +
+    resolveMetaverseMapBundleSemanticSurfaceLocalHeightMeters(
+      surface,
+      localPosition.x,
+      localPosition.z
+    )
+  );
+}
+
+export function conformMapEditorTerrainPatchDraftToSupportSurfaces(
+  project: MapEditorProjectSnapshot,
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot
+): MapEditorTerrainPatchDraftSnapshot {
+  const supportColliders = project.placementDrafts.flatMap((placement) =>
+    resolveMetaverseWorldPlacedSurfaceColliders({
+      environmentAssetId: placement.assetId,
+      placements: Object.freeze([
+        Object.freeze({
+          position: placement.position,
+          rotationYRadians: placement.rotationYRadians,
+          scale: placement.scale
+        })
+      ]),
+      surfaceColliders: placement.surfaceColliders
+    }).filter((collider) => collider.traversalAffordance === "support")
+  );
+  const supportRegions = project.regionDrafts.flatMap((region) => {
+    if (
+      region.regionKind !== "floor" &&
+      region.regionKind !== "path" &&
+      region.regionKind !== "roof"
+    ) {
+      return [];
+    }
+
+    const surface = findSurfaceDraftById(project, region.surfaceId);
+
+    return surface === null
+      ? []
+      : [
+          Object.freeze({
+            region,
+            surface
+          })
+        ];
+  });
+
+  if (supportColliders.length === 0 && supportRegions.length === 0) {
+    return terrainPatch;
+  }
+
+  let didChange = false;
+  const nextHeightSamples = terrainPatch.heightSamples.map((heightSample, sampleIndex) => {
+    const sampleX = sampleIndex % terrainPatch.sampleCountX;
+    const sampleZ = Math.floor(sampleIndex / terrainPatch.sampleCountX);
+    const samplePosition = resolveMapEditorTerrainCellPosition(
+      terrainPatch,
+      sampleX,
+      sampleZ
+    );
+    const currentWorldHeight = terrainPatch.origin.y + (heightSample ?? 0);
+    let selectedSupportHeight: number | null = null;
+    let selectedHeightDelta = Number.POSITIVE_INFINITY;
+
+    for (const collider of supportColliders) {
+      const supportHeight = resolvePlacedSupportSurfaceHeight(
+        collider,
+        samplePosition
+      );
+
+      if (supportHeight === null) {
+        continue;
+      }
+
+      const heightDelta = Math.abs(supportHeight - currentWorldHeight);
+
+      if (
+        heightDelta <= terrainSupportAlignmentHeightToleranceMeters &&
+        heightDelta < selectedHeightDelta
+      ) {
+        selectedSupportHeight = supportHeight;
+        selectedHeightDelta = heightDelta;
+      }
+    }
+
+    for (const supportRegion of supportRegions) {
+      const supportHeight = resolveSemanticSupportSurfaceHeight(
+        supportRegion.region,
+        supportRegion.surface,
+        samplePosition
+      );
+
+      if (supportHeight === null) {
+        continue;
+      }
+
+      const heightDelta = Math.abs(supportHeight - currentWorldHeight);
+
+      if (
+        heightDelta <= terrainSupportAlignmentHeightToleranceMeters &&
+        heightDelta < selectedHeightDelta
+      ) {
+        selectedSupportHeight = supportHeight;
+        selectedHeightDelta = heightDelta;
+      }
+    }
+
+    if (selectedSupportHeight === null) {
+      return heightSample;
+    }
+
+    const nextHeightSample =
+      Math.round((selectedSupportHeight - terrainPatch.origin.y) * 100) / 100;
+
+    if (nextHeightSample !== heightSample) {
+      didChange = true;
+    }
+
+    return nextHeightSample;
+  });
+
+  return didChange
+    ? freezeTerrainPatchDraft({
+        ...terrainPatch,
+        heightSamples: Object.freeze(nextHeightSamples)
+      })
+    : terrainPatch;
+}
+
+function normalizeTerrainBrushSizeCells(
+  brushSizeCells: MapEditorTerrainBrushSizeCells
+): number {
+  return Math.max(1, Math.min(16, Math.round(brushSizeCells)));
+}
+
+function isTerrainBoundaryCell(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
+  cellX: number,
+  cellZ: number
+): boolean {
+  return (
+    cellX === 0 ||
+    cellZ === 0 ||
+    cellX === terrainPatch.sampleCountX - 1 ||
+    cellZ === terrainPatch.sampleCountZ - 1
+  );
+}
+
+function createTerrainBoundarySampleKey(
+  position: Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z">
+): string {
+  return `${Math.round(position.x * 1000)}:${Math.round(position.z * 1000)}`;
+}
+
+function cloneTerrainMaterialLayersForEditing(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot
+): {
+  readonly layerId: string;
+  readonly materialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly weightSamples: number[];
+}[] {
+  return terrainPatch.materialLayers.map((layer) => ({
+    layerId: layer.layerId,
+    materialId: layer.materialId,
+    weightSamples: [...layer.weightSamples]
+  }));
+}
+
+function freezeTerrainMaterialLayers(
+  materialLayers: readonly {
+    readonly layerId: string;
+    readonly materialId: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly weightSamples: readonly number[];
+  }[]
+): MapEditorTerrainPatchDraftSnapshot["materialLayers"] {
+  return Object.freeze(
+    materialLayers.map((layer) =>
+      Object.freeze({
+        layerId: layer.layerId,
+        materialId: layer.materialId,
+        weightSamples: Object.freeze([...layer.weightSamples])
+      })
+    )
+  );
+}
+
+function ensureEditableTerrainMaterialLayer(
+  terrainPatchId: string,
+  sampleCount: number,
+  materialLayers: {
+    readonly layerId: string;
+    readonly materialId: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly weightSamples: number[];
+  }[],
+  materialId: MapEditorStructuralDraftSnapshot["materialId"]
+): {
+  readonly layerId: string;
+  readonly materialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly weightSamples: number[];
+} {
+  const existingLayer = materialLayers.find((layer) => layer.materialId === materialId);
+
+  if (existingLayer !== undefined) {
+    return existingLayer;
+  }
+
+  const nextLayer = {
+    layerId: `${terrainPatchId}:${materialId}`,
+    materialId,
+    weightSamples: Array.from({ length: sampleCount }, () => 0)
+  };
+
+  materialLayers.push(nextLayer);
+
+  return nextLayer;
+}
+
+function transferTerrainBoundarySamples(
+  project: MapEditorProjectSnapshot,
+  sourceTerrainPatchIds: readonly string[],
+  targetTerrainPatchIds: readonly string[]
+): MapEditorProjectSnapshot {
+  if (sourceTerrainPatchIds.length === 0 || targetTerrainPatchIds.length === 0) {
+    return project;
+  }
+
+  const sourcePatchIdSet = new Set(sourceTerrainPatchIds);
+  const sourceSamplesByKey = new Map<
+    string,
+    {
+      readonly height: number;
+      readonly materialWeights: ReadonlyMap<
+        MapEditorStructuralDraftSnapshot["materialId"],
+        number
+      >;
+    }
+  >();
+
+  for (const terrainPatch of project.terrainPatchDrafts) {
+    if (!sourcePatchIdSet.has(terrainPatch.terrainPatchId)) {
+      continue;
+    }
+
+    for (let cellZ = 0; cellZ < terrainPatch.sampleCountZ; cellZ += 1) {
+      for (let cellX = 0; cellX < terrainPatch.sampleCountX; cellX += 1) {
+        if (!isTerrainBoundaryCell(terrainPatch, cellX, cellZ)) {
+          continue;
+        }
+
+        const sampleIndex = createTerrainHeightIndex(terrainPatch, cellX, cellZ);
+        const key = createTerrainBoundarySampleKey(
+          resolveMapEditorTerrainCellPosition(terrainPatch, cellX, cellZ)
+        );
+        const materialWeights = new Map<
+          MapEditorStructuralDraftSnapshot["materialId"],
+          number
+        >();
+
+        for (const layer of terrainPatch.materialLayers) {
+          const sampleWeight = Math.max(0, layer.weightSamples[sampleIndex] ?? 0);
+
+          if (sampleWeight > 0) {
+            materialWeights.set(layer.materialId, sampleWeight);
+          }
+        }
+
+        sourceSamplesByKey.set(
+          key,
+          Object.freeze({
+            height: terrainPatch.heightSamples[sampleIndex] ?? 0,
+            materialWeights
+          })
+        );
+      }
+    }
+  }
+
+  if (sourceSamplesByKey.size === 0) {
+    return project;
+  }
+
+  const targetPatchIdSet = new Set(targetTerrainPatchIds);
+  let didChange = false;
+  const nextTerrainPatchDrafts = project.terrainPatchDrafts.map((terrainPatch) => {
+    if (
+      !targetPatchIdSet.has(terrainPatch.terrainPatchId) ||
+      sourcePatchIdSet.has(terrainPatch.terrainPatchId)
+    ) {
+      return terrainPatch;
+    }
+
+    let patchChanged = false;
+    const nextHeights = [...terrainPatch.heightSamples];
+    const nextMaterialLayers = cloneTerrainMaterialLayersForEditing(terrainPatch);
+
+    for (let cellZ = 0; cellZ < terrainPatch.sampleCountZ; cellZ += 1) {
+      for (let cellX = 0; cellX < terrainPatch.sampleCountX; cellX += 1) {
+        if (!isTerrainBoundaryCell(terrainPatch, cellX, cellZ)) {
+          continue;
+        }
+
+        const sampleIndex = createTerrainHeightIndex(terrainPatch, cellX, cellZ);
+        const sourceSample =
+          sourceSamplesByKey.get(
+            createTerrainBoundarySampleKey(
+              resolveMapEditorTerrainCellPosition(terrainPatch, cellX, cellZ)
+            )
+          ) ?? null;
+
+        if (sourceSample === null) {
+          continue;
+        }
+
+        const sourceHeight = Math.round(sourceSample.height * 100) / 100;
+
+        if ((nextHeights[sampleIndex] ?? 0) !== sourceHeight) {
+          nextHeights[sampleIndex] = sourceHeight;
+          patchChanged = true;
+        }
+
+        for (const layer of nextMaterialLayers) {
+          const nextWeight = Math.max(
+            0,
+            sourceSample.materialWeights.get(layer.materialId) ?? 0
+          );
+
+          if ((layer.weightSamples[sampleIndex] ?? 0) !== nextWeight) {
+            layer.weightSamples[sampleIndex] = nextWeight;
+            patchChanged = true;
+          }
+        }
+
+        for (const [materialId, sampleWeight] of sourceSample.materialWeights) {
+          const targetLayer = ensureEditableTerrainMaterialLayer(
+            terrainPatch.terrainPatchId,
+            terrainPatch.sampleCountX * terrainPatch.sampleCountZ,
+            nextMaterialLayers,
+            materialId
+          );
+          const nextWeight = Math.max(0, sampleWeight);
+
+          if ((targetLayer.weightSamples[sampleIndex] ?? 0) !== nextWeight) {
+            targetLayer.weightSamples[sampleIndex] = nextWeight;
+            patchChanged = true;
+          }
+        }
+      }
+    }
+
+    if (!patchChanged) {
+      return terrainPatch;
+    }
+
+    didChange = true;
+
+    return freezeTerrainPatchDraft({
+      ...terrainPatch,
+      heightSamples: Object.freeze(nextHeights),
+      materialLayers: freezeTerrainMaterialLayers(nextMaterialLayers)
+    });
+  });
+
+  return didChange
+    ? Object.freeze({
+        ...project,
+        terrainPatchDrafts: Object.freeze(nextTerrainPatchDrafts)
+      })
+    : project;
+}
+
+function seedTerrainPatchBoundariesFromNeighbors(
+  project: MapEditorProjectSnapshot,
+  terrainPatchId: string
+): MapEditorProjectSnapshot {
+  return transferTerrainBoundarySamples(
+    project,
+    project.terrainPatchDrafts
+      .filter((terrainPatch) => terrainPatch.terrainPatchId !== terrainPatchId)
+      .map((terrainPatch) => terrainPatch.terrainPatchId),
+    [terrainPatchId]
+  );
+}
+
+function propagateTerrainPatchBoundariesToNeighbors(
+  project: MapEditorProjectSnapshot,
+  terrainPatchId: string
+): MapEditorProjectSnapshot {
+  return transferTerrainBoundarySamples(
+    project,
+    [terrainPatchId],
+    project.terrainPatchDrafts
+      .filter((terrainPatch) => terrainPatch.terrainPatchId !== terrainPatchId)
+      .map((terrainPatch) => terrainPatch.terrainPatchId)
+  );
 }
 
 function listEntityRefsForOutlinerGroup(
@@ -950,44 +1760,100 @@ function listEntityRefsForOutlinerGroup(
   groupId: MapEditorOutlinerGroupId
 ): readonly MapEditorSelectedEntityRef[] {
   switch (groupId) {
+    case "world":
+      return Object.freeze([
+        Object.freeze({
+          id: "global-sun",
+          kind: "world-sun" as const
+        }),
+        Object.freeze({
+          id: "sky",
+          kind: "world-sky" as const
+        }),
+        Object.freeze({
+          id: "atmosphere",
+          kind: "world-atmosphere" as const
+        })
+      ]);
     case "terrain":
       return Object.freeze(
-        project.terrainChunkDrafts.map((terrainChunk) =>
+        project.terrainPatchDrafts.map((terrainPatch) =>
           Object.freeze({
-            id: terrainChunk.chunkId,
-            kind: "terrain-chunk" as const
+            id: terrainPatch.terrainPatchId,
+            kind: "terrain-patch" as const
           })
         )
       );
     case "floors-paths":
-      return Object.freeze(
-        project.regionDrafts
-          .filter((region) => region.regionKind === "floor" || region.regionKind === "path")
+      return Object.freeze([
+        ...project.regionDrafts
+          .filter(
+            (region) =>
+              region.regionKind === "floor" ||
+              region.regionKind === "path" ||
+              region.regionKind === "roof"
+          )
           .map((region) =>
             Object.freeze({
               id: region.regionId,
               kind: "region" as const
             })
+          ),
+        ...project.structuralDrafts
+          .filter((structure) =>
+            structure.structureKind === "bridge" ||
+            structure.structureKind === "catwalk" ||
+            structure.structureKind === "floor" ||
+            structure.structureKind === "pad" ||
+            structure.structureKind === "path" ||
+            structure.structureKind === "ramp" ||
+            structure.structureKind === "vehicle-bay"
           )
-      );
+          .map((structure) =>
+            Object.freeze({
+              id: structure.structureId,
+              kind: "structure" as const
+            })
+          )
+      ]);
     case "walls-boundaries":
-      return Object.freeze(
-        project.edgeDrafts.map((edge) =>
+      return Object.freeze([
+        ...project.edgeDrafts.map((edge) =>
           Object.freeze({
             id: edge.edgeId,
             kind: "edge" as const
           })
-        )
-      );
+        ),
+        ...project.structuralDrafts
+          .filter((structure) =>
+            structure.structureKind === "cover" ||
+            structure.structureKind === "tower" ||
+            structure.structureKind === "wall"
+          )
+          .map((structure) =>
+            Object.freeze({
+              id: structure.structureId,
+              kind: "structure" as const
+            })
+          )
+      ]);
     case "connectors":
-      return Object.freeze(
-        project.connectorDrafts.map((connector) =>
+      return Object.freeze([
+        ...project.connectorDrafts.map((connector) =>
           Object.freeze({
             id: connector.connectorId,
             kind: "connector" as const
           })
-        )
-      );
+        ),
+        ...project.structuralDrafts
+          .filter((structure) => structure.structureKind === "ramp")
+          .map((structure) =>
+            Object.freeze({
+              id: structure.structureId,
+              kind: "structure" as const
+            })
+          )
+      ]);
     case "modules":
       return Object.freeze(
         project.placementDrafts.map((placement) =>
@@ -1009,6 +1875,18 @@ function listEntityRefsForOutlinerGroup(
           Object.freeze({
             id: sceneObjectDraft.objectId,
             kind: "scene-object" as const
+          })
+        ),
+        ...project.gameplayVolumeDrafts.map((volume) =>
+          Object.freeze({
+            id: volume.volumeId,
+            kind: "gameplay-volume" as const
+          })
+        ),
+        ...project.lightDrafts.map((light) =>
+          Object.freeze({
+            id: light.lightId,
+            kind: "light" as const
           })
         )
       ]);
@@ -1036,6 +1914,24 @@ function listEntityRefsForOutlinerGroup(
               id: region.regionId,
               kind: "region" as const
             })
+          ),
+        ...project.structuralDrafts.map((structure) =>
+          Object.freeze({
+            id: structure.structureId,
+            kind: "structure" as const
+          })
+        ),
+        ...project.gameplayVolumeDrafts.map((volume) =>
+          Object.freeze({
+            id: volume.volumeId,
+            kind: "gameplay-volume" as const
+          })
+        ),
+        ...project.lightDrafts.map((light) =>
+          Object.freeze({
+            id: light.lightId,
+            kind: "light" as const
+          })
           )
       ]);
   }
@@ -1046,19 +1942,36 @@ function resolveEntityOutlinerGroup(
   entityRef: MapEditorSelectedEntityRef
 ): MapEditorOutlinerGroupId {
   switch (entityRef.kind) {
-    case "terrain-chunk":
+    case "terrain-patch":
       return "terrain";
     case "edge":
       return "walls-boundaries";
     case "connector":
       return "connectors";
+    case "structure": {
+      const structure = project.structuralDrafts.find(
+        (candidate) => candidate.structureId === entityRef.id
+      );
+
+      return structure?.structureKind === "wall" ||
+        structure?.structureKind === "cover" ||
+        structure?.structureKind === "tower"
+        ? "walls-boundaries"
+        : "floors-paths";
+    }
     case "module":
       return "modules";
+    case "gameplay-volume":
+    case "light":
     case "player-spawn":
     case "scene-object":
       return "gameplay-anchors";
     case "water-region":
       return "water";
+    case "world-atmosphere":
+    case "world-sky":
+    case "world-sun":
+      return "world";
     case "surface":
       return "advanced-semantics";
     case "region":
@@ -1097,7 +2010,11 @@ function createSemanticSurfaceForPlacement(
   label: string,
   position: MetaverseWorldSurfaceVector3Snapshot,
   rotationYRadians: number,
-  size: MetaverseWorldSurfaceVector3Snapshot
+  size: MetaverseWorldSurfaceVector3Snapshot,
+  options?: {
+    readonly kind?: MapEditorSurfaceDraftSnapshot["kind"];
+    readonly slopeRiseMeters?: number;
+  }
 ): {
   readonly project: MapEditorProjectSnapshot;
   readonly surfaceId: string;
@@ -1110,12 +2027,13 @@ function createSemanticSurfaceForPlacement(
       z: position.z
     }),
     elevation: position.y,
-    kind: "flat-slab",
+    kind: options?.kind ?? "flat-slab",
     label,
     rotationYRadians,
     size,
+    slopeRiseMeters: options?.slopeRiseMeters ?? 0,
     surfaceId,
-    terrainChunkId: null
+    terrainPatchId: null
   });
 
   return Object.freeze({
@@ -1130,18 +2048,22 @@ function createSemanticSurfaceForPlacement(
 function ensurePathSurfaceAndRegion(
   project: MapEditorProjectSnapshot,
   center: MetaverseWorldSurfaceVector3Snapshot,
-  elevation: number
+  elevation: number,
+  pathWidthCells = 1,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"] = "warning",
+  materialReferenceId: string = materialId
 ): {
   readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly project: MapEditorProjectSnapshot;
   readonly regionId: string;
   readonly surfaceId: string;
 } {
-  const snappedCenter = Object.freeze({
-    x: snapMapEditorBuildCoordinateToGrid(center.x),
-    y: elevation,
-    z: snapMapEditorBuildCoordinateToGrid(center.z)
-  });
+  const snappedCenter = resolveMapEditorBuildFootprintCenterPosition(
+    center,
+    elevation,
+    pathWidthCells,
+    pathWidthCells
+  );
   const existingSurface = findSurfaceDraftAtPosition(
     project,
     snappedCenter,
@@ -1163,6 +2085,11 @@ function ensurePathSurfaceAndRegion(
   }
 
   const surfaceId = existingSurface?.surfaceId ?? createMapEditorSurfaceId(project);
+  const pathSurfaceSize = Object.freeze({
+    ...defaultPathSurfaceSize,
+    x: Math.max(1, pathWidthCells) * mapEditorBuildGridUnitMeters,
+    z: Math.max(1, pathWidthCells) * mapEditorBuildGridUnitMeters
+  });
   const nextSurface =
     existingSurface ??
     freezeSurfaceDraft({
@@ -1171,9 +2098,10 @@ function ensurePathSurfaceAndRegion(
       kind: "flat-slab",
       label: `Path Surface ${project.surfaceDrafts.length + 1}`,
       rotationYRadians: 0,
-      size: defaultPathSurfaceSize,
+      size: pathSurfaceSize,
+      slopeRiseMeters: 0,
       surfaceId,
-      terrainChunkId: null
+      terrainPatchId: null
     });
   const surfaceProject =
     existingSurface !== null
@@ -1188,11 +2116,12 @@ function ensurePathSurfaceAndRegion(
     freezeRegionDraft({
       center: snappedCenter,
       label: `Path ${surfaceProject.regionDrafts.length + 1}`,
-      materialReferenceId: null,
+      materialReferenceId,
+      outerLoop: createRectangularSurfaceLoop(pathSurfaceSize),
       regionId,
       regionKind: "path",
       rotationYRadians: 0,
-      size: defaultPathSurfaceSize,
+      size: pathSurfaceSize,
       surfaceId
     });
   const nextProject =
@@ -1211,62 +2140,77 @@ function ensurePathSurfaceAndRegion(
   });
 }
 
+function hasStructuralDraftAtGridPosition(
+  project: MapEditorProjectSnapshot,
+  structureKind: MapEditorStructuralDraftSnapshot["structureKind"],
+  center: MetaverseWorldSurfaceVector3Snapshot
+): boolean {
+  return project.structuralDrafts.some(
+    (structure) =>
+      structure.structureKind === structureKind &&
+      structure.center.x === center.x &&
+      Math.abs(structure.center.y - center.y) <= 0.01 &&
+      structure.center.z === center.z
+  );
+}
+
 function createMapEditorWallDraftsForSegment(
   project: MapEditorProjectSnapshot,
   start: MetaverseWorldSurfaceVector3Snapshot,
   end: MetaverseWorldSurfaceVector3Snapshot,
-  edgeKind: MapEditorEdgeDraftSnapshot["edgeKind"]
+  edgeKind: MapEditorEdgeDraftSnapshot["edgeKind"],
+  dimensionsOverride?: {
+    readonly heightMeters: number;
+    readonly thicknessMeters: number;
+  }
 ): {
   readonly edgeId: string;
   readonly project: MapEditorProjectSnapshot;
 } | null {
-  const deltaX = end.x - start.x;
-  const deltaZ = end.z - start.z;
-  const lengthMeters = Math.max(Math.abs(deltaX), Math.abs(deltaZ));
+  const wallSegment = resolveMapEditorBuildWallSegment(start, end);
 
-  if (lengthMeters < mapEditorBuildGridUnitMeters * 0.5) {
+  if (wallSegment === null) {
     return null;
   }
 
-  const rotationYRadians =
-    Math.abs(deltaX) >= Math.abs(deltaZ) ? 0 : Math.PI * 0.5;
-  const center = Object.freeze({
-    x: (start.x + end.x) * 0.5,
-    y: start.y,
-    z: (start.z + end.z) * 0.5
-  });
+  const dimensions =
+    dimensionsOverride ??
+    resolveWallPresetDimensions(edgeKind);
+  const { center, lengthMeters, rotationYRadians } = wallSegment;
   const surfaceSize = Object.freeze({
-    x:
-      rotationYRadians === 0
-        ? Math.max(mapEditorBuildGridUnitMeters, lengthMeters)
-        : defaultWallThicknessMeters,
-    y: defaultWallHeightMeters,
-    z:
-      rotationYRadians === 0
-        ? defaultWallThicknessMeters
-        : Math.max(mapEditorBuildGridUnitMeters, lengthMeters)
+    x: lengthMeters,
+    y: dimensions.heightMeters,
+    z: dimensions.thicknessMeters
   });
   const { project: projectWithSurface, surfaceId } = createSemanticSurfaceForPlacement(
     project,
     `Wall Surface ${project.surfaceDrafts.length + 1}`,
-    center,
+    Object.freeze({
+      x: center.x,
+      y: center.y,
+      z: center.z
+    }),
     rotationYRadians,
     surfaceSize
   );
   const nextEdge = freezeEdgeDraft({
     center: Object.freeze({
       x: center.x,
-      y: center.y + defaultWallHeightMeters * 0.5,
+      y: center.y + dimensions.heightMeters * 0.5,
       z: center.z
     }),
     edgeId: createMapEditorEdgeId(projectWithSurface),
     edgeKind,
-    heightMeters: defaultWallHeightMeters,
+    heightMeters: dimensions.heightMeters,
     label: `${edgeKind[0]?.toUpperCase()}${edgeKind.slice(1)} ${project.edgeDrafts.length + 1}`,
-    lengthMeters: Math.max(mapEditorBuildGridUnitMeters, lengthMeters),
+    lengthMeters,
+    path: Object.freeze([
+      createPlanarPoint(-lengthMeters * 0.5, 0),
+      createPlanarPoint(lengthMeters * 0.5, 0)
+    ]),
     rotationYRadians,
     surfaceId,
-    thicknessMeters: defaultWallThicknessMeters
+    thicknessMeters: dimensions.thicknessMeters
   });
 
   return Object.freeze({
@@ -1348,11 +2292,17 @@ export function createMapEditorProject(
     connectorDrafts: semanticDrafts.connectorDrafts,
     description: loadedBundle.bundle.description,
     edgeDrafts: semanticDrafts.edgeDrafts,
+    environmentPresentation: cloneMetaverseEnvironmentPresentationSnapshot(
+      loadedBundle.environmentPresentation
+    ),
     environmentPresentationProfileId:
       loadedBundle.environmentPresentationProfile?.id ?? null,
+    gameplayVolumeDrafts: semanticDrafts.gameplayVolumeDrafts,
     gameplayProfileId: loadedBundle.gameplayProfile.id,
     hudProfileId: loadedBundle.hudProfile?.id ?? null,
     launchVariationDrafts,
+    lightDrafts: semanticDrafts.lightDrafts,
+    materialDefinitionDrafts: semanticDrafts.materialDefinitionDrafts,
     placementDrafts: semanticDrafts.placementDrafts,
     playerSpawnDrafts: createPlayerSpawnDrafts(loadedBundle),
     playerSpawnSelectionDraft: createPlayerSpawnSelectionDraft(loadedBundle),
@@ -1362,10 +2312,18 @@ export function createMapEditorProject(
     selectedLaunchVariationId,
     selectedPlacementId: createSelectedPlacementId(selectedEntityRef),
     semanticCompatibilityAssetIds: semanticDrafts.semanticCompatibilityAssetIds,
+    structuralDrafts: semanticDrafts.structuralDrafts,
     surfaceDrafts: semanticDrafts.surfaceDrafts,
-    terrainChunkDrafts: semanticDrafts.terrainChunkDrafts,
+    terrainPatchDrafts: semanticDrafts.terrainPatchDrafts,
     waterRegionDrafts: createWaterRegionDrafts(loadedBundle)
   });
+}
+
+function areEnvironmentPresentationsEqual(
+  left: MetaverseMapBundleEnvironmentPresentationSnapshot,
+  right: MetaverseMapBundleEnvironmentPresentationSnapshot
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function readSelectedMapEditorLaunchVariation(
@@ -1419,9 +2377,19 @@ export function selectMapEditorEntity(
       project.connectorDrafts.some(
         (connector) => connector.connectorId === entityRef.id
       )) ||
-    (entityRef.kind === "terrain-chunk" &&
-      project.terrainChunkDrafts.some(
-        (terrainChunk) => terrainChunk.chunkId === entityRef.id
+    (entityRef.kind === "structure" &&
+      project.structuralDrafts.some(
+        (structure) => structure.structureId === entityRef.id
+      )) ||
+    (entityRef.kind === "gameplay-volume" &&
+      project.gameplayVolumeDrafts.some(
+        (volume) => volume.volumeId === entityRef.id
+      )) ||
+    (entityRef.kind === "light" &&
+      project.lightDrafts.some((light) => light.lightId === entityRef.id)) ||
+    (entityRef.kind === "terrain-patch" &&
+      project.terrainPatchDrafts.some(
+        (terrainPatch) => terrainPatch.terrainPatchId === entityRef.id
       )) ||
     (entityRef.kind === "player-spawn" &&
       project.playerSpawnDrafts.some((spawn) => spawn.spawnId === entityRef.id)) ||
@@ -1430,7 +2398,10 @@ export function selectMapEditorEntity(
     (entityRef.kind === "water-region" &&
       project.waterRegionDrafts.some(
         (waterRegion) => waterRegion.waterRegionId === entityRef.id
-      ));
+      )) ||
+    entityRef.kind === "world-atmosphere" ||
+    entityRef.kind === "world-sky" ||
+    entityRef.kind === "world-sun";
 
   return exists ? withSelectedEntity(project, entityRef) : project;
 }
@@ -1553,21 +2524,98 @@ export function updateMapEditorConnectorDraft(
   });
 }
 
-export function updateMapEditorTerrainChunkDraft(
+export function updateMapEditorStructuralDraft(
   project: MapEditorProjectSnapshot,
-  chunkId: string,
+  structureId: string,
   update: (
-    draft: MapEditorTerrainChunkDraftSnapshot
-  ) => MapEditorTerrainChunkDraftSnapshot
+    draft: MapEditorStructuralDraftSnapshot
+  ) => MapEditorStructuralDraftSnapshot
 ): MapEditorProjectSnapshot {
   return Object.freeze({
     ...project,
-    terrainChunkDrafts: Object.freeze(
-      project.terrainChunkDrafts.map((terrainChunk) =>
-        terrainChunk.chunkId === chunkId ? Object.freeze(update(terrainChunk)) : terrainChunk
+    structuralDrafts: Object.freeze(
+      project.structuralDrafts.map((structure) =>
+        structure.structureId === structureId
+          ? freezeStructuralDraft(update(structure))
+          : structure
       )
     )
   });
+}
+
+export function updateMapEditorGameplayVolumeDraft(
+  project: MapEditorProjectSnapshot,
+  volumeId: string,
+  update: (
+    draft: MapEditorGameplayVolumeDraftSnapshot
+  ) => MapEditorGameplayVolumeDraftSnapshot
+): MapEditorProjectSnapshot {
+  return Object.freeze({
+    ...project,
+    gameplayVolumeDrafts: Object.freeze(
+      project.gameplayVolumeDrafts.map((volume) =>
+        volume.volumeId === volumeId
+          ? freezeGameplayVolumeDraft(update(volume))
+          : volume
+      )
+    )
+  });
+}
+
+export function updateMapEditorLightDraft(
+  project: MapEditorProjectSnapshot,
+  lightId: string,
+  update: (draft: MapEditorLightDraftSnapshot) => MapEditorLightDraftSnapshot
+): MapEditorProjectSnapshot {
+  return Object.freeze({
+    ...project,
+    lightDrafts: Object.freeze(
+      project.lightDrafts.map((light) =>
+        light.lightId === lightId ? freezeLightDraft(update(light)) : light
+      )
+    )
+  });
+}
+
+export function updateMapEditorMaterialDefinitionDraft(
+  project: MapEditorProjectSnapshot,
+  materialId: string,
+  update: (
+    draft: MapEditorMaterialDefinitionDraftSnapshot
+  ) => MapEditorMaterialDefinitionDraftSnapshot
+): MapEditorProjectSnapshot {
+  return Object.freeze({
+    ...project,
+    materialDefinitionDrafts: Object.freeze(
+      project.materialDefinitionDrafts.map((materialDefinition) =>
+        materialDefinition.materialId === materialId
+          ? freezeMaterialDefinitionDraft(update(materialDefinition))
+          : materialDefinition
+      )
+    )
+  });
+}
+
+export function updateMapEditorTerrainPatchDraft(
+  project: MapEditorProjectSnapshot,
+  terrainPatchId: string,
+  update: (
+    draft: MapEditorTerrainPatchDraftSnapshot
+  ) => MapEditorTerrainPatchDraftSnapshot
+): MapEditorProjectSnapshot {
+  return propagateTerrainPatchBoundariesToNeighbors(
+    Object.freeze({
+      ...project,
+      terrainPatchDrafts: Object.freeze(
+        project.terrainPatchDrafts.map((terrainPatch) =>
+          terrainPatch.terrainPatchId === terrainPatchId
+            ? freezeTerrainPatchDraft(update(terrainPatch))
+            : terrainPatch
+        )
+      )
+    }),
+    terrainPatchId
+  );
 }
 
 export function removeMapEditorPlacement(
@@ -1622,6 +2670,77 @@ export function removeMapEditorPlacementsByAssetId(
   );
 }
 
+const generatedEdgeSurfaceMatchEpsilon = 0.001;
+
+function nearlyEqualGeneratedEdgeSurfaceValue(a: number, b: number): boolean {
+  return Math.abs(a - b) <= generatedEdgeSurfaceMatchEpsilon;
+}
+
+function isGeneratedEdgeBackingSurface(
+  edge: MapEditorEdgeDraftSnapshot,
+  surface: MapEditorSurfaceDraftSnapshot
+): boolean {
+  const edgeBaseElevation = edge.center.y - edge.heightMeters * 0.5;
+
+  return (
+    surface.terrainPatchId === null &&
+    nearlyEqualGeneratedEdgeSurfaceValue(surface.center.x, edge.center.x) &&
+    (nearlyEqualGeneratedEdgeSurfaceValue(surface.center.y, edgeBaseElevation) ||
+      nearlyEqualGeneratedEdgeSurfaceValue(surface.center.y, edge.center.y)) &&
+    nearlyEqualGeneratedEdgeSurfaceValue(surface.center.z, edge.center.z) &&
+    (nearlyEqualGeneratedEdgeSurfaceValue(surface.elevation, edgeBaseElevation) ||
+      nearlyEqualGeneratedEdgeSurfaceValue(surface.elevation, edge.center.y)) &&
+    nearlyEqualGeneratedEdgeSurfaceValue(
+      surface.rotationYRadians,
+      edge.rotationYRadians
+    ) &&
+    nearlyEqualGeneratedEdgeSurfaceValue(surface.size.x, edge.lengthMeters) &&
+    nearlyEqualGeneratedEdgeSurfaceValue(surface.size.y, edge.heightMeters) &&
+    nearlyEqualGeneratedEdgeSurfaceValue(surface.size.z, edge.thicknessMeters)
+  );
+}
+
+function shouldRemoveGeneratedEdgeBackingSurface(
+  project: MapEditorProjectSnapshot,
+  removedEdge: MapEditorEdgeDraftSnapshot,
+  nextEdgeDrafts: readonly MapEditorEdgeDraftSnapshot[]
+): boolean {
+  const surface = findSurfaceDraftById(project, removedEdge.surfaceId);
+
+  return (
+    surface !== null &&
+    isGeneratedEdgeBackingSurface(removedEdge, surface) &&
+    !nextEdgeDrafts.some((edge) => edge.surfaceId === removedEdge.surfaceId) &&
+    !project.regionDrafts.some(
+      (region) => region.surfaceId === removedEdge.surfaceId
+    ) &&
+    !project.connectorDrafts.some(
+      (connector) =>
+        connector.fromSurfaceId === removedEdge.surfaceId ||
+        connector.toSurfaceId === removedEdge.surfaceId
+    )
+  );
+}
+
+function shouldRemoveOrphanedRegionSurface(
+  project: MapEditorProjectSnapshot,
+  removedRegion: MapEditorRegionDraftSnapshot,
+  nextRegionDrafts: readonly MapEditorRegionDraftSnapshot[]
+): boolean {
+  return (
+    findSurfaceDraftById(project, removedRegion.surfaceId) !== null &&
+    !nextRegionDrafts.some(
+      (region) => region.surfaceId === removedRegion.surfaceId
+    ) &&
+    !project.edgeDrafts.some((edge) => edge.surfaceId === removedRegion.surfaceId) &&
+    !project.connectorDrafts.some(
+      (connector) =>
+        connector.fromSurfaceId === removedRegion.surfaceId ||
+        connector.toSurfaceId === removedRegion.surfaceId
+    )
+  );
+}
+
 export function removeMapEditorEntity(
   project: MapEditorProjectSnapshot,
   entityRef = project.selectedEntityRef
@@ -1631,6 +2750,10 @@ export function removeMapEditorEntity(
   }
 
   switch (entityRef.kind) {
+    case "world-atmosphere":
+    case "world-sky":
+    case "world-sun":
+      return project;
     case "module":
       return removeMapEditorPlacement(project, entityRef.id);
     case "player-spawn": {
@@ -1677,11 +2800,32 @@ export function removeMapEditorEntity(
       );
     }
     case "region": {
+      const removedRegion =
+        project.regionDrafts.find(
+          (regionDraft) => regionDraft.regionId === entityRef.id
+        ) ?? null;
+      const nextRegionDrafts = Object.freeze(
+        project.regionDrafts.filter(
+          (regionDraft) => regionDraft.regionId !== entityRef.id
+        )
+      );
+      const removeOrphanedSurface =
+        removedRegion !== null &&
+        shouldRemoveOrphanedRegionSurface(
+          project,
+          removedRegion,
+          nextRegionDrafts
+        );
       const nextProject = Object.freeze({
         ...project,
-        regionDrafts: Object.freeze(
-          project.regionDrafts.filter((regionDraft) => regionDraft.regionId !== entityRef.id)
-        )
+        regionDrafts: nextRegionDrafts,
+        surfaceDrafts: removeOrphanedSurface
+          ? Object.freeze(
+              project.surfaceDrafts.filter(
+                (surfaceDraft) => surfaceDraft.surfaceId !== removedRegion.surfaceId
+              )
+            )
+          : project.surfaceDrafts
       });
 
       return withSelectedEntity(
@@ -1690,11 +2834,29 @@ export function removeMapEditorEntity(
       );
     }
     case "edge": {
+      const removedEdge =
+        project.edgeDrafts.find((edgeDraft) => edgeDraft.edgeId === entityRef.id) ??
+        null;
+      const nextEdgeDrafts = Object.freeze(
+        project.edgeDrafts.filter((edgeDraft) => edgeDraft.edgeId !== entityRef.id)
+      );
+      const removeBackingSurface =
+        removedEdge !== null &&
+        shouldRemoveGeneratedEdgeBackingSurface(
+          project,
+          removedEdge,
+          nextEdgeDrafts
+        );
       const nextProject = Object.freeze({
         ...project,
-        edgeDrafts: Object.freeze(
-          project.edgeDrafts.filter((edgeDraft) => edgeDraft.edgeId !== entityRef.id)
-        )
+        edgeDrafts: nextEdgeDrafts,
+        surfaceDrafts: removeBackingSurface
+          ? Object.freeze(
+              project.surfaceDrafts.filter(
+                (surfaceDraft) => surfaceDraft.surfaceId !== removedEdge.surfaceId
+              )
+            )
+          : project.surfaceDrafts
       });
 
       return withSelectedEntity(
@@ -1709,6 +2871,49 @@ export function removeMapEditorEntity(
           project.connectorDrafts.filter(
             (connectorDraft) => connectorDraft.connectorId !== entityRef.id
           )
+        )
+      });
+
+      return withSelectedEntity(
+        nextProject,
+        resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
+      );
+    }
+    case "structure": {
+      const nextProject = Object.freeze({
+        ...project,
+        structuralDrafts: Object.freeze(
+          project.structuralDrafts.filter(
+            (structureDraft) => structureDraft.structureId !== entityRef.id
+          )
+        )
+      });
+
+      return withSelectedEntity(
+        nextProject,
+        resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
+      );
+    }
+    case "gameplay-volume": {
+      const nextProject = Object.freeze({
+        ...project,
+        gameplayVolumeDrafts: Object.freeze(
+          project.gameplayVolumeDrafts.filter(
+            (volumeDraft) => volumeDraft.volumeId !== entityRef.id
+          )
+        )
+      });
+
+      return withSelectedEntity(
+        nextProject,
+        resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
+      );
+    }
+    case "light": {
+      const nextProject = Object.freeze({
+        ...project,
+        lightDrafts: Object.freeze(
+          project.lightDrafts.filter((lightDraft) => lightDraft.lightId !== entityRef.id)
         )
       });
 
@@ -1763,11 +2968,11 @@ export function removeMapEditorEntity(
         resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
       );
     }
-    case "terrain-chunk": {
+    case "terrain-patch": {
       const removedChunkId = entityRef.id;
       const removedSurfaceIds = new Set(
         project.surfaceDrafts
-          .filter((surfaceDraft) => surfaceDraft.terrainChunkId === removedChunkId)
+          .filter((surfaceDraft) => surfaceDraft.terrainPatchId === removedChunkId)
           .map((surfaceDraft) => surfaceDraft.surfaceId)
       );
       const removedRegionIds = new Set(
@@ -1809,9 +3014,9 @@ export function removeMapEditorEntity(
             (surfaceDraft) => !removedSurfaceIds.has(surfaceDraft.surfaceId)
           )
         ),
-        terrainChunkDrafts: Object.freeze(
-          project.terrainChunkDrafts.filter(
-            (terrainChunkDraft) => terrainChunkDraft.chunkId !== removedChunkId
+        terrainPatchDrafts: Object.freeze(
+          project.terrainPatchDrafts.filter(
+            (terrainPatchDraft) => terrainPatchDraft.terrainPatchId !== removedChunkId
           )
         )
       });
@@ -1849,15 +3054,16 @@ export function addMapEditorLaunchVariationDraft(
 }
 
 export function addMapEditorPlayerSpawnDraft(
-  project: MapEditorProjectSnapshot
+  project: MapEditorProjectSnapshot,
+  position = createMapEditorSceneDraftPosition(project, Object.freeze({
+    x: 4,
+    y: 0,
+    z: 0
+  }))
 ): MapEditorProjectSnapshot {
   const nextSpawn = freezePlayerSpawnDraft({
     label: `Player Spawn ${project.playerSpawnDrafts.length + 1}`,
-    position: createMapEditorSceneDraftPosition(project, Object.freeze({
-      x: 4,
-      y: 0,
-      z: 0
-    })),
+    position,
     spawnId: createMapEditorPlayerSpawnId(project),
     teamId: "neutral",
     yawRadians: 0
@@ -1876,11 +3082,16 @@ export function addMapEditorPlayerSpawnDraft(
 }
 
 export function addMapEditorSceneObjectDraft(
-  project: MapEditorProjectSnapshot
+  project: MapEditorProjectSnapshot,
+  position = createMapEditorSceneDraftPosition(project, Object.freeze({
+    x: 0,
+    y: 6,
+    z: -12
+  }))
 ): MapEditorProjectSnapshot {
   const nextSceneObject = freezeSceneObjectDraft({
     assetId: null,
-    label: `Launch Object ${project.sceneObjectDrafts.length + 1}`,
+    label: `Portal ${project.sceneObjectDrafts.length + 1}`,
     launchTarget: Object.freeze({
       beamColorHex: "#f4ba2b",
       experienceId: "duck-hunt",
@@ -1889,11 +3100,7 @@ export function addMapEditorSceneObjectDraft(
       ringColorHex: "#f6d06a"
     }),
     objectId: createMapEditorSceneObjectId(project),
-    position: createMapEditorSceneDraftPosition(project, Object.freeze({
-      x: 0,
-      y: 6,
-      z: -12
-    })),
+    position,
     rotationYRadians: 0,
     scale: 1
   });
@@ -1922,25 +3129,65 @@ export function addMapEditorWaterRegionDraft(
   })),
   options?: {
     readonly depthMeters?: number;
+    readonly endPosition?: MetaverseWorldSurfaceVector3Snapshot;
     readonly topElevationMeters?: number;
     readonly widthCells?: number;
     readonly zCells?: number;
   }
 ): MapEditorProjectSnapshot {
-  const snappedPosition = snapMapEditorPositionToGrid(position);
+  const fallbackCellsX = Math.max(1, options?.widthCells ?? 1);
+  const fallbackCellsZ = Math.max(1, options?.zCells ?? 1);
+  const topElevation = options?.topElevationMeters ?? position.y;
+  const endPosition = options?.endPosition ?? position;
+  const snappedStart = resolveMapEditorBuildGroundPosition(
+    position,
+    topElevation
+  );
+  const snappedEnd = resolveMapEditorBuildGroundPosition(
+    endPosition,
+    topElevation
+  );
+  const rectangle =
+    snappedStart.x === snappedEnd.x && snappedStart.z === snappedEnd.z
+      ? Object.freeze({
+          center: resolveMapEditorBuildFootprintCenterPosition(
+            position,
+            topElevation,
+            fallbackCellsX,
+            fallbackCellsZ
+          ),
+          size: Object.freeze({
+            x: fallbackCellsX * mapEditorBuildGridUnitMeters,
+            y: Math.max(0.5, options?.depthMeters ?? 4),
+            z: fallbackCellsZ * mapEditorBuildGridUnitMeters
+          })
+        })
+      : resolveMapEditorBuildRectangleFromGridPoints(
+          snappedStart,
+          snappedEnd,
+          Math.max(0.5, options?.depthMeters ?? 4)
+        );
+  const sizeCellsX = Math.max(
+    1,
+    Math.round(rectangle.size.x / mapEditorBuildGridUnitMeters)
+  );
+  const sizeCellsZ = Math.max(
+    1,
+    Math.round(rectangle.size.z / mapEditorBuildGridUnitMeters)
+  );
   const nextWaterRegion = freezeWaterRegionDraft({
     depthMeters: Math.max(0.5, options?.depthMeters ?? 4),
     footprint: Object.freeze({
-      centerX: snappedPosition.x,
-      centerZ: snappedPosition.z,
-      sizeCellsX: Math.max(1, options?.widthCells ?? 6),
-      sizeCellsZ: Math.max(1, options?.zCells ?? 6)
+      centerX: rectangle.center.x,
+      centerZ: rectangle.center.z,
+      sizeCellsX,
+      sizeCellsZ
     }),
     previewColorHex:
       project.waterRegionDrafts[project.waterRegionDrafts.length - 1]?.previewColorHex ??
       "#2f7f9c",
     previewOpacity: 0.58,
-    topElevationMeters: options?.topElevationMeters ?? snappedPosition.y,
+    topElevationMeters: topElevation,
     waterRegionId: createMapEditorWaterRegionId(project)
   });
 
@@ -1959,40 +3206,91 @@ export function addMapEditorWaterRegionDraft(
   );
 }
 
-export function addMapEditorTerrainChunkDraft(
+export function addMapEditorTerrainPatchDraft(
   project: MapEditorProjectSnapshot,
   position = createMapEditorSceneDraftPosition(project, Object.freeze({
     x: 0,
     y: 0,
     z: 0
-  }))
+  })),
+  materialId: MapEditorStructuralDraftSnapshot["materialId"] = "terrain-grass",
+  options?: {
+    readonly endPosition?: MetaverseWorldSurfaceVector3Snapshot;
+  }
 ): MapEditorProjectSnapshot {
-  const snappedPosition = snapMapEditorPositionToGrid(position);
-  const nextTerrainChunk = Object.freeze({
-    chunkId: createMapEditorTerrainChunkId(project),
-    heights: createTerrainChunkHeights(
-      defaultTerrainChunkSampleCount,
-      defaultTerrainChunkSampleCount
+  const fallbackTerrainCellsX = defaultTerrainPatchSampleCount - 1;
+  const fallbackTerrainCellsZ = defaultTerrainPatchSampleCount - 1;
+  const endPosition = options?.endPosition ?? position;
+  const snappedStart = resolveMapEditorBuildGroundPosition(position, position.y);
+  const snappedEnd = resolveMapEditorBuildGroundPosition(endPosition, position.y);
+  const rectangle =
+    snappedStart.x === snappedEnd.x && snappedStart.z === snappedEnd.z
+      ? Object.freeze({
+          center: resolveMapEditorBuildFootprintCenterPosition(
+            position,
+            position.y,
+            fallbackTerrainCellsX,
+            fallbackTerrainCellsZ
+          ),
+          size: Object.freeze({
+            x: fallbackTerrainCellsX * mapEditorBuildGridUnitMeters,
+            y: 0.5,
+            z: fallbackTerrainCellsZ * mapEditorBuildGridUnitMeters
+          })
+        })
+      : resolveMapEditorBuildRectangleFromGridPoints(snappedStart, snappedEnd, 0.5);
+  const terrainCellsX = Math.max(
+    1,
+    Math.round(rectangle.size.x / mapEditorBuildGridUnitMeters)
+  );
+  const terrainCellsZ = Math.max(
+    1,
+    Math.round(rectangle.size.z / mapEditorBuildGridUnitMeters)
+  );
+  const sampleCountX = terrainCellsX + 1;
+  const sampleCountZ = terrainCellsZ + 1;
+  const terrainPatchId = createMapEditorTerrainPatchId(project);
+  const patchSize = Object.freeze({
+    x: terrainCellsX * mapEditorBuildGridUnitMeters,
+    y: 0.5,
+    z: terrainCellsZ * mapEditorBuildGridUnitMeters
+  });
+  const nextTerrainPatch = Object.freeze({
+    grid: createMapEditorStructuralGrid(rectangle.center, patchSize),
+    heightSamples: createTerrainPatchHeights(
+      sampleCountX,
+      sampleCountZ
     ),
-    label: `Terrain Chunk ${project.terrainChunkDrafts.length + 1}`,
-    origin: snappedPosition,
-    sampleCountX: defaultTerrainChunkSampleCount,
-    sampleCountZ: defaultTerrainChunkSampleCount,
-    sampleStrideMeters: mapEditorBuildGridUnitMeters,
+    label: `Terrain ${project.terrainPatchDrafts.length + 1}`,
+    materialLayers: createTerrainPatchMaterialLayers(
+      terrainPatchId,
+      sampleCountX,
+      sampleCountZ,
+      materialId
+    ),
+    origin: rectangle.center,
+    rotationYRadians: 0,
+    sampleCountX,
+    sampleCountZ,
+    sampleSpacingMeters: mapEditorBuildGridUnitMeters,
+    terrainPatchId,
     waterLevelMeters: null
-  } satisfies MapEditorTerrainChunkDraftSnapshot);
+  } satisfies MapEditorTerrainPatchDraftSnapshot);
 
   return withSelectedEntity(
+    seedTerrainPatchBoundariesFromNeighbors(
+      Object.freeze({
+        ...project,
+        terrainPatchDrafts: Object.freeze([
+          ...project.terrainPatchDrafts,
+          nextTerrainPatch
+        ])
+      }),
+      terrainPatchId
+    ),
     Object.freeze({
-      ...project,
-      terrainChunkDrafts: Object.freeze([
-        ...project.terrainChunkDrafts,
-        nextTerrainChunk
-      ])
-    }),
-    Object.freeze({
-      id: nextTerrainChunk.chunkId,
-      kind: "terrain-chunk"
+      id: nextTerrainPatch.terrainPatchId,
+      kind: "terrain-patch"
     })
   );
 }
@@ -2015,8 +3313,9 @@ export function addMapEditorSurfaceDraft(
       y: 0.5,
       z: 8
     }),
+    slopeRiseMeters: 0,
     surfaceId: createMapEditorSurfaceId(project),
-    terrainChunkId: null
+    terrainPatchId: null
   });
 
   return withSelectedEntity(
@@ -2054,6 +3353,10 @@ export function addMapEditorRegionDraft(
     center: position,
     label: `Region ${project.regionDrafts.length + 1}`,
     materialReferenceId: null,
+    outerLoop: createRectangularSurfaceLoop({
+      x: 8,
+      z: 8
+    }),
     regionId: createMapEditorRegionId(projectWithSurface),
     regionKind: "floor",
     rotationYRadians: 0,
@@ -2077,6 +3380,191 @@ export function addMapEditorRegionDraft(
   );
 }
 
+export function addMapEditorFloorRegionDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  options?: {
+    readonly elevationMeters?: number;
+    readonly footprintCellsX?: number;
+    readonly footprintCellsZ?: number;
+    readonly materialId?: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly materialReferenceId?: string | null;
+    readonly outerLoop?: MetaverseMapBundleSemanticPlanarLoopSnapshot;
+    readonly regionKind?: MapEditorRegionDraftSnapshot["regionKind"];
+    readonly rotationYRadians?: number;
+    readonly slopeRiseMeters?: number;
+    readonly surfaceKind?: MapEditorSurfaceDraftSnapshot["kind"];
+    readonly surfaceCenter?: MetaverseWorldSurfaceVector3Snapshot;
+  }
+): MapEditorProjectSnapshot {
+  const elevation = options?.elevationMeters ?? startPosition.y;
+  const snappedStart = resolveMapEditorBuildGroundPosition(startPosition, elevation);
+  const snappedEnd = resolveMapEditorBuildGroundPosition(endPosition, elevation);
+  const explicitLoop = options?.outerLoop ?? null;
+  const rectangle =
+    explicitLoop === null
+      ? snappedStart.x === snappedEnd.x && snappedStart.z === snappedEnd.z
+        ? Object.freeze({
+            center: resolveMapEditorBuildFootprintCenterPosition(
+              startPosition,
+              elevation,
+              Math.max(1, options?.footprintCellsX ?? 2),
+              Math.max(1, options?.footprintCellsZ ?? 2)
+            ),
+            size: Object.freeze({
+              x:
+                Math.max(1, options?.footprintCellsX ?? 2) *
+                mapEditorBuildGridUnitMeters,
+              y: 0.5,
+              z:
+                Math.max(1, options?.footprintCellsZ ?? 2) *
+                mapEditorBuildGridUnitMeters
+            })
+          })
+        : resolveMapEditorBuildRectangleFromGridPoints(snappedStart, snappedEnd, 0.5)
+      : null;
+  const outerLoop =
+    explicitLoop ?? createRectangularSurfaceLoop(rectangle!.size);
+  const loopBounds = outerLoop.points.reduce(
+    (bounds, point) =>
+      Object.freeze({
+        maxX: Math.max(bounds.maxX, point.x),
+        maxZ: Math.max(bounds.maxZ, point.z),
+        minX: Math.min(bounds.minX, point.x),
+        minZ: Math.min(bounds.minZ, point.z)
+      }),
+    Object.freeze({
+      maxX: Number.NEGATIVE_INFINITY,
+      maxZ: Number.NEGATIVE_INFINITY,
+      minX: Number.POSITIVE_INFINITY,
+      minZ: Number.POSITIVE_INFINITY
+    })
+  );
+  const surfaceCenter =
+    options?.surfaceCenter ??
+    rectangle?.center ??
+    Object.freeze({
+      x: startPosition.x,
+      y: elevation,
+      z: startPosition.z
+    });
+  const surfaceSize = Object.freeze({
+    x: Math.max(0.5, loopBounds.maxX - loopBounds.minX),
+    y: 0.5,
+    z: Math.max(0.5, loopBounds.maxZ - loopBounds.minZ)
+  });
+  const { project: projectWithSurface, surfaceId } =
+    createSemanticSurfaceForPlacement(
+      project,
+      `${options?.regionKind === "roof" ? "Roof" : "Floor"} Surface ${project.surfaceDrafts.length + 1}`,
+      surfaceCenter,
+      options?.rotationYRadians ?? 0,
+      surfaceSize,
+      {
+        kind: options?.surfaceKind ?? "flat-slab",
+        slopeRiseMeters: options?.slopeRiseMeters ?? 0
+      }
+    );
+  const nextRegion = freezeRegionDraft({
+    center: surfaceCenter,
+    label: `${options?.regionKind === "roof" ? "Roof" : "Floor"} ${projectWithSurface.regionDrafts.length + 1}`,
+    materialReferenceId:
+      options?.materialReferenceId ?? options?.materialId ?? "concrete",
+    outerLoop,
+    regionId: createMapEditorRegionId(projectWithSurface),
+    regionKind: options?.regionKind ?? "floor",
+    rotationYRadians: options?.rotationYRadians ?? 0,
+    size: surfaceSize,
+    surfaceId
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...projectWithSurface,
+      regionDrafts: Object.freeze([...projectWithSurface.regionDrafts, nextRegion])
+    }),
+    Object.freeze({
+      id: nextRegion.regionId,
+      kind: "region"
+    })
+  );
+}
+
+export function addMapEditorFloorPolygonRegionDraft(
+  project: MapEditorProjectSnapshot,
+  worldPoints: readonly MetaverseWorldSurfaceVector3Snapshot[],
+  options?: {
+    readonly elevationMeters?: number;
+    readonly materialId?: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly materialReferenceId?: string | null;
+    readonly regionKind?: MapEditorRegionDraftSnapshot["regionKind"];
+    readonly slopeRiseMeters?: number;
+    readonly surfaceKind?: MapEditorSurfaceDraftSnapshot["kind"];
+  }
+): MapEditorProjectSnapshot {
+  if (worldPoints.length < 3) {
+    return project;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const point of worldPoints) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minZ = Math.min(minZ, point.z);
+    maxZ = Math.max(maxZ, point.z);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minZ)) {
+    return project;
+  }
+
+  const elevation = options?.elevationMeters ?? worldPoints[0]!.y;
+  const center = Object.freeze({
+    x: (minX + maxX) * 0.5,
+    y: elevation,
+    z: (minZ + maxZ) * 0.5
+  });
+  const regionOptions = {
+    elevationMeters: elevation,
+    outerLoop: Object.freeze({
+      points: Object.freeze(
+        worldPoints.map((point) =>
+          createPlanarPoint(point.x - center.x, point.z - center.z)
+        )
+      )
+    }),
+    surfaceCenter: center
+  } satisfies {
+    readonly elevationMeters: number;
+    readonly outerLoop: MetaverseMapBundleSemanticPlanarLoopSnapshot;
+    readonly surfaceCenter: MetaverseWorldSurfaceVector3Snapshot;
+  };
+
+  return addMapEditorFloorRegionDraft(project, center, center, {
+    ...regionOptions,
+    ...(options?.materialId === undefined
+      ? null
+      : { materialId: options.materialId }),
+    ...(options?.materialReferenceId === undefined
+      ? null
+      : { materialReferenceId: options.materialReferenceId }),
+    ...(options?.regionKind === undefined
+      ? null
+      : { regionKind: options.regionKind }),
+    ...(options?.slopeRiseMeters === undefined
+      ? null
+      : { slopeRiseMeters: options.slopeRiseMeters }),
+    ...(options?.surfaceKind === undefined
+      ? null
+      : { surfaceKind: options.surfaceKind })
+  });
+}
+
 export function addMapEditorEdgeDraft(
   project: MapEditorProjectSnapshot,
   position = createMapEditorSceneDraftPosition(project, Object.freeze({
@@ -2088,7 +3576,11 @@ export function addMapEditorEdgeDraft(
   const { project: projectWithSurface, surfaceId } = createSemanticSurfaceForPlacement(
     project,
     `Edge Surface ${project.surfaceDrafts.length + 1}`,
-    position,
+    Object.freeze({
+      x: position.x,
+      y: position.y,
+      z: position.z
+    }),
     0,
     Object.freeze({
       x: 8,
@@ -2107,6 +3599,10 @@ export function addMapEditorEdgeDraft(
     heightMeters: 4,
     label: `Edge ${project.edgeDrafts.length + 1}`,
     lengthMeters: 8,
+    path: Object.freeze([
+      createPlanarPoint(-4, 0),
+      createPlanarPoint(4, 0)
+    ]),
     rotationYRadians: 0,
     surfaceId,
     thicknessMeters: 0.5
@@ -2137,7 +3633,7 @@ export function addMapEditorConnectorDraft(
   const nextConnector = freezeConnectorDraft({
     center: position,
     connectorId: createMapEditorConnectorId(project),
-    connectorKind: "stairs",
+    connectorKind: "ramp",
     fromSurfaceId,
     label: `Connector ${project.connectorDrafts.length + 1}`,
     rotationYRadians: 0,
@@ -2164,88 +3660,797 @@ export function addMapEditorConnectorDraft(
   );
 }
 
+export function createMapEditorStructuralGrid(
+  center: MetaverseWorldSurfaceVector3Snapshot,
+  size: MetaverseWorldSurfaceVector3Snapshot
+): MapEditorStructuralDraftSnapshot["grid"] {
+  return Object.freeze({
+    cellX: Math.round((center.x - size.x * 0.5) / mapEditorBuildGridUnitMeters),
+    cellZ: Math.round((center.z - size.z * 0.5) / mapEditorBuildGridUnitMeters),
+    cellsX: Math.max(1, Math.round(size.x / mapEditorBuildGridUnitMeters)),
+    cellsZ: Math.max(1, Math.round(size.z / mapEditorBuildGridUnitMeters)),
+    layer: Math.round(center.y / mapEditorBuildGridUnitMeters)
+  });
+}
+
+export function addMapEditorStructuralDraft(
+  project: MapEditorProjectSnapshot,
+  input: {
+    readonly center: MetaverseWorldSurfaceVector3Snapshot;
+    readonly label?: string;
+    readonly materialId?: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly materialReferenceId?: string | null;
+    readonly rotationYRadians?: number;
+    readonly size: MetaverseWorldSurfaceVector3Snapshot;
+    readonly structureKind: MapEditorStructuralDraftSnapshot["structureKind"];
+    readonly traversalAffordance?: MapEditorStructuralDraftSnapshot["traversalAffordance"];
+  }
+): MapEditorProjectSnapshot {
+  const structureId = createMapEditorStructureId(project);
+  const nextStructure = freezeStructuralDraft({
+    center: input.center,
+    grid: createMapEditorStructuralGrid(input.center, input.size),
+    label:
+      input.label ??
+      `${input.structureKind[0]?.toUpperCase()}${input.structureKind.slice(1)} ${project.structuralDrafts.length + 1}`,
+    materialId: input.materialId ?? "concrete",
+    materialReferenceId: input.materialReferenceId ?? input.materialId ?? "concrete",
+    rotationYRadians: input.rotationYRadians ?? 0,
+    size: input.size,
+    structureId,
+    structureKind: input.structureKind,
+    traversalAffordance:
+      input.traversalAffordance ??
+      (input.structureKind === "cover" || input.structureKind === "wall"
+        ? "blocker"
+        : "support")
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...project,
+      structuralDrafts: Object.freeze([
+        ...project.structuralDrafts,
+        nextStructure
+      ])
+    }),
+    Object.freeze({
+      id: structureId,
+      kind: "structure"
+    })
+  );
+}
+
+export function addMapEditorGameplayVolumeDraft(
+  project: MapEditorProjectSnapshot,
+  input: {
+    readonly center: MetaverseWorldSurfaceVector3Snapshot;
+    readonly label?: string;
+    readonly priority?: number;
+    readonly rotationYRadians?: number;
+    readonly routePoints?: readonly MetaverseWorldSurfaceVector3Snapshot[];
+    readonly size: MetaverseWorldSurfaceVector3Snapshot;
+    readonly tags?: readonly string[];
+    readonly teamId?: MapEditorGameplayVolumeDraftSnapshot["teamId"];
+    readonly volumeKind: MapEditorGameplayVolumeDraftSnapshot["volumeKind"];
+  }
+): MapEditorProjectSnapshot {
+  const volumeId = createMapEditorGameplayVolumeId(project);
+  const nextVolume = freezeGameplayVolumeDraft({
+    center: input.center,
+    label:
+      input.label ??
+      `${input.volumeKind[0]?.toUpperCase()}${input.volumeKind.slice(1)} ${project.gameplayVolumeDrafts.length + 1}`,
+    priority: input.priority ?? 0,
+    rotationYRadians: input.rotationYRadians ?? 0,
+    routePoints: input.routePoints ?? Object.freeze([]),
+    size: input.size,
+    tags: input.tags ?? Object.freeze([]),
+    teamId: input.teamId ?? null,
+    volumeId,
+    volumeKind: input.volumeKind
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...project,
+      gameplayVolumeDrafts: Object.freeze([
+        ...project.gameplayVolumeDrafts,
+        nextVolume
+      ])
+    }),
+    Object.freeze({
+      id: volumeId,
+      kind: "gameplay-volume"
+    })
+  );
+}
+
+export function addMapEditorLightDraft(
+  project: MapEditorProjectSnapshot,
+  position: MetaverseWorldSurfaceVector3Snapshot,
+  input?: {
+    readonly color?: readonly [number, number, number];
+    readonly intensity?: number;
+    readonly lightKind?: MapEditorLightDraftSnapshot["lightKind"];
+    readonly rangeMeters?: number | null;
+  }
+): MapEditorProjectSnapshot {
+  const lightId = createMapEditorLightId(project);
+  const nextLight = freezeLightDraft({
+    color: input?.color ?? Object.freeze([1, 0.86, 0.62] as const),
+    intensity: input?.intensity ?? 2.5,
+    label: `Light ${project.lightDrafts.length + 1}`,
+    lightId,
+    lightKind: input?.lightKind ?? "point",
+    position,
+    rangeMeters: input?.rangeMeters ?? 20,
+    rotationYRadians: 0,
+    target: null
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...project,
+      lightDrafts: Object.freeze([...project.lightDrafts, nextLight])
+    }),
+    Object.freeze({
+      id: lightId,
+      kind: "light"
+    })
+  );
+}
+
+export function addMapEditorMaterialDefinitionDraft(
+  project: MapEditorProjectSnapshot,
+  input: {
+    readonly accentColorHex?: string | null;
+    readonly baseColorHex: string;
+    readonly baseMaterialId: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly label?: string;
+    readonly materialId?: string;
+    readonly metalness?: number;
+    readonly opacity?: number;
+    readonly roughness?: number;
+    readonly textureBrightness?: number;
+    readonly textureContrast?: number;
+    readonly textureImageDataUrl?: string | null;
+    readonly texturePatternStrength?: number;
+    readonly textureRepeat?: number;
+  }
+): MapEditorProjectSnapshot {
+  const materialId =
+    input.materialId ?? createNextMapEditorMaterialDefinitionId(project);
+  const existingDefinition = project.materialDefinitionDrafts.find(
+    (materialDefinition) => materialDefinition.materialId === materialId
+  );
+  const nextDefinition = freezeMaterialDefinitionDraft({
+    accentColorHex: input.accentColorHex ?? null,
+    baseColorHex: input.baseColorHex,
+    baseMaterialId: input.baseMaterialId,
+    label: input.label ?? `Material ${project.materialDefinitionDrafts.length + 1}`,
+    materialId,
+    metalness: Math.min(1, Math.max(0, input.metalness ?? 0.04)),
+    opacity: Math.min(1, Math.max(0, input.opacity ?? 1)),
+    roughness: Math.min(1, Math.max(0, input.roughness ?? 0.82)),
+    textureBrightness: Math.min(2, Math.max(0, input.textureBrightness ?? 1)),
+    textureContrast: Math.min(2, Math.max(0, input.textureContrast ?? 1)),
+    textureImageDataUrl: input.textureImageDataUrl ?? null,
+    texturePatternStrength: Math.min(
+      1,
+      Math.max(0, input.texturePatternStrength ?? 1)
+    ),
+    textureRepeat: Math.min(32, Math.max(0.25, input.textureRepeat ?? 1))
+  });
+
+  return Object.freeze({
+    ...project,
+    materialDefinitionDrafts:
+      existingDefinition === undefined
+        ? Object.freeze([
+            ...project.materialDefinitionDrafts,
+            nextDefinition
+          ])
+        : Object.freeze(
+            project.materialDefinitionDrafts.map((materialDefinition) =>
+              materialDefinition.materialId === materialId
+                ? nextDefinition
+                : materialDefinition
+            )
+          )
+  });
+}
+
+function resolveBuildRectangle(
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  elevationMeters: number,
+  heightMeters: number,
+  fallbackCellsX = 1,
+  fallbackCellsZ = 1
+): {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+} {
+  const snappedStart = resolveMapEditorBuildGroundPosition(
+    startPosition,
+    elevationMeters
+  );
+  const snappedEnd = resolveMapEditorBuildGroundPosition(
+    endPosition,
+    elevationMeters
+  );
+
+  return snappedStart.x === snappedEnd.x && snappedStart.z === snappedEnd.z
+    ? Object.freeze({
+        center: resolveMapEditorBuildFootprintCenterPosition(
+          startPosition,
+          elevationMeters,
+          fallbackCellsX,
+          fallbackCellsZ
+        ),
+        size: Object.freeze({
+          x: Math.max(1, fallbackCellsX) * mapEditorBuildGridUnitMeters,
+          y: heightMeters,
+          z: Math.max(1, fallbackCellsZ) * mapEditorBuildGridUnitMeters
+        })
+      })
+    : resolveMapEditorBuildRectangleFromGridPoints(
+        snappedStart,
+        snappedEnd,
+        heightMeters
+      );
+}
+
+function resolveSegmentDraftShape(
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  widthMeters: number,
+  heightMeters: number
+): {
+  readonly center: MetaverseWorldSurfaceVector3Snapshot;
+  readonly lengthMeters: number;
+  readonly rotationYRadians: number;
+  readonly size: MetaverseWorldSurfaceVector3Snapshot;
+  readonly start: MetaverseWorldSurfaceVector3Snapshot;
+  readonly end: MetaverseWorldSurfaceVector3Snapshot;
+} | null {
+  const snappedStart = resolveMapEditorBuildSizedCenterPosition(
+    startPosition,
+    startPosition.y,
+    widthMeters,
+    widthMeters
+  );
+  const snappedEnd = resolveMapEditorBuildSizedCenterPosition(
+    endPosition,
+    endPosition.y,
+    widthMeters,
+    widthMeters
+  );
+  const deltaX = snappedEnd.x - snappedStart.x;
+  const deltaZ = snappedEnd.z - snappedStart.z;
+  const lengthMeters = Math.hypot(deltaX, deltaZ);
+
+  if (lengthMeters <= 0.01) {
+    return null;
+  }
+
+  return Object.freeze({
+    center: Object.freeze({
+      x: (snappedStart.x + snappedEnd.x) * 0.5,
+      y: Math.min(snappedStart.y, snappedEnd.y),
+      z: (snappedStart.z + snappedEnd.z) * 0.5
+    }),
+    end: snappedEnd,
+    lengthMeters,
+    rotationYRadians: Math.atan2(deltaX, deltaZ),
+    size: Object.freeze({
+      x: widthMeters,
+      y: heightMeters,
+      z: Math.max(mapEditorBuildGridUnitMeters, lengthMeters)
+    }),
+    start: snappedStart
+  });
+}
+
+function createRoutePoint(
+  position: MetaverseWorldSurfaceVector3Snapshot
+): MetaverseWorldSurfaceVector3Snapshot {
+  return Object.freeze({
+    x: position.x,
+    y: position.y,
+    z: position.z
+  });
+}
+
+function addMapEditorSpawnRoomGeometryDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  options?: {
+    readonly elevationMeters?: number;
+    readonly materialId?: MapEditorStructuralDraftSnapshot["materialId"];
+  }
+): MapEditorProjectSnapshot {
+  const elevation = options?.elevationMeters ?? startPosition.y;
+  const firstRoomStructureIndex = project.structuralDrafts.length;
+  const rectangle = resolveBuildRectangle(
+    startPosition,
+    endPosition,
+    elevation,
+    0.5,
+    3,
+    3
+  );
+  const floorOptionsBase = Object.freeze({
+    elevationMeters: elevation,
+    footprintCellsX: Math.max(
+      1,
+      Math.round(rectangle.size.x / mapEditorBuildGridUnitMeters)
+    ),
+    footprintCellsZ: Math.max(
+      1,
+      Math.round(rectangle.size.z / mapEditorBuildGridUnitMeters)
+    )
+  });
+  let nextProject = addMapEditorFloorRegionDraft(
+    project,
+    startPosition,
+    endPosition,
+    options?.materialId === undefined
+      ? floorOptionsBase
+      : Object.freeze({
+          ...floorOptionsBase,
+          materialId: options.materialId
+        })
+  );
+  const minX = rectangle.center.x - rectangle.size.x * 0.5;
+  const maxX = rectangle.center.x + rectangle.size.x * 0.5;
+  const minZ = rectangle.center.z - rectangle.size.z * 0.5;
+  const maxZ = rectangle.center.z + rectangle.size.z * 0.5;
+  const baseY = elevation;
+  const perimeterSegments = [
+    [minX, minZ, maxX, minZ],
+    [maxX, minZ, maxX, maxZ],
+    [maxX, maxZ, minX, maxZ],
+    [minX, maxZ, minX, minZ]
+  ] as const;
+
+  for (const [startX, startZ, endX, endZ] of perimeterSegments) {
+    nextProject = addMapEditorWallSegment(
+      nextProject,
+      Object.freeze({
+        x: startX,
+        y: baseY,
+        z: startZ
+      }),
+      Object.freeze({
+        x: endX,
+        y: baseY,
+        z: endZ
+      }),
+      "wall"
+    );
+  }
+
+  const roomMaterialId = options?.materialId;
+
+  if (roomMaterialId !== undefined) {
+    nextProject = Object.freeze({
+      ...nextProject,
+      structuralDrafts: Object.freeze(
+        nextProject.structuralDrafts.map((structure, structureIndex) =>
+          structureIndex >= firstRoomStructureIndex &&
+          (structure.structureKind === "floor" || structure.structureKind === "wall")
+            ? freezeStructuralDraft({
+                ...structure,
+                materialId: roomMaterialId,
+                materialReferenceId: roomMaterialId
+              })
+            : structure
+        )
+      )
+    });
+  }
+
+  return nextProject;
+}
+
+export function addMapEditorCoverDraft(
+  project: MapEditorProjectSnapshot,
+  position: MetaverseWorldSurfaceVector3Snapshot,
+  options?: {
+    readonly footprintCellsX?: number;
+    readonly footprintCellsZ?: number;
+    readonly heightCells?: number;
+    readonly materialId?: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly materialReferenceId?: string | null;
+  }
+): MapEditorProjectSnapshot {
+  const footprintCellsX = Math.max(1, options?.footprintCellsX ?? 1);
+  const footprintCellsZ = Math.max(1, options?.footprintCellsZ ?? 1);
+  const heightCells = Math.max(1, options?.heightCells ?? 1);
+  const snappedPosition = resolveMapEditorBuildFootprintCenterPosition(
+    position,
+    position.y,
+    footprintCellsX,
+    footprintCellsZ
+  );
+  const size = Object.freeze({
+    x: footprintCellsX * mapEditorBuildGridUnitMeters,
+    y: heightCells * mapEditorBuildGridUnitMeters,
+    z: footprintCellsZ * mapEditorBuildGridUnitMeters
+  });
+  const structureId = createMapEditorStructureId(project);
+  const structure = freezeStructuralDraft({
+    center: snappedPosition,
+    grid: createMapEditorStructuralGrid(snappedPosition, size),
+    label: `Cover Block ${project.structuralDrafts.length + 1}`,
+    materialId: options?.materialId ?? "metal",
+    materialReferenceId:
+      options?.materialReferenceId ?? options?.materialId ?? "metal",
+    rotationYRadians: 0,
+    size,
+    structureId,
+    structureKind: "cover",
+    traversalAffordance: "blocker"
+  });
+  const volumeId = createMapEditorGameplayVolumeId(project);
+  const volume = freezeGameplayVolumeDraft({
+    center: Object.freeze({
+      x: snappedPosition.x,
+      y: snappedPosition.y + size.y * 0.5,
+      z: snappedPosition.z
+    }),
+    label: `Cover Volume ${project.gameplayVolumeDrafts.length + 1}`,
+    priority: 1,
+    rotationYRadians: 0,
+    routePoints: Object.freeze([]),
+    size,
+    tags: Object.freeze(size.y <= mapEditorBuildGridUnitMeters ? ["low", "hard"] : ["high", "hard"]),
+    teamId: null,
+    volumeId,
+    volumeKind: "cover-volume"
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...project,
+      gameplayVolumeDrafts: Object.freeze([
+        ...project.gameplayVolumeDrafts,
+        volume
+      ]),
+      structuralDrafts: Object.freeze([
+        ...project.structuralDrafts,
+        structure
+      ])
+    }),
+    Object.freeze({
+      id: structureId,
+      kind: "structure"
+    })
+  );
+}
+
+export function addMapEditorTeamZoneDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  teamId: MapEditorGameplayVolumeDraftSnapshot["teamId"] = "neutral"
+): MapEditorProjectSnapshot {
+  const rectangle = resolveBuildRectangle(
+    startPosition,
+    endPosition,
+    startPosition.y + 1.5,
+    3,
+    4,
+    4
+  );
+
+  return addMapEditorGameplayVolumeDraft(project, {
+    center: rectangle.center,
+    label: `${teamId ?? "neutral"} Team Zone ${project.gameplayVolumeDrafts.length + 1}`,
+    priority: teamId === "neutral" ? 0 : 2,
+    size: rectangle.size,
+    tags: Object.freeze(["spawn-support", "team-control"]),
+    teamId,
+    volumeKind: "team-zone"
+  });
+}
+
+export function addMapEditorSpawnRoomDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  teamId: MapEditorGameplayVolumeDraftSnapshot["teamId"] = "neutral"
+): MapEditorProjectSnapshot {
+  const roomProject = addMapEditorSpawnRoomGeometryDraft(project, startPosition, endPosition, {
+    elevationMeters: startPosition.y,
+    materialId: teamId === "blue" ? "team-blue" : teamId === "red" ? "team-red" : "concrete"
+  });
+  const rectangle = resolveBuildRectangle(
+    startPosition,
+    endPosition,
+    startPosition.y + 1.5,
+    3,
+    4,
+    4
+  );
+
+  return addMapEditorGameplayVolumeDraft(roomProject, {
+    center: rectangle.center,
+    label: `${teamId ?? "neutral"} Spawn Room ${roomProject.gameplayVolumeDrafts.length + 1}`,
+    priority: teamId === "neutral" ? 1 : 3,
+    size: rectangle.size,
+    tags: Object.freeze(["protected-spawn", "spawn-room"]),
+    teamId,
+    volumeKind: "spawn-room"
+  });
+}
+
+export function addMapEditorCombatLaneDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  widthCells = 3
+): MapEditorProjectSnapshot {
+  const widthMeters = Math.max(1, widthCells) * mapEditorBuildGridUnitMeters;
+  const segment = resolveSegmentDraftShape(
+    startPosition,
+    endPosition,
+    widthMeters,
+    3
+  );
+
+  if (segment === null) {
+    return project;
+  }
+
+  return addMapEditorGameplayVolumeDraft(project, {
+    center: Object.freeze({
+      ...segment.center,
+      y: Math.min(startPosition.y, endPosition.y) + 1.5
+    }),
+    label: `Combat Lane ${project.gameplayVolumeDrafts.length + 1}`,
+    priority: 1,
+    rotationYRadians: segment.rotationYRadians,
+    routePoints: Object.freeze([
+      createRoutePoint(segment.start),
+      createRoutePoint(segment.end)
+    ]),
+    size: segment.size,
+    tags: Object.freeze(["lane", "combat"]),
+    teamId: null,
+    volumeKind: "combat-lane"
+  });
+}
+
+export function addMapEditorVehicleRouteDraft(
+  project: MapEditorProjectSnapshot,
+  startPosition: MetaverseWorldSurfaceVector3Snapshot,
+  endPosition: MetaverseWorldSurfaceVector3Snapshot,
+  widthCells = 3
+): MapEditorProjectSnapshot {
+  const widthMeters = Math.max(1, widthCells) * mapEditorBuildGridUnitMeters;
+  const segment = resolveSegmentDraftShape(
+    startPosition,
+    endPosition,
+    widthMeters,
+    3
+  );
+
+  if (segment === null) {
+    return project;
+  }
+
+  return addMapEditorGameplayVolumeDraft(project, {
+    center: Object.freeze({
+      ...segment.center,
+      y: Math.min(startPosition.y, endPosition.y) + 1.5
+    }),
+    label: `Vehicle Route ${project.gameplayVolumeDrafts.length + 1}`,
+    priority: 1,
+    rotationYRadians: segment.rotationYRadians,
+    routePoints: Object.freeze([
+      createRoutePoint(segment.start),
+      createRoutePoint(segment.end)
+    ]),
+    size: segment.size,
+    tags: Object.freeze(["vehicle", "route"]),
+    teamId: null,
+    volumeKind: "vehicle-route"
+  });
+}
+
+export function paintMapEditorEntityMaterial(
+  project: MapEditorProjectSnapshot,
+  entityRef: MapEditorSelectedEntityRef | null,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"],
+  materialReferenceId: string = materialId
+): MapEditorProjectSnapshot {
+  if (entityRef === null) {
+    return project;
+  }
+
+  switch (entityRef.kind) {
+    case "structure":
+      return updateMapEditorStructuralDraft(project, entityRef.id, (structure) => ({
+        ...structure,
+        materialId,
+        materialReferenceId
+      }));
+    case "module":
+      return updateMapEditorPlacement(project, entityRef.id, (placement) => ({
+        ...placement,
+        materialReferenceId
+      }));
+    case "region":
+      return updateMapEditorRegionDraft(project, entityRef.id, (region) => ({
+        ...region,
+        materialReferenceId
+      }));
+    default:
+      return project;
+  }
+}
+
 export function applyMapEditorTerrainBrush(
   project: MapEditorProjectSnapshot,
   position: MetaverseWorldSurfaceVector3Snapshot,
   brushMode: MapEditorTerrainBrushMode,
   brushSizeCells: MapEditorTerrainBrushSizeCells,
-  smoothEdges: boolean
+  smoothEdges: boolean,
+  brushStrengthMeters = defaultTerrainBrushHeightDeltaMeters,
+  targetHeightMeters = 0,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"] = "terrain-grass",
+  noiseSeed = 0
 ): MapEditorProjectSnapshot {
   const snappedPosition = snapMapEditorPositionToGrid(position);
+  const normalizedBrushSizeCells = normalizeTerrainBrushSizeCells(brushSizeCells);
   let nextProject = project;
-  let terrainChunk = findTerrainChunkAtPosition(nextProject, snappedPosition);
+  let terrainPatch = findTerrainPatchAtPosition(nextProject, snappedPosition);
 
-  if (terrainChunk === null) {
-    nextProject = addMapEditorTerrainChunkDraft(nextProject, snappedPosition);
-    terrainChunk =
-      nextProject.terrainChunkDrafts[nextProject.terrainChunkDrafts.length - 1] ?? null;
+  if (terrainPatch === null) {
+    nextProject = addMapEditorTerrainPatchDraft(nextProject, snappedPosition, materialId);
+    terrainPatch =
+      nextProject.terrainPatchDrafts[nextProject.terrainPatchDrafts.length - 1] ?? null;
   }
 
-  if (terrainChunk === null) {
+  if (terrainPatch === null) {
     return nextProject;
   }
 
-  const targetCell = resolveTerrainCellIndices(terrainChunk, snappedPosition);
+  const targetCell = resolveTerrainCellIndices(terrainPatch, snappedPosition);
 
   if (targetCell === null) {
     return nextProject;
   }
 
-  const nextHeights = [...terrainChunk.heights];
-  const brushOffsetX = Math.floor(brushSizeCells * 0.5);
-  const brushOffsetZ = Math.floor(brushSizeCells * 0.5);
+  const nextHeights = [...terrainPatch.heightSamples];
+  const nextMaterialLayers = cloneTerrainMaterialLayersForEditing(terrainPatch);
+  let materialLayerIndex = nextMaterialLayers.findIndex(
+    (layer) => layer.materialId === materialId
+  );
+
+  if (materialLayerIndex < 0) {
+    materialLayerIndex = nextMaterialLayers.length;
+    nextMaterialLayers.push(
+      Object.freeze({
+        layerId: `${terrainPatch.terrainPatchId}:${materialId}`,
+        materialId,
+        weightSamples: Array.from(
+          { length: terrainPatch.sampleCountX * terrainPatch.sampleCountZ },
+          () => 0
+        )
+      })
+    );
+  }
+
+  const brushOffsetX = Math.floor(normalizedBrushSizeCells * 0.5);
+  const brushOffsetZ = Math.floor(normalizedBrushSizeCells * 0.5);
   const minCellX = targetCell.cellX - brushOffsetX;
   const minCellZ = targetCell.cellZ - brushOffsetZ;
-  const maxCellX = minCellX + brushSizeCells - 1;
-  const maxCellZ = minCellZ + brushSizeCells - 1;
+  const maxCellX = minCellX + normalizedBrushSizeCells - 1;
+  const maxCellZ = minCellZ + normalizedBrushSizeCells - 1;
 
   for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
-    if (cellZ < 0 || cellZ >= terrainChunk.sampleCountZ) {
+    if (cellZ < 0 || cellZ >= terrainPatch.sampleCountZ) {
       continue;
     }
 
     for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-      if (cellX < 0 || cellX >= terrainChunk.sampleCountX) {
+      if (cellX < 0 || cellX >= terrainPatch.sampleCountX) {
         continue;
       }
 
-      const heightIndex = createTerrainHeightIndex(terrainChunk, cellX, cellZ);
+      const heightIndex = createTerrainHeightIndex(terrainPatch, cellX, cellZ);
       const currentHeight = nextHeights[heightIndex] ?? 0;
       const cellDistance = Math.max(
         Math.abs(cellX - targetCell.cellX),
         Math.abs(cellZ - targetCell.cellZ)
       );
-      const falloffRadius = Math.max(1, brushSizeCells - 1);
+      const falloffRadius = Math.max(1, normalizedBrushSizeCells - 1);
       const weight =
         smoothEdges === true
           ? Math.max(0.2, 1 - cellDistance / falloffRadius)
           : 1;
+      const ridgeWeight =
+        1 -
+        Math.min(
+          1,
+          Math.min(
+            Math.abs(cellX - targetCell.cellX),
+            Math.abs(cellZ - targetCell.cellZ)
+          ) / falloffRadius
+        );
+      const noise =
+        Math.sin(
+          (cellX + 17) * 12.9898 +
+            (cellZ + 31) * 78.233 +
+            noiseSeed * 0.143
+        ) * 43758.5453;
+      const normalizedNoise = noise - Math.floor(noise);
       let nextHeight = currentHeight;
 
       switch (brushMode) {
+        case "flatten":
+        case "flatten-pad":
+          nextHeight = currentHeight + (targetHeightMeters - currentHeight) * weight;
+          break;
+        case "cliff":
+          nextHeight =
+            cellX >= targetCell.cellX
+              ? targetHeightMeters + brushStrengthMeters
+              : targetHeightMeters - brushStrengthMeters;
+          break;
+        case "material": {
+          const activeLayer = nextMaterialLayers[materialLayerIndex];
+
+          if (activeLayer !== undefined) {
+            activeLayer.weightSamples[heightIndex] = Math.min(
+              1,
+              Math.max(activeLayer.weightSamples[heightIndex] ?? 0, weight)
+            );
+          }
+          break;
+        }
+        case "noise":
+          nextHeight =
+            currentHeight + (normalizedNoise - 0.5) * brushStrengthMeters * weight;
+          break;
+        case "plateau":
+          nextHeight =
+            currentHeight + (targetHeightMeters + brushStrengthMeters - currentHeight) * weight;
+          break;
         case "raise":
-          nextHeight = currentHeight + defaultTerrainBrushHeightDeltaMeters * weight;
+          nextHeight = currentHeight + brushStrengthMeters * weight;
+          break;
+        case "ridge":
+          nextHeight = currentHeight + brushStrengthMeters * Math.max(weight, ridgeWeight);
           break;
         case "lower":
-          nextHeight = currentHeight - defaultTerrainBrushHeightDeltaMeters * weight;
+          nextHeight = currentHeight - brushStrengthMeters * weight;
+          break;
+        case "valley":
+          nextHeight = currentHeight - brushStrengthMeters * Math.max(weight, ridgeWeight);
           break;
         case "smooth": {
           let totalHeight = 0;
           let neighborCount = 0;
 
           for (let neighborZ = cellZ - 1; neighborZ <= cellZ + 1; neighborZ += 1) {
-            if (neighborZ < 0 || neighborZ >= terrainChunk.sampleCountZ) {
+            if (neighborZ < 0 || neighborZ >= terrainPatch.sampleCountZ) {
               continue;
             }
 
             for (let neighborX = cellX - 1; neighborX <= cellX + 1; neighborX += 1) {
-              if (neighborX < 0 || neighborX >= terrainChunk.sampleCountX) {
+              if (neighborX < 0 || neighborX >= terrainPatch.sampleCountX) {
                 continue;
               }
 
               totalHeight +=
                 nextHeights[
-                  createTerrainHeightIndex(terrainChunk, neighborX, neighborZ)
+                  createTerrainHeightIndex(terrainPatch, neighborX, neighborZ)
                 ] ?? 0;
               neighborCount += 1;
             }
@@ -2263,13 +4468,14 @@ export function applyMapEditorTerrainBrush(
   }
 
   return withSelectedEntity(
-    updateMapEditorTerrainChunkDraft(nextProject, terrainChunk.chunkId, (draft) => ({
+    updateMapEditorTerrainPatchDraft(nextProject, terrainPatch.terrainPatchId, (draft) => ({
       ...draft,
-      heights: Object.freeze(nextHeights)
+      heightSamples: Object.freeze(nextHeights),
+      materialLayers: freezeTerrainMaterialLayers(nextMaterialLayers)
     })),
     Object.freeze({
-      id: terrainChunk.chunkId,
-      kind: "terrain-chunk"
+      id: terrainPatch.terrainPatchId,
+      kind: "terrain-patch"
     })
   );
 }
@@ -2278,29 +4484,39 @@ export function addMapEditorWallSegment(
   project: MapEditorProjectSnapshot,
   startPosition: MetaverseWorldSurfaceVector3Snapshot,
   endPosition: MetaverseWorldSurfaceVector3Snapshot,
-  edgeKind: MapEditorEdgeDraftSnapshot["edgeKind"]
+  edgeKind: MapEditorEdgeDraftSnapshot["edgeKind"],
+  options?: {
+    readonly heightMeters?: number;
+    readonly thicknessMeters?: number;
+  }
 ): MapEditorProjectSnapshot {
-  const snappedStart = snapMapEditorPositionToGrid(startPosition);
-  const snappedEnd = snapMapEditorPositionToGrid(endPosition);
-  const deltaX = snappedEnd.x - snappedStart.x;
-  const deltaZ = snappedEnd.z - snappedStart.z;
-  const constrainedEnd =
-    Math.abs(deltaX) >= Math.abs(deltaZ)
-      ? Object.freeze({
-          x: snappedEnd.x,
-          y: snappedStart.y,
-          z: snappedStart.z
-        })
-      : Object.freeze({
-          x: snappedStart.x,
-          y: snappedStart.y,
-          z: snappedEnd.z
-        });
+  const wallSegment = resolveMapEditorBuildWallSegment(
+    startPosition,
+    endPosition
+  );
+
+  if (wallSegment === null) {
+    return project;
+  }
+
   const nextDrafts = createMapEditorWallDraftsForSegment(
     project,
-    snappedStart,
-    constrainedEnd,
-    edgeKind
+    wallSegment.start,
+    wallSegment.end,
+    edgeKind,
+    options?.heightMeters !== undefined || options?.thicknessMeters !== undefined
+      ? Object.freeze({
+          heightMeters: Math.max(
+            0.25,
+            options?.heightMeters ?? resolveWallPresetDimensions(edgeKind).heightMeters
+          ),
+          thicknessMeters: Math.max(
+            0.1,
+            options?.thicknessMeters ??
+              resolveWallPresetDimensions(edgeKind).thicknessMeters
+          )
+        })
+      : undefined
   );
 
   return nextDrafts === null
@@ -2323,71 +4539,82 @@ export function addMapEditorPathSegment(
         readonly center: MetaverseWorldSurfaceVector3Snapshot;
         readonly elevation: number;
       }
-    | null
+    | null,
+  pathWidthCells = 1,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"] = "warning",
+  materialReferenceId: string = materialId
 ): MapEditorProjectSnapshot {
-  let nextProject = project;
-  let fromSurfaceId: string | null = null;
-  const target = ensurePathSurfaceAndRegion(
-    nextProject,
-    targetPosition,
-    targetElevationMeters
-  );
-
-  nextProject = target.project;
-
-  if (fromAnchor !== null) {
-    const source = ensurePathSurfaceAndRegion(
-      nextProject,
-      fromAnchor.center,
-      fromAnchor.elevation
+  if (fromAnchor === null) {
+    const { project: nextProject, regionId } = ensurePathSurfaceAndRegion(
+      project,
+      targetPosition,
+      targetElevationMeters,
+      pathWidthCells,
+      materialId,
+      materialReferenceId
     );
 
-    nextProject = source.project;
-    fromSurfaceId = source.surfaceId;
-
-    if (
-      source.surfaceId !== target.surfaceId &&
-      Math.abs(fromAnchor.elevation - targetElevationMeters) > 0.01
-    ) {
-      const deltaX = target.center.x - source.center.x;
-      const deltaZ = target.center.z - source.center.z;
-      const connectorCenter = Object.freeze({
-        x: (source.center.x + target.center.x) * 0.5,
-        y: (fromAnchor.elevation + targetElevationMeters) * 0.5,
-        z: (source.center.z + target.center.z) * 0.5
-      });
-      const connector = freezeConnectorDraft({
-        center: connectorCenter,
-        connectorId: createMapEditorConnectorId(nextProject),
-        connectorKind: "ramp",
-        fromSurfaceId,
-        label: `Ramp ${nextProject.connectorDrafts.length + 1}`,
-        rotationYRadians: Math.atan2(deltaX, deltaZ),
-        size: Object.freeze({
-          x: mapEditorBuildGridUnitMeters,
-          y: Math.max(
-            1,
-            Math.abs(targetElevationMeters - fromAnchor.elevation) + 0.5
-          ),
-          z: Math.max(
-            mapEditorBuildGridUnitMeters,
-            Math.hypot(deltaX, deltaZ)
-          )
-        }),
-        toSurfaceId: target.surfaceId
-      });
-
-      nextProject = Object.freeze({
-        ...nextProject,
-        connectorDrafts: Object.freeze([...nextProject.connectorDrafts, connector])
-      });
-    }
+    return withSelectedEntity(
+      nextProject,
+      Object.freeze({
+        id: regionId,
+        kind: "region"
+      })
+    );
   }
 
+  const deltaX = targetPosition.x - fromAnchor.center.x;
+  const deltaZ = targetPosition.z - fromAnchor.center.z;
+  const segmentLengthMeters = Math.hypot(deltaX, deltaZ);
+
+  if (segmentLengthMeters <= 0.01) {
+    return project;
+  }
+
+  const pathWidthMeters =
+    Math.max(1, pathWidthCells) * mapEditorBuildGridUnitMeters;
+  const rotationYRadians = Math.atan2(deltaX, deltaZ);
+  const riseMeters = targetElevationMeters - fromAnchor.elevation;
+  const surfaceSize = Object.freeze({
+    x: pathWidthMeters,
+    y: 0.25,
+    z: Math.max(mapEditorBuildGridUnitMeters, segmentLengthMeters)
+  });
+  const surfaceCenter = Object.freeze({
+    x: (fromAnchor.center.x + targetPosition.x) * 0.5,
+    y: (fromAnchor.elevation + targetElevationMeters) * 0.5,
+    z: (fromAnchor.center.z + targetPosition.z) * 0.5
+  });
+  const { project: projectWithSurface, surfaceId } = createSemanticSurfaceForPlacement(
+    project,
+    `Path Surface ${project.surfaceDrafts.length + 1}`,
+    surfaceCenter,
+    rotationYRadians,
+    surfaceSize,
+    {
+      kind: Math.abs(riseMeters) > 0.01 ? "sloped-plane" : "flat-slab",
+      slopeRiseMeters: riseMeters
+    }
+  );
+  const nextRegion = freezeRegionDraft({
+    center: surfaceCenter,
+    label: `Path ${projectWithSurface.regionDrafts.length + 1}`,
+    materialReferenceId,
+    outerLoop: createRectangularSurfaceLoop(surfaceSize),
+    regionId: createMapEditorRegionId(projectWithSurface),
+    regionKind: "path",
+    rotationYRadians,
+    size: surfaceSize,
+    surfaceId
+  });
+
   return withSelectedEntity(
-    nextProject,
     Object.freeze({
-      id: target.regionId,
+      ...projectWithSurface,
+      regionDrafts: Object.freeze([...projectWithSurface.regionDrafts, nextRegion])
+    }),
+    Object.freeze({
+      id: nextRegion.regionId,
       kind: "region"
     })
   );
@@ -2409,15 +4636,21 @@ export function addMapEditorPlacementAtPositionFromAsset(
   asset: EnvironmentAssetDescriptor,
   position: MapEditorBuildPlacementPositionSnapshot
 ): MapEditorProjectSnapshot {
+  const snappedPosition = resolveMapEditorBuildAssetPlacementPosition(
+    position,
+    asset,
+    position.y
+  );
+
   if (asset.id === metaverseBuilderFloorTileEnvironmentAssetId) {
-    return addMapEditorRegionDraft(project, position);
+    return addMapEditorRegionDraft(project, snappedPosition);
   }
 
   if (asset.id === metaverseBuilderWallTileEnvironmentAssetId) {
-    return addMapEditorEdgeDraft(project, position);
+    return addMapEditorEdgeDraft(project, snappedPosition);
   }
 
-  const nextModule = createModuleDraftFromAsset(project, asset, position);
+  const nextModule = createModuleDraftFromAsset(project, asset, snappedPosition);
 
   return withSelectedEntity(
     Object.freeze({
@@ -2506,16 +4739,63 @@ export function updateMapEditorEnvironmentPresentationProfileId(
   project: MapEditorProjectSnapshot,
   environmentPresentationProfileId: string | null
 ): MapEditorProjectSnapshot {
+  const nextEnvironmentPresentation =
+    environmentPresentationProfileId === null
+      ? project.environmentPresentation
+      : createMetaverseEnvironmentPresentationSnapshotFromProfile(
+          readMetaverseEnvironmentPresentationProfile(
+            environmentPresentationProfileId
+          ) ??
+            (() => {
+              throw new Error(
+                `Unknown environment presentation profile: ${environmentPresentationProfileId}`
+              );
+            })()
+        );
+
   if (
     project.environmentPresentationProfileId ===
-    environmentPresentationProfileId
+      environmentPresentationProfileId &&
+    areEnvironmentPresentationsEqual(
+      project.environmentPresentation,
+      nextEnvironmentPresentation
+    )
   ) {
     return project;
   }
 
   return Object.freeze({
     ...project,
+    environmentPresentation: nextEnvironmentPresentation,
     environmentPresentationProfileId
+  });
+}
+
+export function updateMapEditorEnvironmentPresentation(
+  project: MapEditorProjectSnapshot,
+  update: (
+    environmentPresentation: MetaverseMapBundleEnvironmentPresentationSnapshot
+  ) => MetaverseMapBundleEnvironmentPresentationSnapshot
+): MapEditorProjectSnapshot {
+  const nextEnvironmentPresentation =
+    cloneMetaverseEnvironmentPresentationSnapshot(
+      update(project.environmentPresentation)
+    );
+
+  if (
+    areEnvironmentPresentationsEqual(
+      nextEnvironmentPresentation,
+      project.environmentPresentation
+    ) &&
+    project.environmentPresentationProfileId === null
+  ) {
+    return project;
+  }
+
+  return Object.freeze({
+    ...project,
+    environmentPresentation: nextEnvironmentPresentation,
+    environmentPresentationProfileId: null
   });
 }
 
@@ -2552,15 +4832,65 @@ export function updateMapEditorLaunchVariationDraft(
   });
 }
 
+function createEdgeSurfaceBaseElevationLookup(
+  edges: readonly MapEditorEdgeDraftSnapshot[]
+): ReadonlyMap<string, number> {
+  const baseElevationBySurfaceId = new Map<string, number>();
+
+  for (const edge of edges) {
+    baseElevationBySurfaceId.set(
+      edge.surfaceId,
+      edge.center.y - edge.heightMeters * 0.5
+    );
+  }
+
+  return baseElevationBySurfaceId;
+}
+
+function normalizeEdgeSurfaceDraftForExport(
+  surface: MapEditorSurfaceDraftSnapshot,
+  edgeSurfaceBaseElevationBySurfaceId: ReadonlyMap<string, number>
+): MapEditorSurfaceDraftSnapshot {
+  const edgeBaseElevation =
+    edgeSurfaceBaseElevationBySurfaceId.get(surface.surfaceId);
+
+  if (edgeBaseElevation === undefined) {
+    return surface;
+  }
+
+  return freezeSurfaceDraft({
+    ...surface,
+    center: Object.freeze({
+      ...surface.center,
+      y: edgeBaseElevation
+    }),
+    elevation: edgeBaseElevation
+  });
+}
+
 export function createSemanticWorldFromProject(
   project: MapEditorProjectSnapshot
 ) {
+  const edgeSurfaceBaseElevationBySurfaceId =
+    createEdgeSurfaceBaseElevationLookup(project.edgeDrafts);
+
   return Object.freeze({
     compatibilityAssetIds: project.semanticCompatibilityAssetIds,
     connectors: Object.freeze(
       project.connectorDrafts.map(createSemanticConnectorSnapshotFromDraft)
     ),
     edges: Object.freeze(project.edgeDrafts.map(createSemanticEdgeSnapshotFromDraft)),
+    gameplayVolumes: Object.freeze(
+      project.gameplayVolumeDrafts.map(createSemanticGameplayVolumeSnapshotFromDraft)
+    ),
+    lights: Object.freeze(
+      project.lightDrafts.map(createSemanticLightSnapshotFromDraft)
+    ),
+    materialDefinitions: Object.freeze(
+      project.materialDefinitionDrafts.map(
+        createSemanticMaterialDefinitionSnapshotFromDraft
+      )
+    ),
     modules: Object.freeze(
       project.placementDrafts.map((placement) =>
         Object.freeze({
@@ -2589,10 +4919,20 @@ export function createSemanticWorldFromProject(
       project.regionDrafts.map(createSemanticRegionSnapshotFromDraft)
     ),
     surfaces: Object.freeze(
-      project.surfaceDrafts.map(createSemanticSurfaceSnapshotFromDraft)
+      project.surfaceDrafts.map((surface) =>
+        createSemanticSurfaceSnapshotFromDraft(
+          normalizeEdgeSurfaceDraftForExport(
+            surface,
+            edgeSurfaceBaseElevationBySurfaceId
+          )
+        )
+      )
     ),
-    terrainChunks: Object.freeze(
-      project.terrainChunkDrafts.map(createSemanticTerrainChunkSnapshotFromDraft)
+    structures: Object.freeze(
+      project.structuralDrafts.map(createSemanticStructureSnapshotFromDraft)
+    ),
+    terrainPatches: Object.freeze(
+      project.terrainPatchDrafts.map(createSemanticTerrainPatchSnapshotFromDraft)
     )
   });
 }

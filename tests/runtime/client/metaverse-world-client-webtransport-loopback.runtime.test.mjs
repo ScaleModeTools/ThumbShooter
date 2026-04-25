@@ -876,7 +876,7 @@ test("MetaverseRemoteWorldRuntime keeps remote root motion live while the mover 
       Math.abs((secondRemotePresentation?.look.yawRadians ?? 0) - 0.7) < 0.000001
     );
 
-    nowMs = 150;
+    nowMs = 1_250;
     await publishAuthoritativeWorld(runtime, worldAdapter, nowMs);
     observerRemoteWorldRuntime.sampleRemoteWorld();
 

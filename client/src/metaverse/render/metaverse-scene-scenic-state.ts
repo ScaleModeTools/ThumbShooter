@@ -5,7 +5,12 @@ import {
   type MetaverseSceneCanvasHost,
   type MetaverseSceneRendererHost
 } from "./camera/metaverse-scene-camera";
-import { createMetaverseSceneEnvironment } from "./environment/metaverse-scene-environment";
+import {
+  applyMetaverseSceneEnvironmentRendererTuning,
+  createMetaverseSceneEnvironment,
+  syncMetaverseSceneEnvironmentToCamera,
+  type MetaverseSceneEnvironmentRuntime
+} from "./environment/metaverse-scene-environment";
 import { markMetaverseSceneBundleGroupsDirty } from "./metaverse-scene-bundle-groups";
 import {
   createPortalMeshRuntime,
@@ -23,6 +28,8 @@ interface MetaverseSceneScenicStateDependencies {
 
 export class MetaverseSceneScenicState {
   readonly #camera: PerspectiveCamera;
+  readonly #config: MetaverseRuntimeConfig;
+  readonly #environmentRuntime: MetaverseSceneEnvironmentRuntime;
   readonly #scene: Scene;
   #previousViewportHeight: number | null = null;
   #previousViewportWidth: number | null = null;
@@ -35,9 +42,11 @@ export class MetaverseSceneScenicState {
     scene
   }: MetaverseSceneScenicStateDependencies) {
     this.#camera = camera;
+    this.#config = config;
     this.#scene = scene;
 
     const environmentRuntime = createMetaverseSceneEnvironment(config);
+    this.#environmentRuntime = environmentRuntime;
     const portalSharedRenderResources = createPortalSharedRenderResources();
 
     this.portalMeshes = config.portals.map((portalConfig) =>
@@ -52,6 +61,7 @@ export class MetaverseSceneScenicState {
       environmentRuntime.skyMesh,
       environmentRuntime.waterGroup
     );
+    this.syncCameraRelativeEnvironment();
 
     for (const portalMesh of this.portalMeshes) {
       scene.add(portalMesh.anchorGroup);
@@ -63,6 +73,13 @@ export class MetaverseSceneScenicState {
     canvasHost: MetaverseSceneCanvasHost,
     devicePixelRatio: number
   ): void {
+    applyMetaverseSceneEnvironmentRendererTuning(
+      renderer as MetaverseSceneRendererHost & {
+        toneMappingExposure?: number;
+      },
+      this.#config.environment
+    );
+
     const viewportUpdate = syncMetaverseSceneViewport(
       this.#camera,
       renderer,
@@ -78,5 +95,12 @@ export class MetaverseSceneScenicState {
     if (viewportUpdate.viewportChanged) {
       markMetaverseSceneBundleGroupsDirty(this.#scene);
     }
+  }
+
+  syncCameraRelativeEnvironment(): void {
+    syncMetaverseSceneEnvironmentToCamera(
+      this.#environmentRuntime,
+      this.#camera.position
+    );
   }
 }

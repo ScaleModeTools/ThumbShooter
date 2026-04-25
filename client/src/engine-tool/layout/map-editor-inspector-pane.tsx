@@ -47,6 +47,11 @@ interface MapEditorInspectorPaneProps {
   readonly onDeleteSelectedPlacementRequest: () => void;
   readonly onUpdateGameplayProfileId: (gameplayProfileId: string) => void;
   readonly onSelectLaunchVariation: (variationId: string) => void;
+  readonly onUpdateEnvironmentPresentation: (
+    update: (
+      environmentPresentation: MapEditorProjectSnapshot["environmentPresentation"]
+    ) => MapEditorProjectSnapshot["environmentPresentation"]
+  ) => void;
   readonly onUpdateEnvironmentPresentationProfileId: (
     environmentPresentationProfileId: string | null
   ) => void;
@@ -84,6 +89,7 @@ export function MapEditorInspectorPane({
   onDeleteSelectedPlacementRequest,
   onUpdateGameplayProfileId,
   onSelectLaunchVariation,
+  onUpdateEnvironmentPresentation,
   onUpdateEnvironmentPresentationProfileId,
   onUpdateSelectedPlacement,
   onUpdateLaunchVariation,
@@ -228,6 +234,9 @@ export function MapEditorInspectorPane({
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3">
                 <MapEditorWorldSettingsPanel
+                  onUpdateEnvironmentPresentation={
+                    onUpdateEnvironmentPresentation
+                  }
                   onUpdateEnvironmentPresentationProfileId={
                     onUpdateEnvironmentPresentationProfileId
                   }

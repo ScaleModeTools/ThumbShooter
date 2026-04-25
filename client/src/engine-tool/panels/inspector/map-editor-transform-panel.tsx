@@ -1,9 +1,9 @@
 import { Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
 import type { MetaverseWorldSurfaceVector3Snapshot } from "@webgpu-metaverse/shared/metaverse/world";
 import {
   type MapEditorPlacementDraftSnapshot
@@ -18,12 +18,6 @@ interface MapEditorTransformPanelProps {
 
 function formatRotationDegrees(rotationYRadians: number): string {
   return `${Math.round((rotationYRadians * 180) / Math.PI)} deg`;
-}
-
-function resolveFiniteNumber(value: string): number | null {
-  const nextValue = Number(value);
-
-  return Number.isFinite(nextValue) ? nextValue : null;
 }
 
 function createNextPlacementScale(
@@ -55,61 +49,49 @@ export function MapEditorTransformPanel({
       <div className="grid grid-cols-3 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="map-editor-position-x">Pos X</Label>
-          <Input
+          <MapEditorEditableNumberInput
             id="map-editor-position-x"
-            onChange={(event) => {
-              const nextValue = resolveFiniteNumber(event.target.value);
-
-              if (nextValue !== null) {
-                onUpdateSelectedPlacement({
-                  position: {
-                    ...selectedPlacement.position,
-                    x: nextValue
-                  }
-                });
-              }
+            onValueChange={(nextValue) => {
+              onUpdateSelectedPlacement({
+                position: {
+                  ...selectedPlacement.position,
+                  x: nextValue
+                }
+              });
             }}
-            value={selectedPlacement.position.x.toFixed(2)}
+            value={selectedPlacement.position.x}
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="map-editor-position-y">Pos Y</Label>
-          <Input
+          <MapEditorEditableNumberInput
             id="map-editor-position-y"
-            onChange={(event) => {
-              const nextValue = resolveFiniteNumber(event.target.value);
-
-              if (nextValue !== null) {
-                onUpdateSelectedPlacement({
-                  position: {
-                    ...selectedPlacement.position,
-                    y: nextValue
-                  }
-                });
-              }
+            onValueChange={(nextValue) => {
+              onUpdateSelectedPlacement({
+                position: {
+                  ...selectedPlacement.position,
+                  y: nextValue
+                }
+              });
             }}
-            value={selectedPlacement.position.y.toFixed(2)}
+            value={selectedPlacement.position.y}
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="map-editor-position-z">Pos Z</Label>
-          <Input
+          <MapEditorEditableNumberInput
             id="map-editor-position-z"
-            onChange={(event) => {
-              const nextValue = resolveFiniteNumber(event.target.value);
-
-              if (nextValue !== null) {
-                onUpdateSelectedPlacement({
-                  position: {
-                    ...selectedPlacement.position,
-                    z: nextValue
-                  }
-                });
-              }
+            onValueChange={(nextValue) => {
+              onUpdateSelectedPlacement({
+                position: {
+                  ...selectedPlacement.position,
+                  z: nextValue
+                }
+              });
             }}
-            value={selectedPlacement.position.z.toFixed(2)}
+            value={selectedPlacement.position.z}
           />
         </div>
       </div>
@@ -148,73 +130,52 @@ export function MapEditorTransformPanel({
         <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="map-editor-scale-x">Size X</Label>
-            <Input
+            <MapEditorEditableNumberInput
               id="map-editor-scale-x"
-              min="0.1"
-              onChange={(event) => {
-                const nextValue = resolveFiniteNumber(event.target.value);
-
-                if (nextValue !== null) {
-                  onUpdateSelectedPlacement({
-                    scale: createNextPlacementScale(
-                      selectedPlacement.scale,
-                      "x",
-                      nextValue
-                    )
-                  });
-                }
+              onValueChange={(nextValue) => {
+                onUpdateSelectedPlacement({
+                  scale: createNextPlacementScale(
+                    selectedPlacement.scale,
+                    "x",
+                    nextValue
+                  )
+                });
               }}
-              step="0.1"
-              type="number"
-              value={selectedPlacement.scale.x.toFixed(2)}
+              value={selectedPlacement.scale.x}
             />
           </div>
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="map-editor-scale-y">Size Y</Label>
-            <Input
+            <MapEditorEditableNumberInput
               id="map-editor-scale-y"
-              min="0.1"
-              onChange={(event) => {
-                const nextValue = resolveFiniteNumber(event.target.value);
-
-                if (nextValue !== null) {
-                  onUpdateSelectedPlacement({
-                    scale: createNextPlacementScale(
-                      selectedPlacement.scale,
-                      "y",
-                      nextValue
-                    )
-                  });
-                }
+              onValueChange={(nextValue) => {
+                onUpdateSelectedPlacement({
+                  scale: createNextPlacementScale(
+                    selectedPlacement.scale,
+                    "y",
+                    nextValue
+                  )
+                });
               }}
-              step="0.1"
-              type="number"
-              value={selectedPlacement.scale.y.toFixed(2)}
+              value={selectedPlacement.scale.y}
             />
           </div>
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="map-editor-scale-z">Size Z</Label>
-            <Input
+            <MapEditorEditableNumberInput
               id="map-editor-scale-z"
-              min="0.1"
-              onChange={(event) => {
-                const nextValue = resolveFiniteNumber(event.target.value);
-
-                if (nextValue !== null) {
-                  onUpdateSelectedPlacement({
-                    scale: createNextPlacementScale(
-                      selectedPlacement.scale,
-                      "z",
-                      nextValue
-                    )
-                  });
-                }
+              onValueChange={(nextValue) => {
+                onUpdateSelectedPlacement({
+                  scale: createNextPlacementScale(
+                    selectedPlacement.scale,
+                    "z",
+                    nextValue
+                  )
+                });
               }}
-              step="0.1"
-              type="number"
-              value={selectedPlacement.scale.z.toFixed(2)}
+              value={selectedPlacement.scale.z}
             />
           </div>
         </div>

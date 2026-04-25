@@ -1,8 +1,22 @@
-import type { ReactNode } from "react";
+import { useState, type ChangeEvent, type ReactNode } from "react";
 
-import { ChevronDownIcon, FocusIcon, Trash2Icon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  FocusIcon,
+  MinusIcon,
+  PaintbrushIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  Trash2Icon
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ButtonGroup,
+  ButtonGroupText
+} from "@/components/ui/button-group";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,15 +26,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
+import {
+  conformMapEditorTerrainPatchDraftToSupportSurfaces,
+  createNextMapEditorMaterialDefinitionId,
+  createNaturalTerrainHeightSamples,
   readSelectedMapEditorPlacement,
   type MapEditorConnectorDraftSnapshot,
   type MapEditorEdgeDraftSnapshot,
+  type MapEditorGameplayVolumeDraftSnapshot,
+  type MapEditorLightDraftSnapshot,
+  type MapEditorMaterialDefinitionDraftSnapshot,
   type MapEditorPlacementDraftSnapshot,
   type MapEditorProjectSnapshot,
   type MapEditorRegionDraftSnapshot,
   type MapEditorSelectedEntityRef,
+  type MapEditorStructuralDraftSnapshot,
   type MapEditorSurfaceDraftSnapshot,
-  type MapEditorTerrainChunkDraftSnapshot
+  type MapEditorTerrainPatchDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-state";
 import type {
   MapEditorPlayerSpawnSelectionDraftSnapshot
@@ -33,17 +69,451 @@ import type {
 import {
   resolveMapEditorWaterRegionSize
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
-import type { MapEditorPlacementUpdate } from "@/engine-tool/types/map-editor";
-import { cn } from "@/lib/class-name";
+import { MapEditorWorldSettingsPanel } from "@/engine-tool/panels/inspector/map-editor-world-settings-panel";
+import {
+  bakeMapEditorProceduralTerrainPatch,
+  defaultMapEditorTerrainGenerationConfig
+} from "@/engine-tool/project/map-editor-terrain-generation";
+import {
+  formatMapEditorColorHex,
+  parseMapEditorColorHex
+} from "@/engine-tool/colors/map-editor-color-hex";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
+import {
+  defaultMapEditorMaterialPaletteIds,
+  type MapEditorBuilderToolStateSnapshot,
+  type MapEditorFloorRole,
+  type MapEditorFloorShapeMode,
+  type MapEditorGameplayTeamId,
+  type MapEditorPlacementUpdate,
+  type MapEditorSurfaceMode,
+  type MapEditorTerrainBrushMode,
+  type MapEditorTerrainBrushSizeCells,
+  type MapEditorViewportToolMode,
+  type MapEditorWallToolPresetId
+} from "@/engine-tool/types/map-editor";
+import {
+  type MetaverseSceneSemanticPreviewTextureId,
+  resolveMetaverseSceneSemanticMaterialProfile,
+  resolveMetaverseSceneSemanticPreviewColorHex
+} from "@/metaverse/render/environment/metaverse-scene-semantic-material-textures";
 
+import { composeMapEditorLayoutClassName } from "./map-editor-layout-class-name";
 import { MapEditorMetadataPanel } from "../panels/inspector/map-editor-metadata-panel";
 import { MapEditorPresentationPanel } from "../panels/inspector/map-editor-presentation-panel";
 import { MapEditorTransformPanel } from "../panels/inspector/map-editor-transform-panel";
 
-function readNumberInput(value: string): number | null {
+function readSemanticMaterialId(
+  value: string
+): MapEditorStructuralDraftSnapshot["materialId"] | null {
+  return value === "alien-rock" ||
+    value === "concrete" ||
+    value === "glass" ||
+    value === "metal" ||
+    value === "terrain-ash" ||
+    value === "terrain-grass" ||
+    value === "terrain-rock" ||
+    value === "team-blue" ||
+    value === "team-red" ||
+    value === "warning"
+    ? value
+    : null;
+}
+
+function readSemanticPreviewTextureId(
+  value: string
+): MetaverseSceneSemanticPreviewTextureId | null {
+  const semanticMaterialId = readSemanticMaterialId(value);
+
+  if (semanticMaterialId !== null) {
+    return semanticMaterialId;
+  }
+
+  return value === "__default__" ||
+    value === "shell-floor-grid" ||
+    value === "shell-metal-panel" ||
+    value === "shell-painted-trim"
+    ? value
+    : null;
+}
+
+function readTerrainMaterialId(
+  value: string
+): MapEditorStructuralDraftSnapshot["materialId"] | null {
+  return value === "terrain-ash" ||
+    value === "terrain-grass" ||
+    value === "terrain-rock"
+    ? value
+    : null;
+}
+
+function resolvePrimaryTerrainMaterialId(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot
+): MapEditorStructuralDraftSnapshot["materialId"] {
+  let selectedMaterialId: MapEditorStructuralDraftSnapshot["materialId"] =
+    "terrain-grass";
+  let selectedWeight = Number.NEGATIVE_INFINITY;
+
+  for (const layer of terrainPatch.materialLayers) {
+    const totalWeight = layer.weightSamples.reduce(
+      (sum, weightSample) => sum + Math.max(0, weightSample),
+      0
+    );
+
+    if (totalWeight > selectedWeight) {
+      selectedMaterialId = layer.materialId;
+      selectedWeight = totalWeight;
+    }
+  }
+
+  return selectedMaterialId;
+}
+
+function readTerrainBrushMode(value: string): MapEditorTerrainBrushMode | null {
+  return value === "cliff" ||
+    value === "flatten" ||
+    value === "flatten-pad" ||
+    value === "lower" ||
+    value === "material" ||
+    value === "noise" ||
+    value === "plateau" ||
+    value === "raise" ||
+    value === "ridge" ||
+    value === "smooth" ||
+    value === "valley"
+    ? value
+    : null;
+}
+
+function readTerrainBrushSizeCells(
+  value: string
+): MapEditorTerrainBrushSizeCells | null {
   const nextValue = Number(value);
 
-  return Number.isFinite(nextValue) ? nextValue : null;
+  return Number.isFinite(nextValue)
+    ? Math.max(1, Math.min(16, Math.round(nextValue)))
+    : null;
+}
+
+function readFloorRole(value: string): MapEditorFloorRole | null {
+  return value === "floor" || value === "roof" ? value : null;
+}
+
+function readFloorShapeMode(value: string): MapEditorFloorShapeMode | null {
+  return value === "polygon" || value === "rectangle" ? value : null;
+}
+
+function readSurfaceMode(value: string): MapEditorSurfaceMode | null {
+  return value === "flat" || value === "slope" ? value : null;
+}
+
+function readWallPresetId(value: string): MapEditorWallToolPresetId | null {
+  return value === "curb" ||
+    value === "fence" ||
+    value === "rail" ||
+    value === "retaining-wall" ||
+    value === "wall"
+    ? value
+    : null;
+}
+
+function readLightKind(
+  value: string
+): MapEditorLightDraftSnapshot["lightKind"] | null {
+  return value === "ambient" ||
+    value === "area" ||
+    value === "point" ||
+    value === "spot" ||
+    value === "sun"
+    ? value
+    : null;
+}
+
+function readGameplayTeamId(value: string): MapEditorGameplayTeamId | null {
+  return value === "blue" || value === "neutral" || value === "red"
+    ? value
+    : null;
+}
+
+interface QuickMaterialOption {
+  readonly baseMaterialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly colorHex: string;
+  readonly id: string;
+  readonly isCustom: boolean;
+  readonly label: string;
+}
+
+const allSemanticMaterialOptions = Object.freeze([
+  Object.freeze({ baseMaterialId: "alien-rock", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("alien-rock"), id: "alien-rock", isCustom: false, label: "Alien Rock" }),
+  Object.freeze({ baseMaterialId: "concrete", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("concrete"), id: "concrete", isCustom: false, label: "Concrete" }),
+  Object.freeze({ baseMaterialId: "metal", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("metal"), id: "metal", isCustom: false, label: "Metal" }),
+  Object.freeze({ baseMaterialId: "warning", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("warning"), id: "warning", isCustom: false, label: "Warning" }),
+  Object.freeze({ baseMaterialId: "glass", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("glass"), id: "glass", isCustom: false, label: "Glass" }),
+  Object.freeze({ baseMaterialId: "team-blue", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("team-blue"), id: "team-blue", isCustom: false, label: "Blue" }),
+  Object.freeze({ baseMaterialId: "team-red", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("team-red"), id: "team-red", isCustom: false, label: "Red" }),
+  Object.freeze({ baseMaterialId: "terrain-rock", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-rock"), id: "terrain-rock", isCustom: false, label: "Rock" }),
+  Object.freeze({ baseMaterialId: "terrain-ash", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-ash"), id: "terrain-ash", isCustom: false, label: "Ash" }),
+  Object.freeze({ baseMaterialId: "terrain-grass", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-grass"), id: "terrain-grass", isCustom: false, label: "Grass" })
+] satisfies readonly QuickMaterialOption[]);
+
+const defaultMaterialQuickOption: QuickMaterialOption = Object.freeze({
+  baseMaterialId: "concrete",
+  colorHex: resolveMetaverseSceneSemanticPreviewColorHex("__default__"),
+  id: "__default__",
+  isCustom: false,
+  label: "Default"
+});
+
+const shellMaterialQuickOptions = Object.freeze([
+  Object.freeze({
+    baseMaterialId: "concrete",
+    colorHex: resolveMetaverseSceneSemanticPreviewColorHex("shell-floor-grid"),
+    id: "shell-floor-grid",
+    isCustom: false,
+    label: "Shell Grid"
+  }),
+  Object.freeze({
+    baseMaterialId: "metal",
+    colorHex: resolveMetaverseSceneSemanticPreviewColorHex("shell-metal-panel"),
+    id: "shell-metal-panel",
+    isCustom: false,
+    label: "Metal Panel"
+  }),
+  Object.freeze({
+    baseMaterialId: "concrete",
+    colorHex: resolveMetaverseSceneSemanticPreviewColorHex("shell-painted-trim"),
+    id: "shell-painted-trim",
+    isCustom: false,
+    label: "Painted Trim"
+  })
+] satisfies readonly QuickMaterialOption[]);
+
+const allTerrainMaterialOptions = Object.freeze([
+  Object.freeze({ baseMaterialId: "terrain-grass", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-grass"), id: "terrain-grass", isCustom: false, label: "Grass" }),
+  Object.freeze({ baseMaterialId: "terrain-rock", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-rock"), id: "terrain-rock", isCustom: false, label: "Rock" }),
+  Object.freeze({ baseMaterialId: "terrain-ash", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-ash"), id: "terrain-ash", isCustom: false, label: "Ash" })
+] satisfies readonly QuickMaterialOption[]);
+
+function resolveCssRgbToHex(value: string, fallback: string): string {
+  const match = /^rgb\((\d{1,3}) (\d{1,3}) (\d{1,3})\)$/.exec(value);
+
+  if (match === null) {
+    return value.startsWith("#") ? value : fallback;
+  }
+
+  return `#${[match[1], match[2], match[3]]
+    .map((channel) =>
+      Math.max(0, Math.min(255, Number(channel)))
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
+function createCustomMaterialOptions(
+  materialDefinitions: readonly MapEditorMaterialDefinitionDraftSnapshot[]
+): readonly QuickMaterialOption[] {
+  return Object.freeze(
+    materialDefinitions.map((materialDefinition) =>
+      Object.freeze({
+        baseMaterialId: materialDefinition.baseMaterialId,
+        colorHex: materialDefinition.baseColorHex,
+        id: materialDefinition.materialId,
+        isCustom: true,
+        label: materialDefinition.label
+      })
+    )
+  );
+}
+
+const quickTerrainBrushOptions = Object.freeze([
+  Object.freeze({ id: "raise", label: "Raise" }),
+  Object.freeze({ id: "lower", label: "Lower" }),
+  Object.freeze({ id: "flatten", label: "Flat" }),
+  Object.freeze({ id: "smooth", label: "Smooth" }),
+  Object.freeze({ id: "material", label: "Paint" })
+] satisfies readonly {
+  readonly id: MapEditorTerrainBrushMode;
+  readonly label: string;
+}[]);
+
+const quickWallPresetOptions = Object.freeze([
+  Object.freeze({ id: "wall", label: "Wall" }),
+  Object.freeze({ id: "fence", label: "Fence" }),
+  Object.freeze({ id: "rail", label: "Rail" }),
+  Object.freeze({ id: "curb", label: "Curb" }),
+  Object.freeze({ id: "retaining-wall", label: "Retain" })
+] satisfies readonly {
+  readonly id: MapEditorWallToolPresetId;
+  readonly label: string;
+}[]);
+
+const quickLightKindOptions = Object.freeze([
+  Object.freeze({ id: "point", label: "Point" }),
+  Object.freeze({ id: "spot", label: "Spot" }),
+  Object.freeze({ id: "area", label: "Area" }),
+  Object.freeze({ id: "sun", label: "Sun" })
+] satisfies readonly {
+  readonly id: MapEditorLightDraftSnapshot["lightKind"];
+  readonly label: string;
+}[]);
+
+const quickTeamOptions = Object.freeze([
+  Object.freeze({ id: "neutral", label: "Neutral" }),
+  Object.freeze({ id: "blue", label: "Blue" }),
+  Object.freeze({ id: "red", label: "Red" })
+] satisfies readonly {
+  readonly id: MapEditorGameplayTeamId;
+  readonly label: string;
+}[]);
+
+function formatToolSettingsTitle(
+  viewportToolMode: MapEditorViewportToolMode
+): string {
+  switch (viewportToolMode) {
+    case "cover":
+      return "Cover Settings";
+    case "floor":
+      return "Floor Settings";
+    case "lane":
+      return "Lane Settings";
+    case "light":
+      return "Light Settings";
+    case "paint":
+      return "Paint Settings";
+    case "path":
+      return "Path Settings";
+    case "terrain":
+      return "Terrain Settings";
+    case "vehicle-route":
+      return "Route Settings";
+    case "wall":
+      return "Wall Settings";
+    case "water":
+      return "Water Settings";
+    case "zone":
+      return "Zone Settings";
+    case "delete":
+    case "module":
+    case "move":
+    case "rotate":
+    case "scale":
+    case "select":
+    default:
+      return "Tool Settings";
+  }
+}
+
+function shouldShowMapEditorActiveToolSettings(
+  viewportToolMode: MapEditorViewportToolMode
+): boolean {
+  return (
+    viewportToolMode === "cover" ||
+    viewportToolMode === "floor" ||
+    viewportToolMode === "lane" ||
+    viewportToolMode === "paint" ||
+    viewportToolMode === "vehicle-route" ||
+    viewportToolMode === "terrain" ||
+    viewportToolMode === "wall" ||
+    viewportToolMode === "path" ||
+    viewportToolMode === "light" ||
+    viewportToolMode === "water" ||
+    viewportToolMode === "zone"
+  );
+}
+
+function isWorldSelectionKind(
+  kind: MapEditorSelectedEntityRef["kind"] | undefined
+): boolean {
+  return (
+    kind === "world-atmosphere" ||
+    kind === "world-sky" ||
+    kind === "world-sun"
+  );
+}
+
+function formatSelectionTitle(
+  selectedEntityRef: MapEditorSelectedEntityRef | null
+): string {
+  if (selectedEntityRef === null) {
+    return "No Scene Selection";
+  }
+
+  switch (selectedEntityRef.kind) {
+    case "world-atmosphere":
+      return "World / Atmosphere";
+    case "world-sky":
+      return "World / Sky";
+    case "world-sun":
+      return "World / Global Sun";
+    default:
+      return `${selectedEntityRef.kind} / ${selectedEntityRef.id}`;
+  }
+}
+
+function resolveWorldSettingsScope(
+  selectedEntityRef: MapEditorSelectedEntityRef | null
+): "atmosphere" | "sky" | "sun" | null {
+  switch (selectedEntityRef?.kind) {
+    case "world-atmosphere":
+      return "atmosphere";
+    case "world-sky":
+      return "sky";
+    case "world-sun":
+      return "sun";
+    default:
+      return null;
+  }
+}
+
+function createResizedTerrainPatchDraft(
+  draft: MapEditorTerrainPatchDraftSnapshot,
+  sampleCountX: number,
+  sampleCountZ: number
+): MapEditorTerrainPatchDraftSnapshot {
+  const nextSampleCountX = Math.max(2, Math.round(sampleCountX));
+  const nextSampleCountZ = Math.max(2, Math.round(sampleCountZ));
+  const nextSampleCount = nextSampleCountX * nextSampleCountZ;
+  const resizeSamples = (samples: readonly number[], fillValue: number) =>
+    Object.freeze(
+      Array.from(
+        { length: nextSampleCount },
+        (_entry, sampleIndex) => samples[sampleIndex] ?? fillValue
+      )
+    );
+
+  return {
+    ...draft,
+    heightSamples: resizeSamples(draft.heightSamples, 0),
+    materialLayers: Object.freeze(
+      draft.materialLayers.map((layer) =>
+        Object.freeze({
+          ...layer,
+          weightSamples: resizeSamples(layer.weightSamples, 0)
+        })
+      )
+    ),
+    sampleCountX: nextSampleCountX,
+    sampleCountZ: nextSampleCountZ
+  };
+}
+
+function createSingleTerrainMaterialLayer(
+  draft: MapEditorTerrainPatchDraftSnapshot,
+  materialId: MapEditorStructuralDraftSnapshot["materialId"]
+): MapEditorTerrainPatchDraftSnapshot["materialLayers"] {
+  return Object.freeze([
+    Object.freeze({
+      layerId: `${draft.terrainPatchId}:${materialId}`,
+      materialId,
+      weightSamples: Object.freeze(
+        Array.from(
+          { length: draft.sampleCountX * draft.sampleCountZ },
+          () => 1
+        )
+      )
+    })
+  ]);
 }
 
 function Section({
@@ -68,7 +538,10 @@ function Section({
         <Button className="w-full justify-between px-2" type="button" variant="ghost">
           {title}
           <ChevronDownIcon
-            className={cn("transition-transform", open ? "rotate-0" : "-rotate-90")}
+            className={composeMapEditorLayoutClassName(
+              "transition-transform",
+              open ? "rotate-0" : "-rotate-90"
+            )}
             data-icon="inline-end"
           />
         </Button>
@@ -99,16 +572,12 @@ function Vector3Fields({
       {(["x", "y", "z"] as const).map((axis) => (
         <div className="flex flex-col gap-2" key={axis}>
           <Label htmlFor={`${labelPrefix}-${axis}`}>{labelPrefix} {axis.toUpperCase()}</Label>
-          <Input
+          <MapEditorEditableNumberInput
             id={`${labelPrefix}-${axis}`}
-            onChange={(event) => {
-              const nextValue = readNumberInput(event.target.value);
-
-              if (nextValue !== null) {
-                onChange(axis, nextValue);
-              }
+            onValueChange={(nextValue) => {
+              onChange(axis, nextValue);
             }}
-            value={value[axis].toFixed(2)}
+            value={value[axis]}
           />
         </div>
       ))}
@@ -188,8 +657,1462 @@ function SelectionCard({
   );
 }
 
+type MapEditorBuilderToolStateChangeHandler = (
+  update: (
+    currentBuilderToolState: MapEditorBuilderToolStateSnapshot
+  ) => MapEditorBuilderToolStateSnapshot
+) => void;
+
+interface MapEditorMaterialDefinitionInput {
+  readonly accentColorHex?: string | null;
+  readonly baseColorHex: string;
+  readonly baseMaterialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly label?: string;
+  readonly materialId?: string;
+  readonly metalness?: number;
+  readonly opacity?: number;
+  readonly roughness?: number;
+  readonly textureBrightness?: number;
+  readonly textureContrast?: number;
+  readonly textureImageDataUrl?: string | null;
+  readonly texturePatternStrength?: number;
+  readonly textureRepeat?: number;
+}
+
+function resolveQuickButtonVariant(active: boolean): "default" | "outline" {
+  return active ? "default" : "outline";
+}
+
+function resolveQuickMaterialOptionsFromPalette(
+  materialPaletteIds: readonly string[],
+  sourceOptions: readonly QuickMaterialOption[]
+): readonly QuickMaterialOption[] {
+  const sourceOptionsById = new Map(
+    sourceOptions.map((option) => [option.id, option] as const)
+  );
+  const paletteOptions = materialPaletteIds.flatMap((materialId) => {
+    const option = sourceOptionsById.get(materialId) ?? null;
+
+    return option === null ? [] : [option];
+  });
+
+  return paletteOptions.length === 0
+    ? sourceOptions.filter((option) =>
+        defaultMapEditorMaterialPaletteIds.includes(option.id)
+      )
+    : Object.freeze(paletteOptions);
+}
+
+function QuickMaterialButtonGroup({
+  activeMaterialId,
+  label,
+  onMaterialChange,
+  options
+}: {
+  readonly activeMaterialId: string;
+  readonly label: string;
+  readonly onMaterialChange: (option: QuickMaterialOption) => void;
+  readonly options: readonly QuickMaterialOption[];
+}) {
+  return (
+    <ButtonGroup aria-label={label} className="flex flex-wrap">
+      <ButtonGroupText>
+        <PaintbrushIcon />
+        {label}
+      </ButtonGroupText>
+      {options.map((option) => (
+        <Button
+          aria-pressed={activeMaterialId === option.id}
+          key={option.id}
+          onClick={() => onMaterialChange(option)}
+          size="sm"
+          type="button"
+          variant={resolveQuickButtonVariant(activeMaterialId === option.id)}
+        >
+          <span
+            className="size-2.5 rounded-full border border-border/80"
+            style={{
+              backgroundColor: option.colorHex
+            }}
+          />
+          {option.label}
+        </Button>
+      ))}
+    </ButtonGroup>
+  );
+}
+
+function clampMapEditorMaterialScalar(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function clampMapEditorMaterialTextureScalar(value: number): number {
+  return Math.min(2, Math.max(0, value));
+}
+
+function clampMapEditorMaterialTextureRepeat(value: number): number {
+  return Math.min(32, Math.max(0.25, value));
+}
+
+function isMapEditorMaterialPatternFile(file: File): boolean {
+  return file.type === "image/png" ||
+    file.type === "image/jpeg" ||
+    file.type === "image/webp";
+}
+
+function MaterialDefinitionEditorFields({
+  fieldIdPrefix,
+  materialDefinition,
+  onUpdateMaterialDefinition
+}: {
+  readonly fieldIdPrefix: string;
+  readonly materialDefinition: MapEditorMaterialDefinitionDraftSnapshot;
+  readonly onUpdateMaterialDefinition: (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => void;
+}) {
+  const updateMaterialDefinition = (
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => {
+    onUpdateMaterialDefinition(materialDefinition.materialId, update);
+  };
+  const readPatternFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0] ?? null;
+
+    event.currentTarget.value = "";
+
+    if (file === null || !isMapEditorMaterialPatternFile(file)) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.addEventListener("load", () => {
+      const result = reader.result;
+
+      if (typeof result !== "string") {
+        return;
+      }
+
+      updateMaterialDefinition((draft) => ({
+        ...draft,
+        textureImageDataUrl: result
+      }));
+    });
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-label`}>Label</Label>
+        <Input
+          id={`${fieldIdPrefix}-label`}
+          onChange={(event) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              label: event.target.value
+            }))
+          }
+          value={materialDefinition.label}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-base-material`}>Base Material</Label>
+        <Select
+          onValueChange={(nextMaterialId) => {
+            const baseMaterialId = readSemanticMaterialId(nextMaterialId);
+
+            if (baseMaterialId === null) {
+              return;
+            }
+
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              baseMaterialId
+            }));
+          }}
+          value={materialDefinition.baseMaterialId}
+        >
+          <SelectTrigger id={`${fieldIdPrefix}-base-material`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {allSemanticMaterialOptions.map((option) => (
+                <SelectItem key={option.id} value={option.baseMaterialId}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-base-color`}>Base Color</Label>
+        <Input
+          id={`${fieldIdPrefix}-base-color`}
+          onChange={(event) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              baseColorHex: event.target.value
+            }))
+          }
+          type="color"
+          value={materialDefinition.baseColorHex}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-accent-color`}>Accent Color</Label>
+        <Input
+          id={`${fieldIdPrefix}-accent-color`}
+          onChange={(event) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              accentColorHex: event.target.value
+            }))
+          }
+          type="color"
+          value={materialDefinition.accentColorHex ?? materialDefinition.baseColorHex}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-metalness`}>Metalness</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-metalness`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              metalness: clampMapEditorMaterialScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.metalness}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-roughness`}>Roughness</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-roughness`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              roughness: clampMapEditorMaterialScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.roughness}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-opacity`}>Opacity</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-opacity`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              opacity: clampMapEditorMaterialScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.opacity}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-texture-brightness`}>Brightness</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-texture-brightness`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              textureBrightness: clampMapEditorMaterialTextureScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.textureBrightness}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-texture-contrast`}>Contrast</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-texture-contrast`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              textureContrast: clampMapEditorMaterialTextureScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.textureContrast}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-texture-pattern`}>Pattern</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-texture-pattern`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              texturePatternStrength: clampMapEditorMaterialScalar(nextValue)
+            }))
+          }
+          value={materialDefinition.texturePatternStrength}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${fieldIdPrefix}-texture-repeat`}>Pattern Repeat</Label>
+        <MapEditorEditableNumberInput
+          decimals={2}
+          id={`${fieldIdPrefix}-texture-repeat`}
+          onValueChange={(nextValue) =>
+            updateMaterialDefinition((draft) => ({
+              ...draft,
+              textureRepeat: clampMapEditorMaterialTextureRepeat(nextValue)
+            }))
+          }
+          value={materialDefinition.textureRepeat}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <Label htmlFor={`${fieldIdPrefix}-texture-file`}>Pattern File</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            accept="image/png,image/jpeg,image/webp"
+            className="min-w-0 flex-1"
+            id={`${fieldIdPrefix}-texture-file`}
+            onChange={readPatternFile}
+            type="file"
+          />
+          <Button
+            disabled={materialDefinition.textureImageDataUrl === null}
+            onClick={() =>
+              updateMaterialDefinition((draft) => ({
+                ...draft,
+                textureImageDataUrl: null
+              }))
+            }
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Clear Pattern
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type MaterialPaletteTabId = "custom" | "library" | "palette";
+
+function readMaterialPaletteTabId(value: string): MaterialPaletteTabId {
+  return value === "custom" || value === "library" ? value : "palette";
+}
+
+function MaterialPaletteTabs({
+  activeCustomDefinition,
+  activeMaterialId,
+  builderToolState,
+  libraryOptions,
+  nextCustomMaterialId,
+  onBuilderToolStateChange,
+  onCreateMaterialDefinition,
+  onMaterialChange,
+  onUpdateMaterialDefinition,
+  paletteOptions
+}: {
+  readonly activeCustomDefinition: MapEditorMaterialDefinitionDraftSnapshot | null;
+  readonly activeMaterialId: string;
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
+  readonly libraryOptions: readonly QuickMaterialOption[];
+  readonly nextCustomMaterialId: string | null;
+  readonly onBuilderToolStateChange: MapEditorBuilderToolStateChangeHandler;
+  readonly onCreateMaterialDefinition?: (
+    input: MapEditorMaterialDefinitionInput
+  ) => void;
+  readonly onMaterialChange: (option: QuickMaterialOption) => void;
+  readonly onUpdateMaterialDefinition?: (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => void;
+  readonly paletteOptions: readonly QuickMaterialOption[];
+}) {
+  const activeMaterialOption =
+    libraryOptions.find((option) => option.id === activeMaterialId) ??
+    paletteOptions.find((option) => option.id === activeMaterialId) ??
+    null;
+  const activeMaterialCanJoinPalette = libraryOptions.some(
+    (option) => option.id === activeMaterialId
+  );
+  const activeMaterialIsInPalette = builderToolState.materialPaletteIds.includes(
+    activeMaterialId
+  );
+  const [activeMaterialTab, setActiveMaterialTab] =
+    useState<MaterialPaletteTabId>("palette");
+  const customTabEnabled =
+    onCreateMaterialDefinition !== undefined &&
+    onUpdateMaterialDefinition !== undefined;
+  const resolvedActiveMaterialTab =
+    customTabEnabled || activeMaterialTab !== "custom"
+      ? activeMaterialTab
+      : "palette";
+  const addActiveMaterialToPalette = () => {
+    if (!activeMaterialCanJoinPalette || activeMaterialIsInPalette) {
+      return;
+    }
+
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        materialPaletteIds: Object.freeze([
+          ...currentBuilderToolState.materialPaletteIds,
+          activeMaterialId
+        ])
+      })
+    );
+  };
+  const removeActiveMaterialFromPalette = () => {
+    if (
+      !activeMaterialIsInPalette ||
+      builderToolState.materialPaletteIds.length <= 1
+    ) {
+      return;
+    }
+
+    onBuilderToolStateChange((currentBuilderToolState) => {
+      const nextPaletteIds = currentBuilderToolState.materialPaletteIds.filter(
+        (materialId) => materialId !== activeMaterialId
+      );
+
+      return Object.freeze({
+        ...currentBuilderToolState,
+        materialPaletteIds:
+          nextPaletteIds.length === 0
+            ? defaultMapEditorMaterialPaletteIds
+            : Object.freeze(nextPaletteIds)
+      });
+    });
+  };
+  const resetMaterialPalette = () => {
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        materialPaletteIds: defaultMapEditorMaterialPaletteIds
+      })
+    );
+  };
+  const createCustomMaterial = () => {
+    if (
+      activeMaterialOption === null ||
+      nextCustomMaterialId === null ||
+      onCreateMaterialDefinition === undefined
+    ) {
+      return;
+    }
+
+    const materialProfile = resolveMetaverseSceneSemanticMaterialProfile(
+      activeMaterialOption.baseMaterialId
+    );
+
+    onCreateMaterialDefinition({
+      baseColorHex: resolveCssRgbToHex(
+        activeMaterialOption.colorHex,
+        "#94938c"
+      ),
+      baseMaterialId: activeMaterialOption.baseMaterialId,
+      label: `${activeMaterialOption.label} Custom`,
+      materialId: nextCustomMaterialId,
+      metalness: materialProfile.metalness,
+      opacity: materialProfile.opacity,
+      roughness: materialProfile.roughness,
+      textureBrightness: 1,
+      textureContrast: 1,
+      textureImageDataUrl: null,
+      texturePatternStrength: 1,
+      textureRepeat: 1
+    });
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        activeMaterialId: activeMaterialOption.baseMaterialId,
+        activeMaterialReferenceId: nextCustomMaterialId,
+        materialPaletteIds: Object.freeze([
+          ...currentBuilderToolState.materialPaletteIds.filter(
+            (materialId) => materialId !== nextCustomMaterialId
+          ),
+          nextCustomMaterialId
+        ])
+      })
+    );
+    setActiveMaterialTab("custom");
+  };
+  return (
+    <Tabs
+      className="min-h-0"
+      onValueChange={(nextValue) =>
+        setActiveMaterialTab(readMaterialPaletteTabId(nextValue))
+      }
+      value={resolvedActiveMaterialTab}
+    >
+      <TabsList>
+        <TabsTrigger value="palette">Palette</TabsTrigger>
+        <TabsTrigger value="library">Library</TabsTrigger>
+        {customTabEnabled ? (
+          <TabsTrigger value="custom">Custom</TabsTrigger>
+        ) : null}
+      </TabsList>
+      <TabsContent value="palette">
+        <div className="flex flex-col gap-3">
+          <QuickMaterialButtonGroup
+            activeMaterialId={activeMaterialId}
+            label="Palette"
+            onMaterialChange={onMaterialChange}
+            options={paletteOptions}
+          />
+          <ButtonGroup aria-label="Palette actions" className="flex flex-wrap">
+            <Button
+              disabled={!activeMaterialCanJoinPalette || activeMaterialIsInPalette}
+              onClick={addActiveMaterialToPalette}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <PlusIcon data-icon="inline-start" />
+              Add
+            </Button>
+            <Button
+              disabled={
+                !activeMaterialIsInPalette ||
+                builderToolState.materialPaletteIds.length <= 1
+              }
+              onClick={removeActiveMaterialFromPalette}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <MinusIcon data-icon="inline-start" />
+              Remove
+            </Button>
+            <Button
+              onClick={resetMaterialPalette}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <RotateCcwIcon data-icon="inline-start" />
+              Reset
+            </Button>
+          </ButtonGroup>
+        </div>
+      </TabsContent>
+      <TabsContent value="library">
+        <div className="flex flex-col gap-3">
+          <QuickMaterialButtonGroup
+            activeMaterialId={activeMaterialId}
+            label="Library"
+            onMaterialChange={onMaterialChange}
+            options={libraryOptions}
+          />
+          <Button
+            className="w-fit"
+            disabled={!activeMaterialCanJoinPalette || activeMaterialIsInPalette}
+            onClick={addActiveMaterialToPalette}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <PlusIcon data-icon="inline-start" />
+            Add To Palette
+          </Button>
+        </div>
+      </TabsContent>
+      {customTabEnabled ? (
+        <TabsContent value="custom">
+          <div className="flex flex-col gap-3">
+            <Button
+              className="w-fit"
+              disabled={activeMaterialOption === null}
+              onClick={createCustomMaterial}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <PlusIcon data-icon="inline-start" />
+              New Custom
+            </Button>
+            {activeCustomDefinition === null ? null : (
+              <MaterialDefinitionEditorFields
+                fieldIdPrefix="active-custom-material"
+                materialDefinition={activeCustomDefinition}
+                onUpdateMaterialDefinition={onUpdateMaterialDefinition!}
+              />
+            )}
+          </div>
+        </TabsContent>
+      ) : null}
+    </Tabs>
+  );
+}
+
+interface SelectedMaterialControlTarget {
+  readonly activeMaterialReferenceId: string;
+  readonly fallbackBaseMaterialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly onMaterialChange: (option: QuickMaterialOption) => void;
+  readonly options: readonly QuickMaterialOption[];
+  readonly title: string;
+}
+
+function resolveSelectedMaterialControlOption(
+  activeMaterialReferenceId: string,
+  fallbackBaseMaterialId: MapEditorStructuralDraftSnapshot["materialId"],
+  options: readonly QuickMaterialOption[]
+): QuickMaterialOption {
+  const matchedOption = options.find(
+    (option) => option.id === activeMaterialReferenceId
+  );
+
+  if (matchedOption !== undefined) {
+    return matchedOption;
+  }
+
+  const previewTextureId = readSemanticPreviewTextureId(activeMaterialReferenceId);
+  const baseMaterialId =
+    readSemanticMaterialId(activeMaterialReferenceId) ?? fallbackBaseMaterialId;
+
+  return Object.freeze({
+    baseMaterialId,
+    colorHex:
+      previewTextureId === null
+        ? resolveMetaverseSceneSemanticPreviewColorHex(baseMaterialId)
+        : resolveMetaverseSceneSemanticPreviewColorHex(previewTextureId),
+    id: activeMaterialReferenceId,
+    isCustom: false,
+    label: activeMaterialReferenceId
+  });
+}
+
+function SelectedMaterialControls({
+  materialDefinitions,
+  nextCustomMaterialId,
+  onCreateMaterialDefinition,
+  onUpdateMaterialDefinition,
+  target
+}: {
+  readonly materialDefinitions: readonly MapEditorMaterialDefinitionDraftSnapshot[];
+  readonly nextCustomMaterialId: string | null;
+  readonly onCreateMaterialDefinition: (
+    input: MapEditorMaterialDefinitionInput
+  ) => void;
+  readonly onUpdateMaterialDefinition: (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => void;
+  readonly target: SelectedMaterialControlTarget;
+}) {
+  const activeOption = resolveSelectedMaterialControlOption(
+    target.activeMaterialReferenceId,
+    target.fallbackBaseMaterialId,
+    target.options
+  );
+  const options = target.options.some((option) => option.id === activeOption.id)
+    ? target.options
+    : Object.freeze([activeOption, ...target.options]);
+  const activeMaterialDefinition =
+    materialDefinitions.find(
+      (materialDefinition) => materialDefinition.materialId === activeOption.id
+    ) ?? null;
+  const profileTextureId =
+    readSemanticPreviewTextureId(activeOption.id) ?? activeOption.baseMaterialId;
+  const materialProfile =
+    resolveMetaverseSceneSemanticMaterialProfile(profileTextureId);
+  const baseColorHex =
+    activeMaterialDefinition?.baseColorHex ??
+    resolveCssRgbToHex(activeOption.colorHex, "#94938c");
+  const createSelectedCustomMaterial = () => {
+    if (nextCustomMaterialId === null) {
+      return;
+    }
+
+    const label = `${activeOption.label} Custom`;
+
+    onCreateMaterialDefinition({
+      baseColorHex,
+      baseMaterialId: activeOption.baseMaterialId,
+      label,
+      materialId: nextCustomMaterialId,
+      metalness: activeMaterialDefinition?.metalness ?? materialProfile.metalness,
+      opacity: activeMaterialDefinition?.opacity ?? materialProfile.opacity,
+      roughness: activeMaterialDefinition?.roughness ?? materialProfile.roughness,
+      textureBrightness: activeMaterialDefinition?.textureBrightness ?? 1,
+      textureContrast: activeMaterialDefinition?.textureContrast ?? 1,
+      textureImageDataUrl: activeMaterialDefinition?.textureImageDataUrl ?? null,
+      texturePatternStrength: activeMaterialDefinition?.texturePatternStrength ?? 1,
+      textureRepeat: activeMaterialDefinition?.textureRepeat ?? 1
+    });
+    target.onMaterialChange(
+      Object.freeze({
+        baseMaterialId: activeOption.baseMaterialId,
+        colorHex: baseColorHex,
+        id: nextCustomMaterialId,
+        isCustom: true,
+        label
+      })
+    );
+  };
+
+  return (
+    <SelectionCard title={target.title}>
+      <div className="flex items-center gap-3">
+        <span
+          className="size-9 shrink-0 rounded-xl border border-border/80"
+          style={{ backgroundColor: baseColorHex }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{activeOption.label}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {activeOption.isCustom ? "Custom material" : activeOption.id}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="selected-material-reference">Material</Label>
+        <Select
+          onValueChange={(nextMaterialReferenceId) => {
+            const nextOption =
+              options.find((option) => option.id === nextMaterialReferenceId) ??
+              null;
+
+            if (nextOption !== null) {
+              target.onMaterialChange(nextOption);
+            }
+          }}
+          value={activeOption.id}
+        >
+          <SelectTrigger id="selected-material-reference">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {options.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {activeMaterialDefinition === null ? (
+        <Button
+          className="w-fit"
+          disabled={nextCustomMaterialId === null}
+          onClick={createSelectedCustomMaterial}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <PlusIcon data-icon="inline-start" />
+          New Custom
+        </Button>
+      ) : (
+        <MaterialDefinitionEditorFields
+          fieldIdPrefix="selected-custom-material"
+          materialDefinition={activeMaterialDefinition}
+          onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+        />
+      )}
+
+    </SelectionCard>
+  );
+}
+
+function MapEditorBuildMaterialControlsPanel({
+  builderToolState,
+  onBuilderToolStateChange,
+  onCreateMaterialDefinition,
+  onUpdateMaterialDefinition,
+  project,
+  selectedMaterialTarget,
+  showActiveToolSettings,
+  viewportToolMode
+}: {
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
+  readonly onBuilderToolStateChange: MapEditorBuilderToolStateChangeHandler;
+  readonly onCreateMaterialDefinition: (
+    input: MapEditorMaterialDefinitionInput
+  ) => void;
+  readonly onUpdateMaterialDefinition: (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => void;
+  readonly project: MapEditorProjectSnapshot;
+  readonly selectedMaterialTarget: SelectedMaterialControlTarget | null;
+  readonly showActiveToolSettings: boolean;
+  readonly viewportToolMode: MapEditorViewportToolMode;
+}) {
+  const setActiveMaterial = (option: QuickMaterialOption) => {
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        activeMaterialId: option.baseMaterialId,
+        activeMaterialReferenceId: option.id
+      })
+    );
+  };
+  const setTerrainMaterial = (option: QuickMaterialOption) => {
+    const terrainMaterialId = readTerrainMaterialId(option.baseMaterialId);
+
+    if (terrainMaterialId === null) {
+      return;
+    }
+
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        terrainMaterialId
+      })
+    );
+  };
+  const setPathElevationMode = (
+    mode: "down" | "flat" | "up"
+  ) => {
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        pathElevationMode: mode,
+        riseLayers:
+          mode === "flat"
+            ? currentBuilderToolState.riseLayers
+            : Math.max(1, Math.abs(Math.round(currentBuilderToolState.riseLayers))),
+        surfaceMode: mode === "flat" ? "flat" : "slope"
+      })
+    );
+  };
+  const adjustPathRise = (delta: number) => {
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      Object.freeze({
+        ...currentBuilderToolState,
+        riseLayers: Math.max(
+          1,
+          Math.abs(Math.round(currentBuilderToolState.riseLayers)) + delta
+        ),
+        surfaceMode:
+          currentBuilderToolState.pathElevationMode === "flat"
+            ? currentBuilderToolState.surfaceMode
+            : "slope"
+      })
+    );
+  };
+  const activePathMode =
+    builderToolState.surfaceMode === "slope"
+      ? builderToolState.pathElevationMode === "down"
+        ? "down"
+        : "up"
+      : "flat";
+  const semanticPaletteOptions = resolveQuickMaterialOptionsFromPalette(
+    builderToolState.materialPaletteIds,
+    Object.freeze([
+      ...createCustomMaterialOptions(project.materialDefinitionDrafts),
+      ...shellMaterialQuickOptions,
+      ...allSemanticMaterialOptions
+    ])
+  );
+  const semanticLibraryOptions = Object.freeze([
+    ...createCustomMaterialOptions(project.materialDefinitionDrafts),
+    ...shellMaterialQuickOptions,
+    ...allSemanticMaterialOptions
+  ]);
+  const terrainPaletteOptions = resolveQuickMaterialOptionsFromPalette(
+    builderToolState.materialPaletteIds,
+    allTerrainMaterialOptions
+  );
+  const activeCustomDefinition =
+    project.materialDefinitionDrafts.find(
+      (materialDefinition) =>
+        materialDefinition.materialId === builderToolState.activeMaterialReferenceId
+    ) ?? null;
+  const nextCustomMaterialId = createNextMapEditorMaterialDefinitionId(project);
+  const materialControlsSubtitle = showActiveToolSettings
+    ? formatToolSettingsTitle(viewportToolMode)
+    : (selectedMaterialTarget?.title ?? "Selection");
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background/95">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Material Controls
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {materialControlsSubtitle}
+        </p>
+      </div>
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex flex-col gap-3 p-3">
+          {viewportToolMode === "path" ? (
+            <>
+              <ButtonGroup aria-label="Path elevation mode" className="flex flex-wrap">
+                <ButtonGroupText>Path</ButtonGroupText>
+                <Button
+                  aria-pressed={activePathMode === "flat"}
+                  onClick={() => setPathElevationMode("flat")}
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(activePathMode === "flat")}
+                >
+                  <MinusIcon data-icon="inline-start" />
+                  Flat
+                </Button>
+                <Button
+                  aria-pressed={activePathMode === "up"}
+                  onClick={() => setPathElevationMode("up")}
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(activePathMode === "up")}
+                >
+                  <ArrowUpIcon data-icon="inline-start" />
+                  Up
+                </Button>
+                <Button
+                  aria-pressed={activePathMode === "down"}
+                  onClick={() => setPathElevationMode("down")}
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(activePathMode === "down")}
+                >
+                  <ArrowDownIcon data-icon="inline-start" />
+                  Down
+                </Button>
+              </ButtonGroup>
+              <ButtonGroup aria-label="Path rise" className="flex flex-wrap">
+                <ButtonGroupText>
+                  Rise {Math.max(1, Math.abs(Math.round(builderToolState.riseLayers)))}
+                </ButtonGroupText>
+                <Button
+                  onClick={() => adjustPathRise(-1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <MinusIcon />
+                </Button>
+                <Button
+                  onClick={() => adjustPathRise(1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <ArrowUpIcon />
+                </Button>
+              </ButtonGroup>
+              <MaterialPaletteTabs
+                activeCustomDefinition={activeCustomDefinition}
+                activeMaterialId={builderToolState.activeMaterialReferenceId}
+                builderToolState={builderToolState}
+                libraryOptions={semanticLibraryOptions}
+                nextCustomMaterialId={nextCustomMaterialId}
+                onBuilderToolStateChange={onBuilderToolStateChange}
+                onCreateMaterialDefinition={onCreateMaterialDefinition}
+                onMaterialChange={setActiveMaterial}
+                onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+                paletteOptions={semanticPaletteOptions}
+              />
+            </>
+          ) : null}
+
+          {viewportToolMode === "floor" ? (
+            <>
+              <ButtonGroup aria-label="Floor shape" className="flex flex-wrap">
+                <ButtonGroupText>Shape</ButtonGroupText>
+                <Button
+                  aria-pressed={builderToolState.floorShapeMode === "rectangle"}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        floorShapeMode: "rectangle"
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.floorShapeMode === "rectangle"
+                  )}
+                >
+                  Rectangle
+                </Button>
+                <Button
+                  aria-pressed={builderToolState.floorShapeMode === "polygon"}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        floorShapeMode: "polygon"
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.floorShapeMode === "polygon"
+                  )}
+                >
+                  Polygon
+                </Button>
+              </ButtonGroup>
+              <ButtonGroup aria-label="Floor surface" className="flex flex-wrap">
+                <ButtonGroupText>Surface</ButtonGroupText>
+                <Button
+                  aria-pressed={builderToolState.surfaceMode === "flat"}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        surfaceMode: "flat"
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.surfaceMode === "flat"
+                  )}
+                >
+                  Flat
+                </Button>
+                <Button
+                  aria-pressed={builderToolState.surfaceMode === "slope"}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        surfaceMode: "slope"
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.surfaceMode === "slope"
+                  )}
+                >
+                  Slope
+                </Button>
+              </ButtonGroup>
+              <MaterialPaletteTabs
+                activeCustomDefinition={activeCustomDefinition}
+                activeMaterialId={builderToolState.activeMaterialReferenceId}
+                builderToolState={builderToolState}
+                libraryOptions={semanticLibraryOptions}
+                nextCustomMaterialId={nextCustomMaterialId}
+                onBuilderToolStateChange={onBuilderToolStateChange}
+                onCreateMaterialDefinition={onCreateMaterialDefinition}
+                onMaterialChange={setActiveMaterial}
+                onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+                paletteOptions={semanticPaletteOptions}
+              />
+            </>
+          ) : null}
+
+          {viewportToolMode === "terrain" ? (
+            <>
+              <ButtonGroup aria-label="Terrain brush" className="flex flex-wrap">
+                <ButtonGroupText>Brush</ButtonGroupText>
+                {quickTerrainBrushOptions.map((option) => (
+                  <Button
+                    aria-pressed={builderToolState.terrainBrushMode === option.id}
+                    key={option.id}
+                    onClick={() =>
+                      onBuilderToolStateChange((currentBuilderToolState) =>
+                        Object.freeze({
+                          ...currentBuilderToolState,
+                          terrainBrushMode: option.id
+                        })
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant={resolveQuickButtonVariant(
+                      builderToolState.terrainBrushMode === option.id
+                    )}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </ButtonGroup>
+              <MaterialPaletteTabs
+                activeCustomDefinition={null}
+                activeMaterialId={builderToolState.terrainMaterialId}
+                builderToolState={builderToolState}
+                libraryOptions={allTerrainMaterialOptions}
+                nextCustomMaterialId={null}
+                onBuilderToolStateChange={onBuilderToolStateChange}
+                onMaterialChange={setTerrainMaterial}
+                paletteOptions={terrainPaletteOptions}
+              />
+            </>
+          ) : null}
+
+          {viewportToolMode === "wall" ? (
+            <ButtonGroup aria-label="Wall preset" className="flex flex-wrap">
+              <ButtonGroupText>Preset</ButtonGroupText>
+              {quickWallPresetOptions.map((option) => (
+                <Button
+                  aria-pressed={builderToolState.wallPresetId === option.id}
+                  key={option.id}
+                  onClick={() => {
+                    const presetDimensions =
+                      option.id === "curb"
+                        ? { heightMeters: 0.75, thicknessMeters: 0.75 }
+                        : option.id === "rail"
+                          ? { heightMeters: 1.25, thicknessMeters: 0.3 }
+                          : option.id === "fence"
+                            ? { heightMeters: 2.5, thicknessMeters: 0.35 }
+                            : option.id === "retaining-wall"
+                              ? { heightMeters: 5, thicknessMeters: 0.75 }
+                              : { heightMeters: 4, thicknessMeters: 0.5 };
+
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        wallHeightMeters: presetDimensions.heightMeters,
+                        wallPresetId: option.id,
+                        wallThicknessMeters: presetDimensions.thicknessMeters
+                      })
+                    );
+                  }}
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.wallPresetId === option.id
+                  )}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </ButtonGroup>
+          ) : null}
+
+          {(viewportToolMode === "cover" || viewportToolMode === "paint") ? (
+            <MaterialPaletteTabs
+              activeCustomDefinition={activeCustomDefinition}
+              activeMaterialId={builderToolState.activeMaterialReferenceId}
+              builderToolState={builderToolState}
+              libraryOptions={semanticLibraryOptions}
+              nextCustomMaterialId={nextCustomMaterialId}
+              onBuilderToolStateChange={onBuilderToolStateChange}
+              onCreateMaterialDefinition={onCreateMaterialDefinition}
+              onMaterialChange={setActiveMaterial}
+              onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+              paletteOptions={semanticPaletteOptions}
+            />
+          ) : null}
+
+          {viewportToolMode === "zone" ? (
+            <ButtonGroup aria-label="Zone team" className="flex flex-wrap">
+              <ButtonGroupText>Team</ButtonGroupText>
+              {quickTeamOptions.map((option) => (
+                <Button
+                  aria-pressed={builderToolState.gameplayVolumeTeamId === option.id}
+                  key={option.id}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        gameplayVolumeTeamId: option.id
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.gameplayVolumeTeamId === option.id
+                  )}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </ButtonGroup>
+          ) : null}
+
+          {viewportToolMode === "light" ? (
+            <ButtonGroup aria-label="Light kind" className="flex flex-wrap">
+              <ButtonGroupText>Light</ButtonGroupText>
+              {quickLightKindOptions.map((option) => (
+                <Button
+                  aria-pressed={builderToolState.lightKind === option.id}
+                  key={option.id}
+                  onClick={() =>
+                    onBuilderToolStateChange((currentBuilderToolState) =>
+                      Object.freeze({
+                        ...currentBuilderToolState,
+                        lightKind: option.id
+                      })
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant={resolveQuickButtonVariant(
+                    builderToolState.lightKind === option.id
+                  )}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </ButtonGroup>
+          ) : null}
+
+          {viewportToolMode === "water" ? (
+            <ButtonGroup aria-label="Water footprint" className="flex flex-wrap">
+              <ButtonGroupText>
+                Water {builderToolState.waterFootprintCellsX}x
+                {builderToolState.waterFootprintCellsZ}
+              </ButtonGroupText>
+              <Button
+                onClick={() =>
+                  onBuilderToolStateChange((currentBuilderToolState) =>
+                    Object.freeze({
+                      ...currentBuilderToolState,
+                      waterFootprintCellsX: Math.max(
+                        1,
+                        currentBuilderToolState.waterFootprintCellsX - 1
+                      ),
+                      waterFootprintCellsZ: Math.max(
+                        1,
+                        currentBuilderToolState.waterFootprintCellsZ - 1
+                      )
+                    })
+                  )
+                }
+                size="icon-sm"
+                type="button"
+                variant="outline"
+              >
+                <MinusIcon />
+              </Button>
+              <Button
+                onClick={() =>
+                  onBuilderToolStateChange((currentBuilderToolState) =>
+                    Object.freeze({
+                      ...currentBuilderToolState,
+                      waterFootprintCellsX:
+                        currentBuilderToolState.waterFootprintCellsX + 1,
+                      waterFootprintCellsZ:
+                        currentBuilderToolState.waterFootprintCellsZ + 1
+                    })
+                  )
+                }
+                size="icon-sm"
+                type="button"
+                variant="outline"
+              >
+                <ArrowUpIcon />
+              </Button>
+            </ButtonGroup>
+          ) : null}
+          {selectedMaterialTarget !== null ? (
+            <SelectedMaterialControls
+              materialDefinitions={project.materialDefinitionDrafts}
+              nextCustomMaterialId={nextCustomMaterialId}
+              onCreateMaterialDefinition={onCreateMaterialDefinition}
+              onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+              target={selectedMaterialTarget}
+            />
+          ) : null}
+
+          {!showActiveToolSettings && selectedMaterialTarget === null ? (
+            <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+              No material controls for the current selection.
+            </div>
+          ) : null}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+interface MapEditorSelectionMaterialControlsPaneProps {
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
+  readonly onBuilderToolStateChange: MapEditorBuilderToolStateChangeHandler;
+  readonly onCreateMaterialDefinition: (
+    input: MapEditorMaterialDefinitionInput
+  ) => void;
+  readonly onUpdateMaterialDefinition: (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => void;
+  readonly onUpdateRegion: (
+    regionId: string,
+    update: (draft: MapEditorRegionDraftSnapshot) => MapEditorRegionDraftSnapshot
+  ) => void;
+  readonly onUpdateSelectedPlacement: (update: MapEditorPlacementUpdate) => void;
+  readonly onUpdateStructure: (
+    structureId: string,
+    update: (
+      draft: MapEditorStructuralDraftSnapshot
+    ) => MapEditorStructuralDraftSnapshot
+  ) => void;
+  readonly onUpdateTerrainPatch: (
+    terrainPatchId: string,
+    update: (
+      draft: MapEditorTerrainPatchDraftSnapshot
+    ) => MapEditorTerrainPatchDraftSnapshot
+  ) => void;
+  readonly project: MapEditorProjectSnapshot;
+  readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly viewportToolMode: MapEditorViewportToolMode;
+}
+
+export function MapEditorSelectionMaterialControlsPane({
+  builderToolState,
+  onBuilderToolStateChange,
+  onCreateMaterialDefinition,
+  onUpdateMaterialDefinition,
+  onUpdateRegion,
+  onUpdateSelectedPlacement,
+  onUpdateStructure,
+  onUpdateTerrainPatch,
+  project,
+  selectedEntityRef,
+  viewportToolMode
+}: MapEditorSelectionMaterialControlsPaneProps) {
+  const selectedPlacement = readSelectedMapEditorPlacement(project);
+  const selectedRegion =
+    selectedEntityRef?.kind === "region"
+      ? (project.regionDrafts.find((region) => region.regionId === selectedEntityRef.id) ??
+        null)
+      : null;
+  const selectedStructure =
+    selectedEntityRef?.kind === "structure"
+      ? (project.structuralDrafts.find(
+          (structure) => structure.structureId === selectedEntityRef.id
+        ) ?? null)
+      : null;
+  const selectedTerrainPatch =
+    selectedEntityRef?.kind === "terrain-patch"
+      ? (project.terrainPatchDrafts.find(
+          (terrainPatch) => terrainPatch.terrainPatchId === selectedEntityRef.id
+        ) ?? null)
+      : null;
+  const showActiveToolSettings =
+    shouldShowMapEditorActiveToolSettings(viewportToolMode);
+  const materialLibraryOptions = Object.freeze([
+    ...createCustomMaterialOptions(project.materialDefinitionDrafts),
+    ...shellMaterialQuickOptions,
+    ...allSemanticMaterialOptions
+  ]);
+  const nullableMaterialLibraryOptions = Object.freeze([
+    defaultMaterialQuickOption,
+    ...materialLibraryOptions
+  ]);
+  const selectedMaterialTarget: SelectedMaterialControlTarget | null =
+    selectedPlacement !== null
+      ? {
+          activeMaterialReferenceId:
+            selectedPlacement.materialReferenceId ?? defaultMaterialQuickOption.id,
+          fallbackBaseMaterialId: "concrete",
+          onMaterialChange: (option) => {
+            onUpdateSelectedPlacement({
+              materialReferenceId:
+                option.id === defaultMaterialQuickOption.id ? null : option.id
+            });
+          },
+          options: nullableMaterialLibraryOptions,
+          title: "Selected Module Material"
+        }
+      : selectedStructure !== null
+        ? {
+            activeMaterialReferenceId:
+              selectedStructure.materialReferenceId ?? selectedStructure.materialId,
+            fallbackBaseMaterialId: selectedStructure.materialId,
+            onMaterialChange: (option) => {
+              onUpdateStructure(selectedStructure.structureId, (draft) => ({
+                ...draft,
+                materialId: option.baseMaterialId,
+                materialReferenceId: option.id
+              }));
+            },
+            options: materialLibraryOptions,
+            title: "Selected Structure Material"
+          }
+        : selectedRegion !== null
+          ? {
+              activeMaterialReferenceId:
+                selectedRegion.materialReferenceId ?? defaultMaterialQuickOption.id,
+              fallbackBaseMaterialId: "concrete",
+              onMaterialChange: (option) => {
+                onUpdateRegion(selectedRegion.regionId, (draft) => ({
+                  ...draft,
+                  materialReferenceId:
+                    option.id === defaultMaterialQuickOption.id ? null : option.id
+                }));
+              },
+              options: nullableMaterialLibraryOptions,
+              title: "Selected Region Material"
+            }
+          : selectedTerrainPatch !== null
+            ? {
+                activeMaterialReferenceId:
+                  resolvePrimaryTerrainMaterialId(selectedTerrainPatch),
+                fallbackBaseMaterialId:
+                  resolvePrimaryTerrainMaterialId(selectedTerrainPatch),
+                onMaterialChange: (option) => {
+                  const terrainMaterialId = readTerrainMaterialId(option.baseMaterialId);
+
+                  if (terrainMaterialId === null) {
+                    return;
+                  }
+
+                  onUpdateTerrainPatch(
+                    selectedTerrainPatch.terrainPatchId,
+                    (draft) => ({
+                      ...draft,
+                      materialLayers: createSingleTerrainMaterialLayer(
+                        draft,
+                        terrainMaterialId
+                      )
+                    })
+                  );
+                },
+                options: allTerrainMaterialOptions,
+                title: "Selected Terrain Material"
+              }
+            : null;
+
+  return (
+    <MapEditorBuildMaterialControlsPanel
+      builderToolState={builderToolState}
+      onBuilderToolStateChange={onBuilderToolStateChange}
+      onCreateMaterialDefinition={onCreateMaterialDefinition}
+      onUpdateMaterialDefinition={onUpdateMaterialDefinition}
+      project={project}
+      selectedMaterialTarget={selectedMaterialTarget}
+      showActiveToolSettings={showActiveToolSettings}
+      viewportToolMode={viewportToolMode}
+    />
+  );
+}
+
 interface MapEditorSelectionPaneProps {
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
   readonly onDeleteSelectedEntityRequest: () => void;
+  readonly onBuilderToolStateChange: MapEditorBuilderToolStateChangeHandler;
   readonly onSectionOpenChange: (sectionId: string, open: boolean) => void;
   readonly onUpdateConnector: (
     connectorId: string,
@@ -208,6 +2131,24 @@ interface MapEditorSelectionPaneProps {
       draft: MapEditorPlayerSpawnSelectionDraftSnapshot
     ) => MapEditorPlayerSpawnSelectionDraftSnapshot
   ) => void;
+  readonly onUpdateGameplayVolume: (
+    volumeId: string,
+    update: (
+      draft: MapEditorGameplayVolumeDraftSnapshot
+    ) => MapEditorGameplayVolumeDraftSnapshot
+  ) => void;
+  readonly onUpdateEnvironmentPresentation: (
+    update: (
+      environmentPresentation: MapEditorProjectSnapshot["environmentPresentation"]
+    ) => MapEditorProjectSnapshot["environmentPresentation"]
+  ) => void;
+  readonly onUpdateEnvironmentPresentationProfileId: (
+    environmentPresentationProfileId: string | null
+  ) => void;
+  readonly onUpdateLight: (
+    lightId: string,
+    update: (draft: MapEditorLightDraftSnapshot) => MapEditorLightDraftSnapshot
+  ) => void;
   readonly onUpdateRegion: (
     regionId: string,
     update: (draft: MapEditorRegionDraftSnapshot) => MapEditorRegionDraftSnapshot
@@ -221,11 +2162,17 @@ interface MapEditorSelectionPaneProps {
     surfaceId: string,
     update: (draft: MapEditorSurfaceDraftSnapshot) => MapEditorSurfaceDraftSnapshot
   ) => void;
-  readonly onUpdateTerrainChunk: (
-    chunkId: string,
+  readonly onUpdateStructure: (
+    structureId: string,
     update: (
-      draft: MapEditorTerrainChunkDraftSnapshot
-    ) => MapEditorTerrainChunkDraftSnapshot
+      draft: MapEditorStructuralDraftSnapshot
+    ) => MapEditorStructuralDraftSnapshot
+  ) => void;
+  readonly onUpdateTerrainPatch: (
+    terrainPatchId: string,
+    update: (
+      draft: MapEditorTerrainPatchDraftSnapshot
+    ) => MapEditorTerrainPatchDraftSnapshot
   ) => void;
   readonly onUpdateWaterRegion: (
     waterRegionId: string,
@@ -234,26 +2181,36 @@ interface MapEditorSelectionPaneProps {
   readonly project: MapEditorProjectSnapshot;
   readonly readSectionOpen: (sectionId: string, defaultOpen?: boolean) => boolean;
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly viewportToolMode: MapEditorViewportToolMode;
 }
 
 export function MapEditorSelectionPane({
+  builderToolState,
+  onBuilderToolStateChange,
   onDeleteSelectedEntityRequest,
   onSectionOpenChange,
   onUpdateConnector,
   onUpdateEdge,
+  onUpdateEnvironmentPresentation,
+  onUpdateEnvironmentPresentationProfileId,
+  onUpdateGameplayVolume,
+  onUpdateLight,
   onUpdatePlayerSpawn,
   onUpdatePlayerSpawnSelection,
   onUpdateRegion,
   onUpdateSceneObject,
   onUpdateSelectedPlacement,
   onUpdateSurface,
-  onUpdateTerrainChunk,
+  onUpdateStructure,
+  onUpdateTerrainPatch,
   onUpdateWaterRegion,
   project,
   readSectionOpen,
-  selectedEntityRef
+  selectedEntityRef,
+  viewportToolMode
 }: MapEditorSelectionPaneProps) {
   const selectedPlacement = readSelectedMapEditorPlacement(project);
+  const selectedWorldSettingsScope = resolveWorldSettingsScope(selectedEntityRef);
   const selectedPlayerSpawn =
     selectedEntityRef?.kind === "player-spawn"
       ? (project.playerSpawnDrafts.find(
@@ -287,18 +2244,39 @@ export function MapEditorSelectionPane({
           (connector) => connector.connectorId === selectedEntityRef.id
         ) ?? null)
       : null;
+  const selectedStructure =
+    selectedEntityRef?.kind === "structure"
+      ? (project.structuralDrafts.find(
+          (structure) => structure.structureId === selectedEntityRef.id
+        ) ?? null)
+      : null;
+  const selectedGameplayVolume =
+    selectedEntityRef?.kind === "gameplay-volume"
+      ? (project.gameplayVolumeDrafts.find(
+          (volume) => volume.volumeId === selectedEntityRef.id
+        ) ?? null)
+      : null;
+  const selectedLight =
+    selectedEntityRef?.kind === "light"
+      ? (project.lightDrafts.find((light) => light.lightId === selectedEntityRef.id) ??
+        null)
+      : null;
   const selectedSurface =
     selectedEntityRef?.kind === "surface"
       ? (project.surfaceDrafts.find(
           (surface) => surface.surfaceId === selectedEntityRef.id
         ) ?? null)
       : null;
-  const selectedTerrainChunk =
-    selectedEntityRef?.kind === "terrain-chunk"
-      ? (project.terrainChunkDrafts.find(
-          (terrainChunk) => terrainChunk.chunkId === selectedEntityRef.id
+  const selectedTerrainPatch =
+    selectedEntityRef?.kind === "terrain-patch"
+      ? (project.terrainPatchDrafts.find(
+          (terrainPatch) => terrainPatch.terrainPatchId === selectedEntityRef.id
         ) ?? null)
       : null;
+  const selectedSceneObjectTitle =
+    selectedSceneObject?.launchTarget === null ? "Scene Object" : "Portal";
+  const showActiveToolSettings =
+    shouldShowMapEditorActiveToolSettings(viewportToolMode);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background/84 backdrop-blur-sm">
@@ -311,12 +2289,10 @@ export function MapEditorSelectionPane({
             Selection
           </p>
           <h2 className="truncate font-heading text-lg font-semibold">
-            {selectedEntityRef === null
-              ? "No Scene Selection"
-              : `${selectedEntityRef.kind} / ${selectedEntityRef.id}`}
+            {formatSelectionTitle(selectedEntityRef)}
           </h2>
         </div>
-        {selectedEntityRef !== null ? (
+        {selectedEntityRef !== null && !isWorldSelectionKind(selectedEntityRef.kind) ? (
           <Button
             onClick={onDeleteSelectedEntityRequest}
             type="button"
@@ -328,8 +2304,891 @@ export function MapEditorSelectionPane({
         ) : null}
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <div className="flex flex-col gap-4 p-4">
+          {showActiveToolSettings ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:active-tool", true)}
+              sectionId="selection-pane:active-tool"
+              title={formatToolSettingsTitle(viewportToolMode)}
+            >
+              <SelectionCard
+                title={formatToolSettingsTitle(viewportToolMode)}
+              >
+                {viewportToolMode === "terrain" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-terrain-brush">Brush Action</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextBrushMode = readTerrainBrushMode(nextValue);
+
+                            if (nextBrushMode !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  terrainBrushMode: nextBrushMode
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.terrainBrushMode}
+                        >
+                          <SelectTrigger id="selection-tool-terrain-brush">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="raise">Raise</SelectItem>
+                            <SelectItem value="lower">Lower</SelectItem>
+                            <SelectItem value="flatten">Flatten</SelectItem>
+                            <SelectItem value="flatten-pad">Flatten To Pad</SelectItem>
+                            <SelectItem value="smooth">Smooth</SelectItem>
+                            <SelectItem value="ridge">Ridge</SelectItem>
+                            <SelectItem value="valley">Valley</SelectItem>
+                            <SelectItem value="plateau">Plateau</SelectItem>
+                            <SelectItem value="cliff">Cliff Terrace</SelectItem>
+                            <SelectItem value="noise">Noise</SelectItem>
+                            <SelectItem value="material">Paint Style</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="selection-tool-terrain-size">Brush Size</Label>
+                        <span className="text-xs text-muted-foreground">
+                          {Math.max(1, Math.round(builderToolState.terrainBrushSizeCells))}x
+                          {Math.max(1, Math.round(builderToolState.terrainBrushSizeCells))}
+                        </span>
+                      </div>
+                      <Slider
+                        id="selection-tool-terrain-size"
+                        max={16}
+                        min={1}
+                        onValueChange={(values) => {
+                          const nextBrushSizeCells = readTerrainBrushSizeCells(
+                            String(values[0] ?? 1)
+                          );
+
+                          if (nextBrushSizeCells !== null) {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                terrainBrushSizeCells: nextBrushSizeCells
+                              })
+                            );
+                          }
+                        }}
+                        step={1}
+                        value={[
+                          Math.max(
+                            1,
+                            Math.min(16, Math.round(builderToolState.terrainBrushSizeCells))
+                          )
+                        ]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-terrain-strength">Strength</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={2}
+                          id="selection-tool-terrain-strength"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                terrainBrushStrengthMeters: Math.max(
+                                  0.01,
+                                  nextValue
+                                )
+                              })
+                            );
+                          }}
+                          value={builderToolState.terrainBrushStrengthMeters}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-terrain-target">Target</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={1}
+                          id="selection-tool-terrain-target"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                terrainBrushTargetHeightMeters: nextValue
+                              })
+                            );
+                          }}
+                          value={builderToolState.terrainBrushTargetHeightMeters}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Smooth Edges</Label>
+                      <Button
+                        onClick={() =>
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              terrainSmoothEdges:
+                                !currentBuilderToolState.terrainSmoothEdges
+                            })
+                          )
+                        }
+                        type="button"
+                        variant={
+                          builderToolState.terrainSmoothEdges ? "default" : "outline"
+                        }
+                      >
+                        {builderToolState.terrainSmoothEdges ? "Enabled" : "Disabled"}
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+
+                {viewportToolMode === "floor" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-role">Role</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextRole = readFloorRole(nextValue);
+
+                            if (nextRole !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  floorRole: nextRole
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.floorRole}
+                        >
+                          <SelectTrigger id="selection-tool-floor-role">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="floor">Floor</SelectItem>
+                            <SelectItem value="roof">Roof</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-shape">Shape</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextShapeMode = readFloorShapeMode(nextValue);
+
+                            if (nextShapeMode !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  floorShapeMode: nextShapeMode
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.floorShapeMode}
+                        >
+                          <SelectTrigger id="selection-tool-floor-shape">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rectangle">Rectangle</SelectItem>
+                            <SelectItem value="polygon">Polygon</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-material">Material</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextMaterialId = readSemanticMaterialId(nextValue);
+
+                            if (nextMaterialId !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  activeMaterialId: nextMaterialId,
+                                  activeMaterialReferenceId: nextMaterialId
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.activeMaterialId}
+                        >
+                          <SelectTrigger id="selection-tool-floor-material">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="concrete">Concrete</SelectItem>
+                            <SelectItem value="metal">Metal</SelectItem>
+                            <SelectItem value="warning">Warning</SelectItem>
+                            <SelectItem value="glass">Glass</SelectItem>
+                            <SelectItem value="team-blue">Team Blue</SelectItem>
+                            <SelectItem value="team-red">Team Red</SelectItem>
+                            <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
+                            <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
+                            <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-elevation">Elevation Offset</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={1}
+                          id="selection-tool-floor-elevation"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                floorElevationMeters: nextValue
+                              })
+                            );
+                          }}
+                          value={builderToolState.floorElevationMeters}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-width">Width Cells</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={0}
+                          id="selection-tool-floor-width"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                floorFootprintCellsX: Math.max(1, Math.round(nextValue))
+                              })
+                            );
+                          }}
+                          value={builderToolState.floorFootprintCellsX}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-depth">Depth Cells</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={0}
+                          id="selection-tool-floor-depth"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                floorFootprintCellsZ: Math.max(1, Math.round(nextValue))
+                              })
+                            );
+                          }}
+                          value={builderToolState.floorFootprintCellsZ}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-surface-mode">Surface</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextSurfaceMode = readSurfaceMode(nextValue);
+
+                            if (nextSurfaceMode !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  surfaceMode: nextSurfaceMode
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.surfaceMode}
+                        >
+                          <SelectTrigger id="selection-tool-floor-surface-mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="flat">Flat</SelectItem>
+                            <SelectItem value="slope">Slope</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-floor-rise-layers">Rise Layers</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={0}
+                          id="selection-tool-floor-rise-layers"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                riseLayers: Math.round(nextValue)
+                              })
+                            );
+                          }}
+                          value={builderToolState.riseLayers}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
+                {(viewportToolMode === "cover" || viewportToolMode === "paint") ? (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-tool-active-material">Material</Label>
+                    <Select
+                      onValueChange={(nextValue) => {
+                        const nextMaterialId = readSemanticMaterialId(nextValue);
+
+                        if (nextMaterialId !== null) {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              activeMaterialId: nextMaterialId,
+                              activeMaterialReferenceId: nextMaterialId
+                            })
+                          );
+                        }
+                      }}
+                      value={builderToolState.activeMaterialId}
+                    >
+                      <SelectTrigger id="selection-tool-active-material">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="concrete">Concrete</SelectItem>
+                          <SelectItem value="metal">Metal</SelectItem>
+                          <SelectItem value="warning">Warning</SelectItem>
+                          <SelectItem value="glass">Glass</SelectItem>
+                          <SelectItem value="team-blue">Team Blue</SelectItem>
+                          <SelectItem value="team-red">Team Red</SelectItem>
+                          <SelectItem value="alien-rock">Alien Rock</SelectItem>
+                          <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
+                          <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
+                          <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+
+                {viewportToolMode === "cover" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-cover-width">Width Cells</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-cover-width"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              coverFootprintCellsX: Math.max(1, Math.round(nextValue))
+                            })
+                          );
+                        }}
+                        value={builderToolState.coverFootprintCellsX}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-cover-depth">Depth Cells</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-cover-depth"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              coverFootprintCellsZ: Math.max(1, Math.round(nextValue))
+                            })
+                          );
+                        }}
+                        value={builderToolState.coverFootprintCellsZ}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-cover-height">Height Cells</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-cover-height"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              coverHeightCells: Math.max(1, Math.round(nextValue))
+                            })
+                          );
+                        }}
+                        value={builderToolState.coverHeightCells}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {(viewportToolMode === "zone" ||
+                  viewportToolMode === "lane" ||
+                  viewportToolMode === "vehicle-route") ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-volume-width">
+                        Volume Width
+                      </Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-volume-width"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              gameplayVolumeWidthCells: Math.max(
+                                1,
+                                Math.round(nextValue)
+                              )
+                            })
+                          );
+                        }}
+                        value={builderToolState.gameplayVolumeWidthCells}
+                      />
+                    </div>
+                    {viewportToolMode === "zone" ? (
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-volume-team">Team</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextTeamId = readGameplayTeamId(nextValue);
+
+                            if (nextTeamId !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  gameplayVolumeTeamId: nextTeamId
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.gameplayVolumeTeamId}
+                        >
+                          <SelectTrigger id="selection-tool-volume-team">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="neutral">Neutral</SelectItem>
+                              <SelectItem value="blue">Blue</SelectItem>
+                              <SelectItem value="red">Red</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {viewportToolMode === "water" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-water-width">Width Cells</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-water-width"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              waterFootprintCellsX: Math.max(1, Math.round(nextValue))
+                            })
+                          );
+                        }}
+                        value={builderToolState.waterFootprintCellsX}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-water-depth-cells">
+                        Depth Cells
+                      </Label>
+                      <MapEditorEditableNumberInput
+                        decimals={0}
+                        id="selection-tool-water-depth-cells"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              waterFootprintCellsZ: Math.max(1, Math.round(nextValue))
+                            })
+                          );
+                        }}
+                        value={builderToolState.waterFootprintCellsZ}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-water-top">Top Elevation</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={1}
+                        id="selection-tool-water-top"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              waterTopElevationMeters: nextValue
+                            })
+                          );
+                        }}
+                        value={builderToolState.waterTopElevationMeters}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-water-depth">Water Depth</Label>
+                      <MapEditorEditableNumberInput
+                        decimals={1}
+                        id="selection-tool-water-depth"
+                        onValueChange={(nextValue) => {
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              waterDepthMeters: Math.max(0.5, nextValue)
+                            })
+                          );
+                        }}
+                        value={builderToolState.waterDepthMeters}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {viewportToolMode === "wall" ? (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-tool-wall-preset">Preset</Label>
+                    <Select
+                      onValueChange={(nextValue) => {
+                        const nextPresetId = readWallPresetId(nextValue);
+
+                        if (nextPresetId !== null) {
+                          const presetDimensions =
+                            nextPresetId === "curb"
+                              ? { heightMeters: 0.75, thicknessMeters: 0.75 }
+                              : nextPresetId === "rail"
+                                ? { heightMeters: 1.25, thicknessMeters: 0.3 }
+                                : nextPresetId === "fence"
+                                  ? { heightMeters: 2.5, thicknessMeters: 0.35 }
+                                  : nextPresetId === "retaining-wall"
+                                    ? { heightMeters: 5, thicknessMeters: 0.75 }
+                                    : { heightMeters: 4, thicknessMeters: 0.5 };
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              wallHeightMeters: presetDimensions.heightMeters,
+                              wallPresetId: nextPresetId,
+                              wallThicknessMeters: presetDimensions.thicknessMeters
+                            })
+                          );
+                        }
+                      }}
+                      value={builderToolState.wallPresetId}
+                    >
+                      <SelectTrigger id="selection-tool-wall-preset">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="wall">Wall</SelectItem>
+                        <SelectItem value="fence">Fence</SelectItem>
+                        <SelectItem value="rail">Rail</SelectItem>
+                        <SelectItem value="curb">Curb</SelectItem>
+                        <SelectItem value="retaining-wall">Retaining Wall</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-wall-height">Height</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={2}
+                          id="selection-tool-wall-height"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                wallHeightMeters: Math.max(0.25, nextValue)
+                              })
+                            );
+                          }}
+                          value={builderToolState.wallHeightMeters}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-wall-thickness">Thickness</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={2}
+                          id="selection-tool-wall-thickness"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                wallThicknessMeters: Math.max(0.1, nextValue)
+                              })
+                            );
+                          }}
+                          value={builderToolState.wallThicknessMeters}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {viewportToolMode === "path" ? (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-tool-path-material">Material</Label>
+                      <Select
+                        onValueChange={(nextValue) => {
+                          const nextMaterialId = readSemanticMaterialId(nextValue);
+
+                          if (nextMaterialId !== null) {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                activeMaterialId: nextMaterialId,
+                                activeMaterialReferenceId: nextMaterialId
+                              })
+                            );
+                          }
+                        }}
+                        value={builderToolState.activeMaterialId}
+                      >
+                        <SelectTrigger id="selection-tool-path-material">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="concrete">Concrete</SelectItem>
+                          <SelectItem value="metal">Metal</SelectItem>
+                          <SelectItem value="warning">Warning</SelectItem>
+                          <SelectItem value="glass">Glass</SelectItem>
+                          <SelectItem value="team-blue">Team Blue</SelectItem>
+                          <SelectItem value="team-red">Team Red</SelectItem>
+                          <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
+                          <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
+                          <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-path-width">Width Cells</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={0}
+                          id="selection-tool-path-width"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                pathWidthCells: Math.max(1, Math.round(nextValue))
+                              })
+                            );
+                          }}
+                          value={builderToolState.pathWidthCells}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-path-mode">Surface</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextSurfaceMode = readSurfaceMode(nextValue);
+
+                            if (nextSurfaceMode !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  surfaceMode: nextSurfaceMode
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.surfaceMode}
+                        >
+                          <SelectTrigger id="selection-tool-path-mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="flat">Flat</SelectItem>
+                            <SelectItem value="slope">Slope</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-path-elevation">Rise Layers</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={0}
+                          id="selection-tool-path-elevation"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                riseLayers: Math.round(nextValue)
+                              })
+                            );
+                          }}
+                          value={builderToolState.riseLayers}
+                        />
+                      </div>
+                      {builderToolState.surfaceMode === "slope" ? (
+                        <>
+                          <div className="flex flex-col gap-2">
+                            <Label htmlFor="selection-tool-path-length">Length Cells</Label>
+                            <MapEditorEditableNumberInput
+                              decimals={0}
+                              id="selection-tool-path-length"
+                              onValueChange={(nextValue) => {
+                                onBuilderToolStateChange((currentBuilderToolState) =>
+                                  Object.freeze({
+                                    ...currentBuilderToolState,
+                                    pathSlopeLengthCells: Math.max(
+                                      1,
+                                      Math.round(nextValue)
+                                    )
+                                  })
+                                );
+                              }}
+                              value={builderToolState.pathSlopeLengthCells}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Label htmlFor="selection-tool-path-rotation">Rotation</Label>
+                            <MapEditorEditableNumberInput
+                              decimals={1}
+                              id="selection-tool-path-rotation"
+                              onValueChange={(nextValue) => {
+                                onBuilderToolStateChange((currentBuilderToolState) =>
+                                  Object.freeze({
+                                    ...currentBuilderToolState,
+                                    pathSlopeRotationDegrees: nextValue
+                                  })
+                                );
+                              }}
+                              value={builderToolState.pathSlopeRotationDegrees}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+
+                {viewportToolMode === "light" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-light-kind">Kind</Label>
+                        <Select
+                          onValueChange={(nextValue) => {
+                            const nextLightKind = readLightKind(nextValue);
+
+                            if (nextLightKind !== null) {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  lightKind: nextLightKind
+                                })
+                              );
+                            }
+                          }}
+                          value={builderToolState.lightKind}
+                        >
+                          <SelectTrigger id="selection-tool-light-kind">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="point">Point</SelectItem>
+                            <SelectItem value="spot">Spot</SelectItem>
+                            <SelectItem value="ambient">Ambient</SelectItem>
+                            <SelectItem value="sun">Sun</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-light-color">Color</Label>
+                        <Input
+                          className="h-10 cursor-pointer p-1"
+                          id="selection-tool-light-color"
+                          onChange={(event) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                lightColor: parseMapEditorColorHex(
+                                  event.target.value,
+                                  currentBuilderToolState.lightColor
+                                )
+                              })
+                            );
+                          }}
+                          type="color"
+                          value={formatMapEditorColorHex(builderToolState.lightColor)}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="selection-tool-light-intensity">Intensity</Label>
+                        <MapEditorEditableNumberInput
+                          decimals={1}
+                          id="selection-tool-light-intensity"
+                          onValueChange={(nextValue) => {
+                            onBuilderToolStateChange((currentBuilderToolState) =>
+                              Object.freeze({
+                                ...currentBuilderToolState,
+                                lightIntensity: Math.max(0, nextValue)
+                              })
+                            );
+                          }}
+                          value={builderToolState.lightIntensity}
+                        />
+                      </div>
+                      {builderToolState.lightKind === "ambient" ||
+                      builderToolState.lightKind === "sun" ? null : (
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="selection-tool-light-range">Range</Label>
+                          <MapEditorEditableNumberInput
+                            decimals={1}
+                            id="selection-tool-light-range"
+                            onValueChange={(nextValue) => {
+                              onBuilderToolStateChange((currentBuilderToolState) =>
+                                Object.freeze({
+                                  ...currentBuilderToolState,
+                                  lightRangeMeters: Math.max(1, nextValue)
+                                })
+                              );
+                            }}
+                            value={builderToolState.lightRangeMeters}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </SelectionCard>
+            </Section>
+          ) : null}
+
+          {selectedWorldSettingsScope !== null ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:world", true)}
+              sectionId="selection-pane:world"
+              title="World"
+            >
+              <MapEditorWorldSettingsPanel
+                onUpdateEnvironmentPresentation={onUpdateEnvironmentPresentation}
+                onUpdateEnvironmentPresentationProfileId={
+                  onUpdateEnvironmentPresentationProfileId
+                }
+                project={project}
+                scope={selectedWorldSettingsScope}
+              />
+            </Section>
+          ) : null}
+
           {selectedPlacement !== null ? (
             <SelectedModuleEditor
               onDeleteSelectedEntityRequest={onDeleteSelectedEntityRequest}
@@ -377,19 +3236,15 @@ export function MapEditorSelectionPane({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-player-spawn-yaw">Yaw</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-player-spawn-yaw"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdatePlayerSpawn(selectedPlayerSpawn.spawnId, (draft) => ({
-                            ...draft,
-                            yawRadians: nextValue
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdatePlayerSpawn(selectedPlayerSpawn.spawnId, (draft) => ({
+                          ...draft,
+                          yawRadians: nextValue
+                        }));
                       }}
-                      value={selectedPlayerSpawn.yawRadians.toFixed(2)}
+                      value={selectedPlayerSpawn.yawRadians}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
@@ -411,19 +3266,15 @@ export function MapEditorSelectionPane({
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-player-spawn-bias">Home Bias</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-player-spawn-bias"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdatePlayerSpawnSelection((draft) => ({
-                            ...draft,
-                            homeTeamBiasMeters: Math.max(0, nextValue)
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdatePlayerSpawnSelection((draft) => ({
+                          ...draft,
+                          homeTeamBiasMeters: Math.max(0, nextValue)
+                        }));
                       }}
-                      value={project.playerSpawnSelectionDraft.homeTeamBiasMeters.toFixed(2)}
+                      value={project.playerSpawnSelectionDraft.homeTeamBiasMeters}
                     />
                   </div>
                 </div>
@@ -436,9 +3287,9 @@ export function MapEditorSelectionPane({
               onOpenChange={onSectionOpenChange}
               open={readSectionOpen("selection-pane:scene-object", true)}
               sectionId="selection-pane:scene-object"
-              title="Scene Object"
+              title={selectedSceneObjectTitle}
             >
-              <SelectionCard title="Scene Object">
+              <SelectionCard title={selectedSceneObjectTitle}>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="selection-scene-object-label">Label</Label>
                   <Input
@@ -468,36 +3319,28 @@ export function MapEditorSelectionPane({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-scene-object-yaw">Yaw</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-scene-object-yaw"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateSceneObject(selectedSceneObject.objectId, (draft) => ({
-                            ...draft,
-                            rotationYRadians: nextValue
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateSceneObject(selectedSceneObject.objectId, (draft) => ({
+                          ...draft,
+                          rotationYRadians: nextValue
+                        }));
                       }}
-                      value={selectedSceneObject.rotationYRadians.toFixed(2)}
+                      value={selectedSceneObject.rotationYRadians}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-scene-object-scale">Scale</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-scene-object-scale"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateSceneObject(selectedSceneObject.objectId, (draft) => ({
-                            ...draft,
-                            scale: Math.max(0.1, nextValue)
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateSceneObject(selectedSceneObject.objectId, (draft) => ({
+                          ...draft,
+                          scale: Math.max(0.1, nextValue)
+                        }));
                       }}
-                      value={selectedSceneObject.scale.toFixed(2)}
+                      value={selectedSceneObject.scale}
                     />
                   </div>
                 </div>
@@ -516,120 +3359,98 @@ export function MapEditorSelectionPane({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-center-x">Center X</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-water-center-x"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            footprint: {
-                              ...draft.footprint,
-                              centerX: nextValue
-                            }
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          footprint: {
+                            ...draft.footprint,
+                            centerX: nextValue
+                          }
+                        }));
                       }}
-                      value={selectedWaterRegion.footprint.centerX.toFixed(2)}
+                      value={selectedWaterRegion.footprint.centerX}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-center-z">Center Z</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-water-center-z"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            footprint: {
-                              ...draft.footprint,
-                              centerZ: nextValue
-                            }
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          footprint: {
+                            ...draft.footprint,
+                            centerZ: nextValue
+                          }
+                        }));
                       }}
-                      value={selectedWaterRegion.footprint.centerZ.toFixed(2)}
+                      value={selectedWaterRegion.footprint.centerZ}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-width">Width Cells</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
+                      decimals={0}
                       id="selection-water-width"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            footprint: {
-                              ...draft.footprint,
-                              sizeCellsX: Math.max(1, Math.round(nextValue))
-                            }
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          footprint: {
+                            ...draft.footprint,
+                            sizeCellsX: Math.max(1, Math.round(nextValue))
+                          }
+                        }));
                       }}
-                      value={String(selectedWaterRegion.footprint.sizeCellsX)}
+                      value={selectedWaterRegion.footprint.sizeCellsX}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-depth-cells">Length Cells</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
+                      decimals={0}
                       id="selection-water-depth-cells"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            footprint: {
-                              ...draft.footprint,
-                              sizeCellsZ: Math.max(1, Math.round(nextValue))
-                            }
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          footprint: {
+                            ...draft.footprint,
+                            sizeCellsZ: Math.max(1, Math.round(nextValue))
+                          }
+                        }));
                       }}
-                      value={String(selectedWaterRegion.footprint.sizeCellsZ)}
+                      value={selectedWaterRegion.footprint.sizeCellsZ}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-top">Top Elevation</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-water-top"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            topElevationMeters: nextValue
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          topElevationMeters: nextValue
+                        }));
                       }}
-                      value={selectedWaterRegion.topElevationMeters.toFixed(2)}
+                      value={selectedWaterRegion.topElevationMeters}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-water-depth">Depth</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
                       id="selection-water-depth"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
-                            ...draft,
-                            depthMeters: Math.max(0.5, nextValue)
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateWaterRegion(selectedWaterRegion.waterRegionId, (draft) => ({
+                          ...draft,
+                          depthMeters: Math.max(0.5, nextValue)
+                        }));
                       }}
-                      value={selectedWaterRegion.depthMeters.toFixed(2)}
+                      value={selectedWaterRegion.depthMeters}
                     />
                   </div>
                 </div>
@@ -701,17 +3522,24 @@ export function MapEditorSelectionPane({
             >
               <SelectionCard title="Edge">
                 <Vector3Fields
-                  labelPrefix="Center"
+                  labelPrefix="Base"
                   onChange={(axis, nextValue) =>
                     onUpdateEdge(selectedEdge.edgeId, (draft) => ({
                       ...draft,
                       center: {
                         ...draft.center,
-                        [axis]: nextValue
+                        [axis]:
+                          axis === "y"
+                            ? nextValue + draft.heightMeters * 0.5
+                            : nextValue
                       }
                     }))
                   }
-                  value={selectedEdge.center}
+                  value={{
+                    x: selectedEdge.center.x,
+                    y: selectedEdge.center.y - selectedEdge.heightMeters * 0.5,
+                    z: selectedEdge.center.z
+                  }}
                 />
                 <div className="grid grid-cols-3 gap-3">
                   {[
@@ -733,19 +3561,15 @@ export function MapEditorSelectionPane({
                   ].map((field) => (
                     <div className="flex flex-col gap-2" key={field.id}>
                       <Label htmlFor={`selection-edge-${field.id}`}>{field.label}</Label>
-                      <Input
+                      <MapEditorEditableNumberInput
                         id={`selection-edge-${field.id}`}
-                        onChange={(event) => {
-                          const nextValue = readNumberInput(event.target.value);
-
-                          if (nextValue !== null) {
-                            onUpdateEdge(selectedEdge.edgeId, (draft) => ({
-                              ...draft,
-                              [field.id]: Math.max(0.25, nextValue)
-                            }));
-                          }
+                        onValueChange={(nextValue) => {
+                          onUpdateEdge(selectedEdge.edgeId, (draft) => ({
+                            ...draft,
+                            [field.id]: Math.max(0.25, nextValue)
+                          }));
                         }}
-                        value={field.value.toFixed(2)}
+                        value={field.value}
                       />
                     </div>
                   ))}
@@ -792,6 +3616,257 @@ export function MapEditorSelectionPane({
             </Section>
           ) : null}
 
+          {selectedStructure !== null ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:structure", true)}
+              sectionId="selection-pane:structure"
+              title="Procedural Structure"
+            >
+              <SelectionCard title="Procedural Structure">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="selection-structure-label">Label</Label>
+                  <Input
+                    id="selection-structure-label"
+                    onChange={(event) =>
+                      onUpdateStructure(selectedStructure.structureId, (draft) => ({
+                        ...draft,
+                        label: event.target.value
+                      }))
+                    }
+                    value={selectedStructure.label}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-structure-kind">Kind</Label>
+                    <Input
+                      id="selection-structure-kind"
+                      readOnly
+                      value={selectedStructure.structureKind}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-structure-material">Material</Label>
+                    <Input
+                      id="selection-structure-material"
+                      onChange={(event) => {
+                        const nextMaterialId = readSemanticMaterialId(
+                          event.target.value
+                        );
+
+                        if (nextMaterialId !== null) {
+                          onUpdateStructure(selectedStructure.structureId, (draft) => ({
+                            ...draft,
+                            materialId: nextMaterialId,
+                            materialReferenceId: nextMaterialId
+                          }));
+                        }
+                      }}
+                      value={selectedStructure.materialId}
+                    />
+                  </div>
+                </div>
+                <Vector3Fields
+                  labelPrefix="Center"
+                  onChange={(axis, nextValue) =>
+                    onUpdateStructure(selectedStructure.structureId, (draft) => ({
+                      ...draft,
+                      center: {
+                        ...draft.center,
+                        [axis]: nextValue
+                      }
+                    }))
+                  }
+                  value={selectedStructure.center}
+                />
+                <Vector3Fields
+                  labelPrefix="Size"
+                  onChange={(axis, nextValue) =>
+                    onUpdateStructure(selectedStructure.structureId, (draft) => ({
+                      ...draft,
+                      size: {
+                        ...draft.size,
+                        [axis]: Math.max(0.08, nextValue)
+                      }
+                    }))
+                  }
+                  value={selectedStructure.size}
+                />
+              </SelectionCard>
+            </Section>
+          ) : null}
+
+          {selectedGameplayVolume !== null ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:gameplay-volume", true)}
+              sectionId="selection-pane:gameplay-volume"
+              title="Gameplay Volume"
+            >
+              <SelectionCard title="Gameplay Volume">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-volume-label">Label</Label>
+                    <Input
+                      id="selection-volume-label"
+                      onChange={(event) =>
+                        onUpdateGameplayVolume(
+                          selectedGameplayVolume.volumeId,
+                          (draft) => ({
+                            ...draft,
+                            label: event.target.value
+                          })
+                        )
+                      }
+                      value={selectedGameplayVolume.label}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-volume-kind">Kind</Label>
+                    <Input
+                      id="selection-volume-kind"
+                      readOnly
+                      value={selectedGameplayVolume.volumeKind}
+                    />
+                  </div>
+                </div>
+                <Vector3Fields
+                  labelPrefix="Center"
+                  onChange={(axis, nextValue) =>
+                    onUpdateGameplayVolume(
+                      selectedGameplayVolume.volumeId,
+                      (draft) => ({
+                        ...draft,
+                        center: {
+                          ...draft.center,
+                          [axis]: nextValue
+                        }
+                      })
+                    )
+                  }
+                  value={selectedGameplayVolume.center}
+                />
+                <Vector3Fields
+                  labelPrefix="Size"
+                  onChange={(axis, nextValue) =>
+                    onUpdateGameplayVolume(
+                      selectedGameplayVolume.volumeId,
+                      (draft) => ({
+                        ...draft,
+                        size: {
+                          ...draft.size,
+                          [axis]: Math.max(0.25, nextValue)
+                        }
+                      })
+                    )
+                  }
+                  value={selectedGameplayVolume.size}
+                />
+              </SelectionCard>
+            </Section>
+          ) : null}
+
+          {selectedLight !== null ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:light", true)}
+              sectionId="selection-pane:light"
+              title="Light"
+            >
+              <SelectionCard title="Light">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-light-kind">Kind</Label>
+                    <Select
+                      onValueChange={(nextValue) => {
+                        const nextLightKind = readLightKind(nextValue);
+
+                        if (nextLightKind !== null) {
+                          onUpdateLight(selectedLight.lightId, (draft) => ({
+                            ...draft,
+                            lightKind: nextLightKind
+                          }));
+                        }
+                      }}
+                      value={selectedLight.lightKind}
+                    >
+                      <SelectTrigger id="selection-light-kind">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="point">Point</SelectItem>
+                        <SelectItem value="spot">Spot</SelectItem>
+                        <SelectItem value="ambient">Ambient</SelectItem>
+                        <SelectItem value="sun">Sun</SelectItem>
+                        <SelectItem value="area">Area</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-light-color">Color</Label>
+                    <Input
+                      className="h-10 cursor-pointer p-1"
+                      id="selection-light-color"
+                      onChange={(event) => {
+                        onUpdateLight(selectedLight.lightId, (draft) => ({
+                          ...draft,
+                          color: parseMapEditorColorHex(event.target.value, draft.color)
+                        }));
+                      }}
+                      type="color"
+                      value={formatMapEditorColorHex(selectedLight.color)}
+                    />
+                  </div>
+                </div>
+                <Vector3Fields
+                  labelPrefix="Position"
+                  onChange={(axis, nextValue) =>
+                    onUpdateLight(selectedLight.lightId, (draft) => ({
+                      ...draft,
+                      position: {
+                        ...draft.position,
+                        [axis]: nextValue
+                      }
+                    }))
+                  }
+                  value={selectedLight.position}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-light-intensity">Intensity</Label>
+                    <MapEditorEditableNumberInput
+                      id="selection-light-intensity"
+                      onValueChange={(nextValue) => {
+                        onUpdateLight(selectedLight.lightId, (draft) => ({
+                          ...draft,
+                          intensity: Math.max(0, nextValue)
+                        }));
+                      }}
+                      value={selectedLight.intensity}
+                    />
+                  </div>
+                  {selectedLight.lightKind === "ambient" ||
+                  selectedLight.lightKind === "sun" ? null : (
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-light-range">Range</Label>
+                      <MapEditorEditableNumberInput
+                        id="selection-light-range"
+                        onValueChange={(nextValue) => {
+                          onUpdateLight(selectedLight.lightId, (draft) => ({
+                            ...draft,
+                            rangeMeters: Math.max(1, nextValue)
+                          }));
+                        }}
+                        value={selectedLight.rangeMeters ?? 0}
+                      />
+                    </div>
+                  )}
+                </div>
+              </SelectionCard>
+            </Section>
+          ) : null}
+
           {selectedSurface !== null ? (
             <Section
               onOpenChange={onSectionOpenChange}
@@ -831,48 +3906,320 @@ export function MapEditorSelectionPane({
             </Section>
           ) : null}
 
-          {selectedTerrainChunk !== null ? (
+          {selectedTerrainPatch !== null ? (
             <Section
               onOpenChange={onSectionOpenChange}
-              open={readSectionOpen("selection-pane:terrain-chunk", true)}
-              sectionId="selection-pane:terrain-chunk"
-              title="Terrain Chunk"
+              open={readSectionOpen("selection-pane:terrain-patch", true)}
+              sectionId="selection-pane:terrain-patch"
+              title="Terrain"
             >
-              <SelectionCard title="Terrain Chunk">
+              <SelectionCard title="Terrain">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="selection-terrain-label">Label</Label>
+                  <Input
+                    id="selection-terrain-label"
+                    onChange={(event) =>
+                      onUpdateTerrainPatch(selectedTerrainPatch.terrainPatchId, (draft) => ({
+                        ...draft,
+                        label: event.target.value
+                      }))
+                    }
+                    value={selectedTerrainPatch.label}
+                  />
+                </div>
+                <Vector3Fields
+                  labelPrefix="Origin"
+                  onChange={(axis, nextValue) =>
+                    onUpdateTerrainPatch(selectedTerrainPatch.terrainPatchId, (draft) => ({
+                      ...draft,
+                      origin: {
+                        ...draft.origin,
+                        [axis]: nextValue
+                      }
+                    }))
+                  }
+                  value={selectedTerrainPatch.origin}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-terrain-samples-x">Samples X</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
+                      decimals={0}
                       id="selection-terrain-samples-x"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateTerrainChunk(selectedTerrainChunk.chunkId, (draft) => ({
-                            ...draft,
-                            sampleCountX: Math.max(1, Math.round(nextValue))
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateTerrainPatch(selectedTerrainPatch.terrainPatchId, (draft) => ({
+                          ...createResizedTerrainPatchDraft(
+                            draft,
+                            nextValue,
+                            draft.sampleCountZ
+                          )
+                        }));
                       }}
-                      value={String(selectedTerrainChunk.sampleCountX)}
+                      value={selectedTerrainPatch.sampleCountX}
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-terrain-samples-z">Samples Z</Label>
-                    <Input
+                    <MapEditorEditableNumberInput
+                      decimals={0}
                       id="selection-terrain-samples-z"
-                      onChange={(event) => {
-                        const nextValue = readNumberInput(event.target.value);
-
-                        if (nextValue !== null) {
-                          onUpdateTerrainChunk(selectedTerrainChunk.chunkId, (draft) => ({
-                            ...draft,
-                            sampleCountZ: Math.max(1, Math.round(nextValue))
-                          }));
-                        }
+                      onValueChange={(nextValue) => {
+                        onUpdateTerrainPatch(selectedTerrainPatch.terrainPatchId, (draft) => ({
+                          ...createResizedTerrainPatchDraft(
+                            draft,
+                            draft.sampleCountX,
+                            nextValue
+                          )
+                        }));
                       }}
-                      value={String(selectedTerrainChunk.sampleCountZ)}
+                      value={selectedTerrainPatch.sampleCountZ}
                     />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-spacing">Spacing</Label>
+                    <MapEditorEditableNumberInput
+                      id="selection-terrain-spacing"
+                      onValueChange={(nextValue) => {
+                        onUpdateTerrainPatch(selectedTerrainPatch.terrainPatchId, (draft) => ({
+                          ...draft,
+                          sampleSpacingMeters: Math.max(0.5, nextValue)
+                        }));
+                      }}
+                      value={selectedTerrainPatch.sampleSpacingMeters}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-seed">Seed</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={0}
+                      id="selection-terrain-generate-seed"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainNoiseSeed: Math.round(nextValue)
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainNoiseSeed}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-octaves">Octaves</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={0}
+                      id="selection-terrain-generate-octaves"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationOctaves: Math.max(
+                              1,
+                              Math.round(nextValue)
+                            )
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationOctaves}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-frequency">Frequency</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={3}
+                      id="selection-terrain-generate-frequency"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationFrequency: Math.max(0.001, nextValue)
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationFrequency}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-ground-elevation">
+                      Ground Elevation
+                    </Label>
+                    <MapEditorEditableNumberInput
+                      decimals={1}
+                      id="selection-terrain-ground-elevation"
+                      onValueChange={(nextValue) => {
+                        onUpdateTerrainPatch(
+                          selectedTerrainPatch.terrainPatchId,
+                          (draft) => ({
+                            ...draft,
+                            origin: {
+                              ...draft.origin,
+                              y: nextValue
+                            }
+                          })
+                        );
+                      }}
+                      value={selectedTerrainPatch.origin.y}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-min-elevation">
+                      Min Elevation
+                    </Label>
+                    <MapEditorEditableNumberInput
+                      decimals={1}
+                      id="selection-terrain-generate-min-elevation"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationMinElevationMeters: Math.min(
+                              nextValue,
+                              currentBuilderToolState.terrainGenerationMaxElevationMeters
+                            )
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationMinElevationMeters}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-max-elevation">
+                      Max Elevation
+                    </Label>
+                    <MapEditorEditableNumberInput
+                      decimals={1}
+                      id="selection-terrain-generate-max-elevation"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationMaxElevationMeters: Math.max(
+                              nextValue,
+                              currentBuilderToolState.terrainGenerationMinElevationMeters
+                            )
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationMaxElevationMeters}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-warp-frequency">Warp Freq</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={3}
+                      id="selection-terrain-generate-warp-frequency"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationWarpFrequency: Math.max(
+                              0.001,
+                              nextValue
+                            )
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationWarpFrequency}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-terrain-generate-warp-strength">Warp</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={1}
+                      id="selection-terrain-generate-warp-strength"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            terrainGenerationWarpStrengthMeters: Math.max(
+                              0,
+                              nextValue
+                            )
+                          })
+                        );
+                      }}
+                      value={builderToolState.terrainGenerationWarpStrengthMeters}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button
+                      onClick={() => {
+                        const generatedTerrainPatch =
+                          conformMapEditorTerrainPatchDraftToSupportSurfaces(
+                            project,
+                            bakeMapEditorProceduralTerrainPatch(selectedTerrainPatch, {
+                              ...defaultMapEditorTerrainGenerationConfig,
+                              frequency:
+                                builderToolState.terrainGenerationFrequency,
+                              groundElevationMeters: selectedTerrainPatch.origin.y,
+                              maxElevationMeters:
+                                builderToolState.terrainGenerationMaxElevationMeters,
+                              minElevationMeters:
+                                builderToolState.terrainGenerationMinElevationMeters,
+                              octaves: builderToolState.terrainGenerationOctaves,
+                              seed: builderToolState.terrainNoiseSeed,
+                              warpFrequency:
+                                builderToolState.terrainGenerationWarpFrequency,
+                              warpStrengthMeters:
+                                builderToolState.terrainGenerationWarpStrengthMeters
+                            })
+                          );
+
+                        onUpdateTerrainPatch(
+                          selectedTerrainPatch.terrainPatchId,
+                          () => ({
+                            ...generatedTerrainPatch,
+                            waterLevelMeters: null
+                          })
+                        );
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      Generate
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const naturalizedTerrainPatch =
+                          conformMapEditorTerrainPatchDraftToSupportSurfaces(
+                            project,
+                            {
+                              ...selectedTerrainPatch,
+                              heightSamples:
+                                createNaturalTerrainHeightSamples(selectedTerrainPatch)
+                            }
+                          );
+
+                        onUpdateTerrainPatch(
+                          selectedTerrainPatch.terrainPatchId,
+                          () => ({
+                            ...naturalizedTerrainPatch,
+                            waterLevelMeters: null
+                          })
+                        );
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      Naturalize
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        onUpdateTerrainPatch(
+                          selectedTerrainPatch.terrainPatchId,
+                          (draft) => ({
+                            ...draft,
+                            heightSamples: Object.freeze(
+                              draft.heightSamples.map(() => 0)
+                            )
+                          })
+                        )
+                      }
+                      type="button"
+                      variant="outline"
+                    >
+                      Flatten
+                    </Button>
                   </div>
                 </div>
               </SelectionCard>

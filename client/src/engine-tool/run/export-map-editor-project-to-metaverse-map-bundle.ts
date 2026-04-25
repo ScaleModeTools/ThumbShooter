@@ -1,9 +1,11 @@
 import {
   compileMetaverseMapBundleSemanticWorld,
   type MetaverseMapBundleLaunchVariationSnapshot,
+  type MetaverseMapBundleCompiledWorldSnapshot,
   type MetaverseMapBundleSceneObjectSnapshot,
   type MetaverseMapBundleSnapshot,
-  type MetaverseMapBundleSpawnNodeSnapshot
+  type MetaverseMapBundleSpawnNodeSnapshot,
+  resolveMetaverseMapPlayerSpawnSupportPosition
 } from "@webgpu-metaverse/shared/metaverse/world";
 
 import {
@@ -33,22 +35,28 @@ function toReadonlyRgbTuple(
 }
 
 function resolvePlayerSpawnNodes(
-  project: MapEditorProjectSnapshot
+  project: MapEditorProjectSnapshot,
+  compiledWorld: MetaverseMapBundleCompiledWorldSnapshot
 ): readonly MetaverseMapBundleSpawnNodeSnapshot[] {
   return Object.freeze(
-    project.playerSpawnDrafts.map((spawnDraft) =>
-      Object.freeze({
+    project.playerSpawnDrafts.map((spawnDraft) => {
+      const position = resolveMetaverseMapPlayerSpawnSupportPosition({
+        compiledWorld,
+        spawnPosition: spawnDraft.position
+      });
+
+      return Object.freeze({
         label: spawnDraft.label,
         position: Object.freeze({
-          x: spawnDraft.position.x,
-          y: spawnDraft.position.y,
-          z: spawnDraft.position.z
+          x: position.x,
+          y: position.y,
+          z: position.z
         }),
         spawnId: spawnDraft.spawnId,
         teamId: spawnDraft.teamId,
         yawRadians: spawnDraft.yawRadians
-      } satisfies MetaverseMapBundleSpawnNodeSnapshot)
-    )
+      } satisfies MetaverseMapBundleSpawnNodeSnapshot);
+    })
   );
 }
 
@@ -121,11 +129,12 @@ export function exportMapEditorProjectToMetaverseMapBundle(
     compiledWorld,
     description: project.description,
     environmentAssets: compiledWorld.compatibilityEnvironmentAssets,
+    environmentPresentation: project.environmentPresentation,
     gameplayProfileId: project.gameplayProfileId,
     label: project.bundleLabel,
     launchVariations: resolveLaunchVariations(project),
     mapId: project.bundleId,
-    playerSpawnNodes: resolvePlayerSpawnNodes(project),
+    playerSpawnNodes: resolvePlayerSpawnNodes(project, compiledWorld),
     playerSpawnSelection: Object.freeze({
       enemyAvoidanceRadiusMeters:
         project.playerSpawnSelectionDraft.enemyAvoidanceRadiusMeters,

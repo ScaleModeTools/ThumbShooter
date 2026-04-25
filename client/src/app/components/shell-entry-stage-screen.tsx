@@ -23,16 +23,10 @@ import type { WebGpuMetaverseCapabilitySnapshot } from "../../metaverse/types/we
 import type { MetaverseEntryStepId } from "../../navigation";
 import { StableInlineText } from "@/components/text-stability";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/class-name";
+import { XIcon } from "lucide-react";
 
 interface ShellEntryStageScreenProps {
   readonly capabilityStatus: WebGpuMetaverseCapabilitySnapshot["status"];
@@ -119,7 +113,7 @@ function resolveStageDescription(
     return "Calibration is available before launch.";
   }
 
-  return "Pick a shell room, then launch directly into free roam or authoritative team deathmatch.";
+  return "Launch into free roam or team deathmatch.";
 }
 
 function resolveLaunchCardClassName(selected: boolean): string {
@@ -205,7 +199,6 @@ export function ShellEntryStageScreen({
   metaverseRoomIdDraft,
   nextMetaverseStep,
   onClearProfile,
-  onEditProfile,
   onEnterMetaverse,
   onMatchModeChange,
   onMetaverseRoomIdDraftChange,
@@ -363,106 +356,83 @@ export function ShellEntryStageScreen({
             </p>
           </div>
 
-          <Card className="surface-game-overlay rounded-[1.75rem] text-game-foreground shadow-[0_24px_90px_rgb(2_6_23_/_0.36)]">
-            <CardHeader className="gap-2">
-              <CardTitle className="font-heading text-2xl font-semibold tracking-tight text-game-foreground">
-                {hasConfirmedProfile ? usernameDraft : "Continue"}
-              </CardTitle>
-              <CardDescription className="text-sm leading-6 text-game-muted">
+          <section className="surface-game-overlay rounded-[1.35rem] border border-border/70 bg-card/68 px-5 py-5 text-game-foreground">
+            <div className="mb-4 flex flex-col gap-2">
+              <p className="font-heading text-2xl font-semibold text-game-foreground">
+                {hasConfirmedProfile ? usernameDraft || "Unknown" : "Continue"}
+              </p>
+              <p className="text-sm leading-6 text-game-muted">
                 {hasConfirmedProfile
                   ? "Profile and shell access."
                   : "Start immediately or save a local name first."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {hasConfirmedProfile ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {showRecalibrationButton ? (
+              </p>
+            </div>
+
+            <form className="flex flex-col gap-3" onSubmit={onSubmit}>
+              <div className="flex flex-col gap-2">
+                <Label className="text-game-foreground" htmlFor="login-username">
+                  Player name
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-invalid={loginError !== null}
+                    autoComplete="nickname"
+                    className="h-11 flex-1"
+                    id="login-username"
+                    onChange={(event) => setUsernameDraft(event.target.value)}
+                    placeholder="Unknown"
+                    value={usernameDraft}
+                  />
+                  {hasStoredProfile || hasConfirmedProfile ? (
                     <Button
-                      className="w-full"
-                      onClick={onRecalibrationRequest}
-                      size="lg"
+                      aria-label="Clear local profile"
+                      onClick={onClearProfile}
+                      size="icon"
                       type="button"
                       variant="outline"
                     >
-                      Recalibrate
+                      <XIcon />
                     </Button>
                   ) : null}
-                  <Button
-                    className="w-full"
-                    onClick={onEditProfile}
-                    size="lg"
-                    type="button"
-                    variant="outline"
-                  >
-                    Change name
-                  </Button>
-                  <Button
-                    className="w-full"
-                    onClick={onClearProfile}
-                    size="lg"
-                    type="button"
-                    variant="outline"
-                  >
-                    Clear local profile
-                  </Button>
                 </div>
-              ) : (
-                <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-                  <div className="flex flex-col gap-2">
-                    <Label className="text-game-foreground" htmlFor="login-username">
-                      Username
-                    </Label>
-                    <Input
-                      aria-invalid={loginError !== null}
-                      autoComplete="nickname"
-                      className="h-11"
-                      id="login-username"
-                      onChange={(event) => setUsernameDraft(event.target.value)}
-                      placeholder="Optional local profile name"
-                      value={usernameDraft}
-                    />
-                    <p className="text-sm leading-6 text-game-muted">
-                      Leave it blank to launch as Unknown.
-                    </p>
-                    {loginError !== null ? (
-                      <div className="surface-game-danger rounded-xl px-3 py-3 text-sm leading-6">
-                        {loginError}
-                      </div>
-                    ) : null}
+                {loginError !== null ? (
+                  <div className="surface-game-danger rounded-xl px-3 py-2 text-sm leading-6">
+                    {loginError}
                   </div>
+                ) : null}
+              </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Button className="w-full" size="lg" type="submit" variant="outline">
-                      <StableInlineText
-                        reserveTexts={profileSubmitLabels}
-                        text={profileSubmitLabel}
-                      />
-                    </Button>
+              {!hasConfirmedProfile ? (
+                <Button className="w-full" size="lg" type="submit" variant="outline">
+                  <StableInlineText
+                    reserveTexts={profileSubmitLabels}
+                    text={profileSubmitLabel}
+                  />
+                </Button>
+              ) : null}
+            </form>
 
-                    {hasStoredProfile ? (
-                      <Button
-                        className="w-full"
-                        onClick={onClearProfile}
-                        size="lg"
-                        type="button"
-                        variant="outline"
-                      >
-                        Clear local profile
-                      </Button>
-                    ) : null}
-                  </div>
-                </form>
-              )}
+            {showRecalibrationButton ? (
+              <Button
+                className="mt-3 w-full"
+                onClick={onRecalibrationRequest}
+                size="lg"
+                type="button"
+                variant="outline"
+              >
+                Recalibrate
+              </Button>
+            ) : null}
 
-              {showToolLauncher ? (
+            {showToolLauncher ? (
+              <div className="mt-3">
                 <EngineToolLauncher
                   className="w-full"
                   onOpenToolRequest={onOpenToolRequest}
                 />
-              ) : null}
-            </CardContent>
-          </Card>
+              </div>
+            ) : null}
+          </section>
 
           {metaverseLaunchError !== null ? (
             <div className="surface-game-danger rounded-[1.5rem] px-4 py-4 text-sm leading-6">
@@ -470,7 +440,7 @@ export function ShellEntryStageScreen({
             </div>
           ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             {(["free-roam", "team-deathmatch"] as const).map((launchMode) => {
               const selected = matchMode === launchMode;
               const title =
@@ -495,49 +465,71 @@ export function ShellEntryStageScreen({
                   : "Staging Ground with the Duck Hunt portal intact and the existing free-roam shell flow.";
 
               return (
-                <Card
+                <section
                   className={[
-                    "rounded-[1.75rem] border text-game-foreground shadow-[0_24px_90px_rgb(2_6_23_/_0.28)] backdrop-blur-md transition-colors",
+                    "rounded-[1.35rem] border p-4 text-game-foreground transition-colors",
                     resolveLaunchCardClassName(selected)
                   ].join(" ")}
                   key={launchMode}
                 >
-                  <CardHeader className="gap-2">
-                    <CardTitle className="font-heading text-2xl font-semibold tracking-tight text-game-foreground">
-                      {title}
-                    </CardTitle>
-                    <CardDescription className="text-sm leading-6 text-game-muted">
-                      {description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4">
-                    <div className="rounded-[1.25rem] border border-white/10 bg-[rgb(15_23_42_/_0.26)] px-4 py-4">
-                      <p
-                        className={[
-                          "text-xs font-semibold uppercase tracking-[0.24em]",
-                          badgeClassName
-                        ].join(" ")}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="font-heading text-lg font-semibold tracking-tight text-game-foreground">
+                          {title}
+                        </p>
+                        <p className="text-sm leading-6 text-game-muted">
+                          {detail}
+                        </p>
+                      </div>
+                      <Button
+                        className="shrink-0"
+                        disabled={
+                          launchMode === "team-deathmatch"
+                            ? !canLaunchTeamDeathmatch
+                            : !canLaunchFreeRoam
+                        }
+                        onClick={() => {
+                          handleLaunchRequest(launchMode);
+                        }}
+                        size="sm"
+                        type="button"
+                        variant={selected ? "default" : "outline"}
                       >
-                        {badgeLabel}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-game-muted">
-                        {detail}
-                      </p>
+                        {metaverseLaunchPending ? (
+                          "Connecting..."
+                        ) : (
+                          <StableInlineText
+                            reserveTexts={resolveLaunchReserveTexts(launchMode)}
+                            text={resolveLaunchActionLabel(
+                              launchMode,
+                              capabilityStatus,
+                              nextMetaverseStep
+                            )}
+                          />
+                        )}
+                      </Button>
                     </div>
+                    <p
+                      className={[
+                        "text-xs font-semibold uppercase tracking-[0.24em]",
+                        badgeClassName
+                      ].join(" ")}
+                    >
+                      {badgeLabel}
+                    </p>
+                    <p className="text-sm leading-6 text-game-muted">
+                      {description}
+                    </p>
                     {launchMode === "team-deathmatch" ? (
-                      <div className="rounded-[1.25rem] border border-white/10 bg-[rgb(15_23_42_/_0.18)] px-4 py-4">
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rose-200/70">
-                              Room code
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-game-muted">
-                              Create or join a live team deathmatch room by code.
-                            </p>
-                          </div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rose-200/70">
+                            Room code
+                          </p>
                           <p
                             aria-live="polite"
-                            className="min-w-16 text-right text-xs uppercase tracking-[0.2em] text-game-muted"
+                            className="text-xs uppercase tracking-[0.2em] text-game-muted"
                           >
                             <StableInlineText
                               reserveTexts={["Loading", "Retrying", "88 live"]}
@@ -559,6 +551,7 @@ export function ShellEntryStageScreen({
                             value={metaverseRoomIdDraft}
                           />
                           <Button
+                            className="shrink-0"
                             onClick={() => {
                               onMatchModeChange("team-deathmatch");
                               onMetaverseRoomIdDraftChange(
@@ -582,11 +575,16 @@ export function ShellEntryStageScreen({
                         >
                           {teamDeathmatchDirectoryHint}
                         </p>
-                        <div className="mt-4 grid min-h-28 gap-2 content-start">
+                        <div className="mt-3 rounded-xl border border-white/10">
+                          <div className="grid grid-cols-[minmax(0,1fr)_72px_120px] border-b border-white/10 bg-[rgb(15_23_42_/_0.2)] px-3 py-2 text-xs uppercase tracking-[0.2em] text-game-muted">
+                            <span>Room</span>
+                            <span>Players</span>
+                            <span>Status</span>
+                          </div>
                           {teamDeathmatchRoomEntries.length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-sm leading-6 text-game-muted">
+                            <p className="px-3 py-3 text-sm leading-6 text-game-muted">
                               {teamDeathmatchEmptyStateLabel}
-                            </div>
+                            </p>
                           ) : (
                             teamDeathmatchRoomEntries.map((roomEntry) => {
                               const selectedRoom =
@@ -596,10 +594,10 @@ export function ShellEntryStageScreen({
                               return (
                                 <button
                                   className={[
-                                    "rounded-xl border px-3 py-3 text-left transition-colors",
+                                    "grid w-full grid-cols-[minmax(0,1fr)_72px_120px] cursor-pointer px-3 py-3 text-left transition-colors",
                                     selectedRoom
                                       ? "border-rose-300/40 bg-[rgb(244_63_94_/_0.14)]"
-                                      : "border-white/10 bg-[rgb(15_23_42_/_0.18)]"
+                                      : "border-transparent hover:bg-[rgb(15_23_42_/_0.15)]"
                                   ].join(" ")}
                                   key={roomEntry.roomId}
                                   onClick={() => {
@@ -608,17 +606,15 @@ export function ShellEntryStageScreen({
                                   }}
                                   type="button"
                                 >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-semibold text-game-foreground">
-                                      {roomEntry.roomId}
-                                    </p>
-                                    <p className="text-xs uppercase tracking-[0.2em] text-game-muted">
-                                      {roomEntry.phase ?? "waiting"}
-                                    </p>
-                                  </div>
-                                  <p className="mt-2 text-sm leading-6 text-game-muted">
+                                  <span className="truncate text-sm font-semibold text-game-foreground">
+                                    {roomEntry.roomId}
+                                  </span>
+                                  <span className="text-xs tabular-nums text-game-muted">
+                                    {roomEntry.connectedPlayerCount}/{roomEntry.capacity}
+                                  </span>
+                                  <span className="text-xs uppercase tracking-[0.2em] text-game-muted">
                                     {formatTeamDeathmatchRoomStatus(roomEntry)}
-                                  </p>
+                                  </span>
                                 </button>
                               );
                             })
@@ -626,34 +622,8 @@ export function ShellEntryStageScreen({
                         </div>
                       </div>
                     ) : null}
-                    <Button
-                      className="w-full"
-                      disabled={
-                        launchMode === "team-deathmatch"
-                          ? !canLaunchTeamDeathmatch
-                          : !canLaunchFreeRoam
-                      }
-                      onClick={() => {
-                        handleLaunchRequest(launchMode);
-                      }}
-                      size="lg"
-                      type="button"
-                    >
-                      {metaverseLaunchPending ? (
-                        "Connecting..."
-                      ) : (
-                        <StableInlineText
-                          reserveTexts={resolveLaunchReserveTexts(launchMode)}
-                          text={resolveLaunchActionLabel(
-                            launchMode,
-                            capabilityStatus,
-                            nextMetaverseStep
-                          )}
-                        />
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                </section>
               );
             })}
           </div>

@@ -47,7 +47,7 @@ export function MapEditorSceneRuntimePanel({
         </Button>
         <Button onClick={onAddSceneObject} type="button" variant="outline">
           <SparklesIcon data-icon="inline-start" />
-          Add Launch Object
+          Add Portal
         </Button>
         <Button onClick={onAddWaterRegion} type="button" variant="outline">
           <WavesIcon data-icon="inline-start" />
@@ -80,7 +80,7 @@ export function MapEditorSceneRuntimePanel({
         ))}
       </SceneRuntimeSection>
 
-      <SceneRuntimeSection title="Launch Objects">
+      <SceneRuntimeSection title="Portals">
         {project.sceneObjectDrafts.map((sceneObjectDraft) => (
           <div
             className="rounded-xl border border-border/70 bg-background/70 px-3 py-2"

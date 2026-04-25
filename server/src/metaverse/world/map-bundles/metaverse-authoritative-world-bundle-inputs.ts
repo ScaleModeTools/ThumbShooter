@@ -4,6 +4,8 @@ import {
 } from "@webgpu-metaverse/shared/metaverse/traversal";
 import {
   resolveMetaverseGameplayProfile,
+  resolveMetaverseMapBundleCompiledWorldSurfaceColliders,
+  resolveMetaverseMapPlayerSpawnSupportPosition,
   resolveMetaverseWorldDynamicSurfaceCollidersForAsset,
   resolveMetaverseWorldPlacedSurfaceColliders,
   resolveMetaverseWorldPlacedWaterRegions,
@@ -157,8 +159,13 @@ function createDefaultSpawn(
     );
   }
 
+  const position = resolveMetaverseMapPlayerSpawnSupportPosition({
+    compiledWorld: loadedBundle.bundle.compiledWorld,
+    spawnPosition: defaultSpawnNode.position
+  });
+
   return Object.freeze({
-    position: defaultSpawnNode.position,
+    position,
     spawnId: defaultSpawnNode.spawnId,
     yawRadians: defaultSpawnNode.yawRadians
   });
@@ -176,14 +183,9 @@ export function createMetaverseAuthoritativeWorldBundleInputs(
     ])
   );
 
-  const staticSurfaceColliders = surfaceAssets
-    .filter(
-      (surfaceAsset) =>
-        (surfaceAsset.placement === "static" ||
-          surfaceAsset.placement === "instanced")
-    )
-    .flatMap((surfaceAsset) =>
-      resolveMetaverseWorldPlacedSurfaceColliders(surfaceAsset)
+  const staticSurfaceColliders =
+    resolveMetaverseMapBundleCompiledWorldSurfaceColliders(
+      loadedBundle.bundle.compiledWorld
     );
 
   return Object.freeze({
@@ -307,7 +309,7 @@ export function createMetaverseAuthoritativeWorldBundleInputs(
         ? surfaceColliders
         : emptyMetaverseAuthoritativeSurfaceColliders;
     },
-    staticSurfaceColliders: Object.freeze(staticSurfaceColliders),
+    staticSurfaceColliders,
     waterRegionSnapshots: resolveMetaverseWorldPlacedWaterRegions(
       loadedBundle.bundle.waterRegions
     )

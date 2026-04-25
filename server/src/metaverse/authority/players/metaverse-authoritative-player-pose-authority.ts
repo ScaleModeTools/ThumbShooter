@@ -238,6 +238,7 @@ export class MetaverseAuthoritativePlayerPoseAuthority<
       nowMs,
       hasExplicitPresenceLook(nextPose)
     );
+    playerRuntime.realtimeWorldAuthorityActive = true;
     this.#dependencies.playersById.set(command.playerId, playerRuntime);
     this.#dependencies.incrementSnapshotSequence();
   }

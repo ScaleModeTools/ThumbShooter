@@ -132,3 +132,104 @@ test("MetaverseWorldPreviewHttpAdapter registers preview bundles for later room 
     "server-preview-http-adapter-test"
   );
 });
+
+test("authoritative preview inputs expose compiled procedural structures as static colliders", () => {
+  const previewBundle = Object.freeze({
+    ...createPreviewBundle("server-preview-procedural-structure-test"),
+    compiledWorld: null,
+    semanticWorld: Object.freeze({
+      ...stagingGroundMapBundle.semanticWorld,
+      structures: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 80, y: 4, z: -40 }),
+          grid: Object.freeze({
+            cellX: 20,
+            cellZ: -10,
+            cellsX: 2,
+            cellsZ: 1,
+            layer: 1
+          }),
+          label: "Authoritative Wall",
+          materialId: "concrete",
+          rotationYRadians: 0,
+          size: Object.freeze({ x: 8, y: 4, z: 1 }),
+          structureId: "authoritative-wall",
+          structureKind: "wall",
+          traversalAffordance: "blocker"
+        })
+      ])
+    })
+  });
+
+  registerAuthoritativeMetaverseMapBundlePreview(previewBundle, "staging-ground");
+
+  const previewInputs = createMetaverseAuthoritativeWorldBundleInputs(
+    "server-preview-procedural-structure-test"
+  );
+  const proceduralCollider = previewInputs.staticSurfaceColliders.find(
+    (collider) =>
+      collider.ownerEnvironmentAssetId === null &&
+      collider.translation.x === 80 &&
+      collider.translation.z === -40
+  );
+
+  assert.notEqual(proceduralCollider, undefined);
+  assert.equal(proceduralCollider?.traversalAffordance, "blocker");
+  assert.equal(proceduralCollider?.halfExtents.y, 2);
+});
+
+test("authoritative preview inputs expose compiled terrain as heightfield support", () => {
+  const previewBundle = Object.freeze({
+    ...createPreviewBundle("server-preview-terrain-patch-test"),
+    compiledWorld: null,
+    semanticWorld: Object.freeze({
+      ...stagingGroundMapBundle.semanticWorld,
+      terrainPatches: Object.freeze([
+        Object.freeze({
+          grid: Object.freeze({
+            cellX: 24,
+            cellZ: -12,
+            cellsX: 1,
+            cellsZ: 1,
+            layer: 0
+          }),
+          heightSamples: Object.freeze([0, 0.75, 0.25, 1]),
+          label: "Authoritative Terrain",
+          materialLayers: Object.freeze([
+            Object.freeze({
+              layerId: "authoritative-terrain:terrain-rock",
+              materialId: "terrain-rock",
+              weightSamples: Object.freeze([1, 1, 1, 1])
+            })
+          ]),
+          origin: Object.freeze({ x: 96, y: 0, z: -48 }),
+          rotationYRadians: 0,
+          sampleCountX: 2,
+          sampleCountZ: 2,
+          sampleSpacingMeters: 4,
+          terrainPatchId: "authoritative-terrain",
+          waterLevelMeters: null
+        })
+      ])
+    })
+  });
+
+  registerAuthoritativeMetaverseMapBundlePreview(previewBundle, "staging-ground");
+
+  const previewInputs = createMetaverseAuthoritativeWorldBundleInputs(
+    "server-preview-terrain-patch-test"
+  );
+  const terrainCollider = previewInputs.staticSurfaceColliders.find(
+    (collider) =>
+      collider.ownerEnvironmentAssetId === null &&
+      collider.shape === "heightfield" &&
+      collider.translation.x === 96 &&
+      collider.translation.z === -48
+  );
+
+  assert.notEqual(terrainCollider, undefined);
+  assert.equal(terrainCollider?.traversalAffordance, "support");
+  assert.equal(terrainCollider?.sampleCountX, 2);
+  assert.equal(terrainCollider?.sampleCountZ, 2);
+  assert.equal(terrainCollider?.heightSamples?.length, 4);
+});

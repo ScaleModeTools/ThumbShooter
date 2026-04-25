@@ -299,7 +299,7 @@ export function createMetaverseScene(
       mountedEnvironment = null,
       cameraFieldOfViewDegrees = null
     ) {
-      return presentationState.syncPresentation(
+      const interactionSnapshot = presentationState.syncPresentation(
         cameraSnapshot,
         focusedPortal,
         nowMs,
@@ -311,6 +311,10 @@ export function createMetaverseScene(
         mountedEnvironment,
         cameraFieldOfViewDegrees
       );
+
+      scenicState.syncCameraRelativeEnvironment();
+
+      return interactionSnapshot;
     },
     readDynamicEnvironmentPose(environmentAssetId) {
       return environmentProofState.readDynamicEnvironmentPose(

@@ -157,6 +157,50 @@ function freezeSnapshot(
   });
 }
 
+function resolveRapierControllerSupportNormal(
+  controller: RapierCharacterControllerHandle
+): PhysicsVector3Snapshot | null {
+  const collisionCount = Math.max(
+    0,
+    Math.floor(toFiniteNumber(controller.numComputedCollisions?.() ?? 0, 0))
+  );
+  let selectedNormal: PhysicsVector3Snapshot | null = null;
+  let selectedY = 0;
+
+  for (let collisionIndex = 0; collisionIndex < collisionCount; collisionIndex += 1) {
+    const normal =
+      controller.computedCollision?.(collisionIndex)?.normal1 ?? null;
+
+    if (normal === null) {
+      continue;
+    }
+
+    const x = toFiniteNumber(normal.x, 0);
+    const y = toFiniteNumber(normal.y, 0);
+    const z = toFiniteNumber(normal.z, 0);
+    const magnitude = Math.hypot(x, y, z);
+
+    if (magnitude <= 0.000001) {
+      continue;
+    }
+
+    const normalizedY = y / magnitude;
+
+    if (normalizedY <= 0 || normalizedY <= selectedY) {
+      continue;
+    }
+
+    selectedNormal = freezeVector3(
+      x / magnitude,
+      normalizedY,
+      z / magnitude
+    );
+    selectedY = normalizedY;
+  }
+
+  return selectedNormal;
+}
+
 export class MetaverseAuthoritativeGroundedBodyRuntime {
   readonly #config: MetaverseAuthoritativeGroundedBodyConfig;
   readonly #physicsRuntime: MetaverseAuthoritativeRapierPhysicsRuntime;
@@ -315,7 +359,10 @@ export class MetaverseAuthoritativeGroundedBodyRuntime {
           computedMovement.y,
           computedMovement.z
         ),
-        standingOffsetMeters: this.#standingOffsetMeters
+        standingOffsetMeters: this.#standingOffsetMeters,
+        supportNormal: resolveRapierControllerSupportNormal(
+          this.#characterController
+        )
       },
       this.#config,
       deltaSeconds

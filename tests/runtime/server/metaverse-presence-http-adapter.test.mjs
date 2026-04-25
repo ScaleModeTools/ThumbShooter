@@ -12,10 +12,6 @@ import {
 
 import { MetaversePresenceHttpAdapter } from "../../../server/dist/metaverse/adapters/metaverse-presence-http-adapter.js";
 import { MetaverseRoomDirectory } from "../../../server/dist/metaverse/classes/metaverse-room-directory.js";
-import {
-  authoredWaterBaySkiffPlacement,
-  authoredWaterBaySkiffYawRadians
-} from "../metaverse-authored-world-test-fixtures.mjs";
 
 function createResponseCapture() {
   let body = "";
@@ -82,7 +78,7 @@ function resolvePresenceSnapshotUrl(roomId, playerId) {
   );
 }
 
-test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot polling", async () => {
+test("MetaversePresenceHttpAdapter keeps nested pose sync from overriding server-owned join pose", async () => {
   const playerId = createMetaversePlayerId("harbor-pilot-1");
   const username = createUsername("Harbor Pilot");
 
@@ -174,24 +170,18 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
 
   assert.equal(syncHandled, true);
   assert.equal(syncResponse.statusCode, 200);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.position.x, 0);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.position.z, 24);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.stateSequence, 0);
   assert.equal(
-    syncResponse.json.roster.players[0]?.pose.position.x,
-    authoredWaterBaySkiffPlacement.x
+    syncResponse.json.roster.players[0]?.pose.look.pitchRadians,
+    -0.15
   );
+  assert.equal(syncResponse.json.roster.players[0]?.pose.look.yawRadians, 0.25);
+  assert.equal(syncResponse.json.roster.players[0]?.pose.locomotionMode, "grounded");
   assert.equal(
-    syncResponse.json.roster.players[0]?.pose.position.z,
-    authoredWaterBaySkiffPlacement.z
-  );
-  assert.equal(syncResponse.json.roster.players[0]?.pose.stateSequence, 1);
-  assert.equal(syncResponse.json.roster.players[0]?.pose.look.pitchRadians, 0.3);
-  assert.equal(
-    syncResponse.json.roster.players[0]?.pose.look.yawRadians,
-    authoredWaterBaySkiffYawRadians
-  );
-  assert.equal(syncResponse.json.roster.players[0]?.pose.locomotionMode, "mounted");
-  assert.equal(
-    syncResponse.json.roster.players[0]?.pose.mountedOccupancy?.seatId,
-    "driver-seat"
+    syncResponse.json.roster.players[0]?.pose.mountedOccupancy,
+    null
   );
 
   const pollResponse = createResponseCapture();
@@ -206,22 +196,13 @@ test("MetaversePresenceHttpAdapter handles nested pose join, sync, and snapshot 
   assert.equal(pollResponse.statusCode, 200);
   assert.equal(pollResponse.json.type, "presence-roster");
   assert.equal(pollResponse.json.roster.players.length, 1);
-  assert.equal(pollResponse.json.roster.players[0]?.pose.look.pitchRadians, 0.3);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.look.pitchRadians, -0.15);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.look.yawRadians, 0.25);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.position.x, 0);
+  assert.equal(pollResponse.json.roster.players[0]?.pose.position.z, 24);
   assert.equal(
-    pollResponse.json.roster.players[0]?.pose.look.yawRadians,
-    authoredWaterBaySkiffYawRadians
-  );
-  assert.equal(
-    pollResponse.json.roster.players[0]?.pose.position.x,
-    authoredWaterBaySkiffPlacement.x
-  );
-  assert.equal(
-    pollResponse.json.roster.players[0]?.pose.position.z,
-    authoredWaterBaySkiffPlacement.z
-  );
-  assert.equal(
-    pollResponse.json.roster.players[0]?.pose.mountedOccupancy?.environmentAssetId,
-    "metaverse-hub-skiff-v1"
+    pollResponse.json.roster.players[0]?.pose.mountedOccupancy,
+    null
   );
 });
 

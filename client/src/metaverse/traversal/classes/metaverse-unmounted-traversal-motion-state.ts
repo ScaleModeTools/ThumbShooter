@@ -199,7 +199,7 @@ export function resolvePredictedLocalReconciliationSampleFromMatchingHistory(
       continue;
     }
 
-    if (sample.localWallClockMs < earliestSampleAfterTargetMs) {
+    if (sample.localWallClockMs <= earliestSampleAfterTargetMs) {
       earliestSampleAfterTarget = sample;
       earliestSampleAfterTargetMs = sample.localWallClockMs;
     }

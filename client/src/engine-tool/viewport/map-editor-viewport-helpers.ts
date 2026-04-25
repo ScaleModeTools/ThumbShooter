@@ -60,14 +60,14 @@ function disposeHelperObject(
 export function createMapEditorViewportHelperHandles(
   scene: Scene
 ): MapEditorViewportHelperHandles {
-  const gridHelper = new GridHelper(240, 48, "#1d4ed8", "#1f2937");
+  const gridHelper = new GridHelper(240, 60, "#1d4ed8", "#1f2937");
   scene.add(gridHelper);
 
   const polarGridHelper = new PolarGridHelper(
     120,
-    24,
+    30,
     12,
-    48,
+    60,
     "#0ea5e9",
     "#475569"
   );

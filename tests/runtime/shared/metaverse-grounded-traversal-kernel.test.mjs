@@ -113,6 +113,55 @@ test("shared grounded traversal kernel keeps jump snap suppression active until 
   );
 });
 
+test("shared grounded traversal kernel applies accepted jump impulse along support normal", () => {
+  const deltaSeconds = 0.033;
+  const groundedStepState = createMetaverseGroundedBodyStepStateSnapshot({
+    grounded: true,
+    jumpReady: true,
+    position: {
+      x: 0,
+      y: 0.6,
+      z: 0
+    },
+    supportNormal: {
+      x: 0,
+      y: 0.8,
+      z: 0.6
+    }
+  });
+  const preparedJumpStep = prepareMetaverseGroundedBodyStep(
+    groundedStepState,
+    {
+      boost: false,
+      jump: true,
+      moveAxis: 0,
+      strafeAxis: 0,
+      turnAxis: 0
+    },
+    groundedBodyStepConfig,
+    deltaSeconds
+  );
+  const expectedVerticalSpeed =
+    groundedBodyStepConfig.jumpImpulseUnitsPerSecond * 0.8 -
+    groundedBodyStepConfig.gravityUnitsPerSecond * deltaSeconds;
+
+  assert.equal(preparedJumpStep.jumpRequested, true);
+  assert.equal(preparedJumpStep.snapToGroundEnabled, false);
+  assertApprox(
+    preparedJumpStep.verticalSpeedUnitsPerSecond,
+    expectedVerticalSpeed
+  );
+  assertApprox(preparedJumpStep.desiredMovementDelta.x, 0);
+  assertApprox(
+    preparedJumpStep.desiredMovementDelta.y,
+    expectedVerticalSpeed * deltaSeconds
+  );
+  assertApprox(
+    preparedJumpStep.desiredMovementDelta.z,
+    groundedBodyStepConfig.jumpImpulseUnitsPerSecond * 0.6 * deltaSeconds
+  );
+});
+
 test("shared grounded traversal kernel syncs authoritative state without discarding airborne snap suppression", () => {
   const previousState = createMetaverseGroundedBodyStepStateSnapshot({
     grounded: false,

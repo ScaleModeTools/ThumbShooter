@@ -1,4 +1,7 @@
-import type { ExperienceId } from "@webgpu-metaverse/shared";
+import type {
+  ExperienceId,
+  MetaverseMapBundleEnvironmentPresentationSnapshot
+} from "@webgpu-metaverse/shared";
 import type { MetaverseWorldPlacedWaterRegionSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
 
 import type { MetaverseVector3Snapshot } from "./presentation";
@@ -31,15 +34,8 @@ export interface MetaverseRuntimeConfig {
     readonly near: number;
     readonly spawnPosition: MetaverseVector3Snapshot;
   };
-  readonly environment: {
-    readonly domeRadius: number;
-    readonly fogColor: readonly [number, number, number];
-    readonly fogDensity: number;
-    readonly horizonColor: readonly [number, number, number];
-    readonly sunColor: readonly [number, number, number];
-    readonly sunDirection: MetaverseVector3Snapshot;
-    readonly zenithColor: readonly [number, number, number];
-  };
+  readonly environment:
+    MetaverseMapBundleEnvironmentPresentationSnapshot["environment"];
   readonly groundedBody: {
     readonly accelerationCurveExponent: number;
     readonly accelerationUnitsPerSecondSquared: number;
@@ -73,27 +69,7 @@ export interface MetaverseRuntimeConfig {
   };
   readonly waterRegionSnapshots:
     readonly MetaverseWorldPlacedWaterRegionSnapshot[];
-  readonly ocean: {
-    readonly emissiveColor: readonly [number, number, number];
-    readonly farColor: readonly [number, number, number];
-    readonly height: number;
-    readonly nearColor: readonly [number, number, number];
-    readonly planeDepth: number;
-    readonly planeWidth: number;
-    readonly roughness: number;
-    readonly segmentCount: number;
-    readonly waveAmplitude: number;
-    readonly waveFrequencies: {
-      readonly primary: number;
-      readonly ripple: number;
-      readonly secondary: number;
-    };
-    readonly waveSpeeds: {
-      readonly primary: number;
-      readonly ripple: number;
-      readonly secondary: number;
-    };
-  };
+  readonly ocean: MetaverseMapBundleEnvironmentPresentationSnapshot["ocean"];
   readonly orientation: {
     readonly maxPitchRadians: number;
     readonly maxTurnSpeedRadiansPerSecond: number;

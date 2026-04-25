@@ -37,8 +37,11 @@ import {
 
 import type {
   MetaverseMapBundleCompiledCollisionBoxSnapshot,
+  MetaverseMapBundleCompiledCollisionHeightfieldSnapshot,
+  MetaverseMapBundleCompiledCollisionTriMeshSnapshot,
   MetaverseMapBundleCompiledWorldSnapshot,
   MetaverseMapBundleEnvironmentAssetSnapshot,
+  MetaverseMapBundleEnvironmentPresentationSnapshot,
   MetaverseMapBundleLaunchVariationSnapshot,
   MetaverseMapBundlePlayerSpawnSelectionSnapshot,
   MetaverseMapBundlePlacementSnapshot,
@@ -48,12 +51,21 @@ import type {
   MetaverseMapBundleSceneObjectSnapshot,
   MetaverseMapBundleSemanticConnectorSnapshot,
   MetaverseMapBundleSemanticEdgeSnapshot,
+  MetaverseMapBundleSemanticGameplayVolumeKind,
+  MetaverseMapBundleSemanticGameplayVolumeSnapshot,
+  MetaverseMapBundleSemanticLightKind,
+  MetaverseMapBundleSemanticLightSnapshot,
+  MetaverseMapBundleSemanticMaterialDefinitionSnapshot,
+  MetaverseMapBundleSemanticMaterialId,
   MetaverseMapBundleSemanticModuleSnapshot,
   MetaverseMapBundleSemanticPlanarLoopSnapshot,
   MetaverseMapBundleSemanticPlanarPointSnapshot,
   MetaverseMapBundleSemanticRegionSnapshot,
+  MetaverseMapBundleSemanticStructureKind,
+  MetaverseMapBundleSemanticStructureSnapshot,
   MetaverseMapBundleSemanticSurfaceSnapshot,
-  MetaverseMapBundleSemanticTerrainChunkSnapshot,
+  MetaverseMapBundleSemanticTerrainMaterialLayerSnapshot,
+  MetaverseMapBundleSemanticTerrainPatchSnapshot,
   MetaverseMapBundleSemanticWorldSnapshot,
   MetaverseMapBundleSnapshot,
   MetaverseMapPlayerSpawnTeamId,
@@ -67,6 +79,48 @@ import {
   compileMetaverseMapBundleSemanticWorld,
   createDefaultMetaverseMapBundleCompiledWorld
 } from "./compile-metaverse-semantic-world.js";
+
+const semanticMaterialIds = [
+  "alien-rock",
+  "concrete",
+  "glass",
+  "metal",
+  "terrain-ash",
+  "terrain-grass",
+  "terrain-rock",
+  "team-blue",
+  "team-red",
+  "warning"
+] as const satisfies readonly MetaverseMapBundleSemanticMaterialId[];
+
+const semanticStructureKinds = [
+  "bridge",
+  "catwalk",
+  "cover",
+  "floor",
+  "pad",
+  "path",
+  "ramp",
+  "tower",
+  "vehicle-bay",
+  "wall"
+] as const satisfies readonly MetaverseMapBundleSemanticStructureKind[];
+
+const semanticGameplayVolumeKinds = [
+  "combat-lane",
+  "cover-volume",
+  "spawn-room",
+  "team-zone",
+  "vehicle-route"
+] as const satisfies readonly MetaverseMapBundleSemanticGameplayVolumeKind[];
+
+const semanticLightKinds = [
+  "ambient",
+  "area",
+  "point",
+  "spot",
+  "sun"
+] as const satisfies readonly MetaverseMapBundleSemanticLightKind[];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -94,6 +148,40 @@ function readNumber(value: unknown, fieldName: string): number {
   }
 
   return value;
+}
+
+function readNumberWithDefault(
+  value: unknown,
+  fallback: number,
+  fieldName: string
+): number {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+
+  return readNumber(value, fieldName);
+}
+
+function readUnitNumberWithDefault(
+  value: unknown,
+  fallback: number,
+  fieldName: string
+): number {
+  const numberValue = readNumberWithDefault(value, fallback, fieldName);
+
+  return Math.min(1, Math.max(0, numberValue));
+}
+
+function readClampedNumberWithDefault(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+  fieldName: string
+): number {
+  const numberValue = readNumberWithDefault(value, fallback, fieldName);
+
+  return Math.min(max, Math.max(min, numberValue));
 }
 
 function readBoolean(value: unknown, fieldName: string): boolean {
@@ -703,6 +791,179 @@ function readRgbTuple(
   ]);
 }
 
+function readEnvironmentPresentation(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleEnvironmentPresentationSnapshot {
+  const presentation = readRecord(value, fieldName);
+  const environment = readRecord(
+    presentation.environment,
+    `${fieldName}.environment`
+  );
+  const ocean = readRecord(presentation.ocean, `${fieldName}.ocean`);
+  const waveFrequencies = readRecord(
+    ocean.waveFrequencies,
+    `${fieldName}.ocean.waveFrequencies`
+  );
+  const waveSpeeds = readRecord(ocean.waveSpeeds, `${fieldName}.ocean.waveSpeeds`);
+  const toneMappingExposure = readNumber(
+    environment.toneMappingExposure,
+    `${fieldName}.environment.toneMappingExposure`
+  );
+
+  return Object.freeze({
+    environment: Object.freeze({
+      cloudCoverage: readNumber(
+        environment.cloudCoverage,
+        `${fieldName}.environment.cloudCoverage`
+      ),
+      cloudDensity: readNumber(
+        environment.cloudDensity,
+        `${fieldName}.environment.cloudDensity`
+      ),
+      cloudElevation: readNumber(
+        environment.cloudElevation,
+        `${fieldName}.environment.cloudElevation`
+      ),
+      cloudScale: readNumberWithDefault(
+        environment.cloudScale,
+        0.0002,
+        `${fieldName}.environment.cloudScale`
+      ),
+      cloudSpeed: readNumberWithDefault(
+        environment.cloudSpeed,
+        0.0001,
+        `${fieldName}.environment.cloudSpeed`
+      ),
+      domeRadius: readNumber(
+        environment.domeRadius,
+        `${fieldName}.environment.domeRadius`
+      ),
+      fogColor: readRgbTuple(
+        environment.fogColor,
+        `${fieldName}.environment.fogColor`
+      ),
+      fogDensity: readNumber(
+        environment.fogDensity,
+        `${fieldName}.environment.fogDensity`
+      ),
+      fogEnabled: readBoolean(
+        environment.fogEnabled,
+        `${fieldName}.environment.fogEnabled`
+      ),
+      groundColor: readRgbTuple(
+        environment.groundColor ?? ocean.farColor ?? environment.fogColor,
+        `${fieldName}.environment.groundColor`
+      ),
+      groundFalloff: readNumberWithDefault(
+        environment.groundFalloff,
+        1.2,
+        `${fieldName}.environment.groundFalloff`
+      ),
+      horizonColor: readRgbTuple(
+        environment.horizonColor ?? environment.fogColor,
+        `${fieldName}.environment.horizonColor`
+      ),
+      horizonSoftness: readNumberWithDefault(
+        environment.horizonSoftness,
+        0.22,
+        `${fieldName}.environment.horizonSoftness`
+      ),
+      mieCoefficient: readNumber(
+        environment.mieCoefficient,
+        `${fieldName}.environment.mieCoefficient`
+      ),
+      mieDirectionalG: readNumber(
+        environment.mieDirectionalG,
+        `${fieldName}.environment.mieDirectionalG`
+      ),
+      rayleigh: readNumber(
+        environment.rayleigh,
+        `${fieldName}.environment.rayleigh`
+      ),
+      skyExposure: readClampedNumberWithDefault(
+        environment.skyExposure,
+        toneMappingExposure,
+        0.05,
+        4,
+        `${fieldName}.environment.skyExposure`
+      ),
+      skyExposureCurve: readClampedNumberWithDefault(
+        environment.skyExposureCurve,
+        1,
+        0,
+        4,
+        `${fieldName}.environment.skyExposureCurve`
+      ),
+      sunAzimuthDegrees: readNumber(
+        environment.sunAzimuthDegrees,
+        `${fieldName}.environment.sunAzimuthDegrees`
+      ),
+      sunColor: readRgbTuple(
+        environment.sunColor,
+        `${fieldName}.environment.sunColor`
+      ),
+      sunElevationDegrees: readNumber(
+        environment.sunElevationDegrees,
+        `${fieldName}.environment.sunElevationDegrees`
+      ),
+      toneMappingExposure,
+      turbidity: readNumber(
+        environment.turbidity,
+        `${fieldName}.environment.turbidity`
+      )
+    }),
+    ocean: Object.freeze({
+      emissiveColor: readRgbTuple(
+        ocean.emissiveColor,
+        `${fieldName}.ocean.emissiveColor`
+      ),
+      farColor: readRgbTuple(ocean.farColor, `${fieldName}.ocean.farColor`),
+      height: readNumber(ocean.height, `${fieldName}.ocean.height`),
+      nearColor: readRgbTuple(ocean.nearColor, `${fieldName}.ocean.nearColor`),
+      planeDepth: readNumber(ocean.planeDepth, `${fieldName}.ocean.planeDepth`),
+      planeWidth: readNumber(ocean.planeWidth, `${fieldName}.ocean.planeWidth`),
+      roughness: readNumber(ocean.roughness, `${fieldName}.ocean.roughness`),
+      segmentCount: readNumber(
+        ocean.segmentCount,
+        `${fieldName}.ocean.segmentCount`
+      ),
+      waveAmplitude: readNumber(
+        ocean.waveAmplitude,
+        `${fieldName}.ocean.waveAmplitude`
+      ),
+      waveFrequencies: Object.freeze({
+        primary: readNumber(
+          waveFrequencies.primary,
+          `${fieldName}.ocean.waveFrequencies.primary`
+        ),
+        ripple: readNumber(
+          waveFrequencies.ripple,
+          `${fieldName}.ocean.waveFrequencies.ripple`
+        ),
+        secondary: readNumber(
+          waveFrequencies.secondary,
+          `${fieldName}.ocean.waveFrequencies.secondary`
+        )
+      }),
+      waveSpeeds: Object.freeze({
+        primary: readNumber(
+          waveSpeeds.primary,
+          `${fieldName}.ocean.waveSpeeds.primary`
+        ),
+        ripple: readNumber(
+          waveSpeeds.ripple,
+          `${fieldName}.ocean.waveSpeeds.ripple`
+        ),
+        secondary: readNumber(
+          waveSpeeds.secondary,
+          `${fieldName}.ocean.waveSpeeds.secondary`
+        )
+      })
+    })
+  });
+}
+
 function readSceneObjectCapability(
   value: unknown,
   fieldName: string
@@ -818,6 +1079,17 @@ function readSpawnTeamId(
   return teamId as MetaverseMapPlayerSpawnTeamId;
 }
 
+function readNullableSpawnTeamId(
+  value: unknown,
+  fieldName: string
+): MetaverseMapPlayerSpawnTeamId | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return readSpawnTeamId(value, fieldName);
+}
+
 function readPlayerSpawnSelection(
   value: unknown,
   fieldName: string
@@ -901,33 +1173,151 @@ function readPlanarLoop(
   });
 }
 
-function readTerrainChunk(
+function readSemanticGridRect(
   value: unknown,
   fieldName: string
-): MetaverseMapBundleSemanticTerrainChunkSnapshot {
-  const terrainChunk = readRecord(value, fieldName);
+): MetaverseMapBundleSemanticStructureSnapshot["grid"] {
+  const grid = readRecord(value, fieldName);
 
   return Object.freeze({
-    chunkId: readString(terrainChunk.chunkId, `${fieldName}.chunkId`),
-    heights: Object.freeze(
-      readArray(terrainChunk.heights, `${fieldName}.heights`).map(
+    cellX: readNumber(grid.cellX, `${fieldName}.cellX`),
+    cellZ: readNumber(grid.cellZ, `${fieldName}.cellZ`),
+    cellsX: readNumber(grid.cellsX, `${fieldName}.cellsX`),
+    cellsZ: readNumber(grid.cellsZ, `${fieldName}.cellsZ`),
+    layer: readNumber(grid.layer, `${fieldName}.layer`)
+  });
+}
+
+function createLegacyTerrainPatchGrid(
+  sampleCountX: number,
+  sampleCountZ: number
+): MetaverseMapBundleSemanticTerrainPatchSnapshot["grid"] {
+  return Object.freeze({
+    cellX: Math.round(-(sampleCountX - 1) * 0.5),
+    cellZ: Math.round(-(sampleCountZ - 1) * 0.5),
+    cellsX: Math.max(1, sampleCountX),
+    cellsZ: Math.max(1, sampleCountZ),
+    layer: 0
+  });
+}
+
+function readTerrainMaterialLayer(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticTerrainMaterialLayerSnapshot {
+  const layer = readRecord(value, fieldName);
+
+  return Object.freeze({
+    layerId: readString(layer.layerId, `${fieldName}.layerId`),
+    materialId: readSemanticMaterialId(layer.materialId, `${fieldName}.materialId`),
+    weightSamples: Object.freeze(
+      readArray(layer.weightSamples, `${fieldName}.weightSamples`).map(
+        (weight, weightIndex) =>
+          readNumber(weight, `${fieldName}.weightSamples[${weightIndex}]`)
+      )
+    )
+  });
+}
+
+function readTerrainPatch(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticTerrainPatchSnapshot {
+  const terrainPatch = readRecord(value, fieldName);
+
+  return Object.freeze({
+    grid: readSemanticGridRect(terrainPatch.grid, `${fieldName}.grid`),
+    heightSamples: Object.freeze(
+      readArray(terrainPatch.heightSamples, `${fieldName}.heightSamples`).map(
         (height, heightIndex) =>
-          readNumber(height, `${fieldName}.heights[${heightIndex}]`)
+          readNumber(height, `${fieldName}.heightSamples[${heightIndex}]`)
       )
     ),
-    origin: readVector3(terrainChunk.origin, `${fieldName}.origin`),
+    label: readString(terrainPatch.label, `${fieldName}.label`),
+    materialLayers: Object.freeze(
+      readArray(terrainPatch.materialLayers ?? [], `${fieldName}.materialLayers`).map(
+        (layer, layerIndex) =>
+          readTerrainMaterialLayer(
+            layer,
+            `${fieldName}.materialLayers[${layerIndex}]`
+          )
+      )
+    ),
+    origin: readVector3(terrainPatch.origin, `${fieldName}.origin`),
+    rotationYRadians: readNumber(
+      terrainPatch.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
     sampleCountX: readNumber(
-      terrainChunk.sampleCountX,
+      terrainPatch.sampleCountX,
       `${fieldName}.sampleCountX`
     ),
     sampleCountZ: readNumber(
-      terrainChunk.sampleCountZ,
+      terrainPatch.sampleCountZ,
       `${fieldName}.sampleCountZ`
     ),
-    sampleStrideMeters: readNumber(
+    sampleSpacingMeters: readNumber(
+      terrainPatch.sampleSpacingMeters,
+      `${fieldName}.sampleSpacingMeters`
+    ),
+    terrainPatchId: readString(
+      terrainPatch.terrainPatchId,
+      `${fieldName}.terrainPatchId`
+    ),
+    waterLevelMeters:
+      terrainPatch.waterLevelMeters === null ||
+      terrainPatch.waterLevelMeters === undefined
+        ? null
+        : readNumber(
+            terrainPatch.waterLevelMeters,
+            `${fieldName}.waterLevelMeters`
+          )
+  });
+}
+
+function readLegacyTerrainChunkAsPatch(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticTerrainPatchSnapshot {
+  const terrainChunk = readRecord(value, fieldName);
+  const sampleCountX = readNumber(
+    terrainChunk.sampleCountX,
+    `${fieldName}.sampleCountX`
+  );
+  const sampleCountZ = readNumber(
+    terrainChunk.sampleCountZ,
+    `${fieldName}.sampleCountZ`
+  );
+  const chunkId = readString(terrainChunk.chunkId, `${fieldName}.chunkId`);
+  const heights = Object.freeze(
+    readArray(terrainChunk.heights, `${fieldName}.heights`).map(
+      (height, heightIndex) =>
+        readNumber(height, `${fieldName}.heights[${heightIndex}]`)
+    )
+  );
+
+  return Object.freeze({
+    grid: createLegacyTerrainPatchGrid(sampleCountX, sampleCountZ),
+    heightSamples: heights,
+    label: chunkId,
+    materialLayers: Object.freeze([
+      Object.freeze({
+        layerId: `${chunkId}:terrain-grass`,
+        materialId: "terrain-grass",
+        weightSamples: Object.freeze(
+          Array.from({ length: heights.length }, () => 1)
+        )
+      })
+    ]),
+    origin: readVector3(terrainChunk.origin, `${fieldName}.origin`),
+    rotationYRadians: 0,
+    sampleCountX,
+    sampleCountZ,
+    sampleSpacingMeters: readNumber(
       terrainChunk.sampleStrideMeters,
       `${fieldName}.sampleStrideMeters`
     ),
+    terrainPatchId: chunkId,
     waterLevelMeters:
       terrainChunk.waterLevelMeters === null ||
       terrainChunk.waterLevelMeters === undefined
@@ -946,7 +1336,11 @@ function readSemanticSurface(
   const surface = readRecord(value, fieldName);
   const kind = readString(surface.kind, `${fieldName}.kind`);
 
-  if (kind !== "flat-slab" && kind !== "terrain-patch") {
+  if (
+    kind !== "flat-slab" &&
+    kind !== "sloped-plane" &&
+    kind !== "terrain-patch"
+  ) {
     throw new Error(`Unsupported semantic surface kind for ${fieldName}: ${kind}`);
   }
 
@@ -960,10 +1354,14 @@ function readSemanticSurface(
       `${fieldName}.rotationYRadians`
     ),
     size: readVector3(surface.size, `${fieldName}.size`),
+    slopeRiseMeters:
+      surface.slopeRiseMeters === undefined
+        ? 0
+        : readNumber(surface.slopeRiseMeters, `${fieldName}.slopeRiseMeters`),
     surfaceId: readString(surface.surfaceId, `${fieldName}.surfaceId`),
-    terrainChunkId: readNullableString(
-      surface.terrainChunkId ?? null,
-      `${fieldName}.terrainChunkId`
+    terrainPatchId: readNullableString(
+      surface.terrainPatchId ?? surface.terrainChunkId ?? null,
+      `${fieldName}.terrainPatchId`
     )
   });
 }
@@ -975,7 +1373,12 @@ function readSemanticRegion(
   const region = readRecord(value, fieldName);
   const regionKind = readString(region.regionKind, `${fieldName}.regionKind`);
 
-  if (regionKind !== "arena" && regionKind !== "floor" && regionKind !== "path") {
+  if (
+    regionKind !== "arena" &&
+    regionKind !== "floor" &&
+    regionKind !== "path" &&
+    regionKind !== "roof"
+  ) {
     throw new Error(`Unsupported semantic region kind for ${fieldName}: ${regionKind}`);
   }
 
@@ -1045,8 +1448,7 @@ function readSemanticConnector(
   if (
     connectorKind !== "door" &&
     connectorKind !== "gate" &&
-    connectorKind !== "ramp" &&
-    connectorKind !== "stairs"
+    connectorKind !== "ramp"
   ) {
     throw new Error(
       `Unsupported semantic connector kind for ${fieldName}: ${connectorKind}`
@@ -1159,6 +1561,303 @@ function readSemanticModule(
   });
 }
 
+function readSemanticMaterialId(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticMaterialId {
+  const materialId = readString(value, fieldName);
+
+  if (!semanticMaterialIds.includes(materialId as MetaverseMapBundleSemanticMaterialId)) {
+    throw new Error(`Unsupported semantic material id for ${fieldName}: ${materialId}`);
+  }
+
+  return materialId as MetaverseMapBundleSemanticMaterialId;
+}
+
+function readHexColor(value: unknown, fieldName: string): string {
+  const color = readString(value, fieldName);
+
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
+    throw new Error(`Expected #rrggbb color for ${fieldName}: ${color}`);
+  }
+
+  return color.toLowerCase();
+}
+
+function readNullableHexColor(value: unknown, fieldName: string): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  return readHexColor(value, fieldName);
+}
+
+function readNullableImageDataUrl(value: unknown, fieldName: string): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  const dataUrl = readString(value, fieldName);
+
+  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) {
+    throw new Error(`Expected image data URL for ${fieldName}`);
+  }
+
+  return dataUrl;
+}
+
+function readSemanticMaterialDefinition(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticMaterialDefinitionSnapshot {
+  const materialDefinition = readRecord(value, fieldName);
+
+  return Object.freeze({
+    accentColorHex: readNullableHexColor(
+      materialDefinition.accentColorHex ?? null,
+      `${fieldName}.accentColorHex`
+    ),
+    baseColorHex: readHexColor(
+      materialDefinition.baseColorHex,
+      `${fieldName}.baseColorHex`
+    ),
+    baseMaterialId: readSemanticMaterialId(
+      materialDefinition.baseMaterialId,
+      `${fieldName}.baseMaterialId`
+    ),
+    label: readString(
+      materialDefinition.label ?? materialDefinition.materialId,
+      `${fieldName}.label`
+    ),
+    materialId: readString(materialDefinition.materialId, `${fieldName}.materialId`),
+    metalness: readUnitNumberWithDefault(
+      materialDefinition.metalness,
+      0.04,
+      `${fieldName}.metalness`
+    ),
+    opacity: readUnitNumberWithDefault(
+      materialDefinition.opacity,
+      1,
+      `${fieldName}.opacity`
+    ),
+    roughness: readUnitNumberWithDefault(
+      materialDefinition.roughness,
+      0.82,
+      `${fieldName}.roughness`
+    ),
+    textureBrightness: readClampedNumberWithDefault(
+      materialDefinition.textureBrightness,
+      1,
+      0,
+      2,
+      `${fieldName}.textureBrightness`
+    ),
+    textureContrast: readClampedNumberWithDefault(
+      materialDefinition.textureContrast,
+      1,
+      0,
+      2,
+      `${fieldName}.textureContrast`
+    ),
+    textureImageDataUrl: readNullableImageDataUrl(
+      materialDefinition.textureImageDataUrl ?? null,
+      `${fieldName}.textureImageDataUrl`
+    ),
+    texturePatternStrength: readUnitNumberWithDefault(
+      materialDefinition.texturePatternStrength,
+      1,
+      `${fieldName}.texturePatternStrength`
+    ),
+    textureRepeat: readClampedNumberWithDefault(
+      materialDefinition.textureRepeat,
+      1,
+      0.25,
+      32,
+      `${fieldName}.textureRepeat`
+    )
+  });
+}
+
+function readSemanticMaterialDefinitions(
+  value: unknown,
+  fieldName: string
+): readonly MetaverseMapBundleSemanticMaterialDefinitionSnapshot[] {
+  const materialDefinitions = readArray(value, fieldName).map(
+    (materialDefinition, materialDefinitionIndex) =>
+      readSemanticMaterialDefinition(
+        materialDefinition,
+        `${fieldName}[${materialDefinitionIndex}]`
+      )
+  );
+  const materialIds = new Set<string>();
+
+  for (const materialDefinition of materialDefinitions) {
+    if (semanticMaterialIds.includes(materialDefinition.materialId as MetaverseMapBundleSemanticMaterialId)) {
+      throw new Error(
+        `Custom semantic material id must not shadow a built-in material: ${materialDefinition.materialId}`
+      );
+    }
+
+    if (materialIds.has(materialDefinition.materialId)) {
+      throw new Error(
+        `Duplicate semantic material definition id: ${materialDefinition.materialId}`
+      );
+    }
+
+    materialIds.add(materialDefinition.materialId);
+  }
+
+  return Object.freeze(materialDefinitions);
+}
+
+function readSemanticStructureKind(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticStructureKind {
+  const structureKind = readString(value, fieldName);
+
+  if (!semanticStructureKinds.includes(structureKind as MetaverseMapBundleSemanticStructureKind)) {
+    throw new Error(
+      `Unsupported semantic structure kind for ${fieldName}: ${structureKind}`
+    );
+  }
+
+  return structureKind as MetaverseMapBundleSemanticStructureKind;
+}
+
+function readSemanticStructure(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticStructureSnapshot {
+  const structure = readRecord(value, fieldName);
+  const traversalAffordance = readString(
+    structure.traversalAffordance,
+    `${fieldName}.traversalAffordance`
+  );
+
+  if (traversalAffordance !== "blocker" && traversalAffordance !== "support") {
+    throw new Error(
+      `Unsupported structure traversal affordance for ${fieldName}: ${traversalAffordance}`
+    );
+  }
+
+  return Object.freeze({
+    center: readVector3(structure.center, `${fieldName}.center`),
+    grid: readSemanticGridRect(structure.grid, `${fieldName}.grid`),
+    label: readString(structure.label, `${fieldName}.label`),
+    materialId: readSemanticMaterialId(
+      structure.materialId,
+      `${fieldName}.materialId`
+    ),
+    materialReferenceId: readNullableString(
+      structure.materialReferenceId ?? null,
+      `${fieldName}.materialReferenceId`
+    ),
+    rotationYRadians: readNumber(
+      structure.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
+    size: readVector3(structure.size, `${fieldName}.size`),
+    structureId: readString(structure.structureId, `${fieldName}.structureId`),
+    structureKind: readSemanticStructureKind(
+      structure.structureKind,
+      `${fieldName}.structureKind`
+    ),
+    traversalAffordance
+  });
+}
+
+function readSemanticGameplayVolumeKind(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticGameplayVolumeKind {
+  const volumeKind = readString(value, fieldName);
+
+  if (!semanticGameplayVolumeKinds.includes(volumeKind as MetaverseMapBundleSemanticGameplayVolumeKind)) {
+    throw new Error(
+      `Unsupported semantic gameplay volume kind for ${fieldName}: ${volumeKind}`
+    );
+  }
+
+  return volumeKind as MetaverseMapBundleSemanticGameplayVolumeKind;
+}
+
+function readSemanticGameplayVolume(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticGameplayVolumeSnapshot {
+  const volume = readRecord(value, fieldName);
+
+  return Object.freeze({
+    center: readVector3(volume.center, `${fieldName}.center`),
+    label: readString(volume.label, `${fieldName}.label`),
+    priority: readNumber(volume.priority ?? 0, `${fieldName}.priority`),
+    rotationYRadians: readNumber(
+      volume.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
+    routePoints: Object.freeze(
+      readArray(volume.routePoints ?? [], `${fieldName}.routePoints`).map(
+        (point, pointIndex) =>
+          readVector3(point, `${fieldName}.routePoints[${pointIndex}]`)
+      )
+    ),
+    size: readVector3(volume.size, `${fieldName}.size`),
+    tags: Object.freeze(
+      readArray(volume.tags ?? [], `${fieldName}.tags`).map((tag, tagIndex) =>
+        readString(tag, `${fieldName}.tags[${tagIndex}]`)
+      )
+    ),
+    teamId: readNullableSpawnTeamId(volume.teamId ?? null, `${fieldName}.teamId`),
+    volumeId: readString(volume.volumeId, `${fieldName}.volumeId`),
+    volumeKind: readSemanticGameplayVolumeKind(
+      volume.volumeKind,
+      `${fieldName}.volumeKind`
+    )
+  });
+}
+
+function readSemanticLightKind(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticLightKind {
+  const lightKind = readString(value, fieldName);
+
+  if (!semanticLightKinds.includes(lightKind as MetaverseMapBundleSemanticLightKind)) {
+    throw new Error(`Unsupported semantic light kind for ${fieldName}: ${lightKind}`);
+  }
+
+  return lightKind as MetaverseMapBundleSemanticLightKind;
+}
+
+function readSemanticLight(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleSemanticLightSnapshot {
+  const light = readRecord(value, fieldName);
+
+  return Object.freeze({
+    color: readRgbTuple(light.color, `${fieldName}.color`),
+    intensity: readNumber(light.intensity, `${fieldName}.intensity`),
+    label: readString(light.label, `${fieldName}.label`),
+    lightId: readString(light.lightId, `${fieldName}.lightId`),
+    lightKind: readSemanticLightKind(light.lightKind, `${fieldName}.lightKind`),
+    position: readVector3(light.position, `${fieldName}.position`),
+    rangeMeters:
+      light.rangeMeters === undefined || light.rangeMeters === null
+        ? null
+        : readNumber(light.rangeMeters, `${fieldName}.rangeMeters`),
+    rotationYRadians: readNumber(
+      light.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
+    target:
+      light.target === undefined || light.target === null
+        ? null
+        : readVector3(light.target, `${fieldName}.target`)
+  });
+}
+
 function readSemanticWorld(
   value: unknown,
   fieldName: string
@@ -1199,6 +1898,27 @@ function readSemanticWorld(
           readSemanticEdge(edge, `${fieldName}.edges[${edgeIndex}]`)
       )
     ),
+    gameplayVolumes: Object.freeze(
+      readArray(
+        semanticWorld.gameplayVolumes ?? [],
+        `${fieldName}.gameplayVolumes`
+      ).map((volume, volumeIndex) =>
+        readSemanticGameplayVolume(
+          volume,
+          `${fieldName}.gameplayVolumes[${volumeIndex}]`
+        )
+      )
+    ),
+    lights: Object.freeze(
+      readArray(semanticWorld.lights ?? [], `${fieldName}.lights`).map(
+        (light, lightIndex) =>
+          readSemanticLight(light, `${fieldName}.lights[${lightIndex}]`)
+      )
+    ),
+    materialDefinitions: readSemanticMaterialDefinitions(
+      semanticWorld.materialDefinitions ?? [],
+      `${fieldName}.materialDefinitions`
+    ),
     modules: Object.freeze(
       readArray(semanticWorld.modules ?? [], `${fieldName}.modules`).map(
         (module, moduleIndex) =>
@@ -1217,16 +1937,36 @@ function readSemanticWorld(
           readSemanticSurface(surface, `${fieldName}.surfaces[${surfaceIndex}]`)
       )
     ),
-    terrainChunks: Object.freeze(
-      readArray(
-        semanticWorld.terrainChunks ?? [],
-        `${fieldName}.terrainChunks`
-      ).map((terrainChunk, terrainChunkIndex) =>
-        readTerrainChunk(
-          terrainChunk,
-          `${fieldName}.terrainChunks[${terrainChunkIndex}]`
-        )
+    structures: Object.freeze(
+      readArray(semanticWorld.structures ?? [], `${fieldName}.structures`).map(
+        (structure, structureIndex) =>
+          readSemanticStructure(
+            structure,
+            `${fieldName}.structures[${structureIndex}]`
+          )
       )
+    ),
+    terrainPatches: Object.freeze(
+      [
+        ...readArray(
+          semanticWorld.terrainPatches ?? [],
+          `${fieldName}.terrainPatches`
+        ).map((terrainPatch, terrainPatchIndex) =>
+          readTerrainPatch(
+            terrainPatch,
+            `${fieldName}.terrainPatches[${terrainPatchIndex}]`
+          )
+        ),
+        ...readArray(
+          semanticWorld.terrainChunks ?? [],
+          `${fieldName}.terrainChunks`
+        ).map((terrainChunk, terrainChunkIndex) =>
+          readLegacyTerrainChunkAsPatch(
+            terrainChunk,
+            `${fieldName}.terrainChunks[${terrainChunkIndex}]`
+          )
+        )
+      ]
     )
   });
 }
@@ -1247,7 +1987,7 @@ function readCompiledCollisionBox(
     ownerKind !== "edge" &&
     ownerKind !== "module" &&
     ownerKind !== "region" &&
-    ownerKind !== "terrain-chunk"
+    ownerKind !== "structure"
   ) {
     throw new Error(`Unsupported compiled owner kind for ${fieldName}: ${ownerKind}`);
   }
@@ -1267,6 +2007,103 @@ function readCompiledCollisionBox(
       `${fieldName}.rotationYRadians`
     ),
     size: readVector3(collisionBox.size, `${fieldName}.size`),
+    traversalAffordance
+  });
+}
+
+function readNumberArray(
+  value: unknown,
+  fieldName: string
+): readonly number[] {
+  return Object.freeze(
+    readArray(value, fieldName).map((entry, entryIndex) =>
+      readNumber(entry, `${fieldName}[${entryIndex}]`)
+    )
+  );
+}
+
+function readCompiledCollisionTriMesh(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleCompiledCollisionTriMeshSnapshot {
+  const triMesh = readRecord(value, fieldName);
+  const ownerKind = readString(triMesh.ownerKind, `${fieldName}.ownerKind`);
+  const traversalAffordance = readString(
+    triMesh.traversalAffordance,
+    `${fieldName}.traversalAffordance`
+  );
+
+  if (ownerKind !== "terrain-patch" && ownerKind !== "region") {
+    throw new Error(`Unsupported compiled tri mesh owner kind for ${fieldName}: ${ownerKind}`);
+  }
+
+  if (traversalAffordance !== "blocker" && traversalAffordance !== "support") {
+    throw new Error(
+      `Unsupported compiled tri mesh traversal affordance for ${fieldName}: ${traversalAffordance}`
+    );
+  }
+
+  return Object.freeze({
+    indices: readNumberArray(triMesh.indices, `${fieldName}.indices`),
+    ownerId: readString(triMesh.ownerId, `${fieldName}.ownerId`),
+    ownerKind,
+    rotationYRadians: readNumber(
+      triMesh.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
+    translation: readVector3(triMesh.translation, `${fieldName}.translation`),
+    traversalAffordance,
+    vertices: readNumberArray(triMesh.vertices, `${fieldName}.vertices`)
+  });
+}
+
+function readCompiledCollisionHeightfield(
+  value: unknown,
+  fieldName: string
+): MetaverseMapBundleCompiledCollisionHeightfieldSnapshot {
+  const heightfield = readRecord(value, fieldName);
+  const ownerKind = readString(heightfield.ownerKind, `${fieldName}.ownerKind`);
+  const traversalAffordance = readString(
+    heightfield.traversalAffordance,
+    `${fieldName}.traversalAffordance`
+  );
+
+  if (ownerKind !== "terrain-patch") {
+    throw new Error(
+      `Unsupported compiled heightfield owner kind for ${fieldName}: ${ownerKind}`
+    );
+  }
+
+  if (traversalAffordance !== "support") {
+    throw new Error(
+      `Unsupported compiled heightfield traversal affordance for ${fieldName}: ${traversalAffordance}`
+    );
+  }
+
+  return Object.freeze({
+    heightSamples: readNumberArray(
+      heightfield.heightSamples,
+      `${fieldName}.heightSamples`
+    ),
+    ownerId: readString(heightfield.ownerId, `${fieldName}.ownerId`),
+    ownerKind,
+    rotationYRadians: readNumber(
+      heightfield.rotationYRadians,
+      `${fieldName}.rotationYRadians`
+    ),
+    sampleCountX: readNumber(
+      heightfield.sampleCountX,
+      `${fieldName}.sampleCountX`
+    ),
+    sampleCountZ: readNumber(
+      heightfield.sampleCountZ,
+      `${fieldName}.sampleCountZ`
+    ),
+    sampleSpacingMeters: readNumber(
+      heightfield.sampleSpacingMeters,
+      `${fieldName}.sampleSpacingMeters`
+    ),
+    translation: readVector3(heightfield.translation, `${fieldName}.translation`),
     traversalAffordance
   });
 }
@@ -1327,7 +2164,29 @@ function readCompiledWorld(
                     readCompiledCollisionBox(
                       box,
                       `${fieldName}.chunks[${chunkIndex}].collision.boxes[${boxIndex}]`
-                    )
+                  )
+                )
+              ),
+              heightfields: Object.freeze(
+                readArray(
+                  collision.heightfields ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].collision.heightfields`
+                ).map((heightfield, heightfieldIndex) =>
+                  readCompiledCollisionHeightfield(
+                    heightfield,
+                    `${fieldName}.chunks[${chunkIndex}].collision.heightfields[${heightfieldIndex}]`
+                  )
+                )
+              ),
+              triMeshes: Object.freeze(
+                readArray(
+                  collision.triMeshes ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].collision.triMeshes`
+                ).map((triMesh, triMeshIndex) =>
+                  readCompiledCollisionTriMesh(
+                    triMesh,
+                    `${fieldName}.chunks[${chunkIndex}].collision.triMeshes[${triMeshIndex}]`
+                  )
                 )
               )
             }),
@@ -1340,6 +2199,17 @@ function readCompiledWorld(
                   readString(
                     connectorId,
                     `${fieldName}.chunks[${chunkIndex}].navigation.connectorIds[${connectorIndex}]`
+                  )
+                )
+              ),
+              gameplayVolumeIds: Object.freeze(
+                readArray(
+                  navigation.gameplayVolumeIds ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].navigation.gameplayVolumeIds`
+                ).map((volumeId, volumeIndex) =>
+                  readString(
+                    volumeId,
+                    `${fieldName}.chunks[${chunkIndex}].navigation.gameplayVolumeIds[${volumeIndex}]`
                   )
                 )
               ),
@@ -1389,6 +2259,17 @@ function readCompiledWorld(
                   )
                 )
               ),
+              lightIds: Object.freeze(
+                readArray(
+                  render.lightIds ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].render.lightIds`
+                ).map((lightId, lightIndex) =>
+                  readString(
+                    lightId,
+                    `${fieldName}.chunks[${chunkIndex}].render.lightIds[${lightIndex}]`
+                  )
+                )
+              ),
               regionIds: Object.freeze(
                 readArray(
                   render.regionIds ?? [],
@@ -1400,14 +2281,25 @@ function readCompiledWorld(
                   )
                 )
               ),
-              terrainChunkIds: Object.freeze(
+              structureIds: Object.freeze(
                 readArray(
-                  render.terrainChunkIds ?? [],
-                  `${fieldName}.chunks[${chunkIndex}].render.terrainChunkIds`
-                ).map((terrainChunkId, terrainChunkIndex) =>
+                  render.structureIds ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].render.structureIds`
+                ).map((structureId, structureIndex) =>
                   readString(
-                    terrainChunkId,
-                    `${fieldName}.chunks[${chunkIndex}].render.terrainChunkIds[${terrainChunkIndex}]`
+                    structureId,
+                    `${fieldName}.chunks[${chunkIndex}].render.structureIds[${structureIndex}]`
+                  )
+                )
+              ),
+              terrainPatchIds: Object.freeze(
+                readArray(
+                  render.terrainPatchIds ?? render.terrainChunkIds ?? [],
+                  `${fieldName}.chunks[${chunkIndex}].render.terrainPatchIds`
+                ).map((terrainPatchId, terrainPatchIndex) =>
+                  readString(
+                    terrainPatchId,
+                    `${fieldName}.chunks[${chunkIndex}].render.terrainPatchIds[${terrainPatchIndex}]`
                   )
                 )
               ),
@@ -1450,10 +2342,14 @@ function createEmptySemanticWorld(): MetaverseMapBundleSemanticWorldSnapshot {
     }),
     connectors: Object.freeze([]),
     edges: Object.freeze([]),
+    gameplayVolumes: Object.freeze([]),
+    lights: Object.freeze([]),
+    materialDefinitions: Object.freeze([]),
     modules: Object.freeze([]),
     regions: Object.freeze([]),
     surfaces: Object.freeze([]),
-    terrainChunks: Object.freeze([])
+    structures: Object.freeze([]),
+    terrainPatches: Object.freeze([])
   });
 }
 
@@ -1474,15 +2370,20 @@ export function parseMetaverseMapBundleSnapshot(
     bundle.semanticWorld === undefined || bundle.semanticWorld === null
       ? createEmptySemanticWorld()
       : readSemanticWorld(bundle.semanticWorld, "bundle.semanticWorld");
+  const shouldCompileSemanticWorld =
+    semanticWorld.modules.length > 0 ||
+    semanticWorld.regions.length > 0 ||
+    semanticWorld.edges.length > 0 ||
+    semanticWorld.connectors.length > 0 ||
+    semanticWorld.structures.length > 0 ||
+    semanticWorld.gameplayVolumes.length > 0 ||
+    semanticWorld.lights.length > 0 ||
+    semanticWorld.terrainPatches.length > 0;
   const compiledWorld =
-    bundle.compiledWorld === undefined || bundle.compiledWorld === null
-      ? semanticWorld.modules.length > 0 ||
-        semanticWorld.regions.length > 0 ||
-        semanticWorld.edges.length > 0 ||
-        semanticWorld.connectors.length > 0 ||
-        semanticWorld.terrainChunks.length > 0
-        ? compileMetaverseMapBundleSemanticWorld(semanticWorld)
-        : createDefaultMetaverseMapBundleCompiledWorld(environmentAssets)
+    shouldCompileSemanticWorld
+      ? compileMetaverseMapBundleSemanticWorld(semanticWorld)
+      : bundle.compiledWorld === undefined || bundle.compiledWorld === null
+        ? createDefaultMetaverseMapBundleCompiledWorld(environmentAssets)
       : readCompiledWorld(bundle.compiledWorld, "bundle.compiledWorld");
   const resolvedEnvironmentAssets =
     compiledWorld.compatibilityEnvironmentAssets.length > 0
@@ -1493,6 +2394,14 @@ export function parseMetaverseMapBundleSnapshot(
     compiledWorld,
     description: readString(bundle.description, "bundle.description"),
     environmentAssets: resolvedEnvironmentAssets,
+    environmentPresentation:
+      bundle.environmentPresentation === undefined ||
+      bundle.environmentPresentation === null
+        ? null
+        : readEnvironmentPresentation(
+            bundle.environmentPresentation,
+            "bundle.environmentPresentation"
+          ),
     gameplayProfileId: readGameplayProfileId(
       bundle.gameplayProfileId,
       "bundle.gameplayProfileId"

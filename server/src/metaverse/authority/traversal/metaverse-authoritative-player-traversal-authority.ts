@@ -1,5 +1,7 @@
 import {
   createMetaverseTraversalFacingSnapshot,
+  metaverseTraversalActionBufferSeconds,
+  queueMetaverseUnmountedTraversalAction,
   type MetaverseTraversalBodyControlSnapshot,
   type MetaverseTraversalFacingSnapshot,
   type MetaverseUnmountedTraversalStateSnapshot
@@ -300,6 +302,22 @@ export class MetaverseAuthoritativePlayerTraversalAuthority<
           intent: nextTraversalIntent
         })
       );
+
+      if (
+        nextEffectiveAtMs <= nowMs &&
+        nextTraversalIntent.actionIntent.kind !== "none" &&
+        nextTraversalIntent.actionIntent.pressed
+      ) {
+        playerRuntime.unmountedTraversalState =
+          queueMetaverseUnmountedTraversalAction(
+            playerRuntime.unmountedTraversalState,
+            {
+              actionIntent: nextTraversalIntent.actionIntent,
+              bufferSeconds: metaverseTraversalActionBufferSeconds
+            }
+          );
+      }
+
       latestComparableIntent = nextTraversalIntent;
       acceptedTraversalIntent = true;
       nextEffectiveAtMs += tickIntervalMs;

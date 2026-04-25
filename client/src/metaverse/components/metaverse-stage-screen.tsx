@@ -17,7 +17,6 @@ import type {
 } from "@webgpu-metaverse/shared";
 
 import { metaverseActiveFullBodyCharacterAssetId } from "@/assets/config/character-model-manifest";
-import { DuckHuntLaunchPanel } from "../../experiences/duck-hunt/components/duck-hunt-launch-panel";
 import { ImmersiveStageFrame } from "../../ui/components/immersive-stage-frame";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,12 +98,12 @@ function resolveMetaverseHudScale(
 function createMetaverseHudStyle(scale: number): CSSProperties {
   return {
     "--game-ui-scale": `${scale}`,
-    "--metaverse-hud-edge": `${16 * scale}px`,
+    "--metaverse-hud-edge": `${24 * scale}px`,
     "--metaverse-hud-gap": `${24 * scale}px`,
     "--metaverse-hud-inset-padding": `${14 * scale}px`,
-    "--metaverse-hud-inset-radius": `${16 * scale}px`,
+    "--metaverse-hud-inset-radius": `${8 * scale}px`,
     "--metaverse-hud-panel-padding": `${20 * scale}px`,
-    "--metaverse-hud-panel-radius": `${24 * scale}px`
+    "--metaverse-hud-panel-radius": `${8 * scale}px`
   } as CSSProperties;
 }
 
@@ -116,7 +115,7 @@ function MetaverseHudSurface({
   return (
     <div
       className={[
-        "pointer-events-auto min-w-0 w-full rounded-[var(--metaverse-hud-panel-radius)] p-[var(--metaverse-hud-panel-padding)] shadow-[0_20px_60px_rgb(15_23_42_/_0.22)]",
+        "pointer-events-auto min-w-0 w-full rounded-[var(--metaverse-hud-panel-radius)] p-[var(--metaverse-hud-panel-padding)] shadow-[0_18px_48px_rgb(2_6_23_/_0.22)]",
         strong ? "surface-shell-panel-strong" : "surface-shell-panel",
         className
       ]
@@ -157,6 +156,18 @@ function resolveTeamHudTone(
   }
 }
 
+function formatMatchTimeLabel(timeRemainingMs: number | null): string {
+  if (timeRemainingMs === null) {
+    return "No timer";
+  }
+
+  const totalSeconds = Math.max(0, Math.ceil(timeRemainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = `${totalSeconds % 60}`.padStart(2, "0");
+
+  return `${minutes}m ${seconds}s`;
+}
+
 export function MetaverseStageScreen({
   attachmentProofConfig,
   audioStatusLabel,
@@ -175,6 +186,14 @@ export function MetaverseStageScreen({
   onSetupRequest,
   username
 }: MetaverseStageScreenProps) {
+  void audioStatusLabel;
+  void calibrationQualityLabel;
+  void coopRoomIdDraft;
+  void gameplayInputMode;
+  void onCoopRoomIdDraftChange;
+  void onExperienceLaunchRequest;
+  void onRecalibrationRequest;
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const localCharacterId =
@@ -216,6 +235,7 @@ export function MetaverseStageScreen({
     width: 1280
   });
   const [isDeveloperOverlayOpen, setDeveloperOverlayOpen] = useState(false);
+  const [isPauseMenuOpen, setPauseMenuOpen] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const subscribeUiUpdates = useCallback(
     (notifyReact: () => void) => metaverseRuntime.subscribeUiUpdates(notifyReact),
@@ -237,6 +257,73 @@ export function MetaverseStageScreen({
     () => metaverseRuntime.weaponHudSnapshot
   );
   const showDeveloperOverlay = import.meta.env.DEV;
+  useEffect(() => {
+    const { getGamepads } = globalThis.navigator;
+    const hasRaf =
+      typeof globalThis.requestAnimationFrame === "function" &&
+      typeof globalThis.cancelAnimationFrame === "function";
+
+    if (typeof getGamepads !== "function" || !hasRaf) {
+      return;
+    }
+
+    let isStartPressed = false;
+    let frameId = 0;
+    let isMounted = true;
+
+    const pollPauseStart = () => {
+      const gamepads = getGamepads.call(globalThis.navigator);
+      const nextIsStartPressed = gamepads.some(
+        (gamepad) => gamepad !== null && gamepad.buttons[9]?.pressed === true
+      );
+
+      if (nextIsStartPressed && !isStartPressed) {
+        setPauseMenuOpen((currentValue) => !currentValue);
+      }
+
+      isStartPressed = nextIsStartPressed;
+
+      if (isMounted) {
+        frameId = globalThis.requestAnimationFrame(pollPauseStart);
+      }
+    };
+
+    frameId = globalThis.requestAnimationFrame(pollPauseStart);
+
+    return () => {
+      isMounted = false;
+      globalThis.cancelAnimationFrame(frameId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePauseKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "p" || event.repeat) {
+        return;
+      }
+
+      const eventTarget = event.target;
+      const editableTarget =
+        eventTarget instanceof HTMLElement &&
+        (eventTarget.isContentEditable ||
+          eventTarget instanceof HTMLInputElement ||
+          eventTarget instanceof HTMLTextAreaElement ||
+          eventTarget instanceof HTMLSelectElement);
+
+      if (editableTarget) {
+        return;
+      }
+
+      event.preventDefault();
+      setPauseMenuOpen((currentValue) => !currentValue);
+    };
+
+    globalThis.addEventListener("keydown", handlePauseKeyDown);
+
+    return () => {
+      globalThis.removeEventListener("keydown", handlePauseKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     if (!showDeveloperOverlay) {
@@ -372,24 +459,35 @@ export function MetaverseStageScreen({
       hudViewport.width
     ]
   );
-  const focusedPortal = hudSnapshot.focusedPortal;
-  const focusDistanceLabel =
-    focusedPortal === null
-      ? null
-      : `${focusedPortal.distanceFromCamera.toFixed(1)}m from portal`;
-  const mountedInteractionHud = hudSnapshot.mountedInteractionHud;
   const combatSnapshot = hudSnapshot.combat;
   const localTeamId = hudSnapshot.presence.localTeamId;
   const teamHudTone = resolveTeamHudTone(localTeamId);
+  const localIsBlue = localTeamId === "blue";
+  const blueTeamScore = localIsBlue
+    ? combatSnapshot.teamScore ?? 0
+    : combatSnapshot.enemyScore ?? 0;
+  const redTeamScore = localIsBlue
+    ? combatSnapshot.enemyScore ?? 0
+    : combatSnapshot.teamScore ?? 0;
+  const scoreLimit = combatSnapshot.scoreLimit;
+  const scoreProgressDenominator = Math.max(
+    scoreLimit === null ? Math.max(blueTeamScore, redTeamScore, 1) : scoreLimit,
+    1
+  );
+  const blueScorePercent = `${Math.round((blueTeamScore / scoreProgressDenominator) * 100)}%`;
+  const redScorePercent = `${Math.round((redTeamScore / scoreProgressDenominator) * 100)}%`;
   const showTeamDeathmatchHud =
     matchMode === "team-deathmatch" && combatSnapshot.available;
   const healthRatio = combatSnapshot.available
     ? clamp(combatSnapshot.health / Math.max(1, combatSnapshot.maxHealth), 0, 1)
     : 0;
-  const showPortalScan =
-    focusedPortal !== null ||
-    hudSnapshot.presence.lastError !== null ||
-    runtimeError !== null;
+  const accuracyLabel =
+    combatSnapshot.accuracyRatio === null
+      ? "--%"
+      : `${Math.round(combatSnapshot.accuracyRatio * 100)}%`;
+  const healthLabel = combatSnapshot.available
+    ? `${Math.round(combatSnapshot.health)}/${Math.round(combatSnapshot.maxHealth)}`
+    : "--/--";
 
   return (
     <ImmersiveStageFrame className="bg-game-stage">
@@ -413,24 +511,16 @@ export function MetaverseStageScreen({
               top: "var(--metaverse-hud-edge)"
             }}
           >
-            <div className="w-[min(24rem,calc(100vw-2rem))] rounded-full border border-white/10 bg-[rgb(15_23_42_/_0.42)] px-3 py-2 shadow-[0_18px_48px_rgb(15_23_42_/_0.24)] backdrop-blur-md">
-              <div className="flex items-center justify-between gap-4 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-white/72">
-                <span>Health</span>
-                <span>
-                  {combatSnapshot.health}/{combatSnapshot.maxHealth}
-                </span>
-              </div>
-              <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className={[
-                    "h-full rounded-full transition-[width] duration-150 ease-out",
-                    teamHudTone.barClassName
-                  ].join(" ")}
-                  style={{
-                    width: `${healthRatio * 100}%`
-                  }}
-                />
-              </div>
+            <div className="w-[min(24rem,calc(100vw-2rem))]">
+              <div
+                className={[
+                  "h-2.5 overflow-hidden rounded-full transition-[width] duration-150 ease-out",
+                  teamHudTone.barClassName
+                ].join(" ")}
+                style={{
+                  width: `${healthRatio * 100}%`
+                }}
+              />
             </div>
           </div>
         ) : null}
@@ -442,247 +532,152 @@ export function MetaverseStageScreen({
             style={hudStyle}
           >
             <div className="flex flex-wrap items-start justify-between gap-[var(--metaverse-hud-gap)]">
-              {showTeamDeathmatchHud ||
-              showPortalScan ||
-              mountedInteractionHud.visible ? (
-                <div className="flex min-w-0 max-w-[min(28rem,100%)] flex-col gap-[var(--metaverse-hud-gap)]">
-                  {showTeamDeathmatchHud ? (
-                    <MetaverseHudSurface className="max-w-[min(22rem,100%)] border border-white/10 bg-[rgb(15_23_42_/_0.34)]">
-                      <p className="type-shell-banner">Match diagnostics</p>
-                      <p className="type-shell-heading mt-2">Team deathmatch</p>
-                      <div className="mt-4 flex flex-col gap-3 rounded-[var(--metaverse-hud-inset-radius)] bg-[rgb(15_23_42_/_0.16)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="type-shell-body">
-                            {combatSnapshot.matchPhase === "waiting-for-players"
-                              ? "Waiting for players"
-                              : combatSnapshot.matchPhase === "completed"
-                                ? "Match complete"
-                                : "Match active"}
-                          </span>
-                          <span className="type-shell-body">
-                            {combatSnapshot.teamScore ?? 0} - {combatSnapshot.enemyScore ?? 0}
-                            {combatSnapshot.scoreLimit === null
-                              ? ""
-                              : ` / ${combatSnapshot.scoreLimit}`}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="type-shell-body">
-                            {combatSnapshot.timeRemainingMs === null
-                              ? "No timer"
-                              : `${Math.ceil(combatSnapshot.timeRemainingMs / 1000)}s left`}
-                          </span>
-                          <span className="type-shell-body">
-                            {combatSnapshot.accuracyRatio === null
-                              ? "Accuracy --"
-                              : `Accuracy ${Math.round(combatSnapshot.accuracyRatio * 100)}%`}
-                          </span>
-                        </div>
-                        {!combatSnapshot.alive ? (
-                          <p className="type-shell-body">
-                            Respawn in {Math.ceil(combatSnapshot.respawnRemainingMs / 1000)}s
-                          </p>
-                        ) : combatSnapshot.spawnProtectionRemainingMs > 0 ? (
-                          <p className="type-shell-body">
-                            Spawn protection {Math.ceil(
-                              combatSnapshot.spawnProtectionRemainingMs / 1000
-                            )}s
-                          </p>
-                        ) : null}
-                        {combatSnapshot.killFeed.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            {combatSnapshot.killFeed.map((entry) => (
-                              <p
-                                className="type-shell-body text-sm"
-                                key={entry.sequence}
-                              >
-                                {entry.summary}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </MetaverseHudSurface>
-                  ) : null}
-
-                  {showPortalScan ? (
-                    <MetaverseHudSurface className="max-w-[min(24rem,100%)]">
-                      <div className="flex flex-col gap-3">
-                        {focusedPortal !== null ? (
-                          <div className="flex flex-col gap-2">
-                            <p className="type-shell-banner">Portal scan</p>
-                            <p className="type-shell-heading">
-                              {focusedPortal.label} is in range.
-                            </p>
-                            <p className="type-shell-body">{focusDistanceLabel}</p>
-                          </div>
-                        ) : null}
-
-                        {hudSnapshot.presence.lastError !== null ? (
-                          <div className="surface-shell-danger rounded-[var(--metaverse-hud-inset-radius)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]">
-                            <p className="type-shell-body text-[color:var(--shell-danger-foreground)]">
-                              Presence issue: {hudSnapshot.presence.lastError}
-                            </p>
-                          </div>
-                        ) : null}
-
-                        {runtimeError !== null ? (
-                          <div className="surface-shell-danger rounded-[var(--metaverse-hud-inset-radius)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]">
-                            <p className="type-shell-body text-[color:var(--shell-danger-foreground)]">
-                              {runtimeError}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    </MetaverseHudSurface>
-                  ) : null}
-
-                  {mountedInteractionHud.visible ? (
-                    <MetaverseHudSurface className="max-w-[min(26rem,100%)]">
-                      <p className="type-shell-banner">Vehicle access</p>
-                      <p className="type-shell-heading mt-2">
-                        {mountedInteractionHud.heading}
-                      </p>
-                      <p className="type-shell-body mt-3">
-                        {mountedInteractionHud.detail}
-                      </p>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {mountedInteractionHud.boardingEntries.map((entry) => (
-                          <Button
-                            key={entry.entryId}
-                            onClick={() => {
-                              metaverseRuntime.boardMountable(entry.entryId);
-                            }}
-                            type="button"
-                          >
-                            {entry.label}
-                          </Button>
-                        ))}
-                        {mountedInteractionHud.seatTargets.map((seatTarget) => (
-                          <Button
-                            key={seatTarget.seatId}
-                            onClick={() => {
-                              metaverseRuntime.occupySeat(seatTarget.seatId);
-                            }}
-                            type="button"
-                            variant={mountedInteractionHud.seatTargetButtonVariant}
-                          >
-                            {mountedInteractionHud.seatTargetButtonVariant ===
-                            "outline"
-                              ? `Sit ${seatTarget.label}`
-                              : `Move to ${seatTarget.label}`}
-                          </Button>
-                        ))}
-                        {mountedInteractionHud.leaveActionLabel !== null ? (
-                          <Button
-                            onClick={() => {
-                              metaverseRuntime.leaveMountedEnvironment();
-                            }}
-                            type="button"
-                            variant="outline"
-                          >
-                            {mountedInteractionHud.leaveActionLabel}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </MetaverseHudSurface>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="ml-auto flex max-w-full justify-end">
-                <Button
-                  className="pointer-events-auto"
-                  onClick={onSetupRequest}
-                  type="button"
-                  variant="outline"
-                >
-                  Main Menu
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-end justify-between gap-[var(--metaverse-hud-gap)]">
               <MetaverseHudSurface
-                className={[
-                  "max-w-[min(18rem,100%)]",
-                  teamHudTone.surfaceClassName
-                ].join(" ")}
+                className="max-w-[min(18rem,100%)]"
+                strong
               >
-                <div className="flex flex-col gap-3">
-                  <p className="type-shell-heading truncate">{username}</p>
-                  {combatSnapshot.available ? (
-                    <div
-                      className={[
-                        "grid grid-cols-2 gap-3 rounded-[var(--metaverse-hud-inset-radius)] px-[var(--metaverse-hud-inset-padding)] py-[var(--metaverse-hud-inset-padding)]",
-                        teamHudTone.insetClassName
-                      ].join(" ")}
-                    >
-                      <div className="flex flex-col">
-                        <span className="type-shell-banner">Health</span>
-                        <span className="type-shell-heading">
-                          {combatSnapshot.health}/{combatSnapshot.maxHealth}
-                        </span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="type-shell-banner">Ammo</span>
-                        <span className="type-shell-heading">
-                          {combatSnapshot.ammoInMagazine}/{combatSnapshot.ammoInReserve}
-                        </span>
-                      </div>
-                      {showTeamDeathmatchHud ? (
-                        <>
-                          <div className="flex flex-col">
-                            <span className="type-shell-banner">K/D/A</span>
-                            <span className="type-shell-body">
-                              {combatSnapshot.kills}/{combatSnapshot.deaths}/
-                              {combatSnapshot.assists}
-                            </span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="type-shell-banner">Headshots</span>
-                            <span className="type-shell-body">
-                              {combatSnapshot.headshotKills}
-                            </span>
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
+                <p className="type-shell-heading truncate">{username}</p>
+                <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3">
+                  <div className="min-w-0">
+                    <span className="type-shell-banner block truncate">
+                      Accuracy
+                    </span>
+                    <p className="type-shell-heading mt-1 tabular-nums">
+                      {accuracyLabel}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="type-shell-banner block truncate">
+                      K / D / A
+                    </span>
+                    <p className="type-shell-heading mt-1 tabular-nums">
+                      {combatSnapshot.kills}/{combatSnapshot.deaths}/{combatSnapshot.assists}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="type-shell-banner block truncate">
+                      Headshots
+                    </span>
+                    <p className="type-shell-heading mt-1 tabular-nums">
+                      {combatSnapshot.headshotKills}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="type-shell-banner block truncate">
+                      Health
+                    </span>
+                    <p className="type-shell-heading mt-1 tabular-nums">
+                      {healthLabel}
+                    </p>
+                  </div>
                 </div>
               </MetaverseHudSurface>
 
-              <div className="ml-auto flex w-full max-w-[min(48rem,100%)] flex-col items-end gap-[var(--metaverse-hud-gap)] md:w-auto">
-                {focusedPortal?.experienceId === "duck-hunt" ? (
-                  <div className="pointer-events-auto w-full max-h-[clamp(18rem,55dvh,34rem)] overflow-y-auto overscroll-contain">
-                    <DuckHuntLaunchPanel
-                      audioStatusLabel={audioStatusLabel}
-                      calibrationQualityLabel={calibrationQualityLabel}
-                      coopRoomIdDraft={coopRoomIdDraft}
-                      inputMode={gameplayInputMode}
-                      onCoopRoomIdDraftChange={onCoopRoomIdDraftChange}
-                      onLaunchRequest={() => {
-                        onExperienceLaunchRequest("duck-hunt");
-                      }}
-                      onRecalibrationRequest={onRecalibrationRequest}
-                      onSessionModeChange={() => {}}
-                      sessionMode="single-player"
-                    />
+              <MetaverseHudSurface
+                className="max-w-[min(17rem,100%)] shrink-0"
+                strong
+              >
+                <span className="type-shell-banner">Ammo</span>
+                <div className="mt-3 grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-end gap-4">
+                  <div className="min-w-0">
+                    <span className="type-shell-caption block truncate">
+                      Mag
+                    </span>
+                    <p className="type-shell-value mt-1 min-w-[3ch] tabular-nums">
+                      {combatSnapshot.ammoInMagazine}
+                    </p>
                   </div>
-                ) : null}
+                  <div className="h-10 w-px bg-slate-950/12" />
+                  <div className="min-w-0">
+                    <span className="type-shell-caption block truncate">
+                      Reserve
+                    </span>
+                    <p className="type-shell-value mt-1 min-w-[4ch] tabular-nums">
+                      {combatSnapshot.ammoInReserve}
+                    </p>
+                  </div>
+                </div>
+              </MetaverseHudSurface>
+            </div>
 
+            <div className="flex flex-wrap items-end justify-between gap-[var(--metaverse-hud-gap)]">
+              <div className="pointer-events-none">
                 {hudSnapshot.boot.phase === "ready" && runtimeError === null ? (
-                  <MetaverseHudSurface
-                    className={[
-                      "w-fit max-w-[min(14rem,100%)] px-3 py-3",
-                      teamHudTone.surfaceClassName
-                    ].join(" ")}
-                  >
-                    <MetaversePlayerRadarHud radarSnapshot={hudSnapshot.radar} />
-                  </MetaverseHudSurface>
+                  <MetaversePlayerRadarHud radarSnapshot={hudSnapshot.radar} />
                 ) : null}
               </div>
+
+              {showTeamDeathmatchHud ? (
+                <MetaverseHudSurface
+                  className="max-w-[16rem]"
+                  strong
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="type-shell-heading">Team Deathmatch</p>
+                    <p className="type-shell-body">
+                      {formatMatchTimeLabel(combatSnapshot.timeRemainingMs)}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex flex-col gap-3">
+                    <div>
+                      <div className="mb-2 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                        <svg
+                          aria-hidden="true"
+                          className="size-2.5 text-sky-300"
+                          fill="currentColor"
+                          viewBox="0 0 10 10"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <rect
+                            height="10"
+                            width="10"
+                            x="0"
+                            y="0"
+                          />
+                        </svg>
+                        <span className="w-8 tabular-nums text-slate-950">
+                          {blueTeamScore}
+                        </span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-950/12">
+                          <div
+                            className="h-full bg-sky-300 transition-[width] duration-150 ease-out"
+                            style={{ width: blueScorePercent }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                        <svg
+                          aria-hidden="true"
+                          className="size-2.5 text-rose-300"
+                          fill="currentColor"
+                          viewBox="0 0 10 10"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <rect
+                            height="10"
+                            width="10"
+                            x="0"
+                            y="0"
+                          />
+                        </svg>
+                        <span className="w-8 tabular-nums text-slate-950">
+                          {redTeamScore}
+                        </span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-950/12">
+                          <div
+                            className="h-full bg-rose-300 transition-[width] duration-150 ease-out"
+                            style={{ width: redScorePercent }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </MetaverseHudSurface>
+              ) : null}
             </div>
           </div>
         </div>
@@ -713,6 +708,40 @@ export function MetaverseStageScreen({
             </DialogContent>
           </Dialog>
         ) : null}
+
+        <Dialog onOpenChange={setPauseMenuOpen} open={isPauseMenuOpen}>
+          <DialogContent className="max-w-sm border border-white/10 bg-[rgb(2_6_23_/_0.92)] text-game-foreground shadow-none">
+            <DialogHeader>
+              <DialogTitle>Game Paused</DialogTitle>
+              <DialogDescription>
+                Resume with <span className="font-medium">P</span> or Start,
+                or return to the main menu.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  setPauseMenuOpen(false);
+                }}
+                type="button"
+                variant="outline"
+              >
+                Resume
+              </Button>
+              <Button
+                onClick={() => {
+                  setPauseMenuOpen(false);
+                  onSetupRequest();
+                }}
+                type="button"
+                variant="outline"
+              >
+                Main Menu
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </ImmersiveStageFrame>
   );

@@ -41,11 +41,20 @@ test("scene environment runtime builds shared water regions and visual atmospher
     environmentRuntime.backgroundColor.b,
     metaverseRuntimeConfig.environment.horizonColor[2]
   );
-  assert.equal(
-    environmentRuntime.fog.density,
-    metaverseRuntimeConfig.environment.fogDensity
-  );
+  assert.equal(environmentRuntime.fog, null);
   assert.equal(environmentRuntime.skyMesh.material.depthWrite, false);
+  assert.equal(environmentRuntime.skyMesh.isSkyMesh, true);
+  assert.equal(environmentRuntime.skyMesh.geometry.type, "SphereGeometry");
+  assert.equal(environmentRuntime.skyMesh.children.length, 1);
+  assert.equal(environmentRuntime.skyMesh.children[0]?.name, "metaverse_scene_environment/sky_horizon_overlay");
+  assert.equal(
+    environmentRuntime.skyMesh.cloudScale.value,
+    metaverseRuntimeConfig.environment.cloudScale
+  );
+  assert.equal(
+    environmentRuntime.skyMesh.cloudSpeed.value,
+    metaverseRuntimeConfig.environment.cloudSpeed
+  );
   assert.equal(environmentRuntime.sunLight.intensity, 2.2);
-  assert.equal(environmentRuntime.hemisphereLight.intensity, 1.8);
+  assert.equal(environmentRuntime.hemisphereLight.intensity, 1.65);
 });

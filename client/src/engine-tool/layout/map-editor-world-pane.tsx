@@ -12,15 +12,30 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { MapEditorLaunchVariationDraftSnapshot } from "@/engine-tool/project/map-editor-project-launch-variations";
 import type { MapEditorProjectSnapshot } from "@/engine-tool/project/map-editor-project-state";
-import { cn } from "@/lib/class-name";
 
+import { composeMapEditorLayoutClassName } from "./map-editor-layout-class-name";
 import { MapEditorLaunchVariationsPanel } from "../panels/inspector/map-editor-launch-variations-panel";
+import { MapEditorMaterialLightingToolsPanel } from "../panels/inspector/map-editor-material-lighting-tools-panel";
 import { MapEditorWorldSettingsPanel } from "../panels/inspector/map-editor-world-settings-panel";
+import type {
+  MapEditorBuilderToolStateSnapshot
+} from "@/engine-tool/types/map-editor";
 
 interface MapEditorWorldPaneProps {
+  readonly builderToolState: MapEditorBuilderToolStateSnapshot;
   readonly onAddLaunchVariation: () => void;
+  readonly onBuilderToolStateChange: (
+    update: (
+      currentBuilderToolState: MapEditorBuilderToolStateSnapshot
+    ) => MapEditorBuilderToolStateSnapshot
+  ) => void;
   readonly onSectionOpenChange: (sectionId: string, open: boolean) => void;
   readonly onSelectLaunchVariation: (variationId: string) => void;
+  readonly onUpdateEnvironmentPresentation: (
+    update: (
+      environmentPresentation: MapEditorProjectSnapshot["environmentPresentation"]
+    ) => MapEditorProjectSnapshot["environmentPresentation"]
+  ) => void;
   readonly onUpdateEnvironmentPresentationProfileId: (
     environmentPresentationProfileId: string | null
   ) => void;
@@ -65,7 +80,10 @@ function Section({
             {badge}
           </span>
           <ChevronDownIcon
-            className={cn("shrink-0 transition-transform", open ? "rotate-0" : "-rotate-90")}
+            className={composeMapEditorLayoutClassName(
+              "shrink-0 transition-transform",
+              open ? "rotate-0" : "-rotate-90"
+            )}
             data-icon="inline-end"
           />
         </Button>
@@ -76,9 +94,12 @@ function Section({
 }
 
 export function MapEditorWorldPane({
+  builderToolState,
   onAddLaunchVariation,
+  onBuilderToolStateChange,
   onSectionOpenChange,
   onSelectLaunchVariation,
+  onUpdateEnvironmentPresentation,
   onUpdateEnvironmentPresentationProfileId,
   onUpdateGameplayProfileId,
   onUpdateLaunchVariation,
@@ -153,11 +174,26 @@ export function MapEditorWorldPane({
 
           <Section
             onOpenChange={onSectionOpenChange}
+            open={readSectionOpen("world-pane:material-lighting-tools", true)}
+            sectionId="world-pane:material-lighting-tools"
+            title="Material & Light Tools"
+          >
+            <MapEditorMaterialLightingToolsPanel
+              builderToolState={builderToolState}
+              onBuilderToolStateChange={onBuilderToolStateChange}
+            />
+          </Section>
+
+          <Section
+            onOpenChange={onSectionOpenChange}
             open={readSectionOpen("world-pane:settings", true)}
             sectionId="world-pane:settings"
             title="World Settings"
           >
             <MapEditorWorldSettingsPanel
+              onUpdateEnvironmentPresentation={
+                onUpdateEnvironmentPresentation
+              }
               onUpdateEnvironmentPresentationProfileId={
                 onUpdateEnvironmentPresentationProfileId
               }

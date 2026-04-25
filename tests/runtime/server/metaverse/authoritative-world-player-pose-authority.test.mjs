@@ -16,6 +16,63 @@ import {
   requireValue
 } from "./authoritative-world-test-fixtures.mjs";
 
+test("MetaverseAuthoritativeWorldRuntime treats the selected join spawn as immediately authoritative", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("join-authority-pilot"),
+    "playerId"
+  );
+  const username = requireValue(
+    createUsername("Join Authority Pilot"),
+    "username"
+  );
+
+  joinSurfacePlayer(runtime, playerId, username);
+
+  const authoritativeWorldSnapshot = runtime.readWorldSnapshot(0, playerId);
+  const authoritativePlayerSnapshot = authoritativeWorldSnapshot.players[0];
+
+  assert.notEqual(authoritativePlayerSnapshot, undefined);
+  assert.equal(authoritativePlayerSnapshot?.stateSequence, 1);
+
+  runtime.acceptPresenceCommand(
+    createMetaverseSyncPresenceCommand({
+      playerId,
+      pose: {
+        animationVocabulary: "jump-down",
+        locomotionMode: "swim",
+        look: {
+          pitchRadians: 0.45,
+          yawRadians: 1.1
+        },
+        position: {
+          x: 42,
+          y: 12,
+          z: 96
+        },
+        stateSequence: 99,
+        yawRadians: 1.4
+      }
+    }),
+    0
+  );
+
+  const worldSnapshot = runtime.readWorldSnapshot(0, playerId);
+  const presenceSnapshot = runtime.readPresenceRosterSnapshot(0, playerId);
+
+  assert.deepEqual(
+    readPlayerActiveBodySnapshot(worldSnapshot.players[0]).position,
+    readPlayerActiveBodySnapshot(authoritativePlayerSnapshot).position
+  );
+  assert.equal(worldSnapshot.players[0]?.locomotionMode, "grounded");
+  assert.equal(worldSnapshot.players[0]?.stateSequence, 1);
+  assert.deepEqual(
+    presenceSnapshot.players[0]?.pose.position,
+    readPlayerActiveBodySnapshot(authoritativePlayerSnapshot).position
+  );
+  assert.equal(presenceSnapshot.players[0]?.pose.stateSequence, 1);
+});
+
 test("MetaverseAuthoritativeWorldRuntime keeps presence resyncs from overriding realtime world pose authority", () => {
   const runtime = createAuthoritativeRuntime();
   const playerId = requireValue(

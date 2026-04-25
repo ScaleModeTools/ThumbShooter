@@ -1,4 +1,66 @@
 import type { MapEditorMaterialOption } from "../types/map-editor";
+import type {
+  MetaverseMapBundleSemanticMaterialId
+} from "@webgpu-metaverse/shared/metaverse/world";
+
+export interface MapEditorSemanticMaterialOption {
+  readonly label: string;
+  readonly value: MetaverseMapBundleSemanticMaterialId;
+}
+
+export const mapEditorSemanticMaterialOptions = Object.freeze(
+  [
+    Object.freeze({
+      label: "Concrete",
+      value: "concrete"
+    }),
+    Object.freeze({
+      label: "Metal",
+      value: "metal"
+    }),
+    Object.freeze({
+      label: "Warning",
+      value: "warning"
+    }),
+    Object.freeze({
+      label: "Glass",
+      value: "glass"
+    }),
+    Object.freeze({
+      label: "Team Blue",
+      value: "team-blue"
+    }),
+    Object.freeze({
+      label: "Team Red",
+      value: "team-red"
+    }),
+    Object.freeze({
+      label: "Alien Rock",
+      value: "alien-rock"
+    }),
+    Object.freeze({
+      label: "Terrain Rock",
+      value: "terrain-rock"
+    }),
+    Object.freeze({
+      label: "Terrain Ash",
+      value: "terrain-ash"
+    }),
+    Object.freeze({
+      label: "Terrain Grass",
+      value: "terrain-grass"
+    })
+  ] satisfies readonly MapEditorSemanticMaterialOption[]
+);
+
+export const mapEditorTerrainMaterialOptions = Object.freeze(
+  mapEditorSemanticMaterialOptions.filter(
+    (option) =>
+      option.value === "terrain-grass" ||
+      option.value === "terrain-rock" ||
+      option.value === "terrain-ash"
+  )
+);
 
 export const mapEditorMaterialOptions = Object.freeze(
   [

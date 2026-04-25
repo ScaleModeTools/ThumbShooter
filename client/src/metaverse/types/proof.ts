@@ -168,12 +168,81 @@ export interface MetaverseEnvironmentOrientationProofConfig {
   readonly forwardModelYawRadians: number;
 }
 
-import type { MetaverseWorldSurfaceScaleSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
+import type {
+  MetaverseMapBundleSemanticGameplayVolumeKind,
+  MetaverseMapBundleSemanticLightKind,
+  MetaverseMapBundleSemanticMaterialDefinitionSnapshot,
+  MetaverseMapBundleSemanticMaterialId,
+  MetaverseMapBundleSemanticStructureKind,
+  MetaverseWorldPlacedSurfaceColliderSnapshot,
+  MetaverseWorldSurfaceScaleSnapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
 
 export interface MetaverseEnvironmentPlacementProofConfig {
+  readonly materialReferenceId?: string | null;
   readonly position: MetaverseVector3Snapshot;
   readonly rotationYRadians: number;
   readonly scale: MetaverseWorldSurfaceScaleSnapshot;
+}
+
+export interface MetaverseEnvironmentProceduralStructureProofConfig {
+  readonly center: MetaverseVector3Snapshot;
+  readonly materialId: MetaverseMapBundleSemanticMaterialId;
+  readonly materialReferenceId: string | null;
+  readonly rotationYRadians: number;
+  readonly size: MetaverseVector3Snapshot;
+  readonly structureId: string;
+  readonly structureKind: MetaverseMapBundleSemanticStructureKind;
+  readonly traversalAffordance: "blocker" | "support";
+}
+
+export interface MetaverseEnvironmentTerrainMaterialLayerProofConfig {
+  readonly layerId: string;
+  readonly materialId: MetaverseMapBundleSemanticMaterialId;
+  readonly weightSamples: readonly number[];
+}
+
+export interface MetaverseEnvironmentTerrainPatchProofConfig {
+  readonly heightSamples: readonly number[];
+  readonly materialLayers:
+    readonly MetaverseEnvironmentTerrainMaterialLayerProofConfig[];
+  readonly origin: MetaverseVector3Snapshot;
+  readonly rotationYRadians: number;
+  readonly sampleCountX: number;
+  readonly sampleCountZ: number;
+  readonly sampleSpacingMeters: number;
+  readonly terrainPatchId: string;
+  readonly waterLevelMeters: number | null;
+}
+
+export interface MetaverseEnvironmentSurfaceMeshProofConfig {
+  readonly indices: readonly number[];
+  readonly materialId: MetaverseMapBundleSemanticMaterialId;
+  readonly materialReferenceId: string | null;
+  readonly regionId: string;
+  readonly regionKind: "floor" | "path" | "roof";
+  readonly rotationYRadians: number;
+  readonly translation: MetaverseVector3Snapshot;
+  readonly vertices: readonly number[];
+}
+
+export interface MetaverseEnvironmentGameplayVolumeProofConfig {
+  readonly center: MetaverseVector3Snapshot;
+  readonly size: MetaverseVector3Snapshot;
+  readonly teamId: "blue" | "neutral" | "red" | null;
+  readonly volumeId: string;
+  readonly volumeKind: MetaverseMapBundleSemanticGameplayVolumeKind;
+}
+
+export interface MetaverseEnvironmentLightProofConfig {
+  readonly color: readonly [number, number, number];
+  readonly intensity: number;
+  readonly lightId: string;
+  readonly lightKind: MetaverseMapBundleSemanticLightKind;
+  readonly position: MetaverseVector3Snapshot;
+  readonly rangeMeters: number | null;
+  readonly rotationYRadians: number;
+  readonly target: MetaverseVector3Snapshot | null;
 }
 
 export interface MetaverseEnvironmentModelLodProofConfig {
@@ -219,4 +288,14 @@ export interface MetaverseEnvironmentAssetProofConfig {
 
 export interface MetaverseEnvironmentProofConfig {
   readonly assets: readonly MetaverseEnvironmentAssetProofConfig[];
+  readonly gameplayVolumes: readonly MetaverseEnvironmentGameplayVolumeProofConfig[];
+  readonly lights: readonly MetaverseEnvironmentLightProofConfig[];
+  readonly materialDefinitions:
+    readonly MetaverseMapBundleSemanticMaterialDefinitionSnapshot[];
+  readonly proceduralStructures:
+    readonly MetaverseEnvironmentProceduralStructureProofConfig[];
+  readonly surfaceColliders:
+    readonly MetaverseWorldPlacedSurfaceColliderSnapshot[];
+  readonly surfaceMeshes: readonly MetaverseEnvironmentSurfaceMeshProofConfig[];
+  readonly terrainPatches: readonly MetaverseEnvironmentTerrainPatchProofConfig[];
 }

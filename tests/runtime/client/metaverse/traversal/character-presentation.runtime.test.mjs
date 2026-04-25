@@ -60,10 +60,10 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       clientLoader.load(
         "/src/metaverse/traversal/presentation/character-presentation.ts"
       )
-    ]);
+  ]);
 
   assert.equal(metaverseRuntimeConfig.groundedBody.baseSpeedUnitsPerSecond, 6);
-  assert.equal(metaverseRuntimeConfig.groundedBody.jumpImpulseUnitsPerSecond, 3.5);
+  assert.equal(metaverseRuntimeConfig.groundedBody.jumpImpulseUnitsPerSecond, 6.8);
   assert.equal(metaverseRuntimeConfig.groundedBody.boostMultiplier, 1.25);
   assert.equal(
     resolveCharacterAnimationPlaybackRateMultiplier({

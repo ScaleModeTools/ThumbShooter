@@ -15,12 +15,47 @@ import type {
   EnvironmentRenderLodDescriptor
 } from "@/assets/types/environment-asset-manifest";
 import type { MapEditorPlacementDraftSnapshot } from "@/engine-tool/project/map-editor-project-state";
+import {
+  resolveMetaverseSceneSemanticPreviewColorHex,
+  type MetaverseSceneSemanticPreviewTextureId
+} from "@/metaverse/render/environment/metaverse-scene-semantic-material-textures";
 import { createDefaultMetaverseSceneAssetLoader } from "@/metaverse/render/metaverse-scene-asset-loader";
 
 interface PreviewMeshUserData {
   mapEditorOwnsGeometry?: boolean;
   mapEditorOwnsMaterial?: boolean;
   placementId?: string;
+}
+
+interface PreviewTintableMaterial extends Material {
+  color?: {
+    set: (value: string) => void;
+  };
+  emissive?: {
+    set: (value: string) => void;
+  };
+  metalness?: number;
+  roughness?: number;
+}
+
+function readSemanticPreviewTextureId(
+  value: string | null
+): MetaverseSceneSemanticPreviewTextureId | null {
+  return value === "alien-rock" ||
+    value === "concrete" ||
+    value === "glass" ||
+    value === "metal" ||
+    value === "terrain-ash" ||
+    value === "terrain-grass" ||
+    value === "terrain-rock" ||
+    value === "team-blue" ||
+    value === "team-red" ||
+    value === "warning" ||
+    value === "shell-floor-grid" ||
+    value === "shell-metal-panel" ||
+    value === "shell-painted-trim"
+    ? value
+    : null;
 }
 
 function createProceduralPreviewMaterial(
@@ -159,7 +194,85 @@ function applyPlacementPreviewAppearance(
   previewRoot: Group,
   placement: MapEditorPlacementDraftSnapshot
 ): void {
-  applyMapEditorViewportPreviewOpacity(previewRoot, placement.isVisible ? 1 : 0.34);
+  const materialReferenceId = readSemanticPreviewTextureId(
+    placement.materialReferenceId
+  );
+  const visibleOpacity = materialReferenceId === "glass" ? 0.72 : 1;
+
+  applyMapEditorViewportPreviewOpacity(
+    previewRoot,
+    placement.isVisible ? visibleOpacity : 0.34
+  );
+}
+
+function applyPlacementPreviewMaterialReference(
+  previewRoot: Group,
+  materialReferenceId: string | null
+): void {
+  const textureId = readSemanticPreviewTextureId(materialReferenceId);
+
+  if (textureId === null) {
+    return;
+  }
+
+  const materialColor = resolveMetaverseSceneSemanticPreviewColorHex(textureId);
+
+  previewRoot.traverse((node) => {
+    if (!("isMesh" in node) || node.isMesh !== true) {
+      return;
+    }
+
+    const mesh = node as Mesh;
+
+    ensureOwnedPreviewMaterial(mesh);
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+    for (const material of materials) {
+      const tintableMaterial = material as PreviewTintableMaterial;
+
+      tintableMaterial.color?.set(materialColor);
+      tintableMaterial.emissive?.set(textureId === "alien-rock" ? "#160c2f" : "#050609");
+      tintableMaterial.metalness =
+        textureId === "metal" || textureId === "shell-metal-panel" ? 0.32 : 0.04;
+      tintableMaterial.roughness = textureId === "glass" ? 0.28 : 0.78;
+      tintableMaterial.needsUpdate = true;
+    }
+  });
+}
+
+export function resolveMapEditorViewportPlacementRenderYawRadians(
+  placement: Pick<MapEditorPlacementDraftSnapshot, "assetId" | "rotationYRadians">
+): number {
+  const asset = readEnvironmentAssetDescriptor(placement.assetId);
+  const forwardModelYawRadians = asset?.orientation?.forwardModelYawRadians ?? null;
+
+  return forwardModelYawRadians === null
+    ? placement.rotationYRadians
+    : forwardModelYawRadians - placement.rotationYRadians;
+}
+
+function resolvePlacementVisualYawOffsetRadians(
+  placement: Pick<MapEditorPlacementDraftSnapshot, "assetId" | "rotationYRadians">
+): number {
+  return (
+    resolveMapEditorViewportPlacementRenderYawRadians(placement) -
+    placement.rotationYRadians
+  );
+}
+
+function syncPlacementPreviewVisualFrame(
+  previewAnchor: Group,
+  placement: MapEditorPlacementDraftSnapshot
+): void {
+  const previewRoot = previewAnchor.children[0] ?? null;
+
+  if (previewRoot === null) {
+    return;
+  }
+
+  previewRoot.rotation.y = resolvePlacementVisualYawOffsetRadians(placement);
+  previewRoot.updateMatrixWorld(true);
 }
 
 export function applyMapEditorViewportPreviewOpacity(
@@ -205,6 +318,11 @@ export function syncMapEditorViewportPlacementPreviewAnchor(
   placement: MapEditorPlacementDraftSnapshot
 ): void {
   syncMapEditorViewportPlacementAnchorTransform(previewAnchor, placement);
+  syncPlacementPreviewVisualFrame(previewAnchor, placement);
+  applyPlacementPreviewMaterialReference(
+    previewAnchor,
+    placement.materialReferenceId
+  );
   applyPlacementPreviewAppearance(previewAnchor, placement);
 }
 
@@ -320,7 +438,6 @@ export class MapEditorViewportPreviewAssetLibrary {
   ): Promise<Group> {
     const previewRoot = await this.#loadPreviewRoot(placement.assetId);
     const previewAnchor = new Group();
-    const asset = readEnvironmentAssetDescriptor(placement.assetId);
 
     previewAnchor.name = `map_editor_placement/${placement.placementId}`;
     previewAnchor.position.set(
@@ -329,7 +446,7 @@ export class MapEditorViewportPreviewAssetLibrary {
       placement.position.z
     );
     previewAnchor.userData.placementId = placement.placementId;
-    previewRoot.rotation.y = asset?.orientation?.forwardModelYawRadians ?? 0;
+    previewRoot.rotation.y = resolvePlacementVisualYawOffsetRadians(placement);
     tagPlacementNodes(previewAnchor, placement.placementId);
     tagPlacementNodes(previewRoot, placement.placementId);
     previewAnchor.add(previewRoot);

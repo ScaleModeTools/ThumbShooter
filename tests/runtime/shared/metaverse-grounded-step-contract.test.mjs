@@ -3,6 +3,7 @@ import test, { after, before } from "node:test";
 
 import { metaverseRealtimeWorldCadenceConfig } from "@webgpu-metaverse/shared";
 import { MetaverseAuthoritativeGroundedBodyRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-grounded-body-runtime.js";
+import { MetaverseAuthoritativeRapierPhysicsRuntime } from "../../../server/dist/metaverse/classes/metaverse-authoritative-rapier-physics-runtime.js";
 import { createClientModuleLoader } from "../client/load-client-module.mjs";
 
 let clientLoader;
@@ -722,5 +723,92 @@ test("grounded client prediction and server authority stay lockstep on fixed-ste
     harness.clientPhysicsRuntime.removeCollider(harness.clientGroundCollider);
     harness.authoritativeGroundedBodyRuntime.dispose();
     harness.serverPhysicsRuntime.removeCollider(harness.serverGroundCollider);
+  }
+});
+
+test("authoritative grounded body jumps along Rapier heightfield support normal", () => {
+  const supportHeightMeters = 1.2;
+  const deltaSeconds = 1 / 60;
+  const physicsRuntime = new MetaverseAuthoritativeRapierPhysicsRuntime();
+  const terrainCollider = physicsRuntime.createHeightfieldCollider(
+    4,
+    4,
+    2,
+    [
+      0.4, 0.7, 0.8, 0.5,
+      0.8, 1.2, 1.2, 0.9,
+      0.7, 1.2, 1.2, 0.6,
+      0.3, 0.6, 0.5, 0.2
+    ],
+    freezeVector3(0, 0, 0)
+  );
+  const groundedBodyRuntime = new MetaverseAuthoritativeGroundedBodyRuntime(
+    {
+      ...authoritativeGroundedBodyConfig,
+      spawnPosition: freezeVector3(0, supportHeightMeters, 0)
+    },
+    physicsRuntime
+  );
+
+  try {
+    groundedBodyRuntime.teleport(freezeVector3(0, supportHeightMeters, 0), 0);
+
+    for (let stepIndex = 0; stepIndex < 3; stepIndex += 1) {
+      physicsRuntime.stepSimulation(deltaSeconds);
+      groundedBodyRuntime.advance(createTraversalIntent(), deltaSeconds);
+    }
+
+    assert.equal(groundedBodyRuntime.snapshot.grounded, true);
+    assertApprox(
+      groundedBodyRuntime.snapshot.position.y,
+      supportHeightMeters,
+      "heightfield settled support height",
+      0.01
+    );
+
+    physicsRuntime.stepSimulation(deltaSeconds);
+    const jumpSnapshot = groundedBodyRuntime.advance(
+      createTraversalIntent({ jump: true }),
+      deltaSeconds
+    );
+
+    assert.equal(jumpSnapshot.grounded, false);
+    assert.equal(jumpSnapshot.contact.supportingContactDetected, false);
+    assert.equal(readGroundedBodyJumpReady(jumpSnapshot), false);
+    assert.ok(jumpSnapshot.position.y > supportHeightMeters + 0.08);
+    assert.ok(
+      readGroundedBodyPlanarSpeed(jumpSnapshot) > 0.05,
+      "expected heightfield support normal to add planar jump impulse"
+    );
+    assert.ok(readGroundedBodyVerticalSpeed(jumpSnapshot) > 0);
+
+    let snapshot = jumpSnapshot;
+    let sawFallingNearTerrain = false;
+
+    for (let stepIndex = 0; stepIndex < 90 && !snapshot.grounded; stepIndex += 1) {
+      physicsRuntime.stepSimulation(deltaSeconds);
+      snapshot = groundedBodyRuntime.advance(createTraversalIntent(), deltaSeconds);
+
+      if (
+        !snapshot.grounded &&
+        readGroundedBodyVerticalSpeed(snapshot) < 0 &&
+        snapshot.position.y > supportHeightMeters &&
+        snapshot.position.y < supportHeightMeters + 0.25
+      ) {
+        sawFallingNearTerrain = true;
+      }
+    }
+
+    assert.ok(sawFallingNearTerrain);
+    assert.equal(snapshot.grounded, true);
+    assertApprox(
+      snapshot.position.y,
+      supportHeightMeters,
+      "heightfield jump landing support height",
+      0.05
+    );
+  } finally {
+    groundedBodyRuntime.dispose();
+    physicsRuntime.removeCollider(terrainCollider);
   }
 });

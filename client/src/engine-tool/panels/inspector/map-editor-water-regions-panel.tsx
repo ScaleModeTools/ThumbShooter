@@ -1,16 +1,11 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
 import {
   resolveMapEditorWaterRegionSize,
   type MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
-
-function resolveFiniteNumber(value: string): number | null {
-  const nextValue = Number(value);
-
-  return Number.isFinite(nextValue) ? nextValue : null;
-}
 
 interface MapEditorWaterRegionsPanelProps {
   readonly onUpdateWaterRegion: (
@@ -51,44 +46,36 @@ export function MapEditorWaterRegionsPanel({
                 <Label htmlFor={`${waterRegionDraft.waterRegionId}-center-x`}>
                   Center X
                 </Label>
-                <Input
+                <MapEditorEditableNumberInput
                   id={`${waterRegionDraft.waterRegionId}-center-x`}
-                  onChange={(event) => {
-                    const nextValue = resolveFiniteNumber(event.target.value);
-
-                    if (nextValue !== null) {
-                      onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
-                        ...draft,
-                        footprint: {
-                          ...draft.footprint,
-                          centerX: nextValue
-                        }
-                      }));
-                    }
+                  onValueChange={(nextValue) => {
+                    onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
+                      ...draft,
+                      footprint: {
+                        ...draft.footprint,
+                        centerX: nextValue
+                      }
+                    }));
                   }}
-                  value={waterRegionDraft.footprint.centerX.toFixed(2)}
+                  value={waterRegionDraft.footprint.centerX}
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${waterRegionDraft.waterRegionId}-center-z`}>
                   Center Z
                 </Label>
-                <Input
+                <MapEditorEditableNumberInput
                   id={`${waterRegionDraft.waterRegionId}-center-z`}
-                  onChange={(event) => {
-                    const nextValue = resolveFiniteNumber(event.target.value);
-
-                    if (nextValue !== null) {
-                      onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
-                        ...draft,
-                        footprint: {
-                          ...draft.footprint,
-                          centerZ: nextValue
-                        }
-                      }));
-                    }
+                  onValueChange={(nextValue) => {
+                    onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
+                      ...draft,
+                      footprint: {
+                        ...draft.footprint,
+                        centerZ: nextValue
+                      }
+                    }));
                   }}
-                  value={waterRegionDraft.footprint.centerZ.toFixed(2)}
+                  value={waterRegionDraft.footprint.centerZ}
                 />
               </div>
             </div>
@@ -98,63 +85,53 @@ export function MapEditorWaterRegionsPanel({
                 <Label htmlFor={`${waterRegionDraft.waterRegionId}-size-x`}>
                   Width Cells
                 </Label>
-                <Input
+                <MapEditorEditableNumberInput
+                  decimals={0}
                   id={`${waterRegionDraft.waterRegionId}-size-x`}
-                  onChange={(event) => {
-                    const nextValue = resolveFiniteNumber(event.target.value);
-
-                    if (nextValue !== null) {
-                      onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
-                        ...draft,
-                        footprint: {
-                          ...draft.footprint,
-                          sizeCellsX: Math.max(1, Math.round(nextValue))
-                        }
-                      }));
-                    }
+                  onValueChange={(nextValue) => {
+                    onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
+                      ...draft,
+                      footprint: {
+                        ...draft.footprint,
+                        sizeCellsX: Math.max(1, Math.round(nextValue))
+                      }
+                    }));
                   }}
-                  value={String(waterRegionDraft.footprint.sizeCellsX)}
+                  value={waterRegionDraft.footprint.sizeCellsX}
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${waterRegionDraft.waterRegionId}-size-z`}>
                   Length Cells
                 </Label>
-                <Input
+                <MapEditorEditableNumberInput
+                  decimals={0}
                   id={`${waterRegionDraft.waterRegionId}-size-z`}
-                  onChange={(event) => {
-                    const nextValue = resolveFiniteNumber(event.target.value);
-
-                    if (nextValue !== null) {
-                      onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
-                        ...draft,
-                        footprint: {
-                          ...draft.footprint,
-                          sizeCellsZ: Math.max(1, Math.round(nextValue))
-                        }
-                      }));
-                    }
+                  onValueChange={(nextValue) => {
+                    onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
+                      ...draft,
+                      footprint: {
+                        ...draft.footprint,
+                        sizeCellsZ: Math.max(1, Math.round(nextValue))
+                      }
+                    }));
                   }}
-                  value={String(waterRegionDraft.footprint.sizeCellsZ)}
+                  value={waterRegionDraft.footprint.sizeCellsZ}
                 />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${waterRegionDraft.waterRegionId}-depth`}>
                   Depth
                 </Label>
-                <Input
+                <MapEditorEditableNumberInput
                   id={`${waterRegionDraft.waterRegionId}-depth`}
-                  onChange={(event) => {
-                    const nextValue = resolveFiniteNumber(event.target.value);
-
-                    if (nextValue !== null) {
-                      onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
-                        ...draft,
-                        depthMeters: Math.max(0.5, nextValue)
-                      }));
-                    }
+                  onValueChange={(nextValue) => {
+                    onUpdateWaterRegion(waterRegionDraft.waterRegionId, (draft) => ({
+                      ...draft,
+                      depthMeters: Math.max(0.5, nextValue)
+                    }));
                   }}
-                  value={waterRegionDraft.depthMeters.toFixed(2)}
+                  value={waterRegionDraft.depthMeters}
                 />
               </div>
             </div>

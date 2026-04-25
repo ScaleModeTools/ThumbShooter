@@ -1,23 +1,49 @@
 import { resolveMetaverseWorldSurfaceScaleVector } from "@webgpu-metaverse/shared/metaverse/world";
 import {
+  AmbientLight,
   BoxGeometry,
+  BufferGeometry,
   BundleGroup,
+  Color,
+  DirectionalLight,
+  DoubleSide,
+  Float32BufferAttribute,
   Group,
   InstancedMesh,
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
+  PointLight,
   Quaternion,
   SphereGeometry,
+  SpotLight,
   Vector3,
   type Object3D
 } from "three/webgpu";
 import { color, float } from "three/tsl";
+import {
+  createMetaverseSceneTerrainPatchPreviewTexture,
+  resolveMetaverseSceneSemanticMaterialProfile,
+  resolveMetaverseSceneSurfacePreviewTextureId,
+  type MetaverseSceneSemanticPreviewTextureId
+} from "./metaverse-scene-semantic-material-textures";
+import {
+  createMetaverseSceneSemanticRenderMaterial,
+  resolveMetaverseSceneSemanticMaterialDefinition
+} from "./metaverse-scene-semantic-materials";
+import {
+  createMetaverseSceneTerrainPatchGeometry
+} from "./metaverse-scene-terrain-patch-geometry";
 
 import type {
   MetaverseEnvironmentAssetProofConfig,
+  MetaverseEnvironmentGameplayVolumeProofConfig,
+  MetaverseEnvironmentLightProofConfig,
   MetaverseEnvironmentLodProofConfig,
   MetaverseEnvironmentPlacementProofConfig,
+  MetaverseEnvironmentProceduralStructureProofConfig,
+  MetaverseEnvironmentSurfaceMeshProofConfig,
+  MetaverseEnvironmentTerrainPatchProofConfig,
   MetaverseEnvironmentProofConfig
 } from "../../types/metaverse-runtime";
 import type {
@@ -29,6 +55,7 @@ import type {
   MetaverseSceneMountableEnvironmentEntryRuntime,
   MetaverseSceneMountableEnvironmentSeatRuntime
 } from "../mounts/metaverse-scene-mounts";
+import { resolveEnvironmentRenderYawFromSimulationYaw } from "../../traversal/presentation/mount-presentation";
 
 const dynamicEnvironmentSeatSocketPositionScratch = new Vector3();
 const dynamicEnvironmentSeatSocketQuaternionScratch = new Quaternion();
@@ -57,6 +84,399 @@ function createProceduralEnvironmentMaterial(
   }
 
   return material;
+}
+
+function readEnvironmentPlacementMaterialTextureId(
+  materialReferenceId: string
+): MetaverseSceneSemanticPreviewTextureId | null {
+  switch (materialReferenceId) {
+    case "__default__":
+    case "alien-rock":
+    case "concrete":
+    case "glass":
+    case "metal":
+    case "shell-floor-grid":
+    case "shell-metal-panel":
+    case "shell-painted-trim":
+    case "team-blue":
+    case "team-red":
+    case "terrain-ash":
+    case "terrain-grass":
+    case "terrain-rock":
+    case "warning":
+      return materialReferenceId;
+    default:
+      return null;
+  }
+}
+
+function createEnvironmentPlacementMaterialOverride(
+  materialReferenceId: string | null,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): MeshStandardNodeMaterial | null {
+  if (materialReferenceId === null) {
+    return null;
+  }
+
+  const materialDefinition = resolveMetaverseSceneSemanticMaterialDefinition(
+    materialDefinitions,
+    materialReferenceId
+  );
+  const textureId =
+    materialDefinition?.baseMaterialId ??
+    readEnvironmentPlacementMaterialTextureId(materialReferenceId);
+
+  return textureId === null
+    ? null
+    : createMetaverseSceneSemanticRenderMaterial(textureId, materialDefinition);
+}
+
+function applyEnvironmentPlacementMaterialOverride(
+  scene: Group,
+  materialReferenceId: string | null,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): void {
+  const material = createEnvironmentPlacementMaterialOverride(
+    materialReferenceId,
+    materialDefinitions
+  );
+
+  if (material === null) {
+    return;
+  }
+
+  scene.traverse((node) => {
+    if (
+      "isMesh" in node &&
+      node.isMesh === true &&
+      (!("isSkinnedMesh" in node) || node.isSkinnedMesh !== true)
+    ) {
+      (node as Mesh).material = material;
+    }
+  });
+}
+
+function groupEnvironmentPlacementsByMaterialReference(
+  placements: readonly MetaverseEnvironmentPlacementProofConfig[]
+): readonly {
+  readonly materialReferenceId: string | null;
+  readonly placements: readonly {
+    readonly placement: MetaverseEnvironmentPlacementProofConfig;
+    readonly placementIndex: number;
+  }[];
+}[] {
+  const groups: {
+    readonly materialReferenceId: string | null;
+    readonly placements: {
+      readonly placement: MetaverseEnvironmentPlacementProofConfig;
+      readonly placementIndex: number;
+    }[];
+  }[] = [];
+  const groupsByKey = new Map<string, (typeof groups)[number]>();
+
+  placements.forEach((placement, placementIndex) => {
+    const materialReferenceId = placement.materialReferenceId ?? null;
+    const groupKey = materialReferenceId ?? "__source__";
+    const existingGroup = groupsByKey.get(groupKey);
+    const group =
+      existingGroup ??
+      {
+        materialReferenceId,
+        placements: []
+      };
+
+    if (existingGroup === undefined) {
+      groupsByKey.set(groupKey, group);
+      groups.push(group);
+    }
+
+    group.placements.push(
+      Object.freeze({
+        placement,
+        placementIndex
+      })
+    );
+  });
+
+  return Object.freeze(
+    groups.map((group) =>
+      Object.freeze({
+        materialReferenceId: group.materialReferenceId,
+        placements: Object.freeze(group.placements)
+      })
+    )
+  );
+}
+
+function resolveTerrainPatchPrimaryTextureId(
+  terrainPatch: MetaverseEnvironmentTerrainPatchProofConfig
+): MetaverseSceneSemanticPreviewTextureId {
+  let selectedTextureId: MetaverseSceneSemanticPreviewTextureId = "terrain-grass";
+  let selectedWeight = Number.NEGATIVE_INFINITY;
+
+  for (const layer of terrainPatch.materialLayers) {
+    const layerWeight = layer.weightSamples.reduce(
+      (totalWeight, sampleWeight) => totalWeight + Math.max(0, sampleWeight),
+      0
+    );
+
+    if (layerWeight > selectedWeight) {
+      selectedTextureId = layer.materialId;
+      selectedWeight = layerWeight;
+    }
+  }
+
+  return selectedTextureId;
+}
+
+function createSemanticStructureMaterial(
+  structure: MetaverseEnvironmentProceduralStructureProofConfig,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): MeshStandardNodeMaterial {
+  const materialDefinition = resolveMetaverseSceneSemanticMaterialDefinition(
+    materialDefinitions,
+    structure.materialReferenceId
+  );
+
+  return createMetaverseSceneSemanticRenderMaterial(
+    materialDefinition?.baseMaterialId ?? structure.materialId,
+    materialDefinition
+  );
+}
+
+function createSurfaceMeshMaterial(
+  surfaceMesh: MetaverseEnvironmentSurfaceMeshProofConfig,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): MeshStandardNodeMaterial {
+  const materialDefinition = resolveMetaverseSceneSemanticMaterialDefinition(
+    materialDefinitions,
+    surfaceMesh.materialReferenceId
+  );
+  const textureId =
+    materialDefinition?.baseMaterialId ??
+    resolveMetaverseSceneSurfacePreviewTextureId(surfaceMesh);
+  const profile = resolveMetaverseSceneSemanticMaterialProfile(textureId);
+  const material = createMetaverseSceneSemanticRenderMaterial(
+    textureId,
+    materialDefinition
+  );
+
+  material.metalnessNode = float(
+    materialDefinition?.metalness ??
+      (surfaceMesh.regionKind === "roof"
+        ? Math.max(profile.metalness, 0.18)
+        : profile.metalness)
+  );
+  material.roughnessNode = float(
+    materialDefinition?.roughness ??
+      (surfaceMesh.regionKind === "path"
+        ? Math.min(0.72, profile.roughness)
+        : profile.roughness)
+  );
+  material.side = DoubleSide;
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -1;
+  material.polygonOffsetUnits = -1;
+
+  return material;
+}
+
+function createTerrainPatchMaterial(
+  terrainPatch: MetaverseEnvironmentTerrainPatchProofConfig
+): MeshStandardNodeMaterial {
+  return createMetaverseSceneSemanticRenderMaterial(
+    resolveTerrainPatchPrimaryTextureId(terrainPatch),
+    null,
+    {
+      diffuseTexture: createMetaverseSceneTerrainPatchPreviewTexture(terrainPatch)
+    }
+  );
+}
+
+function createSemanticGameplayVolumeMaterial(
+  volume: MetaverseEnvironmentGameplayVolumeProofConfig
+): MeshBasicNodeMaterial {
+  const material = new MeshBasicNodeMaterial();
+
+  if (volume.teamId === "blue") {
+    material.colorNode = color(0.22, 0.74, 0.97);
+  } else if (volume.teamId === "red") {
+    material.colorNode = color(0.98, 0.45, 0.52);
+  } else if (volume.volumeKind === "vehicle-route") {
+    material.colorNode = color(0.64, 0.9, 0.16);
+  } else {
+    material.colorNode = color(0.96, 0.62, 0.08);
+  }
+
+  material.transparent = true;
+  material.opacity = volume.volumeKind === "cover-volume" ? 0.12 : 0.08;
+  material.depthWrite = false;
+
+  return material;
+}
+
+function createProceduralStructureGroup(
+  structure: MetaverseEnvironmentProceduralStructureProofConfig,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): Group {
+  const group = new Group();
+  const mesh = new Mesh(
+    new BoxGeometry(structure.size.x, structure.size.y, structure.size.z),
+    createSemanticStructureMaterial(structure, materialDefinitions)
+  );
+
+  group.name = `metaverse_environment_procedural_structure/${structure.structureId}`;
+  mesh.name = `${group.name}/mesh`;
+  mesh.position.y = structure.size.y * 0.5;
+  mesh.receiveShadow = true;
+  mesh.castShadow = structure.traversalAffordance === "blocker";
+  group.position.set(structure.center.x, structure.center.y, structure.center.z);
+  group.rotation.y = structure.rotationYRadians;
+  group.add(mesh);
+
+  return group;
+}
+
+function createSurfaceUvAttribute(
+  vertices: readonly number[]
+): Float32BufferAttribute {
+  let minX = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  const uvs: number[] = [];
+
+  for (let index = 0; index < vertices.length; index += 3) {
+    minX = Math.min(minX, vertices[index] ?? 0);
+    minZ = Math.min(minZ, vertices[index + 2] ?? 0);
+  }
+
+  for (let index = 0; index < vertices.length; index += 3) {
+    uvs.push(
+      ((vertices[index] ?? 0) - minX) / 4,
+      ((vertices[index + 2] ?? 0) - minZ) / 4
+    );
+  }
+
+  return new Float32BufferAttribute(uvs, 2);
+}
+
+function createTerrainPatchGroup(
+  terrainPatch: MetaverseEnvironmentTerrainPatchProofConfig
+): Group {
+  const group = new Group();
+  const mesh = new Mesh(
+    createMetaverseSceneTerrainPatchGeometry(terrainPatch),
+    createTerrainPatchMaterial(terrainPatch)
+  );
+
+  group.name = `metaverse_environment_terrain_patch/${terrainPatch.terrainPatchId}`;
+  mesh.name = `${group.name}/mesh`;
+  mesh.receiveShadow = true;
+  group.position.set(
+    terrainPatch.origin.x,
+    terrainPatch.origin.y,
+    terrainPatch.origin.z
+  );
+  group.rotation.y = terrainPatch.rotationYRadians;
+  group.add(mesh);
+
+  return group;
+}
+
+function createSurfaceMeshGroup(
+  surfaceMesh: MetaverseEnvironmentSurfaceMeshProofConfig,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
+): Group {
+  const geometry = new BufferGeometry();
+  const material = createSurfaceMeshMaterial(surfaceMesh, materialDefinitions);
+  const group = new Group();
+  const mesh = new Mesh(geometry, material);
+
+  geometry.setAttribute(
+    "position",
+    new Float32BufferAttribute(surfaceMesh.vertices, 3)
+  );
+  geometry.setAttribute("uv", createSurfaceUvAttribute(surfaceMesh.vertices));
+  geometry.setIndex(Array.from(surfaceMesh.indices));
+  geometry.computeVertexNormals();
+
+  group.name = `metaverse_environment_surface_mesh/${surfaceMesh.regionId}`;
+  mesh.name = `${group.name}/mesh`;
+  mesh.receiveShadow = true;
+  mesh.castShadow = surfaceMesh.regionKind === "roof";
+  group.position.set(
+    surfaceMesh.translation.x,
+    surfaceMesh.translation.y,
+    surfaceMesh.translation.z
+  );
+  group.rotation.y = surfaceMesh.rotationYRadians;
+  group.add(mesh);
+
+  return group;
+}
+
+function createGameplayVolumeGroup(
+  volume: MetaverseEnvironmentGameplayVolumeProofConfig
+): Group {
+  const group = new Group();
+  const mesh = new Mesh(
+    new BoxGeometry(volume.size.x, volume.size.y, volume.size.z),
+    createSemanticGameplayVolumeMaterial(volume)
+  );
+
+  group.name = `metaverse_environment_gameplay_volume/${volume.volumeId}`;
+  mesh.name = `${group.name}/mesh`;
+  group.position.set(volume.center.x, volume.center.y, volume.center.z);
+  group.add(mesh);
+
+  return group;
+}
+
+function addSemanticLight(
+  anchorGroup: Group,
+  light: MetaverseEnvironmentLightProofConfig
+): void {
+  const lightColor = new Color(light.color[0], light.color[1], light.color[2]);
+
+  switch (light.lightKind) {
+    case "ambient":
+      anchorGroup.add(new AmbientLight(lightColor, light.intensity));
+      return;
+    case "sun": {
+      const sun = new DirectionalLight(lightColor, light.intensity);
+
+      sun.position.set(light.position.x, light.position.y, light.position.z);
+      anchorGroup.add(sun);
+      return;
+    }
+    case "spot": {
+      const spot = new SpotLight(
+        lightColor,
+        light.intensity,
+        light.rangeMeters ?? 0,
+        Math.PI * 0.25,
+        0.4,
+        1
+      );
+
+      spot.position.set(light.position.x, light.position.y, light.position.z);
+      anchorGroup.add(spot);
+      return;
+    }
+    case "area":
+    case "point":
+    default: {
+      const point = new PointLight(
+        lightColor,
+        light.intensity,
+        light.rangeMeters ?? 0,
+        1
+      );
+
+      point.position.set(light.position.x, light.position.y, light.position.z);
+      anchorGroup.add(point);
+      return;
+    }
+  }
 }
 
 function createProceduralEnvironmentLodAsset(
@@ -183,6 +603,20 @@ function applyPlacementTransform(
   object.updateMatrixWorld(true);
 }
 
+function applyDynamicPlacementTransform(
+  object: Object3D,
+  environmentAssetProofConfig: MetaverseEnvironmentAssetProofConfig,
+  placement: MetaverseEnvironmentPlacementProofConfig
+): void {
+  applyPlacementTransform(object, placement);
+  object.rotation.y = resolveEnvironmentRenderYawFromSimulationYaw(
+    environmentAssetProofConfig,
+    placement.rotationYRadians
+  );
+  object.updateMatrix();
+  object.updateMatrixWorld(true);
+}
+
 async function loadEnvironmentLodObjects(
   environmentAssetProofConfig: MetaverseEnvironmentAssetProofConfig,
   createSceneAssetLoader: () => SceneAssetLoaderLike
@@ -215,7 +649,8 @@ async function loadEnvironmentLodObjects(
 
 async function loadStaticEnvironmentAssetProofRuntime(
   environmentAssetProofConfig: MetaverseEnvironmentAssetProofConfig,
-  createSceneAssetLoader: () => SceneAssetLoaderLike
+  createSceneAssetLoader: () => SceneAssetLoaderLike,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
 ): Promise<{
   readonly anchorGroup: Group;
   readonly placements: readonly MetaverseEnvironmentProofRuntime["staticPlacements"][number][];
@@ -241,6 +676,11 @@ async function loadStaticEnvironmentAssetProofRuntime(
         );
 
         lodScene.name = `${lodBundle.name}/scene`;
+        applyEnvironmentPlacementMaterialOverride(
+          lodScene,
+          placement.materialReferenceId ?? null,
+          materialDefinitions
+        );
         lodBundle.visible = false;
         lodBundle.add(lodScene);
         placementAnchor.add(lodBundle);
@@ -280,7 +720,8 @@ async function loadStaticEnvironmentAssetProofRuntime(
 
 async function loadInstancedEnvironmentAssetProofRuntime(
   environmentAssetProofConfig: MetaverseEnvironmentAssetProofConfig,
-  createSceneAssetLoader: () => SceneAssetLoaderLike
+  createSceneAssetLoader: () => SceneAssetLoaderLike,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"]
 ): Promise<
   MetaverseEnvironmentProofRuntime["instancedAssets"][number] & {
     readonly anchorGroup: Group;
@@ -292,6 +733,9 @@ async function loadInstancedEnvironmentAssetProofRuntime(
   );
   const placementScratch = new Group();
   const anchorGroup = new Group();
+  const placementGroups = groupEnvironmentPlacementsByMaterialReference(
+    environmentAssetProofConfig.placements
+  );
   const lods = loadedLodAssets.map(({ config, scene: loadedScene }) => {
     const sourceMeshes = collectRenderableMeshes(
       loadedScene,
@@ -314,23 +758,31 @@ async function loadInstancedEnvironmentAssetProofRuntime(
         );
       }
 
-      const instancedMesh = new InstancedMesh(
-        sourceMesh.geometry,
-        sourceMesh.material,
-        environmentAssetProofConfig.placements.length
-      );
+      placementGroups.forEach((placementGroup, placementGroupIndex) => {
+        const instancedMesh = new InstancedMesh(
+          sourceMesh.geometry,
+          createEnvironmentPlacementMaterialOverride(
+            placementGroup.materialReferenceId,
+            materialDefinitions
+          ) ?? sourceMesh.material,
+          placementGroup.placements.length
+        );
 
-      instancedMesh.name = `${lodGroup.name}/mesh-${meshIndex}`;
+        instancedMesh.name = `${lodGroup.name}/mesh-${meshIndex}-${placementGroupIndex}`;
 
-      environmentAssetProofConfig.placements.forEach(
-        (placement, placementIndex) => {
-          applyPlacementTransform(placementScratch, placement);
-          instancedMesh.setMatrixAt(placementIndex, placementScratch.matrix);
-        }
-      );
+        placementGroup.placements.forEach(
+          ({ placement }, placementGroupPlacementIndex) => {
+            applyPlacementTransform(placementScratch, placement);
+            instancedMesh.setMatrixAt(
+              placementGroupPlacementIndex,
+              placementScratch.matrix
+            );
+          }
+        );
 
-      instancedMesh.instanceMatrix.needsUpdate = true;
-      lodGroup.add(instancedMesh);
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        lodGroup.add(instancedMesh);
+      });
     });
 
     anchorGroup.add(lodGroup);
@@ -357,6 +809,7 @@ async function loadInstancedEnvironmentAssetProofRuntime(
 async function loadDynamicEnvironmentAssetProofRuntime(
   environmentAssetProofConfig: MetaverseEnvironmentAssetProofConfig,
   createSceneAssetLoader: () => SceneAssetLoaderLike,
+  materialDefinitions: MetaverseEnvironmentProofConfig["materialDefinitions"],
   dynamicAssetIndex: number,
   findNamedNode: (
     scene: Group,
@@ -398,6 +851,12 @@ async function loadDynamicEnvironmentAssetProofRuntime(
     null;
   let seats: readonly MetaverseSceneMountableEnvironmentSeatRuntime[] | null =
     null;
+
+  applyEnvironmentPlacementMaterialOverride(
+    environmentScene,
+    placement.materialReferenceId ?? null,
+    materialDefinitions
+  );
 
   if (environmentAssetProofConfig.traversalAffordance === "mount") {
     if (
@@ -520,7 +979,11 @@ async function loadDynamicEnvironmentAssetProofRuntime(
   for (const seat of seats ?? []) {
     presentationGroup.add(seat.anchorGroup);
   }
-  applyPlacementTransform(anchorGroup, placement);
+  applyDynamicPlacementTransform(
+    anchorGroup,
+    environmentAssetProofConfig,
+    placement
+  );
 
   return {
     anchorGroup,
@@ -552,17 +1015,44 @@ export async function loadMetaverseEnvironmentProofRuntime(
   const dynamicAssets: MetaverseEnvironmentDynamicAssetRuntime[] = [];
   const instancedAssets: MetaverseEnvironmentProofRuntime["instancedAssets"][number][] = [];
   const staticPlacements: MetaverseEnvironmentProofRuntime["staticPlacements"][number][] = [];
+  const materialDefinitions =
+    environmentProofConfig.materialDefinitions ?? Object.freeze([]);
 
   anchorGroup.name = "metaverse_environment";
+
+  for (const terrainPatch of environmentProofConfig.terrainPatches ?? []) {
+    anchorGroup.add(createTerrainPatchGroup(terrainPatch));
+  }
+
+  for (const surfaceMesh of environmentProofConfig.surfaceMeshes ?? []) {
+    anchorGroup.add(
+      createSurfaceMeshGroup(surfaceMesh, materialDefinitions)
+    );
+  }
+
+  for (const structure of environmentProofConfig.proceduralStructures ?? []) {
+    anchorGroup.add(
+      createProceduralStructureGroup(structure, materialDefinitions)
+    );
+  }
+
+  for (const volume of environmentProofConfig.gameplayVolumes ?? []) {
+    anchorGroup.add(createGameplayVolumeGroup(volume));
+  }
+
+  for (const semanticLight of environmentProofConfig.lights ?? []) {
+    addSemanticLight(anchorGroup, semanticLight);
+  }
 
   for (const [
     environmentAssetIndex,
     environmentAssetProofConfig
-  ] of environmentProofConfig.assets.entries()) {
+  ] of (environmentProofConfig.assets ?? []).entries()) {
     if (environmentAssetProofConfig.placement === "dynamic") {
       const dynamicAssetRuntime = await loadDynamicEnvironmentAssetProofRuntime(
         environmentAssetProofConfig,
         createSceneAssetLoader,
+        materialDefinitions,
         environmentAssetIndex,
         findNamedNode,
         showSocketDebug
@@ -577,7 +1067,8 @@ export async function loadMetaverseEnvironmentProofRuntime(
       const instancedAssetRuntime =
         await loadInstancedEnvironmentAssetProofRuntime(
           environmentAssetProofConfig,
-          createSceneAssetLoader
+          createSceneAssetLoader,
+          materialDefinitions
         );
 
       instancedAssets.push(instancedAssetRuntime);
@@ -587,7 +1078,8 @@ export async function loadMetaverseEnvironmentProofRuntime(
 
     const staticAssetRuntime = await loadStaticEnvironmentAssetProofRuntime(
       environmentAssetProofConfig,
-      createSceneAssetLoader
+      createSceneAssetLoader,
+      materialDefinitions
     );
 
     staticPlacements.push(...staticAssetRuntime.placements);

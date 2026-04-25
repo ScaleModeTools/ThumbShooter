@@ -178,3 +178,47 @@ test("RapierPhysicsRuntime sanitizes dynamic body config, clamps invalid timeste
   assert.equal(world.colliders.includes(collider), false);
   assert.equal(world.queryColliders.includes(collider), false);
 });
+
+test("RapierPhysicsRuntime creates sanitized heightfield colliders from terrain samples", async () => {
+  const { RapierPhysicsRuntime } = await clientLoader.load("/src/physics/index.ts");
+  const { physicsRuntime } = createFakePhysicsRuntimeWithWorld(
+    RapierPhysicsRuntime
+  );
+
+  await physicsRuntime.init();
+
+  const collider = physicsRuntime.createHeightfieldCollider(
+    3,
+    2,
+    Number.NaN,
+    Object.freeze([1, 2, 3, 4, 5, 6]),
+    Object.freeze({
+      x: 6,
+      y: Number.POSITIVE_INFINITY,
+      z: -4
+    }),
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0,
+      w: 0
+    })
+  );
+
+  assert.equal(collider.shape, "heightfield");
+  assert.equal(collider.payload.rows, 2);
+  assert.equal(collider.payload.cols, 1);
+  assert.deepEqual(Array.from(collider.payload.heights), [1, 4, 2, 5, 3, 6]);
+  assert.equal(collider.payload.scale.x, 2);
+  assert.equal(collider.payload.scale.y, 1);
+  assert.equal(collider.payload.scale.z, 1);
+  assert.equal(collider.translationVector.x, 6);
+  assert.equal(collider.translationVector.y, 0);
+  assert.equal(collider.translationVector.z, -4);
+  assert.deepEqual(collider.rotationQuaternion, {
+    x: 0,
+    y: 0,
+    z: 0,
+    w: 1
+  });
+});

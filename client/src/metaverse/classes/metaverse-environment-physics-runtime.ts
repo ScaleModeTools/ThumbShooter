@@ -42,7 +42,6 @@ import {
   resolveDynamicCollisionTriMeshes,
   resolvePlacedCollisionTriMeshes,
   resolveScaledCollisionTriMeshes,
-  resolvePlacedCuboidColliders,
   type MetaverseTriMeshColliderSnapshot
 } from "../states/metaverse-environment-collision";
 
@@ -435,11 +434,7 @@ export class MetaverseEnvironmentPhysicsRuntime {
     const staticSurfaceColliderSnapshots =
       environmentProofConfig === null
         ? []
-        : environmentProofConfig.assets.flatMap((environmentAsset) =>
-            shouldUseCollisionMeshSurfaceSupport(environmentAsset)
-              ? []
-              : resolvePlacedCuboidColliders(environmentAsset)
-          );
+        : [...(environmentProofConfig.surfaceColliders ?? [])];
 
     if (shouldUseSimpleSpawnSupportOverride()) {
       staticSurfaceColliderSnapshots.push(metaverseDebugSimpleSpawnSupportCollider);
@@ -797,11 +792,34 @@ export class MetaverseEnvironmentPhysicsRuntime {
     }
 
     for (const collider of this.#staticSurfaceColliderSnapshots) {
-      const environmentCollider = this.#physicsRuntime.createFixedCuboidCollider(
-        collider.halfExtents,
-        collider.translation,
-        collider.rotation
-      );
+      const environmentCollider =
+        collider.shape === "heightfield" &&
+        collider.heightSamples !== undefined &&
+        collider.sampleCountX !== undefined &&
+        collider.sampleCountZ !== undefined &&
+        collider.sampleSpacingMeters !== undefined
+          ? this.#physicsRuntime.createHeightfieldCollider(
+              collider.sampleCountX,
+              collider.sampleCountZ,
+              collider.sampleSpacingMeters,
+              collider.heightSamples,
+              collider.translation,
+              collider.rotation
+            )
+          : collider.shape === "trimesh" &&
+              collider.vertices !== undefined &&
+              collider.indices !== undefined
+            ? this.#physicsRuntime.createTriMeshCollider(
+                collider.vertices,
+                collider.indices,
+                collider.translation,
+                collider.rotation
+              )
+            : this.#physicsRuntime.createFixedCuboidCollider(
+                collider.halfExtents,
+                collider.translation,
+                collider.rotation
+              );
 
       this.#environmentColliders.push(environmentCollider);
       this.#surfaceColliderMetadataByHandle.set(

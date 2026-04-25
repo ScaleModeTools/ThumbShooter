@@ -182,6 +182,14 @@ function rotatePlanarPointByQuaternion(x, z, quaternion) {
   };
 }
 
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readHeightfieldSample(heights, sampleCountZ, sampleX, sampleZ) {
+  return heights[sampleX * sampleCountZ + sampleZ] ?? 0;
+}
+
 class FakeCharacterController {
   constructor(world) {
     this.applyImpulsesToDynamicBodies = false;
@@ -331,6 +339,104 @@ class FakeCharacterController {
         candidate === undefined ||
         (filterPredicate !== undefined && !filterPredicate(candidate))
       ) {
+        continue;
+      }
+
+      if (candidate.shape === "heightfield") {
+        const rows = candidate.payload.rows ?? 0;
+        const cols = candidate.payload.cols ?? 0;
+        const sampleCountX = rows + 1;
+        const sampleCountZ = cols + 1;
+        const heights = candidate.payload.heights ?? [];
+        const scale = candidate.payload.scale ?? { x: 1, y: 1, z: 1 };
+
+        if (
+          sampleCountX < 2 ||
+          sampleCountZ < 2 ||
+          heights.length < sampleCountX * sampleCountZ
+        ) {
+          continue;
+        }
+
+        const candidateTranslation = candidate.translation();
+        const candidateRotation = candidate.rotationQuaternion ?? {
+          x: 0,
+          y: 0,
+          z: 0,
+          w: 1
+        };
+        const localOffset = rotatePlanarPointByQuaternion(
+          centerX - candidateTranslation.x,
+          centerZ - candidateTranslation.z,
+          {
+            x: -candidateRotation.x,
+            y: -candidateRotation.y,
+            z: -candidateRotation.z,
+            w: candidateRotation.w
+          }
+        );
+        const halfExtentX = Math.max(0, scale.x ?? 0) * 0.5;
+        const halfExtentZ = Math.max(0, scale.z ?? 0) * 0.5;
+
+        if (
+          Math.abs(localOffset.x) > halfExtentX + capsuleRadius ||
+          Math.abs(localOffset.z) > halfExtentZ + capsuleRadius
+        ) {
+          continue;
+        }
+
+        const spacingX = (halfExtentX * 2) / (sampleCountX - 1);
+        const spacingZ = (halfExtentZ * 2) / (sampleCountZ - 1);
+        const sampleXFloat = clampNumber(
+          (localOffset.x + halfExtentX) / spacingX,
+          0,
+          sampleCountX - 1
+        );
+        const sampleZFloat = clampNumber(
+          (localOffset.z + halfExtentZ) / spacingZ,
+          0,
+          sampleCountZ - 1
+        );
+        const cellX = Math.min(sampleCountX - 2, Math.floor(sampleXFloat));
+        const cellZ = Math.min(sampleCountZ - 2, Math.floor(sampleZFloat));
+        const localX = sampleXFloat - cellX;
+        const localZ = sampleZFloat - cellZ;
+        const topLeft = readHeightfieldSample(
+          heights,
+          sampleCountZ,
+          cellX,
+          cellZ
+        );
+        const bottomLeft = readHeightfieldSample(
+          heights,
+          sampleCountZ,
+          cellX,
+          cellZ + 1
+        );
+        const topRight = readHeightfieldSample(
+          heights,
+          sampleCountZ,
+          cellX + 1,
+          cellZ
+        );
+        const bottomRight = readHeightfieldSample(
+          heights,
+          sampleCountZ,
+          cellX + 1,
+          cellZ + 1
+        );
+        const localSurfaceY =
+          localX + localZ <= 1
+            ? topLeft + (topRight - topLeft) * localX + (bottomLeft - topLeft) * localZ
+            : bottomRight +
+              (bottomLeft - bottomRight) * (1 - localX) +
+              (topRight - bottomRight) * (1 - localZ);
+        const surfaceY = candidateTranslation.y + localSurfaceY;
+
+        if (highestSurfaceY === null || surfaceY > highestSurfaceY) {
+          highestSurfaceY = surfaceY;
+        }
+
         continue;
       }
 
@@ -528,6 +634,14 @@ export function createFakePhysicsRuntimeWithWorld(RapierPhysicsRuntime) {
                 return new FakeColliderDesc("trimesh", {
                   indices,
                   vertices
+                });
+              },
+              heightfield(rows, cols, heights, scale) {
+                return new FakeColliderDesc("heightfield", {
+                  cols,
+                  heights,
+                  rows,
+                  scale
                 });
               }
             },

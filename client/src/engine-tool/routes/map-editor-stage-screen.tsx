@@ -7,7 +7,36 @@ import {
   useState
 } from "react";
 
-import { ArrowLeftIcon, Layers3Icon, PlayIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  BoxIcon,
+  BrickWallIcon,
+  CarFrontIcon,
+  CrosshairIcon,
+  DoorOpenIcon,
+  ExpandIcon,
+  FlagIcon,
+  FlagTriangleRightIcon,
+  FolderTreeIcon,
+  InfoIcon,
+  LightbulbIcon,
+  MountainIcon,
+  MousePointer2Icon,
+  Move3dIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
+  PaintbrushIcon,
+  PlayIcon,
+  RotateCwIcon,
+  RouteIcon,
+  ShieldIcon,
+  SquareIcon,
+  Trash2Icon,
+  WavesIcon
+} from "lucide-react";
 
 import { environmentPropManifest } from "@/assets/config/environment-prop-manifest";
 import type { EnvironmentAssetDescriptor } from "@/assets/types/environment-asset-manifest";
@@ -32,15 +61,32 @@ import {
   ResizablePanelGroup
 } from "@/components/ui/resizable";
 import { MapEditorMenubar } from "@/engine-tool/layout/map-editor-menubar";
+import { MapEditorGameplayPane } from "@/engine-tool/layout/map-editor-gameplay-pane";
 import { MapEditorSceneRail } from "@/engine-tool/layout/map-editor-scene-rail";
-import { MapEditorSelectionPane } from "@/engine-tool/layout/map-editor-selection-pane";
+import {
+  MapEditorSelectionPane,
+  MapEditorSelectionMaterialControlsPane
+} from "@/engine-tool/layout/map-editor-selection-pane";
 import { MapEditorToolbar } from "@/engine-tool/layout/map-editor-toolbar";
 import { MapEditorViewportPane } from "@/engine-tool/layout/map-editor-viewport-pane";
-import { MapEditorWorldPane } from "@/engine-tool/layout/map-editor-world-pane";
 import {
+  mapEditorBuildGridUnitMeters,
+  resolveMapEditorBuildAssetPlacementPosition,
+  resolveMapEditorBuildFootprintCenterPosition,
+  resolveMapEditorBuildSizedCenterPosition,
+  snapMapEditorBuildCoordinateToCellCenter,
+  snapMapEditorBuildCoordinateToGrid
+} from "@/engine-tool/build/map-editor-build-placement";
+import {
+  addMapEditorFloorPolygonRegionDraft,
   addMapEditorPathSegment,
+  addMapEditorCombatLaneDraft,
   addMapEditorConnectorDraft,
+  addMapEditorCoverDraft,
   addMapEditorEdgeDraft,
+  addMapEditorFloorRegionDraft,
+  addMapEditorLightDraft,
+  addMapEditorMaterialDefinitionDraft,
   addMapEditorPlayerSpawnDraft,
   addMapEditorLaunchVariationDraft,
   addMapEditorPlacementFromAsset,
@@ -48,36 +94,49 @@ import {
   addMapEditorRegionDraft,
   addMapEditorSceneObjectDraft,
   addMapEditorSurfaceDraft,
-  addMapEditorTerrainChunkDraft,
+  addMapEditorTeamZoneDraft,
+  addMapEditorTerrainPatchDraft,
+  addMapEditorVehicleRouteDraft,
   addMapEditorWallSegment,
   addMapEditorWaterRegionDraft,
   applyMapEditorTerrainBrush,
+  createMapEditorStructuralGrid,
   createMapEditorProject,
   readSelectedMapEditorLaunchVariation,
   readSelectedMapEditorPlacement,
   removeMapEditorEntity,
+  paintMapEditorEntityMaterial,
   selectMapEditorEntity,
   selectMapEditorLaunchVariation,
   type MapEditorConnectorDraftSnapshot,
   type MapEditorEdgeDraftSnapshot,
+  type MapEditorGameplayVolumeDraftSnapshot,
+  type MapEditorLightDraftSnapshot,
+  type MapEditorMaterialDefinitionDraftSnapshot,
   updateMapEditorLaunchVariationDraft,
   updateMapEditorConnectorDraft,
   updateMapEditorEdgeDraft,
+  updateMapEditorEnvironmentPresentation,
   updateMapEditorEnvironmentPresentationProfileId,
+  updateMapEditorGameplayVolumeDraft,
   updateMapEditorGameplayProfileId,
+  updateMapEditorLightDraft,
+  updateMapEditorMaterialDefinitionDraft,
   updateMapEditorPlayerSpawnDraft,
   updateMapEditorPlayerSpawnSelectionDraft,
   updateMapEditorRegionDraft,
   updateMapEditorSceneObjectDraft,
   updateMapEditorPlacement,
+  updateMapEditorStructuralDraft,
   updateMapEditorSurfaceDraft,
-  updateMapEditorTerrainChunkDraft,
+  updateMapEditorTerrainPatchDraft,
   updateMapEditorWaterRegionDraft,
   type MapEditorProjectSnapshot,
   type MapEditorRegionDraftSnapshot,
   type MapEditorSelectedEntityRef,
+  type MapEditorStructuralDraftSnapshot,
   type MapEditorSurfaceDraftSnapshot,
-  type MapEditorTerrainChunkDraftSnapshot
+  type MapEditorTerrainPatchDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-state";
 import {
   applyMapEditorProjectSessionChange,
@@ -112,16 +171,31 @@ import {
   TabsList,
   TabsTrigger
 } from "@/components/ui/tabs";
-import { defaultMapEditorViewportHelperVisibility } from "@/engine-tool/types/map-editor";
+import {
+  defaultMapEditorBuilderToolState,
+  defaultMapEditorViewportHelperVisibility
+} from "@/engine-tool/types/map-editor";
 import type {
   MapEditorBuilderToolStateSnapshot,
+  MapEditorEntityTransformUpdate,
   MapEditorPlayerSpawnTransformUpdate,
+  MapEditorSceneVisibilityLayerId,
   MapEditorViewportHelperId,
   MapEditorPlacementUpdate,
+  MapEditorViewportTransformTargetRef,
   MapEditorViewportToolMode
 } from "@/engine-tool/types/map-editor";
-import { defaultMapEditorBuilderToolState } from "@/engine-tool/types/map-editor";
 import type { MetaverseWorldPreviewLaunchSelectionSnapshot } from "@/metaverse/world/map-bundles";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle
+} from "@/components/ui/alert";
+import {
+  ButtonGroup,
+  ButtonGroupText
+} from "@/components/ui/button-group";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 function readBrowserStorage(): MapEditorProjectStorageLike | null {
   try {
@@ -168,12 +242,99 @@ function applyPlacementUpdate(
   return updateMapEditorPlacement(
     project,
     placementId,
-    (placement) => ({
-      ...placement,
-      ...update,
-      position: update.position ?? placement.position
-    })
+    (placement) => {
+      const asset =
+        environmentPropManifest.environmentAssets.find(
+          (environmentAsset) => environmentAsset.id === placement.assetId
+        ) ?? null;
+
+      return {
+        ...placement,
+        ...update,
+        position:
+          update.position === undefined
+            ? placement.position
+            : asset === null
+              ? update.position
+              : resolveMapEditorBuildAssetPlacementPosition(
+                  update.position,
+                  asset,
+                  update.position.y
+                )
+      };
+    }
   );
+}
+
+function normalizeEditorCardinalYawRadians(rotationYRadians: number): number {
+  const quarterTurns = Math.round(rotationYRadians / (Math.PI * 0.5));
+  const normalized = quarterTurns * Math.PI * 0.5;
+
+  return ((normalized % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+}
+
+function scaleMeters(value: number, scale: number, minimum: number): number {
+  return Math.max(minimum, Math.round(value * Math.max(0.1, scale) * 100) / 100);
+}
+
+function createTransformPosition(
+  position: MapEditorEntityTransformUpdate["position"],
+  snapMode: "cell" | "grid" | "none"
+) {
+  return Object.freeze({
+    x:
+      snapMode === "cell"
+        ? snapMapEditorBuildCoordinateToCellCenter(position.x)
+        : snapMode === "grid"
+          ? snapMapEditorBuildCoordinateToGrid(position.x)
+          : position.x,
+    y: position.y,
+    z:
+      snapMode === "cell"
+        ? snapMapEditorBuildCoordinateToCellCenter(position.z)
+        : snapMode === "grid"
+          ? snapMapEditorBuildCoordinateToGrid(position.z)
+          : position.z
+  });
+}
+
+function createFootprintTransformPosition(
+  position: MapEditorEntityTransformUpdate["position"],
+  size: {
+    readonly x: number;
+    readonly z: number;
+  }
+) {
+  return resolveMapEditorBuildSizedCenterPosition(
+    position,
+    position.y,
+    size.x,
+    size.z
+  );
+}
+
+function createTerrainPatchGridFromTransform(
+  origin: MapEditorEntityTransformUpdate["position"],
+  sampleCountX: number,
+  sampleCountZ: number,
+  sampleSpacingMeters: number
+): MapEditorTerrainPatchDraftSnapshot["grid"] {
+  const sizeX = Math.max(
+    mapEditorBuildGridUnitMeters,
+    (sampleCountX - 1) * sampleSpacingMeters
+  );
+  const sizeZ = Math.max(
+    mapEditorBuildGridUnitMeters,
+    (sampleCountZ - 1) * sampleSpacingMeters
+  );
+
+  return Object.freeze({
+    cellX: Math.round((origin.x - sizeX * 0.5) / mapEditorBuildGridUnitMeters),
+    cellZ: Math.round((origin.z - sizeZ * 0.5) / mapEditorBuildGridUnitMeters),
+    cellsX: Math.max(1, Math.round(sizeX / mapEditorBuildGridUnitMeters)),
+    cellsZ: Math.max(1, Math.round(sizeZ / mapEditorBuildGridUnitMeters)),
+    layer: Math.round(origin.y / mapEditorBuildGridUnitMeters)
+  });
 }
 
 function isEditableKeyboardTarget(target: EventTarget | null): boolean {
@@ -191,11 +352,186 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   );
 }
 
-type MapEditorRightPaneTabId = "selection" | "world";
+type MapEditorLeftSidebarTabId = "authoring" | "gameplay" | "scene";
 
 interface MapEditorPanelApi {
   collapse: () => void;
   expand: () => void;
+}
+
+function formatEditorTabLabel(tabId: MapEditorLeftSidebarTabId): string {
+  switch (tabId) {
+    case "gameplay":
+      return "Gameplay";
+    case "scene":
+      return "Scene";
+    case "authoring":
+    default:
+      return "Project";
+  }
+}
+
+type HeaderViewportToolItem = {
+  readonly Icon: LucideIcon;
+  readonly label: string;
+  readonly value: MapEditorViewportToolMode;
+};
+
+type HeaderViewportToolGroup = {
+  readonly label: string;
+  readonly tools: readonly HeaderViewportToolItem[];
+};
+
+function createHeaderViewportToolGroup(
+  group: HeaderViewportToolGroup
+): HeaderViewportToolGroup {
+  return Object.freeze({
+    label: group.label,
+    tools: Object.freeze(group.tools.map((tool) => Object.freeze(tool)))
+  });
+}
+
+const headerViewportToolGroups: readonly HeaderViewportToolGroup[] = Object.freeze([
+  createHeaderViewportToolGroup({
+    label: "Edit",
+    tools: [
+      { Icon: MousePointer2Icon, label: "Select", value: "select" },
+      { Icon: PaintbrushIcon, label: "Paint", value: "paint" },
+      { Icon: Trash2Icon, label: "Delete", value: "delete" },
+      { Icon: Move3dIcon, label: "Move", value: "move" },
+      { Icon: RotateCwIcon, label: "Rotate", value: "rotate" },
+      { Icon: ExpandIcon, label: "Scale", value: "scale" }
+    ]
+  }),
+  createHeaderViewportToolGroup({
+    label: "Build",
+    tools: [
+      { Icon: SquareIcon, label: "Floor", value: "floor" },
+      { Icon: ShieldIcon, label: "Cover", value: "cover" },
+      { Icon: MountainIcon, label: "Terrain", value: "terrain" },
+      { Icon: BrickWallIcon, label: "Wall", value: "wall" },
+      { Icon: RouteIcon, label: "Path", value: "path" },
+      { Icon: WavesIcon, label: "Water", value: "water" }
+    ]
+  }),
+  createHeaderViewportToolGroup({
+    label: "Gameplay Tools",
+    tools: [
+      { Icon: CrosshairIcon, label: "Zone", value: "zone" },
+      { Icon: FlagTriangleRightIcon, label: "Lane", value: "lane" },
+      { Icon: CarFrontIcon, label: "Route", value: "vehicle-route" }
+    ]
+  }),
+  createHeaderViewportToolGroup({
+    label: "Scene",
+    tools: [
+      { Icon: FlagIcon, label: "Spawn", value: "player-spawn" },
+      { Icon: DoorOpenIcon, label: "Portal", value: "portal" },
+      { Icon: BoxIcon, label: "Module", value: "module" },
+      { Icon: LightbulbIcon, label: "Light", value: "light" }
+    ]
+  })
+]);
+
+function readHeaderViewportToolMode(
+  nextValue: string
+): MapEditorViewportToolMode | null {
+  for (const group of headerViewportToolGroups) {
+    if (group.tools.some((item) => item.value === nextValue)) {
+      return nextValue as MapEditorViewportToolMode;
+    }
+  }
+
+  return null;
+}
+
+function MapEditorHeaderToolRow({
+  onViewportToolModeChange,
+  viewportToolMode
+}: {
+  readonly onViewportToolModeChange: (
+    viewportToolMode: MapEditorViewportToolMode
+  ) => void;
+  readonly viewportToolMode: MapEditorViewportToolMode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center border-t border-border/70 px-3 py-1.5">
+      <div className="min-w-0 flex-1 overflow-x-auto">
+        <ButtonGroup aria-label="Viewport tool groups" className="w-max">
+          {headerViewportToolGroups.map((group) => (
+            <ButtonGroup aria-label={`${group.label} tools`} key={group.label}>
+              <ButtonGroupText className="text-xs uppercase text-muted-foreground">
+                {group.label}
+              </ButtonGroupText>
+              <ToggleGroup
+                aria-label={`${group.label} viewport tools`}
+                className="[&>[data-slot=toggle-group-item]:first-child]:rounded-l-none"
+                onValueChange={(nextValue) => {
+                  const nextViewportToolMode =
+                    readHeaderViewportToolMode(nextValue);
+
+                  if (nextViewportToolMode !== null) {
+                    onViewportToolModeChange(nextViewportToolMode);
+                  }
+                }}
+                size="sm"
+                spacing={0}
+                type="single"
+                value={viewportToolMode}
+                variant="outline"
+              >
+                {group.tools.map((item) => {
+                  const ToolIcon = item.Icon;
+
+                  return (
+                    <ToggleGroupItem
+                      aria-label={item.label}
+                      key={item.value}
+                      title={item.label}
+                      value={item.value}
+                    >
+                      <ToolIcon data-icon="inline-start" />
+                      <span>{item.label}</span>
+                    </ToggleGroupItem>
+                  );
+                })}
+              </ToggleGroup>
+            </ButtonGroup>
+          ))}
+        </ButtonGroup>
+      </div>
+    </div>
+  );
+}
+
+function isDeletableMapEditorSelection(
+  selectedEntityRef: MapEditorSelectedEntityRef | null
+): boolean {
+  return (
+    selectedEntityRef !== null &&
+    selectedEntityRef.kind !== "world-atmosphere" &&
+    selectedEntityRef.kind !== "world-sky" &&
+    selectedEntityRef.kind !== "world-sun"
+  );
+}
+
+function formatSelectedEntityLabel(
+  selectedEntityRef: MapEditorSelectedEntityRef | null,
+  fallbackToolMode: MapEditorViewportToolMode
+): string {
+  if (selectedEntityRef === null) {
+    if (fallbackToolMode === "player-spawn") {
+      return "Player Spawn";
+    }
+
+    if (fallbackToolMode === "vehicle-route") {
+      return "Vehicle Route";
+    }
+
+    return `${fallbackToolMode[0]?.toUpperCase() ?? ""}${fallbackToolMode.slice(1)}`;
+  }
+
+  return `${selectedEntityRef.kind}: ${selectedEntityRef.id}`;
 }
 
 function freezeSectionOpenState(
@@ -250,8 +586,9 @@ export function MapEditorStageScreen({
     )
   );
   const sceneRailPanelApiRef = useRef<MapEditorPanelApi | null>(null);
-  const [activeRightPaneTab, setActiveRightPaneTab] =
-    useState<MapEditorRightPaneTabId>("world");
+  const inspectorPanelApiRef = useRef<MapEditorPanelApi | null>(null);
+  const [activeLeftSidebarTab, setActiveLeftSidebarTab] =
+    useState<MapEditorLeftSidebarTabId>("authoring");
   const [activeModuleAssetId, setActiveModuleAssetId] = useState<string | null>(
     null
   );
@@ -262,11 +599,17 @@ export function MapEditorStageScreen({
   const [sceneRailCollapsed, setSceneRailCollapsed] = useState(
     initialUiPrefs.sceneRailCollapsed
   );
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(
+    initialUiPrefs.inspectorCollapsed
+  );
   const [sectionOpenState, setSectionOpenState] = useState(
     initialUiPrefs.sectionOpenState
   );
   const [viewportHelperVisibility, setViewportHelperVisibility] = useState(
     defaultMapEditorViewportHelperVisibility
+  );
+  const [sceneVisibility, setSceneVisibility] = useState(
+    initialUiPrefs.sceneVisibility
   );
   const [viewportToolMode, setViewportToolMode] =
     useState<MapEditorViewportToolMode>("select");
@@ -330,6 +673,24 @@ export function MapEditorStageScreen({
   const readSectionOpen = (sectionId: string, defaultOpen = true): boolean =>
     sectionOpenState[sectionId] ?? defaultOpen;
 
+  const handleLeftSidebarCollapsedChange = (collapsed: boolean) => {
+    if (collapsed) {
+      sceneRailPanelApiRef.current?.collapse();
+    } else {
+      sceneRailPanelApiRef.current?.expand();
+    }
+    setSceneRailCollapsed(collapsed);
+  };
+
+  const handleInspectorCollapsedChange = (collapsed: boolean) => {
+    if (collapsed) {
+      inspectorPanelApiRef.current?.collapse();
+    } else {
+      inspectorPanelApiRef.current?.expand();
+    }
+    setInspectorCollapsed(collapsed);
+  };
+
   const handleBundleChange = (nextBundleId: string) => {
     startTransition(() => {
       setSelectedBundleId(nextBundleId);
@@ -374,10 +735,19 @@ export function MapEditorStageScreen({
   useEffect(() => {
     saveMapEditorUiPrefs(browserStorage, {
       builderToolState,
+      inspectorCollapsed,
+      sceneVisibility,
       sceneRailCollapsed,
       sectionOpenState
     });
-  }, [browserStorage, builderToolState, sceneRailCollapsed, sectionOpenState]);
+  }, [
+    browserStorage,
+    builderToolState,
+    inspectorCollapsed,
+    sceneVisibility,
+    sceneRailCollapsed,
+    sectionOpenState
+  ]);
 
   const handleSelectEntity = (entityRef: MapEditorSelectedEntityRef | null) => {
     if (entityRef?.kind === "module") {
@@ -413,6 +783,16 @@ export function MapEditorStageScreen({
     );
   };
 
+  const handleUpdateEnvironmentPresentation = (
+    update: (
+      environmentPresentation: MapEditorProjectSnapshot["environmentPresentation"]
+    ) => MapEditorProjectSnapshot["environmentPresentation"]
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorEnvironmentPresentation(currentProject, update)
+    );
+  };
+
   const handleUpdateGameplayProfileId = (gameplayProfileId: string) => {
     handleProjectAuthoringChange((currentProject) =>
       updateMapEditorGameplayProfileId(currentProject, gameplayProfileId)
@@ -428,6 +808,23 @@ export function MapEditorStageScreen({
   const handleAddPlayerSpawn = () => {
     handleProjectAuthoringChange((currentProject) =>
       addMapEditorPlayerSpawnDraft(currentProject)
+    );
+  };
+
+  const handleCreatePlayerSpawnAtPosition = (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => {
+    const snappedPosition = resolveMapEditorBuildFootprintCenterPosition(
+      position,
+      position.y,
+      1,
+      1
+    );
+
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorPlayerSpawnDraft(currentProject, snappedPosition)
     );
   };
 
@@ -458,6 +855,30 @@ export function MapEditorStageScreen({
   const handleAddSceneObject = () => {
     handleProjectAuthoringChange((currentProject) =>
       addMapEditorSceneObjectDraft(currentProject)
+    );
+  };
+
+  const handleCreatePortalAtPosition = (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => {
+    const snappedPosition = resolveMapEditorBuildFootprintCenterPosition(
+      position,
+      position.y,
+      1,
+      1
+    );
+
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorSceneObjectDraft(
+        currentProject,
+        Object.freeze({
+          x: snappedPosition.x,
+          y: snappedPosition.y + 6,
+          z: snappedPosition.z
+        })
+      )
     );
   };
 
@@ -498,6 +919,276 @@ export function MapEditorStageScreen({
         yawRadians: update.yawRadians
       }))
     );
+  };
+
+  const handleCommitViewportEntityTransform = (
+    target: MapEditorViewportTransformTargetRef,
+    update: MapEditorEntityTransformUpdate
+  ) => {
+    handleProjectAuthoringChange((currentProject) => {
+      switch (target.kind) {
+        case "scene-object":
+          return updateMapEditorSceneObjectDraft(
+            currentProject,
+            target.id,
+            (sceneObject) => ({
+              ...sceneObject,
+              position: createTransformPosition(update.position, "cell"),
+              rotationYRadians: normalizeEditorCardinalYawRadians(
+                update.rotationYRadians
+              ),
+              scale: scaleMeters(1, update.scale.x, 0.1)
+            })
+          );
+        case "water-region":
+          return updateMapEditorWaterRegionDraft(
+            currentProject,
+            target.id,
+            (waterRegion) => {
+              const nextDepthMeters = scaleMeters(
+                waterRegion.depthMeters,
+                update.scale.y,
+                0.5
+              );
+              const nextSizeCellsX = Math.max(
+                1,
+                Math.round(waterRegion.footprint.sizeCellsX * update.scale.x)
+              );
+              const nextSizeCellsZ = Math.max(
+                1,
+                Math.round(waterRegion.footprint.sizeCellsZ * update.scale.z)
+              );
+              const size = Object.freeze({
+                x: nextSizeCellsX * mapEditorBuildGridUnitMeters,
+                z: nextSizeCellsZ * mapEditorBuildGridUnitMeters
+              });
+              const center = createFootprintTransformPosition(
+                update.position,
+                size
+              );
+
+              return {
+                ...waterRegion,
+                depthMeters: nextDepthMeters,
+                footprint: Object.freeze({
+                  centerX: center.x,
+                  centerZ: center.z,
+                  sizeCellsX: nextSizeCellsX,
+                  sizeCellsZ: nextSizeCellsZ
+                }),
+                topElevationMeters: update.position.y + nextDepthMeters * 0.5
+              };
+            }
+          );
+        case "terrain-patch":
+          return updateMapEditorTerrainPatchDraft(
+            currentProject,
+            target.id,
+            (terrainPatch) => {
+              const horizontalScale = Math.max(
+                0.25,
+                (Math.abs(update.scale.x) + Math.abs(update.scale.z)) * 0.5
+              );
+              const nextSampleSpacingMeters = scaleMeters(
+                terrainPatch.sampleSpacingMeters,
+                horizontalScale,
+                0.5
+              );
+              const verticalScale = Math.max(0.1, Math.abs(update.scale.y));
+              const origin = resolveMapEditorBuildFootprintCenterPosition(
+                update.position,
+                update.position.y,
+                Math.max(
+                  1,
+                  Math.round(
+                    ((terrainPatch.sampleCountX - 1) * nextSampleSpacingMeters) /
+                      mapEditorBuildGridUnitMeters
+                  )
+                ),
+                Math.max(
+                  1,
+                  Math.round(
+                    ((terrainPatch.sampleCountZ - 1) * nextSampleSpacingMeters) /
+                      mapEditorBuildGridUnitMeters
+                  )
+                )
+              );
+
+              return {
+                ...terrainPatch,
+                grid: createTerrainPatchGridFromTransform(
+                  origin,
+                  terrainPatch.sampleCountX,
+                  terrainPatch.sampleCountZ,
+                  nextSampleSpacingMeters
+                ),
+                heightSamples: Object.freeze(
+                  terrainPatch.heightSamples.map(
+                    (heightSample) =>
+                      Math.round(heightSample * verticalScale * 100) / 100
+                  )
+                ),
+                origin,
+                rotationYRadians: normalizeEditorCardinalYawRadians(
+                  update.rotationYRadians
+                ),
+                sampleSpacingMeters: nextSampleSpacingMeters
+              };
+            }
+          );
+        case "surface":
+          return updateMapEditorSurfaceDraft(currentProject, target.id, (surface) => {
+            const size = Object.freeze({
+              x: scaleMeters(surface.size.x, update.scale.x, 0.25),
+              y: scaleMeters(surface.size.y, update.scale.y, 0.05),
+              z: scaleMeters(surface.size.z, update.scale.z, 0.25)
+            });
+            const center = createFootprintTransformPosition(
+              update.position,
+              size
+            );
+
+            return {
+              ...surface,
+              center,
+              elevation: center.y,
+              rotationYRadians: normalizeEditorCardinalYawRadians(
+                update.rotationYRadians
+              ),
+              size
+            };
+          });
+        case "region":
+          return updateMapEditorRegionDraft(currentProject, target.id, (region) => {
+            const size = Object.freeze({
+              x: scaleMeters(region.size.x, update.scale.x, 0.25),
+              y: scaleMeters(region.size.y, update.scale.y, 0.05),
+              z: scaleMeters(region.size.z, update.scale.z, 0.25)
+            });
+
+            return {
+              ...region,
+              center: createFootprintTransformPosition(update.position, size),
+              rotationYRadians: normalizeEditorCardinalYawRadians(
+                update.rotationYRadians
+              ),
+              size
+            };
+          });
+        case "edge":
+          return updateMapEditorEdgeDraft(currentProject, target.id, (edge) => ({
+            ...edge,
+            center: createTransformPosition(update.position, "grid"),
+            heightMeters: scaleMeters(edge.heightMeters, update.scale.y, 0.25),
+            lengthMeters: scaleMeters(edge.lengthMeters, update.scale.x, 0.25),
+            rotationYRadians: normalizeEditorCardinalYawRadians(
+              update.rotationYRadians
+            ),
+            thicknessMeters: scaleMeters(edge.thicknessMeters, update.scale.z, 0.1)
+          }));
+        case "connector":
+          return updateMapEditorConnectorDraft(
+            currentProject,
+            target.id,
+            (connector) => {
+              const size = Object.freeze({
+                x: scaleMeters(connector.size.x, update.scale.x, 0.25),
+                y: scaleMeters(connector.size.y, update.scale.y, 0.25),
+                z: scaleMeters(connector.size.z, update.scale.z, 0.25)
+              });
+
+              return {
+                ...connector,
+                center: createFootprintTransformPosition(update.position, size),
+                rotationYRadians: normalizeEditorCardinalYawRadians(
+                  update.rotationYRadians
+                ),
+                size
+              };
+            }
+          );
+        case "structure":
+          return updateMapEditorStructuralDraft(
+            currentProject,
+            target.id,
+            (structure) => {
+              const size = Object.freeze({
+                x: scaleMeters(structure.size.x, update.scale.x, 0.25),
+                y: scaleMeters(structure.size.y, update.scale.y, 0.1),
+                z: scaleMeters(structure.size.z, update.scale.z, 0.25)
+              });
+              const center =
+                structure.structureKind === "wall"
+                  ? createTransformPosition(update.position, "grid")
+                  : createFootprintTransformPosition(update.position, size);
+
+              return {
+                ...structure,
+                center,
+                grid: createMapEditorStructuralGrid(center, size),
+                rotationYRadians: normalizeEditorCardinalYawRadians(
+                  update.rotationYRadians
+                ),
+                size
+              };
+            }
+          );
+        case "gameplay-volume":
+          return updateMapEditorGameplayVolumeDraft(
+            currentProject,
+            target.id,
+            (volume) => {
+              const size = Object.freeze({
+                x: scaleMeters(volume.size.x, update.scale.x, 0.25),
+                y: scaleMeters(volume.size.y, update.scale.y, 0.25),
+                z: scaleMeters(volume.size.z, update.scale.z, 0.25)
+              });
+
+              return {
+                ...volume,
+                center: createFootprintTransformPosition(update.position, size),
+                rotationYRadians: normalizeEditorCardinalYawRadians(
+                  update.rotationYRadians
+                ),
+                routePoints:
+                  volume.routePoints.length === 0
+                    ? volume.routePoints
+                    : Object.freeze(
+                        volume.routePoints.map((routePoint) =>
+                          createTransformPosition(routePoint, "cell")
+                        )
+                      ),
+                size
+              };
+            }
+          );
+        case "light":
+          return updateMapEditorLightDraft(currentProject, target.id, (light) => {
+            const rangeScale = Math.max(
+              0.1,
+              (Math.abs(update.scale.x) +
+                Math.abs(update.scale.y) +
+                Math.abs(update.scale.z)) /
+                3
+            );
+
+            return {
+              ...light,
+              position: createTransformPosition(update.position, "none"),
+              rangeMeters:
+                light.rangeMeters === null
+                  ? null
+                  : scaleMeters(light.rangeMeters, rangeScale, 0.5),
+              rotationYRadians: normalizeEditorCardinalYawRadians(
+                update.rotationYRadians
+              )
+            };
+          });
+        case "placement":
+        case "player-spawn":
+          return currentProject;
+      }
+    });
   };
 
   const handleResetSelectedTransformRequest = () => {
@@ -561,6 +1252,63 @@ export function MapEditorStageScreen({
     );
   };
 
+  const handleCreateFloorRegion = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorFloorRegionDraft(currentProject, startPosition, endPosition, {
+        elevationMeters: startPosition.y + builderToolState.floorElevationMeters,
+        footprintCellsX: builderToolState.floorFootprintCellsX,
+        footprintCellsZ: builderToolState.floorFootprintCellsZ,
+        materialId: builderToolState.activeMaterialId,
+        materialReferenceId: builderToolState.activeMaterialReferenceId,
+        regionKind: builderToolState.floorRole,
+        slopeRiseMeters:
+          builderToolState.surfaceMode === "slope"
+            ? builderToolState.riseLayers
+            : 0,
+        surfaceKind:
+          builderToolState.surfaceMode === "slope"
+            ? "sloped-plane"
+            : "flat-slab"
+      })
+    );
+  };
+
+  const handleCreateFloorPolygonRegion = (
+    points: readonly {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }[]
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorFloorPolygonRegionDraft(currentProject, points, {
+        elevationMeters: points[0]?.y ?? builderToolState.floorElevationMeters,
+        materialId: builderToolState.activeMaterialId,
+        materialReferenceId: builderToolState.activeMaterialReferenceId,
+        regionKind: builderToolState.floorRole,
+        slopeRiseMeters:
+          builderToolState.surfaceMode === "slope"
+            ? builderToolState.riseLayers
+            : 0,
+        surfaceKind:
+          builderToolState.surfaceMode === "slope"
+            ? "sloped-plane"
+            : "flat-slab"
+      })
+    );
+  };
+
   const handleApplyTerrainBrushAtPosition = (position: {
     readonly x: number;
     readonly y: number;
@@ -572,7 +1320,35 @@ export function MapEditorStageScreen({
         position,
         builderToolState.terrainBrushMode,
         builderToolState.terrainBrushSizeCells,
-        builderToolState.terrainSmoothEdges
+        builderToolState.terrainSmoothEdges,
+        builderToolState.terrainBrushStrengthMeters,
+        builderToolState.terrainBrushTargetHeightMeters,
+        builderToolState.terrainMaterialId,
+        builderToolState.terrainNoiseSeed
+      )
+    );
+  };
+
+  const handleCreateTerrainPatchAtPositions = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorTerrainPatchDraft(
+        currentProject,
+        startPosition,
+        builderToolState.terrainMaterialId,
+        {
+          endPosition
+        }
       )
     );
   };
@@ -594,7 +1370,11 @@ export function MapEditorStageScreen({
         currentProject,
         startPosition,
         endPosition,
-        builderToolState.wallPresetId
+        builderToolState.wallPresetId,
+        {
+          heightMeters: builderToolState.wallHeightMeters,
+          thicknessMeters: builderToolState.wallThicknessMeters
+        }
       )
     );
   };
@@ -627,25 +1407,158 @@ export function MapEditorStageScreen({
                 x: fromAnchor.center.x,
                 y: fromAnchor.center.y,
                 z: fromAnchor.center.z
-              }),
-              elevation: fromAnchor.elevation
-            })
+            }),
+            elevation: fromAnchor.elevation
+        }),
+        builderToolState.pathWidthCells,
+        builderToolState.activeMaterialId,
+        builderToolState.activeMaterialReferenceId
       )
     );
   };
 
-  const handleCreateWaterRegionAtPosition = (position: {
+  const handleCreateWaterRegionAtPosition = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorWaterRegionDraft(currentProject, startPosition, {
+        depthMeters: builderToolState.waterDepthMeters,
+        endPosition,
+        topElevationMeters: builderToolState.waterTopElevationMeters,
+        widthCells: builderToolState.waterFootprintCellsX,
+        zCells: builderToolState.waterFootprintCellsZ
+      })
+    );
+  };
+
+  const handleCreateCoverAtPosition = (position: {
     readonly x: number;
     readonly y: number;
     readonly z: number;
   }) => {
     handleProjectAuthoringChange((currentProject) =>
-      addMapEditorWaterRegionDraft(currentProject, position, {
-        depthMeters: builderToolState.waterDepthMeters,
-        topElevationMeters: builderToolState.waterTopElevationMeters,
-        widthCells: builderToolState.waterFootprintCellsX,
-        zCells: builderToolState.waterFootprintCellsZ
+      addMapEditorCoverDraft(currentProject, position, {
+        footprintCellsX: builderToolState.coverFootprintCellsX,
+        footprintCellsZ: builderToolState.coverFootprintCellsZ,
+        heightCells: builderToolState.coverHeightCells,
+        materialId: builderToolState.activeMaterialId,
+        materialReferenceId: builderToolState.activeMaterialReferenceId
       })
+    );
+  };
+
+  const handleCreateTeamZone = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorTeamZoneDraft(
+        currentProject,
+        startPosition,
+        endPosition,
+        builderToolState.gameplayVolumeTeamId
+      )
+    );
+  };
+
+  const handleCreateCombatLane = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorCombatLaneDraft(
+        currentProject,
+        startPosition,
+        endPosition,
+        builderToolState.gameplayVolumeWidthCells
+      )
+    );
+  };
+
+  const handleCreateVehicleRoute = (
+    startPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    },
+    endPosition: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorVehicleRouteDraft(
+        currentProject,
+        startPosition,
+        endPosition,
+        builderToolState.gameplayVolumeWidthCells
+      )
+    );
+  };
+
+  const handleCreateLightAtPosition = (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorLightDraft(
+        currentProject,
+        Object.freeze({
+          x: position.x,
+          y: position.y + Math.max(2, builderToolState.lightRangeMeters * 0.18),
+          z: position.z
+        }),
+        {
+          color: builderToolState.lightColor,
+          intensity: builderToolState.lightIntensity,
+          lightKind: builderToolState.lightKind,
+          rangeMeters: builderToolState.lightRangeMeters
+        }
+      )
+    );
+  };
+
+  const handlePaintEntity = (entityRef: MapEditorSelectedEntityRef) => {
+    handleProjectAuthoringChange((currentProject) =>
+      paintMapEditorEntityMaterial(
+        currentProject,
+        entityRef,
+        builderToolState.activeMaterialId,
+        builderToolState.activeMaterialReferenceId
+      )
+    );
+  };
+
+  const handleDeleteEntity = (entityRef: MapEditorSelectedEntityRef) => {
+    handleProjectAuthoringChange((currentProject) =>
+      removeMapEditorEntity(currentProject, entityRef)
     );
   };
 
@@ -663,6 +1576,34 @@ export function MapEditorStageScreen({
         [helperId]: visible
       });
     });
+  };
+
+  const handleSceneVisibilityChange = (
+    layerId: MapEditorSceneVisibilityLayerId,
+    visible: boolean
+  ) => {
+    setSceneVisibility((currentVisibility) => {
+      if (currentVisibility[layerId] === visible) {
+        return currentVisibility;
+      }
+
+      return Object.freeze({
+        ...currentVisibility,
+        [layerId]: visible
+      });
+    });
+  };
+
+  const handleUpdatePlacementVisibility = (
+    placementId: string,
+    visible: boolean
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorPlacement(currentProject, placementId, (placement) => ({
+        ...placement,
+        isVisible: visible
+      }))
+    );
   };
 
   const handleUpdatePlayerSpawn = (
@@ -739,6 +1680,68 @@ export function MapEditorStageScreen({
     );
   };
 
+  const handleUpdateStructure = (
+    structureId: string,
+    update: (
+      draft: MapEditorStructuralDraftSnapshot
+    ) => MapEditorStructuralDraftSnapshot
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorStructuralDraft(currentProject, structureId, update)
+    );
+  };
+
+  const handleUpdateGameplayVolume = (
+    volumeId: string,
+    update: (
+      draft: MapEditorGameplayVolumeDraftSnapshot
+    ) => MapEditorGameplayVolumeDraftSnapshot
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorGameplayVolumeDraft(currentProject, volumeId, update)
+    );
+  };
+
+  const handleUpdateLight = (
+    lightId: string,
+    update: (draft: MapEditorLightDraftSnapshot) => MapEditorLightDraftSnapshot
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorLightDraft(currentProject, lightId, update)
+    );
+  };
+
+  const handleCreateMaterialDefinition = (input: {
+    readonly accentColorHex?: string | null;
+    readonly baseColorHex: string;
+    readonly baseMaterialId: MapEditorStructuralDraftSnapshot["materialId"];
+    readonly label?: string;
+    readonly materialId?: string;
+    readonly metalness?: number;
+    readonly opacity?: number;
+    readonly roughness?: number;
+    readonly textureBrightness?: number;
+    readonly textureContrast?: number;
+    readonly textureImageDataUrl?: string | null;
+    readonly texturePatternStrength?: number;
+    readonly textureRepeat?: number;
+  }) => {
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorMaterialDefinitionDraft(currentProject, input)
+    );
+  };
+
+  const handleUpdateMaterialDefinition = (
+    materialId: string,
+    update: (
+      draft: MapEditorMaterialDefinitionDraftSnapshot
+    ) => MapEditorMaterialDefinitionDraftSnapshot
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorMaterialDefinitionDraft(currentProject, materialId, update)
+    );
+  };
+
   const handleUpdateSurface = (
     surfaceId: string,
     update: (
@@ -750,27 +1753,16 @@ export function MapEditorStageScreen({
     );
   };
 
-  const handleUpdateTerrainChunk = (
-    chunkId: string,
+  const handleUpdateTerrainPatch = (
+    terrainPatchId: string,
     update: (
-      draft: MapEditorTerrainChunkDraftSnapshot
-    ) => MapEditorTerrainChunkDraftSnapshot
+      draft: MapEditorTerrainPatchDraftSnapshot
+    ) => MapEditorTerrainPatchDraftSnapshot
   ) => {
     handleProjectAuthoringChange((currentProject) =>
-      updateMapEditorTerrainChunkDraft(currentProject, chunkId, update)
+      updateMapEditorTerrainPatchDraft(currentProject, terrainPatchId, update)
     );
   };
-
-  useEffect(() => {
-    if (project.selectedEntityRef !== null) {
-      setActiveRightPaneTab("selection");
-      return;
-    }
-
-    setActiveRightPaneTab((currentTab) =>
-      currentTab === "selection" ? "world" : currentTab
-    );
-  }, [project.selectedEntityRef]);
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
@@ -838,99 +1830,13 @@ export function MapEditorStageScreen({
   };
 
   return (
-    <section className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgb(14_165_233/0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgb(251_146_60/0.12),transparent_24%),linear-gradient(180deg,rgb(2_6_23),rgb(15_23_42))] text-foreground">
+    <section className="relative flex h-dvh min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgb(14_165_233/0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgb(251_146_60/0.12),transparent_24%),linear-gradient(180deg,rgb(2_6_23),rgb(15_23_42))] text-foreground">
       <header className="shrink-0 border-b border-border/70 bg-background/92 backdrop-blur-sm">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl border border-border/70 bg-muted/80">
-              <Layers3Icon />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-                Engine Tool
-              </p>
-              <h1 className="truncate font-heading text-xl font-semibold tracking-tight">
-                Map Editor Suite
-              </h1>
-            </div>
-          </div>
-
-          <Badge variant="secondary">
-            <StableInlineText
-              reserveTexts={bundleLabelReserveTexts}
-              stabilizeNumbers={false}
-              text={project.bundleLabel}
-            />
-          </Badge>
-          <Badge variant="outline">
-            <StableInlineText
-              reserveTexts={placementCountReserveTexts}
-              text={`${project.placementDrafts.length} module${
-                project.placementDrafts.length === 1 ? "" : "s"
-              }`}
-            />
-          </Badge>
-          <Badge variant="outline">
-            <StableInlineText
-              reserveTexts={playerSpawnCountReserveTexts}
-              text={`${project.playerSpawnDrafts.length} player spawn${
-                project.playerSpawnDrafts.length === 1 ? "" : "s"
-              }`}
-            />
-          </Badge>
-          <Badge variant="outline">
-            <StableInlineText
-              reserveTexts={waterRegionCountReserveTexts}
-              text={`${project.waterRegionDrafts.length} water region${
-                project.waterRegionDrafts.length === 1 ? "" : "s"
-              }`}
-            />
-          </Badge>
-          {selectedLaunchVariation !== null ? (
-            <Badge variant="outline">
-              <StableInlineText
-                stabilizeNumbers={false}
-                text={`Variation: ${selectedLaunchVariation.label}`}
-              />
-            </Badge>
-          ) : null}
-
-          <div className="ml-auto flex items-center gap-2">
-            <Button onClick={onCloseRequest} type="button" variant="outline">
-              <ArrowLeftIcon data-icon="inline-start" />
-              <StableInlineText stabilizeNumbers={false} text="Return To Shell" />
-            </Button>
-            <Button
-              disabled={runInProgress}
-              onClick={handleSaveDraftRequest}
-              type="button"
-              variant="outline"
-            >
-              <StableInlineText stabilizeNumbers={false} text="Save Draft" />
-            </Button>
-            <Button
-              disabled={runInProgress}
-              onClick={handleValidateAndRunRequest}
-              type="button"
-            >
-              <PlayIcon data-icon="inline-start" />
-              <StableInlineText
-                stabilizeNumbers={false}
-                text={runInProgress ? "Running..." : "Validate + Run"}
-              />
-            </Button>
-          </div>
-        </div>
-
-        {runStatusMessage !== null ? (
-          <div className="border-t border-border/70 px-4 py-2 text-sm text-muted-foreground">
-            {runStatusMessage}
-          </div>
-        ) : null}
-
-        <div className="border-t border-border/70 px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto px-3 py-2">
           <MapEditorMenubar
-            canDeleteSelectedEntity={project.selectedEntityRef !== null}
+            canDeleteSelectedEntity={isDeletableMapEditorSelection(
+              project.selectedEntityRef
+            )}
             canResetSelectedTransform={selectedPlacement !== null}
             canUndoProjectChange={canUndoProjectChange}
             onCloseRequest={onCloseRequest}
@@ -944,21 +1850,114 @@ export function MapEditorStageScreen({
               handleViewportHelperVisibilityChange
             }
             viewportHelperVisibility={viewportHelperVisibility}
-            onViewportToolModeChange={setViewportToolMode}
-            viewportToolMode={viewportToolMode}
           />
+
+          <div className="min-w-0 flex-1" />
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Badge variant="secondary">
+              <StableInlineText
+                reserveTexts={placementCountReserveTexts}
+                text={`${project.placementDrafts.length} module${
+                  project.placementDrafts.length === 1 ? "" : "s"
+                }`}
+              />
+            </Badge>
+            <Badge variant="outline">
+              <StableInlineText
+                reserveTexts={playerSpawnCountReserveTexts}
+                text={`${project.playerSpawnDrafts.length} spawn${
+                  project.playerSpawnDrafts.length === 1 ? "" : "s"
+                }`}
+              />
+            </Badge>
+            <Badge variant="outline">
+              <StableInlineText
+                reserveTexts={waterRegionCountReserveTexts}
+                text={`${project.waterRegionDrafts.length} water region${
+                  project.waterRegionDrafts.length === 1 ? "" : "s"
+                }`}
+              />
+            </Badge>
+            {selectedLaunchVariation !== null ? (
+              <Badge variant="outline">
+                <StableInlineText
+                  stabilizeNumbers={false}
+                  text={selectedLaunchVariation.label}
+                />
+              </Badge>
+            ) : null}
+            <Button
+              size="sm"
+              onClick={() =>
+                handleLeftSidebarCollapsedChange(!sceneRailCollapsed)
+              }
+              type="button"
+              variant={sceneRailCollapsed ? "outline" : "secondary"}
+            >
+              {sceneRailCollapsed ? (
+                <PanelLeftOpenIcon data-icon="inline-start" />
+              ) : (
+                <PanelLeftCloseIcon data-icon="inline-start" />
+              )}
+              <StableInlineText
+                stabilizeNumbers={false}
+                text="Sidebar"
+              />
+            </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                handleInspectorCollapsedChange(!inspectorCollapsed)
+              }
+              type="button"
+              variant={inspectorCollapsed ? "outline" : "secondary"}
+            >
+              {inspectorCollapsed ? (
+                <PanelRightOpenIcon data-icon="inline-start" />
+              ) : (
+                <PanelRightCloseIcon data-icon="inline-start" />
+              )}
+              <StableInlineText
+                stabilizeNumbers={false}
+                text="Inspector"
+              />
+            </Button>
+            <Button
+              onClick={onCloseRequest}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <ArrowLeftIcon data-icon="inline-start" />
+              <StableInlineText stabilizeNumbers={false} text="Shell" />
+            </Button>
+            <Button
+              disabled={runInProgress}
+              onClick={handleSaveDraftRequest}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <StableInlineText stabilizeNumbers={false} text="Save" />
+            </Button>
+            <Button
+              disabled={runInProgress}
+              onClick={handleValidateAndRunRequest}
+              size="sm"
+              type="button"
+            >
+              <PlayIcon data-icon="inline-start" />
+              <StableInlineText
+                stabilizeNumbers={false}
+                text={runInProgress ? "Running..." : "Validate + Run"}
+              />
+            </Button>
+          </div>
         </div>
 
-        <MapEditorToolbar
-          activeModuleAssetLabel={activeModuleAssetId}
-          builderToolState={builderToolState}
-          onBundleChange={handleBundleChange}
-          onBuilderToolStateChange={handleBuilderToolStateChange}
-          onResetDraftRequest={handleResetDraftRequest}
-          onSaveDraftRequest={handleSaveDraftRequest}
+        <MapEditorHeaderToolRow
           onViewportToolModeChange={setViewportToolMode}
-          registryEntries={registryEntries}
-          selectedBundleId={selectedBundleId}
           viewportToolMode={viewportToolMode}
         />
       </header>
@@ -966,70 +1965,188 @@ export function MapEditorStageScreen({
       <div className="min-h-0 flex-1 overflow-hidden">
         <ResizablePanelGroup className="h-full min-h-0" orientation="horizontal">
           <ResizablePanel
-            collapsedSize={5}
+            collapsedSize={4}
             collapsible
-            defaultSize={22}
+            defaultSize={sceneRailCollapsed ? 4 : 22}
             minSize={18}
             panelRef={(panelApi) => {
               sceneRailPanelApiRef.current = panelApi;
             }}
           >
-            <MapEditorSceneRail
-              activeModuleAssetId={activeModuleAssetId}
-              activeViewportToolMode={viewportToolMode}
-              assetCatalogEntries={environmentPropManifest.environmentAssets}
-              collapsed={sceneRailCollapsed}
-              onActivateModuleAssetId={handleActivateModuleAssetId}
-              onActivateViewportToolMode={handleActivateViewportToolMode}
-              onAddConnector={handleAddConnector}
-              onAddEdge={handleAddEdge}
-              onAddModuleFromAsset={handleAddModuleFromAsset}
-              onAddPlayerSpawn={handleAddPlayerSpawn}
-              onAddRegion={handleAddRegion}
-              onAddSceneObject={handleAddSceneObject}
-              onAddSurface={handleAddSurface}
-              onCollapsedChange={(collapsed) => {
-                if (collapsed) {
-                  sceneRailPanelApiRef.current?.collapse();
-                } else {
-                  sceneRailPanelApiRef.current?.expand();
-                }
-                setSceneRailCollapsed(collapsed);
-              }}
-              onSectionOpenChange={handleSectionOpenChange}
-              onSelectEntityRef={handleSelectEntity}
-              project={project}
-              readSectionOpen={readSectionOpen}
-              selectedEntityRef={project.selectedEntityRef}
-            />
+            {sceneRailCollapsed ? (
+              <div className="flex h-full min-h-0 flex-col items-center gap-3 bg-background/84 px-2 py-3 backdrop-blur-sm">
+                <Button
+                  onClick={() => handleLeftSidebarCollapsedChange(false)}
+                  size="icon"
+                  type="button"
+                  variant="outline"
+                >
+                  <PanelLeftOpenIcon />
+                </Button>
+                <div className="pt-6 text-[11px] uppercase tracking-[0.24em] text-muted-foreground [writing-mode:vertical-rl]">
+                  Authoring
+                </div>
+              </div>
+            ) : (
+              <Tabs
+                className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-background/84 backdrop-blur-sm"
+                onValueChange={(nextTab) => {
+                  if (
+                    nextTab === "authoring" ||
+                    nextTab === "gameplay" ||
+                    nextTab === "scene"
+                  ) {
+                    setActiveLeftSidebarTab(nextTab);
+                  }
+                }}
+                value={activeLeftSidebarTab}
+              >
+                <div className="flex shrink-0 flex-col gap-2 border-b border-border/70 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-8 items-center justify-center rounded-lg border border-border/70 bg-muted/70">
+                      <FolderTreeIcon />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Authoring
+                      </p>
+                      <h2 className="truncate text-sm font-semibold">
+                        {formatEditorTabLabel(activeLeftSidebarTab)}
+                      </h2>
+                    </div>
+                    <Button
+                      onClick={() => handleLeftSidebarCollapsedChange(true)}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <PanelLeftCloseIcon />
+                    </Button>
+                  </div>
+
+                  <TabsList className="grid h-8 w-full grid-cols-3">
+                    <TabsTrigger value="authoring">Project</TabsTrigger>
+                    <TabsTrigger value="gameplay">Gameplay</TabsTrigger>
+                    <TabsTrigger value="scene">Scene</TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent
+                  className="mt-0 min-h-0 flex-1 overflow-hidden"
+                  value="authoring"
+                >
+                  <MapEditorToolbar
+                    onBundleChange={handleBundleChange}
+                    onResetDraftRequest={handleResetDraftRequest}
+                    onSaveDraftRequest={handleSaveDraftRequest}
+                    registryEntries={registryEntries}
+                    selectedBundleId={selectedBundleId}
+                  />
+                </TabsContent>
+
+                <TabsContent
+                  className="mt-0 min-h-0 flex-1 overflow-hidden"
+                  value="gameplay"
+                >
+                  <MapEditorGameplayPane
+                    onAddLaunchVariation={handleAddLaunchVariation}
+                    onSectionOpenChange={handleSectionOpenChange}
+                    onSelectLaunchVariation={handleSelectLaunchVariation}
+                    onUpdateGameplayProfileId={handleUpdateGameplayProfileId}
+                    onUpdateLaunchVariation={handleUpdateLaunchVariation}
+                    project={project}
+                    readSectionOpen={readSectionOpen}
+                    selectedLaunchVariation={selectedLaunchVariation}
+                  />
+                </TabsContent>
+
+                <TabsContent
+                  className="mt-0 min-h-0 flex-1 overflow-hidden"
+                  value="scene"
+                >
+                  <MapEditorSceneRail
+                    activeModuleAssetId={activeModuleAssetId}
+                    activeViewportToolMode={viewportToolMode}
+                    assetCatalogEntries={environmentPropManifest.environmentAssets}
+                    builderToolsVisible={false}
+                    collapsed={false}
+                    headerVisible={false}
+                    onActivateModuleAssetId={handleActivateModuleAssetId}
+                    onActivateViewportToolMode={handleActivateViewportToolMode}
+                    onAddConnector={handleAddConnector}
+                    onAddEdge={handleAddEdge}
+                    onAddModuleFromAsset={handleAddModuleFromAsset}
+                    onAddPlayerSpawn={handleAddPlayerSpawn}
+                    onAddRegion={handleAddRegion}
+                    onAddSceneObject={handleAddSceneObject}
+                    onAddSurface={handleAddSurface}
+                    onCollapsedChange={handleLeftSidebarCollapsedChange}
+                    onSceneVisibilityChange={handleSceneVisibilityChange}
+                    onSectionOpenChange={handleSectionOpenChange}
+                    onSelectEntityRef={handleSelectEntity}
+                    onUpdatePlacementVisibility={handleUpdatePlacementVisibility}
+                    project={project}
+                    readSectionOpen={readSectionOpen}
+                    sceneVisibility={sceneVisibility}
+                    selectedEntityRef={project.selectedEntityRef}
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
           </ResizablePanel>
 
           <ResizableHandle withHandle />
 
-          <ResizablePanel defaultSize={50} minSize={34}>
+          <ResizablePanel defaultSize={inspectorCollapsed ? 68 : 48} minSize={34}>
             <MapEditorViewportPane
               activeModuleAssetId={activeModuleAssetId}
+              activeWorkspaceLabel={formatEditorTabLabel(activeLeftSidebarTab)}
               builderToolState={builderToolState}
+              bundleLabel={project.bundleLabel}
+              bundleLabelReserveTexts={bundleLabelReserveTexts}
               bundleId={project.bundleId}
               connectorDrafts={project.connectorDrafts}
               edgeDrafts={project.edgeDrafts}
+              environmentPresentation={project.environmentPresentation}
+              gameplayVolumeDrafts={project.gameplayVolumeDrafts}
+              lightDrafts={project.lightDrafts}
+              materialDefinitionDrafts={project.materialDefinitionDrafts}
               onApplyTerrainBrushAtPosition={handleApplyTerrainBrushAtPosition}
+              onCreateTerrainPatchAtPositions={handleCreateTerrainPatchAtPositions}
+              onCreateCombatLane={handleCreateCombatLane}
+              onCreateCoverAtPosition={handleCreateCoverAtPosition}
               onCommitPathSegment={handleCommitPathSegment}
+              onCommitEntityTransform={handleCommitViewportEntityTransform}
               onCommitPlacementTransform={handleCommitViewportPlacementTransform}
               onCommitPlayerSpawnTransform={
                 handleCommitViewportPlayerSpawnTransform
               }
               onCommitWallSegment={handleCommitWallSegment}
+              onCreateFloorPolygonRegion={handleCreateFloorPolygonRegion}
+              onCreateFloorRegion={handleCreateFloorRegion}
+              onCreateLightAtPosition={handleCreateLightAtPosition}
               onCreateModuleAtPosition={handleCreateModuleAtPosition}
+              onCreatePlayerSpawnAtPosition={handleCreatePlayerSpawnAtPosition}
+              onCreatePortalAtPosition={handleCreatePortalAtPosition}
+              onCreateTeamZone={handleCreateTeamZone}
+              onCreateVehicleRoute={handleCreateVehicleRoute}
               onCreateWaterRegionAtPosition={handleCreateWaterRegionAtPosition}
+              onDeleteEntity={handleDeleteEntity}
+              onPaintEntity={handlePaintEntity}
               onSelectEntity={handleSelectEntity}
               placementDrafts={project.placementDrafts}
               playerSpawnDrafts={project.playerSpawnDrafts}
               regionDrafts={project.regionDrafts}
               sceneObjectDrafts={project.sceneObjectDrafts}
+              sceneVisibility={sceneVisibility}
               selectedEntityRef={project.selectedEntityRef}
+              selectedEntityLabel={formatSelectedEntityLabel(
+                project.selectedEntityRef,
+                viewportToolMode
+              )}
+              structuralDrafts={project.structuralDrafts}
               surfaceDrafts={project.surfaceDrafts}
-              terrainChunkDrafts={project.terrainChunkDrafts}
+              terrainPatchDrafts={project.terrainPatchDrafts}
               waterRegionDrafts={project.waterRegionDrafts}
               viewportHelperVisibility={viewportHelperVisibility}
               viewportToolMode={viewportToolMode}
@@ -1038,70 +2155,121 @@ export function MapEditorStageScreen({
 
           <ResizableHandle withHandle />
 
-          <ResizablePanel defaultSize={28} minSize={24}>
-            <Tabs
-              className="flex h-full min-h-0 flex-col overflow-hidden bg-background/70"
-              onValueChange={(nextTab) => {
-                if (nextTab === "selection" || nextTab === "world") {
-                  setActiveRightPaneTab(nextTab);
-                }
-              }}
-              value={activeRightPaneTab}
-            >
-              <div className="shrink-0 border-b border-border/70 px-4 py-3">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="selection">Selection</TabsTrigger>
-                  <TabsTrigger value="world">World</TabsTrigger>
-                </TabsList>
+          <ResizablePanel
+            collapsedSize={4}
+            collapsible
+            defaultSize={inspectorCollapsed ? 4 : 24}
+            minSize={22}
+            panelRef={(panelApi) => {
+              inspectorPanelApiRef.current = panelApi;
+            }}
+          >
+            {inspectorCollapsed ? (
+              <div className="flex h-full min-h-0 flex-col items-center gap-3 bg-background/70 px-2 py-3 backdrop-blur-sm">
+                <Button
+                  onClick={() => handleInspectorCollapsedChange(false)}
+                  size="icon"
+                  type="button"
+                  variant="outline"
+                >
+                  <PanelRightOpenIcon />
+                </Button>
+                <div className="pt-6 text-[11px] uppercase tracking-[0.24em] text-muted-foreground [writing-mode:vertical-rl]">
+                  Inspector
+                </div>
               </div>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/70">
+                <div className="flex shrink-0 items-center gap-2 border-b border-border/70 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+                      Inspector
+                    </p>
+                    <h2 className="truncate font-heading text-lg font-semibold">
+                      Selection & Tools
+                    </h2>
+                  </div>
+                  <Button
+                    onClick={() => handleInspectorCollapsedChange(true)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <PanelRightCloseIcon />
+                  </Button>
+                </div>
 
-              <TabsContent
-                className="mt-0 min-h-0 flex-1 overflow-hidden"
-                value="selection"
-              >
-                <MapEditorSelectionPane
-                  onDeleteSelectedEntityRequest={handleDeleteSelectedEntityRequest}
-                  onSectionOpenChange={handleSectionOpenChange}
-                  onUpdateConnector={handleUpdateConnector}
-                  onUpdateEdge={handleUpdateEdge}
-                  onUpdatePlayerSpawn={handleUpdatePlayerSpawn}
-                  onUpdatePlayerSpawnSelection={handleUpdatePlayerSpawnSelection}
-                  onUpdateRegion={handleUpdateRegion}
-                  onUpdateSceneObject={handleUpdateSceneObject}
-                  onUpdateSelectedPlacement={handleUpdateSelectedPlacement}
-                  onUpdateSurface={handleUpdateSurface}
-                  onUpdateTerrainChunk={handleUpdateTerrainChunk}
-                  onUpdateWaterRegion={handleUpdateWaterRegion}
-                  project={project}
-                  readSectionOpen={readSectionOpen}
-                  selectedEntityRef={project.selectedEntityRef}
-                />
-              </TabsContent>
+                <ResizablePanelGroup
+                  className="min-h-0 flex-1"
+                  orientation="vertical"
+                >
+                  <ResizablePanel defaultSize={50} minSize={24}>
+                    <MapEditorSelectionPane
+                      builderToolState={builderToolState}
+                      onBuilderToolStateChange={handleBuilderToolStateChange}
+                      onDeleteSelectedEntityRequest={handleDeleteSelectedEntityRequest}
+                      onSectionOpenChange={handleSectionOpenChange}
+                      onUpdateConnector={handleUpdateConnector}
+                      onUpdateEdge={handleUpdateEdge}
+                      onUpdateEnvironmentPresentation={
+                        handleUpdateEnvironmentPresentation
+                      }
+                      onUpdateEnvironmentPresentationProfileId={
+                        handleUpdateEnvironmentPresentationProfileId
+                      }
+                      onUpdateGameplayVolume={handleUpdateGameplayVolume}
+                      onUpdateLight={handleUpdateLight}
+                      onUpdatePlayerSpawn={handleUpdatePlayerSpawn}
+                      onUpdatePlayerSpawnSelection={handleUpdatePlayerSpawnSelection}
+                      onUpdateRegion={handleUpdateRegion}
+                      onUpdateSceneObject={handleUpdateSceneObject}
+                      onUpdateSelectedPlacement={handleUpdateSelectedPlacement}
+                      onUpdateStructure={handleUpdateStructure}
+                      onUpdateSurface={handleUpdateSurface}
+                      onUpdateTerrainPatch={handleUpdateTerrainPatch}
+                      onUpdateWaterRegion={handleUpdateWaterRegion}
+                      project={project}
+                      readSectionOpen={readSectionOpen}
+                      selectedEntityRef={project.selectedEntityRef}
+                      viewportToolMode={viewportToolMode}
+                    />
+                  </ResizablePanel>
 
-              <TabsContent
-                className="mt-0 min-h-0 flex-1 overflow-hidden"
-                value="world"
-              >
-                <MapEditorWorldPane
-                  onSectionOpenChange={handleSectionOpenChange}
-                  onAddLaunchVariation={handleAddLaunchVariation}
-                  onSelectLaunchVariation={handleSelectLaunchVariation}
-                  onUpdateEnvironmentPresentationProfileId={
-                    handleUpdateEnvironmentPresentationProfileId
-                  }
-                  onUpdateGameplayProfileId={handleUpdateGameplayProfileId}
-                  onUpdateLaunchVariation={handleUpdateLaunchVariation}
-                  project={project}
-                  readSectionOpen={readSectionOpen}
-                  runInProgress={runInProgress}
-                  runStatusMessage={runStatusMessage}
-                  selectedLaunchVariation={selectedLaunchVariation}
-                />
-              </TabsContent>
-            </Tabs>
+                  <ResizableHandle withHandle />
+
+                  <ResizablePanel defaultSize={50} minSize={24}>
+                    <MapEditorSelectionMaterialControlsPane
+                      builderToolState={builderToolState}
+                      onBuilderToolStateChange={handleBuilderToolStateChange}
+                      onCreateMaterialDefinition={handleCreateMaterialDefinition}
+                      onUpdateMaterialDefinition={handleUpdateMaterialDefinition}
+                      onUpdateRegion={handleUpdateRegion}
+                      onUpdateSelectedPlacement={handleUpdateSelectedPlacement}
+                      onUpdateStructure={handleUpdateStructure}
+                      onUpdateTerrainPatch={handleUpdateTerrainPatch}
+                      project={project}
+                      selectedEntityRef={project.selectedEntityRef}
+                      viewportToolMode={viewportToolMode}
+                    />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </div>
+            )}
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
+
+      {runStatusMessage !== null ? (
+        <div className="pointer-events-none absolute right-4 top-24 w-[calc(100%-2rem)] max-w-lg">
+          <Alert className="pointer-events-auto shadow-xl">
+            <InfoIcon />
+            <AlertTitle>
+              {runInProgress ? "Preview" : "Engine Tool"}
+            </AlertTitle>
+            <AlertDescription>{runStatusMessage}</AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
     </section>
   );
 }

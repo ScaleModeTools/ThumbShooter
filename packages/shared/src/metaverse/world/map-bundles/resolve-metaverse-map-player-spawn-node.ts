@@ -1,9 +1,15 @@
-import type {
-  MetaverseWorldSurfaceVector3Snapshot
+import {
+  createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot,
+  createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot,
+  type MetaverseWorldPlacedSurfaceColliderSnapshot,
+  type MetaverseWorldSurfaceVector3Snapshot
 } from "../../metaverse-world-surface-query.js";
+import { resolveMetaverseWorldSurfaceHeightMeters } from "../../metaverse-world-surface-policy.js";
 import type { MetaversePlayerTeamId } from "../../metaverse-player-team.js";
 
 import type {
+  MetaverseMapBundleCompiledCollisionBoxSnapshot,
+  MetaverseMapBundleCompiledWorldSnapshot,
   MetaverseMapBundlePlayerSpawnSelectionSnapshot,
   MetaverseMapBundleSpawnNodeSnapshot,
   MetaverseMapPlayerSpawnTeamId
@@ -34,6 +40,103 @@ interface MetaverseMapPlayerSpawnCandidate {
 }
 
 const spawnDistanceFallbackMeters = 10_000;
+const metaverseMapSpawnSupportSearchUpMeters = 1.1;
+const metaverseMapSpawnSupportSurfacePolicyConfig = Object.freeze({
+  capsuleHalfHeightMeters: 0,
+  capsuleRadiusMeters: 0,
+  gravityUnitsPerSecond: 0,
+  jumpImpulseUnitsPerSecond: 0,
+  oceanHeightMeters: 0,
+  stepHeightMeters: metaverseMapSpawnSupportSearchUpMeters
+});
+
+function freezeVector3(
+  x: number,
+  y: number,
+  z: number
+): MetaverseWorldSurfaceVector3Snapshot {
+  return Object.freeze({
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
+    z: Number.isFinite(z) ? z : 0
+  });
+}
+
+function createYawQuaternion(yawRadians: number) {
+  const halfAngle = yawRadians * 0.5;
+
+  return Object.freeze({
+    x: 0,
+    y: Math.sin(halfAngle),
+    z: 0,
+    w: Math.cos(halfAngle)
+  });
+}
+
+function createSurfaceColliderFromCompiledBox(
+  box: MetaverseMapBundleCompiledCollisionBoxSnapshot
+): MetaverseWorldPlacedSurfaceColliderSnapshot {
+  return Object.freeze({
+    halfExtents: freezeVector3(
+      Math.max(0.01, box.size.x * 0.5),
+      Math.max(0.01, box.size.y * 0.5),
+      Math.max(0.01, box.size.z * 0.5)
+    ),
+    ownerEnvironmentAssetId: null,
+    rotation: createYawQuaternion(box.rotationYRadians),
+    rotationYRadians: box.rotationYRadians,
+    shape: "box" as const,
+    translation: freezeVector3(box.center.x, box.center.y, box.center.z),
+    traversalAffordance: box.traversalAffordance
+  });
+}
+
+function createCompiledWorldSurfaceColliders(
+  compiledWorld: MetaverseMapBundleCompiledWorldSnapshot
+): readonly MetaverseWorldPlacedSurfaceColliderSnapshot[] {
+  return Object.freeze(
+    compiledWorld.chunks.flatMap((chunk) => [
+      ...chunk.collision.boxes.map(createSurfaceColliderFromCompiledBox),
+      ...chunk.collision.heightfields.flatMap((heightfield) => {
+        const collider =
+          createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+            null,
+            {
+              heightSamples: heightfield.heightSamples,
+              sampleCountX: heightfield.sampleCountX,
+              sampleCountZ: heightfield.sampleCountZ,
+              sampleSpacingMeters: heightfield.sampleSpacingMeters
+            },
+            {
+              position: heightfield.translation,
+              yawRadians: heightfield.rotationYRadians
+            }
+          );
+
+        return collider === null ? [] : [collider];
+      }),
+      ...chunk.collision.triMeshes.flatMap((triMesh) => {
+        if (triMesh.traversalAffordance !== "support") {
+          return [];
+        }
+
+        const collider = createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
+          null,
+          {
+            indices: Uint32Array.from(triMesh.indices),
+            vertices: Float32Array.from(triMesh.vertices)
+          },
+          {
+            position: triMesh.translation,
+            yawRadians: triMesh.rotationYRadians
+          }
+        );
+
+        return collider === null ? [] : [collider];
+      })
+    ])
+  );
+}
 
 function readPlanarDistanceMeters(
   position: MetaverseWorldSurfaceVector3Snapshot,
@@ -254,4 +357,30 @@ export function resolveMetaverseMapPlayerSpawnNode({
     ] ?? highestPriorityCandidate;
 
   return resolvedSpawnCandidate.node;
+}
+
+export function resolveMetaverseMapPlayerSpawnSupportPosition({
+  compiledWorld,
+  searchUpMeters = metaverseMapSpawnSupportSearchUpMeters,
+  spawnPosition
+}: {
+  readonly compiledWorld: MetaverseMapBundleCompiledWorldSnapshot;
+  readonly searchUpMeters?: number;
+  readonly spawnPosition: MetaverseWorldSurfaceVector3Snapshot;
+}): MetaverseWorldSurfaceVector3Snapshot {
+  const maxSupportHeightMeters =
+    spawnPosition.y + Math.max(0, Number.isFinite(searchUpMeters) ? searchUpMeters : 0);
+  const supportHeightMeters = resolveMetaverseWorldSurfaceHeightMeters(
+    metaverseMapSpawnSupportSurfacePolicyConfig,
+    createCompiledWorldSurfaceColliders(compiledWorld),
+    Object.freeze([]),
+    spawnPosition.x,
+    spawnPosition.z,
+    null,
+    maxSupportHeightMeters
+  );
+
+  return supportHeightMeters === null
+    ? freezeVector3(spawnPosition.x, spawnPosition.y, spawnPosition.z)
+    : freezeVector3(spawnPosition.x, supportHeightMeters, spawnPosition.z);
 }

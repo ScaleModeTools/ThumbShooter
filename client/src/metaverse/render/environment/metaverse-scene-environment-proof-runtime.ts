@@ -13,8 +13,7 @@ import type {
   MetaverseVector3Snapshot
 } from "../../types/metaverse-runtime";
 import {
-  resolveEnvironmentRenderYawFromSimulationYaw,
-  resolveEnvironmentSimulationYawFromRenderYaw
+  resolveEnvironmentRenderYawFromSimulationYaw
 } from "../../traversal/presentation/mount-presentation";
 import { markMetaverseSceneBundleGroupsDirty } from "../metaverse-scene-bundle-groups";
 import {
@@ -234,10 +233,7 @@ export function resolveDynamicEnvironmentBasePose(
       dynamicAssetRuntime.basePlacement.position.y,
       dynamicAssetRuntime.basePlacement.position.z
     ),
-    yawRadians: resolveEnvironmentSimulationYawFromRenderYaw(
-      dynamicAssetRuntime,
-      dynamicAssetRuntime.basePlacement.rotationYRadians
-    )
+    yawRadians: dynamicAssetRuntime.basePlacement.rotationYRadians
   });
 }
 

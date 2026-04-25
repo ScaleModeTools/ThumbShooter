@@ -8,6 +8,12 @@ import {
   loadStoredMetaverseWorldBundleSnapshot,
   type StoredMetaverseWorldBundleStorageLike
 } from "../map-bundles/stored-metaverse-world-bundle";
+import {
+  createLoadedMetaverseMapBundleSnapshot
+} from "../map-bundles/create-loaded-metaverse-map-bundle-snapshot";
+import {
+  createMetaverseEnvironmentProofConfig
+} from "../proof/create-metaverse-environment-proof-config";
 
 export interface MetaverseWorldBundleRegistryEntry {
   readonly bundle: MetaverseMapBundleSnapshot;
@@ -85,13 +91,30 @@ export function registerMetaverseWorldBundlePreviewEntry(
   metaverseWorldBundlePreviewEntriesById.set(entry.bundleId, freezeRegistryEntry(entry));
 }
 
+function supportsRuntimeMetaverseEnvironmentProof(
+  bundle: MetaverseMapBundleSnapshot
+): boolean {
+  try {
+    createMetaverseEnvironmentProofConfig(
+      createLoadedMetaverseMapBundleSnapshot(bundle)
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function applyStoredMetaverseWorldBundleOverride(
   storage: StoredMetaverseWorldBundleStorageLike | null,
   bundleId: string
 ): boolean {
   const storedBundle = loadStoredMetaverseWorldBundleSnapshot(storage, bundleId);
 
-  if (storedBundle === null) {
+  if (
+    storedBundle === null ||
+    !supportsRuntimeMetaverseEnvironmentProof(storedBundle)
+  ) {
+    clearMetaverseWorldBundlePreviewEntry(bundleId);
     return false;
   }
 

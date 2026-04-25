@@ -1,4 +1,6 @@
-import { resolveMetaverseWorldSurfaceScaleVector } from "@webgpu-metaverse/shared/metaverse/world";
+import {
+  resolveMetaverseWorldSurfaceScaleVector
+} from "@webgpu-metaverse/shared/metaverse/world";
 import { Group, Matrix4, Mesh, Quaternion, Vector3 } from "three/webgpu";
 
 import type {
@@ -13,14 +15,18 @@ import type {
 } from "../types/metaverse-runtime";
 
 export interface MetaversePlacedCuboidColliderSnapshot {
-  readonly shape?: "box" | "trimesh";
+  readonly shape?: "box" | "heightfield" | "trimesh";
   readonly ownerEnvironmentAssetId: string | null;
   readonly rotationYRadians: number;
   readonly traversalAffordance:
     MetaverseEnvironmentPhysicsColliderProofConfig["traversalAffordance"];
   readonly halfExtents: PhysicsVector3Snapshot;
+  readonly heightSamples?: Float32Array;
   readonly indices?: Uint32Array;
   readonly rotation: PhysicsQuaternionSnapshot;
+  readonly sampleCountX?: number;
+  readonly sampleCountZ?: number;
+  readonly sampleSpacingMeters?: number;
   readonly translation: PhysicsVector3Snapshot;
   readonly vertices?: Float32Array;
 }

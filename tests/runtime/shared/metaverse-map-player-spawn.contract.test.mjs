@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  resolveMetaverseMapPlayerSpawnNode
+  resolveMetaverseMapPlayerSpawnNode,
+  resolveMetaverseMapPlayerSpawnSupportPosition
 } from "@webgpu-metaverse/shared/metaverse/world";
 
 function createSpawnNode(spawnId, teamId, x, z) {
@@ -132,4 +133,68 @@ test("shared team-aware spawn resolver avoids reusing an occupied home spawn whe
   });
 
   assert.equal(reroutedBlueSpawn?.spawnId, "blue-base-b");
+});
+
+test("shared spawn support resolver keeps a basement spawn on its local floor instead of the roof above it", () => {
+  const compiledWorld = Object.freeze({
+    chunkSizeMeters: 24,
+    chunks: Object.freeze([
+      Object.freeze({
+        bounds: Object.freeze({
+          center: Object.freeze({ x: 0, y: 0, z: 0 }),
+          size: Object.freeze({ x: 24, y: 24, z: 24 })
+        }),
+        chunkId: "chunk:0:0",
+        collision: Object.freeze({
+          boxes: Object.freeze([
+            Object.freeze({
+              center: Object.freeze({ x: 0, y: -0.25, z: 0 }),
+              ownerId: "basement-floor",
+              ownerKind: "region",
+              rotationYRadians: 0,
+              size: Object.freeze({ x: 8, y: 0.5, z: 8 }),
+              traversalAffordance: "support"
+            }),
+            Object.freeze({
+              center: Object.freeze({ x: 0, y: 2.75, z: 0 }),
+              ownerId: "upper-floor",
+              ownerKind: "region",
+              rotationYRadians: 0,
+              size: Object.freeze({ x: 8, y: 0.5, z: 8 }),
+              traversalAffordance: "support"
+            })
+          ]),
+          heightfields: Object.freeze([]),
+          triMeshes: Object.freeze([])
+        }),
+        navigation: Object.freeze({
+          connectorIds: Object.freeze([]),
+          gameplayVolumeIds: Object.freeze([]),
+          regionIds: Object.freeze(["basement-floor", "upper-floor"]),
+          surfaceIds: Object.freeze([])
+        }),
+        render: Object.freeze({
+          edgeIds: Object.freeze([]),
+          instancedModuleAssetIds: Object.freeze([]),
+          lightIds: Object.freeze([]),
+          regionIds: Object.freeze(["basement-floor", "upper-floor"]),
+          structureIds: Object.freeze([]),
+          terrainPatchIds: Object.freeze([]),
+          transparentEntityIds: Object.freeze([])
+        })
+      })
+    ]),
+    compatibilityEnvironmentAssets: Object.freeze([])
+  });
+  const basementSpawnPosition = resolveMetaverseMapPlayerSpawnSupportPosition({
+    compiledWorld,
+    spawnPosition: Object.freeze({ x: 0, y: -0.2, z: 0 })
+  });
+  const upperSpawnPosition = resolveMetaverseMapPlayerSpawnSupportPosition({
+    compiledWorld,
+    spawnPosition: Object.freeze({ x: 0, y: 2.2, z: 0 })
+  });
+
+  assert.equal(basementSpawnPosition.y, 0);
+  assert.equal(upperSpawnPosition.y, 3);
 });
