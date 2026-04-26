@@ -1,5 +1,9 @@
 import type { MetaverseSurfaceTraversalConfig } from "./metaverse-surface-traversal-simulation.js";
-import type { MetaverseWorldSurfacePolicyConfig } from "./metaverse-world-surface-policy.js";
+import {
+  metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians,
+  metaverseWorldSurfaceDefaultStepHeightMeters,
+  type MetaverseWorldSurfacePolicyConfig
+} from "./metaverse-world-surface-policy.js";
 
 export interface MetaverseGroundedBodyTraversalCoreConfig
   extends MetaverseSurfaceTraversalConfig {
@@ -75,11 +79,12 @@ export const metaverseGroundedBodyTraversalCoreConfig = Object.freeze({
   gravityUnitsPerSecond: 18,
   jumpGroundContactGraceSeconds: 0.2,
   jumpImpulseUnitsPerSecond: 6.8,
-  maxSlopeClimbAngleRadians: Math.PI * 0.26,
+  maxSlopeClimbAngleRadians:
+    metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians,
   maxTurnSpeedRadiansPerSecond: 3.6,
   minSlopeSlideAngleRadians: Math.PI * 0.34,
   snapToGroundDistanceMeters: 0.22,
-  stepHeightMeters: 0.28,
+  stepHeightMeters: metaverseWorldSurfaceDefaultStepHeightMeters,
   stepWidthMeters: 0.24
 } as const satisfies MetaverseGroundedBodyTraversalCoreConfig);
 

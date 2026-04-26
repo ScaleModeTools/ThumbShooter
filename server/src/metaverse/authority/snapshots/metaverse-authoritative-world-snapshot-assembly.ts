@@ -299,6 +299,10 @@ export function createMetaverseAuthoritativeWorldSnapshot<
           }),
           yawRadians: playerRuntime.yawRadians
         }),
+        groundedSupport:
+          playerRuntime.locomotionMode === "grounded"
+            ? playerRuntime.unmountedTraversalState.groundedSupport
+            : null,
         look: {
           pitchRadians: playerRuntime.lookPitchRadians,
           yawRadians: playerRuntime.lookYawRadians

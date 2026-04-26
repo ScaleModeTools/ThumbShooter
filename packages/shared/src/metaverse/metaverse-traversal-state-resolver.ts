@@ -8,6 +8,7 @@ import type {
 } from "./metaverse-world-surface-query.js";
 import type {
   MetaverseWorldAutomaticSurfaceLocomotionDebugSnapshot,
+  MetaverseWorldSurfaceSupportSnapshot,
   MetaverseWorldSurfacePolicyConfig
 } from "./metaverse-world-surface-policy.js";
 import {
@@ -30,6 +31,7 @@ export type MetaverseTraversalStateResolutionReasonId =
 export interface MetaverseTraversalStateDecision {
   readonly capabilityId: MetaverseTraversalCapabilityId;
   readonly locomotionMode: MetaverseTraversalCapabilityId;
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
 }
 
@@ -72,7 +74,8 @@ export function resolveMetaverseTraversalStateFromWorldAffordances(
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   currentCapabilityId: MetaverseTraversalCapabilityId,
-  excludedOwnerEnvironmentAssetId: string | null = null
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): MetaverseTraversalStateResolutionSnapshot {
   const automaticSurfaceSnapshot = resolveMetaverseWorldAutomaticSurfaceLocomotion(
     config,
@@ -81,7 +84,8 @@ export function resolveMetaverseTraversalStateFromWorldAffordances(
     position,
     yawRadians,
     currentCapabilityId,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    preferredSupport
   );
   const resolvedCapabilityId = automaticSurfaceSnapshot.decision.locomotionMode;
   const resolutionReason = resolveTraversalStateResolutionReason(
@@ -103,6 +107,7 @@ export function resolveMetaverseTraversalStateFromWorldAffordances(
     decision: Object.freeze({
       capabilityId: resolvedCapabilityId,
       locomotionMode: resolvedCapabilityId,
+      support: automaticSurfaceSnapshot.decision.support,
       supportHeightMeters: automaticSurfaceSnapshot.decision.supportHeightMeters
     })
   });

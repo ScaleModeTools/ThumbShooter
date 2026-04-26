@@ -554,6 +554,7 @@ export class MetaverseUnmountedTraversalOrchestrationState {
           localTraversalPose,
           syncAuthoritativeLook: syncOptions.syncAuthoritativeLook ?? false
         });
+    this.#syncAuthoritativeTraversalSupport(authoritativePlayerSnapshot);
 
     if (!appliedCorrection) {
       return nextCameraSnapshot.current;
@@ -568,6 +569,27 @@ export class MetaverseUnmountedTraversalOrchestrationState {
     this.syncCharacterPresentationSnapshot();
 
     return nextCameraSnapshot.current;
+  }
+
+  #syncAuthoritativeTraversalSupport(
+    authoritativePlayerSnapshot: AuthoritativeLocalPlayerPoseSnapshot
+  ): void {
+    const currentTraversalState = this.#dependencies.readTraversalState();
+    const locomotionMode =
+      authoritativePlayerSnapshot.locomotionMode === "swim"
+        ? "swim"
+        : "grounded";
+
+    this.#dependencies.writeTraversalState(
+      createMetaverseUnmountedTraversalStateSnapshot({
+        actionState: currentTraversalState.actionState,
+        groundedSupport:
+          locomotionMode === "grounded"
+            ? authoritativePlayerSnapshot.groundedSupport
+            : null,
+        locomotionMode
+      })
+    );
   }
 
   syncCharacterPresentationSnapshot(deltaSeconds = 0): void {
@@ -596,7 +618,8 @@ export class MetaverseUnmountedTraversalOrchestrationState {
         this.#dependencies.surfaceLocomotionState.readGroundedSupportHeightMeters(
           position,
           null,
-          maxSupportHeightMeters ?? null
+          maxSupportHeightMeters ?? null,
+          this.#dependencies.readTraversalState().groundedSupport
         ),
       swimPredictionSeconds:
         this.#dependencies.unmountedTraversalMotionState.swimPredictionSeconds,

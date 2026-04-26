@@ -485,6 +485,10 @@ export class MetaverseTraversalRuntime {
     if (locomotionMode === "grounded" || locomotionMode === "swim") {
       this.#unmountedTraversalState = createMetaverseUnmountedTraversalStateSnapshot({
         actionState: this.#unmountedTraversalState.actionState,
+        groundedSupport:
+          locomotionMode === "grounded"
+            ? this.#unmountedTraversalState.groundedSupport
+            : null,
         locomotionMode
       });
     }

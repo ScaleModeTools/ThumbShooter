@@ -13,7 +13,8 @@ import type {
 import type {
   MetaversePlayerTraversalActionIntentSnapshot,
   MetaversePlayerTraversalBodyControlSnapshot,
-  MetaversePlayerTraversalIntentSnapshot
+  MetaversePlayerTraversalIntentSnapshot,
+  MetaverseWorldSurfaceSupportSnapshot
 } from "@webgpu-metaverse/shared";
 
 import type {
@@ -117,6 +118,7 @@ export type AutomaticSurfaceLocomotionModeId = "grounded" | "swim";
 
 export interface AutomaticSurfaceLocomotionDecision {
   readonly locomotionMode: AutomaticSurfaceLocomotionModeId;
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
 }
 

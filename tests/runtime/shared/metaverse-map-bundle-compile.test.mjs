@@ -10,7 +10,7 @@ import {
   stagingGroundMapBundle
 } from "@webgpu-metaverse/shared/metaverse/world";
 
-test("semantic terrain patches compile deterministic support heightfields with edge blockers", () => {
+test("semantic terrain patches compile deterministic support heightfields with subsurface blockers", () => {
   const compiledWorld = compileMetaverseMapBundleSemanticWorld(
     Object.freeze({
       compatibilityAssetIds: Object.freeze({
@@ -81,8 +81,14 @@ test("semantic terrain patches compile deterministic support heightfields with e
   assert.equal(terrainTriMeshes.length, 1);
   assert.equal(terrainTriMeshes[0]?.ownerId, "terrain-a");
   assert.equal(terrainTriMeshes[0]?.traversalAffordance, "blocker");
-  assert.equal(terrainTriMeshes[0]?.vertices.length, 24);
-  assert.equal(terrainTriMeshes[0]?.indices.length, 24);
+  assert.equal(terrainTriMeshes[0]?.vertices.length > 0, true);
+  assert.equal(terrainTriMeshes[0]?.indices.length > 0, true);
+  assert.equal(
+    Math.max(...(terrainTriMeshes[0]?.vertices.filter(
+      (_value, index) => index % 3 === 1
+    ) ?? [])) < 2,
+    true
+  );
   assert.equal(
     surfaceColliders.filter(
       (collider) =>
@@ -99,7 +105,7 @@ test("semantic terrain patches compile deterministic support heightfields with e
   );
 });
 
-test("semantic terrain patches do not emit blocker tops for interior-only height changes", () => {
+test("semantic terrain patches fill below walkable interior height changes", () => {
   const compiledWorld = compileMetaverseMapBundleSemanticWorld(
     Object.freeze({
       compatibilityAssetIds: Object.freeze({
@@ -169,7 +175,184 @@ test("semantic terrain patches do not emit blocker tops for interior-only height
 
   assert.equal(terrainHeightfields.length, 1);
   assert.equal(terrainHeightfields[0]?.ownerId, "terrain-interior-hill");
-  assert.equal(terrainTriMeshes.length, 0);
+  assert.equal(terrainTriMeshes.length, 1);
+  assert.equal(terrainTriMeshes[0]?.ownerId, "terrain-interior-hill");
+  assert.equal(terrainTriMeshes[0]?.traversalAffordance, "blocker");
+  assert.equal(
+    Math.max(...(terrainTriMeshes[0]?.vertices.filter(
+      (_value, index) => index % 3 === 1
+    ) ?? [])) < 2,
+    true
+  );
+});
+
+test("semantic terrain patches emit blockers for unwalkable interior height changes", () => {
+  const compiledWorld = compileMetaverseMapBundleSemanticWorld(
+    Object.freeze({
+      compatibilityAssetIds: Object.freeze({
+        connectorAssetId: null,
+        floorAssetId: null,
+        wallAssetId: null
+      }),
+      connectors: Object.freeze([]),
+      edges: Object.freeze([]),
+      gameplayVolumes: Object.freeze([]),
+      lights: Object.freeze([]),
+      modules: Object.freeze([]),
+      regions: Object.freeze([]),
+      structures: Object.freeze([]),
+      surfaces: Object.freeze([]),
+      terrainPatches: Object.freeze([
+        Object.freeze({
+          grid: Object.freeze({
+            cellX: 0,
+            cellZ: 0,
+            cellsX: 1,
+            cellsZ: 1,
+            layer: 0
+          }),
+          heightSamples: Object.freeze([
+            0, 0, 0,
+            0, 2, 0,
+            0, 0, 0
+          ]),
+          label: "Terrain Interior Cliff",
+          materialLayers: Object.freeze([
+            Object.freeze({
+              layerId: "terrain-interior-cliff:terrain-rock",
+              materialId: "terrain-rock",
+              weightSamples: Object.freeze([
+                1, 1, 1,
+                1, 1, 1,
+                1, 1, 1
+              ])
+            })
+          ]),
+          origin: Object.freeze({
+            x: 0,
+            y: 0,
+            z: 0
+          }),
+          rotationYRadians: 0,
+          sampleCountX: 3,
+          sampleCountZ: 3,
+          sampleSpacingMeters: 0.5,
+          terrainPatchId: "terrain-interior-cliff",
+          waterLevelMeters: null
+        })
+      ])
+    })
+  );
+  const terrainHeightfields = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.heightfields.filter(
+      (heightfield) => heightfield.ownerKind === "terrain-patch"
+    )
+  );
+  const terrainTriMeshes = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.triMeshes.filter(
+      (triMesh) => triMesh.ownerKind === "terrain-patch"
+    )
+  );
+  const surfaceColliders =
+    resolveMetaverseMapBundleCompiledWorldSurfaceColliders(compiledWorld);
+
+  assert.equal(terrainHeightfields.length, 1);
+  assert.equal(terrainHeightfields[0]?.ownerId, "terrain-interior-cliff");
+  assert.equal(terrainTriMeshes.length, 1);
+  assert.equal(terrainTriMeshes[0]?.ownerId, "terrain-interior-cliff");
+  assert.equal(terrainTriMeshes[0]?.traversalAffordance, "blocker");
+  assert.equal(terrainTriMeshes[0]?.vertices.length > 0, true);
+  assert.equal(terrainTriMeshes[0]?.indices.length > 0, true);
+  assert.equal(
+    surfaceColliders.filter(
+      (collider) =>
+        collider.shape === "trimesh" &&
+        collider.traversalAffordance === "blocker"
+    ).length,
+    1
+  );
+});
+
+test("semantic terrain patches block short steep slopes inside the terrain footprint", () => {
+  const compiledWorld = compileMetaverseMapBundleSemanticWorld(
+    Object.freeze({
+      compatibilityAssetIds: Object.freeze({
+        connectorAssetId: null,
+        floorAssetId: null,
+        wallAssetId: null
+      }),
+      connectors: Object.freeze([]),
+      edges: Object.freeze([]),
+      gameplayVolumes: Object.freeze([]),
+      lights: Object.freeze([]),
+      modules: Object.freeze([]),
+      regions: Object.freeze([]),
+      structures: Object.freeze([]),
+      surfaces: Object.freeze([]),
+      terrainPatches: Object.freeze([
+        Object.freeze({
+          grid: Object.freeze({
+            cellX: 0,
+            cellZ: 0,
+            cellsX: 1,
+            cellsZ: 1,
+            layer: 0
+          }),
+          heightSamples: Object.freeze([
+            0, 0, 0,
+            0, 0.2, 0,
+            0, 0, 0
+          ]),
+          label: "Short Steep Terrain",
+          materialLayers: Object.freeze([
+            Object.freeze({
+              layerId: "short-steep-terrain:terrain-rock",
+              materialId: "terrain-rock",
+              weightSamples: Object.freeze([
+                1, 1, 1,
+                1, 1, 1,
+                1, 1, 1
+              ])
+            })
+          ]),
+          origin: Object.freeze({ x: 0, y: 0, z: 0 }),
+          rotationYRadians: 0,
+          sampleCountX: 3,
+          sampleCountZ: 3,
+          sampleSpacingMeters: 0.1,
+          terrainPatchId: "short-steep-terrain",
+          waterLevelMeters: null
+        })
+      ])
+    })
+  );
+  const terrainTriMeshes = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.triMeshes.filter(
+      (triMesh) => triMesh.ownerKind === "terrain-patch"
+    )
+  );
+
+  assert.equal(terrainTriMeshes.length, 1);
+  assert.equal(terrainTriMeshes[0]?.ownerId, "short-steep-terrain");
+  assert.equal(terrainTriMeshes[0]?.traversalAffordance, "blocker");
+  assert.equal(
+    Math.min(...(terrainTriMeshes[0]?.vertices.filter(
+      (_value, index) => index % 3 === 1
+    ) ?? [])) < 0,
+    true
+  );
+  assert.equal(
+    Math.max(...(terrainTriMeshes[0]?.vertices.filter(
+      (_value, index) => index % 3 === 1
+    ) ?? [])) < 0.2,
+    true
+  );
+  assert.equal(
+    Math.max(...(terrainTriMeshes[0]?.vertices.filter(
+      (_value, index) => index % 3 === 1
+    ) ?? [])) > 0.15,
+    true
+  );
 });
 
 test("compiled world surface colliders keep authored support without compatibility duplicates", () => {

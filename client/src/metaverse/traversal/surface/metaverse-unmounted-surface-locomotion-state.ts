@@ -19,6 +19,7 @@ import { freezeVector3, toFiniteNumber, wrapRadians } from "../policies/surface-
 import {
   resolveAutomaticSurfaceLocomotionSnapshot,
   resolveSurfaceHeightMeters,
+  resolveSurfaceSupportSnapshot,
   resolveWaterSurfaceHeightMeters
 } from "../policies/surface-routing";
 import {
@@ -245,20 +246,24 @@ export class MetaverseUnmountedSurfaceLocomotionState {
   readGroundedSupportHeightMeters(
     position: Pick<PhysicsVector3Snapshot, "x" | "z">,
     fallbackHeightMeters: number | null = null,
-    maxSupportHeightMeters: number | null = null
+    maxSupportHeightMeters: number | null = null,
+    preferredSupport: MetaverseUnmountedTraversalStateSnapshot["groundedSupport"] = null
   ): number | null {
     const localWaterSurfaceHeightMeters = this.readWaterSurfaceHeightMeters(
       position,
       this.#config.groundedBody.capsuleRadiusMeters
     );
-    const resolvedSurfaceHeightMeters = resolveSurfaceHeightMeters(
+    const resolvedSurfaceSupport = resolveSurfaceSupportSnapshot(
       this.#config,
       this.#dependencies.surfaceColliderSnapshots,
       position.x,
       position.z,
       null,
-      maxSupportHeightMeters
+      maxSupportHeightMeters,
+      preferredSupport
     );
+    const resolvedSurfaceHeightMeters =
+      resolvedSurfaceSupport?.supportHeightMeters ?? null;
 
     if (resolvedSurfaceHeightMeters === null) {
       return fallbackHeightMeters;

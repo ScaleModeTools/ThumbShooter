@@ -82,6 +82,37 @@ test("MetaverseAuthoritativeWorldRuntime keeps simulation time stable between re
   assert.equal(secondSnapshot.tick.emittedAtServerTimeMs, 190);
 });
 
+test("MetaverseAuthoritativeWorldRuntime publishes the authoritative grounded support token", () => {
+  const runtime = createAuthoritativeRuntime();
+  const playerId = requireValue(
+    createMetaversePlayerId("support-token-harbor-pilot"),
+    "playerId"
+  );
+  const username = requireValue(createUsername("Support Token Pilot"), "username");
+
+  joinSurfacePlayer(runtime, playerId, username, {
+    position: {
+      x: 0,
+      y: 1.62,
+      z: 24
+    },
+    yawRadians: 0
+  });
+  runtime.advanceToTime(100);
+
+  const worldSnapshot = runtime.readWorldSnapshot(100, playerId);
+  const playerSnapshot = worldSnapshot.players[0];
+
+  assert.equal(playerSnapshot?.locomotionMode, "grounded");
+  assert.equal(playerSnapshot?.groundedSupport?.walkable, true);
+  assert.equal(playerSnapshot?.groundedSupport?.supportKind, "box");
+  assert.ok((playerSnapshot?.groundedSupport?.supportHeightMeters ?? 0) > 0);
+  assert.ok(
+    (playerSnapshot?.groundedSupport?.supportHeightMeters ?? 0) <
+      (playerSnapshot?.groundedBody.position.y ?? 0)
+  );
+});
+
 test("MetaverseAuthoritativeWorldRuntime does not advance simulation when snapshots are only read", () => {
   const runtime = createAuthoritativeRuntime();
   const playerId = requireValue(

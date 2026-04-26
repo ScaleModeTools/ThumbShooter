@@ -28,12 +28,13 @@ import {
   resolveMetaverseWorldWaterSurfaceHeightMeters
 } from "./metaverse-world-surface-query.js";
 import type {
+  MetaverseWorldSurfaceSupportSnapshot,
   MetaverseWorldSurfacePolicyConfig
 } from "./metaverse-world-surface-policy.js";
 import {
   metaverseWorldAutomaticSurfaceWaterlineThresholdMeters,
   resolveMetaverseWorldGroundedAutostepHeightMeters,
-  resolveMetaverseWorldSurfaceHeightMeters
+  resolveMetaverseWorldSurfaceSupportSnapshot
 } from "./metaverse-world-surface-policy.js";
 import type {
   MetaverseTraversalCapabilityId,
@@ -67,6 +68,7 @@ export interface MetaverseUnmountedGroundedTraversalConfigSnapshot {
 
 export interface MetaverseUnmountedTraversalStateSnapshot {
   readonly actionState: MetaverseTraversalActionStateSnapshot;
+  readonly groundedSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly locomotionMode: "grounded" | "swim";
 }
 
@@ -77,6 +79,8 @@ export function createMetaverseUnmountedTraversalStateSnapshot(
     actionState: createMetaverseTraversalActionStateSnapshot(
       input.actionState ?? {}
     ),
+    groundedSupport:
+      input.locomotionMode === "swim" ? null : input.groundedSupport ?? null,
     locomotionMode: input.locomotionMode === "swim" ? "swim" : "grounded"
   });
 }
@@ -90,6 +94,7 @@ export function queueMetaverseUnmountedTraversalAction(
       traversalState.actionState,
       input
     ),
+    groundedSupport: traversalState.groundedSupport,
     locomotionMode: traversalState.locomotionMode
   });
 }
@@ -101,6 +106,7 @@ export function clearMetaverseUnmountedTraversalPendingActions(
     actionState: clearMetaverseTraversalPendingActions(
       traversalState.actionState
     ),
+    groundedSupport: traversalState.groundedSupport,
     locomotionMode: traversalState.locomotionMode
   });
 }
@@ -124,6 +130,7 @@ export interface MetaversePreparedUnmountedGroundedTraversalStepSnapshot {
   readonly bodyIntent: MetaverseGroundedTraversalBodyIntentSnapshot;
   readonly jumpRequested: boolean;
   readonly locomotionMode: "grounded";
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly traversalState: MetaverseUnmountedTraversalStateSnapshot;
 }
 
@@ -152,6 +159,7 @@ export interface ResolveMetaverseUnmountedTraversalStepSnapshot {
   readonly automaticSurfaceSnapshot: MetaverseTraversalStateResolutionSnapshot;
   readonly grounded: boolean;
   readonly locomotionMode: "grounded" | "swim";
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
   readonly traversalState: MetaverseUnmountedTraversalStateSnapshot;
   readonly waterlineHeightMeters: number;
@@ -160,7 +168,10 @@ export interface ResolveMetaverseUnmountedTraversalStepSnapshot {
 export interface ResolveMetaverseUnmountedTraversalTransitionInput {
   readonly locomotionOutcome: Pick<
     ResolveMetaverseUnmountedTraversalStepSnapshot,
-    "grounded" | "locomotionMode" | "supportHeightMeters" | "waterlineHeightMeters"
+    | "grounded"
+    | "locomotionMode"
+    | "supportHeightMeters"
+    | "waterlineHeightMeters"
   >;
   readonly preparedTraversalStep: Pick<
     MetaversePreparedUnmountedTraversalStepSnapshot,
@@ -220,6 +231,7 @@ interface PrepareMetaverseUnmountedGroundedTraversalStepInput {
   readonly deltaSeconds: number;
   readonly groundedBodyConfig: MetaverseUnmountedGroundedTraversalConfigSnapshot;
   readonly groundedBodySnapshot: MetaverseUnmountedGroundedBodySnapshot;
+  readonly groundedSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly preferredLookYawRadians?: number | null;
   readonly surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[];
   readonly surfacePolicyConfig: MetaverseWorldSurfacePolicyConfig;
@@ -232,10 +244,12 @@ interface PrepareMetaverseUnmountedGroundedTraversalStepResult {
   readonly autostepHeightMeters: number | null;
   readonly bodyIntent: MetaverseGroundedTraversalBodyIntentSnapshot;
   readonly jumpRequested: boolean;
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
 }
 
 interface ResolveMetaverseUnmountedGroundedTraversalOutcomeInput {
   readonly groundedBodySnapshot: MetaverseUnmountedGroundedBodySnapshot;
+  readonly preferredSupport?: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[];
   readonly surfacePolicyConfig: MetaverseWorldSurfacePolicyConfig;
   readonly waterRegionSnapshots: readonly MetaverseWorldPlacedWaterRegionSnapshot[];
@@ -246,6 +260,7 @@ interface ResolveMetaverseUnmountedGroundedTraversalOutcomeSnapshot {
   readonly automaticSurfaceSnapshot: MetaverseTraversalStateResolutionSnapshot;
   readonly grounded: boolean;
   readonly locomotionMode: "grounded" | "swim";
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
   readonly waterlineHeightMeters: number;
 }
@@ -262,6 +277,7 @@ interface ResolveMetaverseUnmountedSwimTraversalOutcomeSnapshot {
   readonly automaticSurfaceSnapshot: MetaverseTraversalStateResolutionSnapshot;
   readonly grounded: boolean;
   readonly locomotionMode: "grounded" | "swim";
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
   readonly waterlineHeightMeters: number;
 }
@@ -273,7 +289,8 @@ function resolveAutomaticSurfaceSnapshot(
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   currentLocomotionMode: MetaverseTraversalCapabilityId,
-  excludedOwnerEnvironmentAssetId: string | null
+  excludedOwnerEnvironmentAssetId: string | null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): MetaverseTraversalStateResolutionSnapshot {
   return resolveMetaverseTraversalStateFromWorldAffordances(
     surfacePolicyConfig,
@@ -282,7 +299,8 @@ function resolveAutomaticSurfaceSnapshot(
     position,
     yawRadians,
     currentLocomotionMode,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    preferredSupport
   );
 }
 
@@ -383,6 +401,7 @@ function prepareMetaverseUnmountedGroundedTraversalStep({
   deltaSeconds,
   groundedBodySnapshot,
   groundedBodyConfig,
+  groundedSupport,
   preferredLookYawRadians,
   surfaceColliderSnapshots,
   surfacePolicyConfig,
@@ -395,15 +414,17 @@ function prepareMetaverseUnmountedGroundedTraversalStep({
   readonly actionState: MetaverseTraversalActionStateSnapshot;
   readonly groundedBodySnapshot: MetaverseUnmountedGroundedBodySnapshot;
 }): PrepareMetaverseUnmountedGroundedTraversalStepResult {
-  const supportHeightMeters = resolveMetaverseWorldSurfaceHeightMeters(
+  const supportSnapshot = resolveMetaverseWorldSurfaceSupportSnapshot(
     surfacePolicyConfig,
     surfaceColliderSnapshots,
-    waterRegionSnapshots,
     groundedBodySnapshot.position.x,
     groundedBodySnapshot.position.z,
+    surfacePolicyConfig.capsuleRadiusMeters,
     excludedOwnerEnvironmentAssetId,
-    groundedBodySnapshot.position.y
+    groundedBodySnapshot.position.y,
+    groundedSupport
   );
+  const supportHeightMeters = supportSnapshot?.supportHeightMeters ?? null;
   const waterSurfaceHeightMeters = readMetaverseTraversalWaterSurfaceHeightMeters(
     waterRegionSnapshots,
     groundedBodySnapshot.position
@@ -450,26 +471,31 @@ function prepareMetaverseUnmountedGroundedTraversalStep({
       ...traversalActionStep.bodyIntent,
       snapToGroundOverrideEnabled: currentDirectSupportKeepsGrounded
     }),
-    jumpRequested: traversalActionStep.jumpRequested
+    jumpRequested: traversalActionStep.jumpRequested,
+    support: supportSnapshot
   });
 }
 
 function resolveMetaverseUnmountedGroundedTraversalOutcome({
   groundedBodySnapshot,
+  preferredSupport = null,
   surfaceColliderSnapshots,
   surfacePolicyConfig,
   waterRegionSnapshots,
   excludedOwnerEnvironmentAssetId = null
 }: ResolveMetaverseUnmountedGroundedTraversalOutcomeInput): ResolveMetaverseUnmountedGroundedTraversalOutcomeSnapshot {
-  const resolvedSupportHeightMeters = resolveMetaverseWorldSurfaceHeightMeters(
+  const resolvedSupport = resolveMetaverseWorldSurfaceSupportSnapshot(
     surfacePolicyConfig,
     surfaceColliderSnapshots,
-    waterRegionSnapshots,
     groundedBodySnapshot.position.x,
     groundedBodySnapshot.position.z,
+    surfacePolicyConfig.capsuleRadiusMeters,
     excludedOwnerEnvironmentAssetId,
-    groundedBodySnapshot.position.y
+    groundedBodySnapshot.position.y,
+    preferredSupport
   );
+  const resolvedSupportHeightMeters =
+    resolvedSupport?.supportHeightMeters ?? null;
   const automaticSurfaceSnapshot = resolveAutomaticSurfaceSnapshot(
     surfacePolicyConfig,
     surfaceColliderSnapshots,
@@ -477,7 +503,8 @@ function resolveMetaverseUnmountedGroundedTraversalOutcome({
     groundedBodySnapshot.position,
     groundedBodySnapshot.yawRadians,
     "grounded",
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    resolvedSupport ?? preferredSupport
   );
   const waterSurfaceHeightMeters = readMetaverseTraversalWaterSurfaceHeightMeters(
     waterRegionSnapshots,
@@ -512,6 +539,7 @@ function resolveMetaverseUnmountedGroundedTraversalOutcome({
         decision: Object.freeze({
           capabilityId: "swim",
           locomotionMode: "swim",
+          support: null,
           supportHeightMeters: null
         } satisfies MetaverseTraversalStateDecision)
         } satisfies MetaverseTraversalStateResolutionSnapshot)
@@ -521,6 +549,10 @@ function resolveMetaverseUnmountedGroundedTraversalOutcome({
     automaticSurfaceSnapshot: nextAutomaticSurfaceSnapshot,
     grounded: shouldEnterSwim ? false : groundedBodySnapshot.grounded,
     locomotionMode: shouldEnterSwim ? "swim" : "grounded",
+    support:
+      shouldEnterSwim === true
+        ? null
+        : resolvedSupport ?? automaticSurfaceSnapshot.decision.support,
     supportHeightMeters:
       shouldEnterSwim
         ? null
@@ -564,6 +596,7 @@ function resolveMetaverseUnmountedSwimTraversalOutcome({
     automaticSurfaceSnapshot,
     grounded,
     locomotionMode: grounded ? "grounded" : "swim",
+    support: grounded ? nextLocomotionDecision.support : null,
     supportHeightMeters: nextLocomotionDecision.supportHeightMeters,
     waterlineHeightMeters
   });
@@ -595,6 +628,7 @@ export function prepareMetaverseUnmountedTraversalStep({
       deltaSeconds,
       groundedBodyConfig,
       groundedBodySnapshot,
+      groundedSupport: traversalState.groundedSupport,
       preferredLookYawRadians,
       surfaceColliderSnapshots,
       surfacePolicyConfig,
@@ -607,8 +641,10 @@ export function prepareMetaverseUnmountedTraversalStep({
       bodyIntent: groundedTraversalStep.bodyIntent,
       jumpRequested: groundedTraversalStep.jumpRequested,
       locomotionMode: "grounded",
+      support: groundedTraversalStep.support,
       traversalState: Object.freeze({
         actionState: groundedTraversalStep.actionState,
+        groundedSupport: groundedTraversalStep.support,
         locomotionMode: "grounded"
       })
     });
@@ -636,6 +672,7 @@ export function prepareMetaverseUnmountedTraversalStep({
           deltaSeconds
         }
       ).state,
+      groundedSupport: null,
       locomotionMode: "swim"
     }),
     waterlineHeightMeters: resolveMetaverseTraversalWaterlineHeightMeters(
@@ -663,6 +700,7 @@ export function resolveMetaverseUnmountedTraversalStep({
 
     const locomotionOutcome = resolveMetaverseUnmountedGroundedTraversalOutcome({
       groundedBodySnapshot,
+      preferredSupport: preparedTraversalStep.support,
       surfaceColliderSnapshots,
       surfacePolicyConfig,
       waterRegionSnapshots,
@@ -673,9 +711,14 @@ export function resolveMetaverseUnmountedTraversalStep({
       automaticSurfaceSnapshot: locomotionOutcome.automaticSurfaceSnapshot,
       grounded: locomotionOutcome.grounded,
       locomotionMode: locomotionOutcome.locomotionMode,
+      support: locomotionOutcome.support,
       supportHeightMeters: locomotionOutcome.supportHeightMeters,
       traversalState: Object.freeze({
         actionState: preparedTraversalStep.traversalState.actionState,
+        groundedSupport:
+          locomotionOutcome.locomotionMode === "grounded"
+            ? locomotionOutcome.support
+            : null,
         locomotionMode: locomotionOutcome.locomotionMode
       }),
       waterlineHeightMeters: locomotionOutcome.waterlineHeightMeters
@@ -700,9 +743,14 @@ export function resolveMetaverseUnmountedTraversalStep({
     automaticSurfaceSnapshot: locomotionOutcome.automaticSurfaceSnapshot,
     grounded: locomotionOutcome.grounded,
     locomotionMode: locomotionOutcome.locomotionMode,
+    support: locomotionOutcome.support,
     supportHeightMeters: locomotionOutcome.supportHeightMeters,
     traversalState: Object.freeze({
       actionState: preparedTraversalStep.traversalState.actionState,
+      groundedSupport:
+        locomotionOutcome.locomotionMode === "grounded"
+          ? locomotionOutcome.support
+          : null,
       locomotionMode: locomotionOutcome.locomotionMode
     }),
     waterlineHeightMeters: locomotionOutcome.waterlineHeightMeters

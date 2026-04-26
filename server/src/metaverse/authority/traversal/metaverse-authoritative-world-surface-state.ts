@@ -342,6 +342,10 @@ export class MetaverseAuthoritativeWorldSurfaceState<
         z: playerRuntime.positionZ
       }
     );
+    const preferredSupport =
+      playerRuntime.locomotionMode === "grounded"
+        ? playerRuntime.unmountedTraversalState.groundedSupport
+        : null;
     const locomotionDecision = resolveMetaverseTraversalStateFromWorldAffordances(
       this.#dependencies.groundedBodyConfig,
       filteredSurfaceColliders,
@@ -353,7 +357,8 @@ export class MetaverseAuthoritativeWorldSurfaceState<
       },
       playerRuntime.yawRadians,
       playerRuntime.locomotionMode === "swim" ? "swim" : "grounded",
-      excludedOwnerEnvironmentAssetId
+      excludedOwnerEnvironmentAssetId,
+      preferredSupport
     ).decision;
 
     if (
@@ -364,6 +369,7 @@ export class MetaverseAuthoritativeWorldSurfaceState<
       playerRuntime.unmountedTraversalState =
         createMetaverseUnmountedTraversalStateSnapshot({
           actionState: playerRuntime.unmountedTraversalState.actionState,
+          groundedSupport: locomotionDecision.support,
           locomotionMode: "grounded"
         });
       this.#dependencies.syncUnmountedPlayerToGroundedSupport(

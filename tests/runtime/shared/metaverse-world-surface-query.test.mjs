@@ -16,6 +16,7 @@ import {
   resolveMetaverseWorldMountedOccupancyPolicySnapshotFromAuthoring,
   resolveMetaverseWorldPlacedSurfaceColliders,
   resolveMetaverseWorldSurfaceHeightMeters,
+  resolveMetaverseWorldSurfaceSupportSnapshot,
   resolveMetaverseWorldPlacedWaterRegionAtPlanarPosition,
   resolveMetaverseWorldWaterSurfaceHeightMeters
 } from "@webgpu-metaverse/shared";
@@ -124,6 +125,26 @@ test("shared world surface query derives support height from authored tri-mesh c
       ) ?? 0) - 2.6
     ) < 0.0001
   );
+  const supportSnapshot = resolveMetaverseWorldSurfaceSupportSnapshot(
+    Object.freeze({
+      capsuleHalfHeightMeters: 0.48,
+      capsuleRadiusMeters: 0.34,
+      gravityUnitsPerSecond: 18,
+      jumpImpulseUnitsPerSecond: 6.8,
+      oceanHeightMeters: 0,
+      stepHeightMeters: 0.28
+    }),
+    Object.freeze([triMeshSupportSnapshot]),
+    8.1,
+    -5.9
+  );
+
+  assert.equal(supportSnapshot?.supportKind, "trimesh");
+  assert.equal(supportSnapshot?.walkable, true);
+  assert.equal(supportSnapshot?.ownerEnvironmentAssetId, "test-trimesh-surface");
+  assert.ok(
+    Math.abs((supportSnapshot?.supportHeightMeters ?? 0) - 2.6) < 0.0001
+  );
 });
 
 test("shared world surface blockers treat visible tri-mesh tops as solid only below the walkable surface", () => {
@@ -231,6 +252,24 @@ test("shared world surface query derives support height from authored heightfiel
     ),
     null
   );
+  const supportSnapshot = resolveMetaverseWorldSurfaceSupportSnapshot(
+    Object.freeze({
+      capsuleHalfHeightMeters: 0.48,
+      capsuleRadiusMeters: 0.34,
+      gravityUnitsPerSecond: 18,
+      jumpImpulseUnitsPerSecond: 6.8,
+      oceanHeightMeters: 0,
+      stepHeightMeters: 0.28
+    }),
+    Object.freeze([heightfieldSupportSnapshot]),
+    10,
+    -5
+  );
+
+  assert.equal(supportSnapshot?.supportKind, "heightfield");
+  assert.equal(supportSnapshot?.walkable, true);
+  assert.equal(supportSnapshot?.supportHeightMeters, 3.5);
+  assert.ok((supportSnapshot?.supportNormal.y ?? 0) < 1);
 });
 
 test("shared traversal state resolver keeps direct grounded support height above water when step probes are absent", () => {

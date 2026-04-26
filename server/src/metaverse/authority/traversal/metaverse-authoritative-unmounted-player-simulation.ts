@@ -291,8 +291,9 @@ export class MetaverseAuthoritativeUnmountedPlayerSimulation<
       waterRegionSnapshots: this.#dependencies.waterRegionSnapshots
     });
     const preparedTraversalStep = traversalBodyStep.preparedTraversalStep;
-    playerRuntime.unmountedTraversalState =
+    const resolvedTraversalState =
       traversalBodyStep.locomotionOutcome.traversalState;
+    playerRuntime.unmountedTraversalState = resolvedTraversalState;
     const transitionSnapshot = traversalBodyStep.transitionSnapshot;
 
     if (preparedTraversalStep.locomotionMode === "swim") {
@@ -376,8 +377,9 @@ export class MetaverseAuthoritativeUnmountedPlayerSimulation<
     playerRuntime.locomotionMode = resolvedLocomotionMode;
     playerRuntime.unmountedTraversalState =
       createMetaverseUnmountedTraversalStateSnapshot({
-        actionState: playerRuntime.unmountedTraversalState.actionState,
-        locomotionMode: resolvedLocomotionMode
+        actionState: resolvedTraversalState.actionState,
+        groundedSupport: resolvedTraversalState.groundedSupport,
+        locomotionMode: resolvedTraversalState.locomotionMode
       });
     playerRuntime.lastPoseAtMs = nowMs;
 

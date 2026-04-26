@@ -4,7 +4,6 @@ import {
   type MetaverseWorldSurfaceScaleSnapshot,
   type MetaverseWorldSurfaceVector3Snapshot
 } from "../../metaverse-world-surface-query.js";
-
 import type {
   MetaverseMapBundleCompiledCollisionBoxSnapshot,
   MetaverseMapBundleCompiledCollisionHeightfieldSnapshot,
@@ -50,6 +49,7 @@ const semanticConnectorFootprint = Object.freeze({
   z: 4
 });
 const terrainPatchCollisionHeightEpsilonMeters = 0.001;
+const terrainPatchSubsurfaceBlockerCeilingInsetMeters = 0.035;
 
 function freezeVector3(
   x: number,
@@ -1082,7 +1082,7 @@ function createTerrainPatchHeightfield(
   });
 }
 
-function createTerrainPatchEdgeSkirtBlockerTriMesh(
+function createTerrainPatchSubsurfaceBlockerTriMesh(
   terrainPatch: MetaverseMapBundleSemanticTerrainPatchSnapshot
 ): MetaverseMapBundleCompiledCollisionTriMeshSnapshot | null {
   if (
@@ -1093,9 +1093,15 @@ function createTerrainPatchEdgeSkirtBlockerTriMesh(
     return null;
   }
 
-  let hasNonGroundEdgeHeight = false;
   const vertices: number[] = [];
   const indices: number[] = [];
+  let blockerBaseHeight = 0;
+
+  for (const heightSample of terrainPatch.heightSamples) {
+    blockerBaseHeight = Math.min(blockerBaseHeight, heightSample);
+  }
+
+  blockerBaseHeight -= terrainPatchCollisionHeightEpsilonMeters;
   const halfX =
     (terrainPatch.sampleCountX - 1) * terrainPatch.sampleSpacingMeters * 0.5;
   const halfZ =
@@ -1111,107 +1117,102 @@ function createTerrainPatchEdgeSkirtBlockerTriMesh(
 
     return vertexIndex;
   };
-  const edgeVertexIndicesBySampleKey = new Map<
-    string,
-    {
-      readonly bottomIndex: number;
-      readonly topIndex: number;
-    }
-  >();
-  const createSampleKey = (sampleX: number, sampleZ: number): string =>
-    `${sampleX}:${sampleZ}`;
-  const readEdgeVertexIndices = (
-    sampleX: number,
-    sampleZ: number
-  ): {
-    readonly bottomIndex: number;
-    readonly topIndex: number;
-  } => {
-    const sampleKey = createSampleKey(sampleX, sampleZ);
-    const existingIndices = edgeVertexIndicesBySampleKey.get(sampleKey);
-
-    if (existingIndices !== undefined) {
-      return existingIndices;
-    }
-
-    const height = resolveTerrainPatchSampleHeight(
-      terrainPatch,
-      sampleX,
-      sampleZ
+  const resolveBlockerCeilingHeight = (height: number): number =>
+    Math.max(
+      blockerBaseHeight,
+      height - terrainPatchSubsurfaceBlockerCeilingInsetMeters
     );
-
-    hasNonGroundEdgeHeight =
-      hasNonGroundEdgeHeight ||
-      Math.abs(height) > terrainPatchCollisionHeightEpsilonMeters;
-
-    const nextIndices = Object.freeze({
-      bottomIndex: pushVertex(readLocalX(sampleX), 0, readLocalZ(sampleZ)),
-      topIndex: pushVertex(readLocalX(sampleX), height, readLocalZ(sampleZ))
-    });
-
-    edgeVertexIndicesBySampleKey.set(sampleKey, nextIndices);
-
-    return nextIndices;
-  };
-  const pushTerrainEdgeSkirt = (
-    samples: readonly {
-      readonly sampleX: number;
-      readonly sampleZ: number;
-    }[]
+  const pushRawTriangle = (
+    a: { readonly x: number; readonly y: number; readonly z: number },
+    b: { readonly x: number; readonly y: number; readonly z: number },
+    c: { readonly x: number; readonly y: number; readonly z: number }
   ): void => {
-    if (samples.length < 2) {
+    const aIndex = pushVertex(a.x, a.y, a.z);
+    const bIndex = pushVertex(b.x, b.y, b.z);
+    const cIndex = pushVertex(c.x, c.y, c.z);
+
+    indices.push(aIndex, bIndex, cIndex);
+  };
+  const pushTriangleCeiling = (
+    a: { readonly x: number; readonly y: number; readonly z: number },
+    b: { readonly x: number; readonly y: number; readonly z: number },
+    c: { readonly x: number; readonly y: number; readonly z: number }
+  ): void => {
+    if (
+      Math.max(a.y, b.y, c.y) <=
+      blockerBaseHeight + terrainPatchCollisionHeightEpsilonMeters
+    ) {
       return;
     }
 
-    const edgeVertices = samples.map(({ sampleX, sampleZ }) =>
-      readEdgeVertexIndices(sampleX, sampleZ)
-    );
-
-    for (let index = 0; index < samples.length - 1; index += 1) {
-      const currentVertex = edgeVertices[index];
-      const nextVertex = edgeVertices[index + 1];
-
-      if (currentVertex === undefined || nextVertex === undefined) {
-        continue;
-      }
-
-      indices.push(
-        currentVertex.topIndex,
-        currentVertex.bottomIndex,
-        nextVertex.topIndex,
-        nextVertex.topIndex,
-        currentVertex.bottomIndex,
-        nextVertex.bottomIndex
-      );
-    }
+    pushRawTriangle(a, b, c);
   };
+  const pushBoundarySide = (
+    a: { readonly x: number; readonly y: number; readonly z: number },
+    b: { readonly x: number; readonly y: number; readonly z: number }
+  ): void => {
+    if (
+      Math.max(a.y, b.y) <=
+      blockerBaseHeight + terrainPatchCollisionHeightEpsilonMeters
+    ) {
+      return;
+    }
 
-  pushTerrainEdgeSkirt(
-    Array.from({ length: terrainPatch.sampleCountX }, (_entry, sampleX) => ({
-      sampleX,
-      sampleZ: 0
-    }))
-  );
-  pushTerrainEdgeSkirt(
-    Array.from({ length: terrainPatch.sampleCountZ }, (_entry, sampleZ) => ({
-      sampleX: terrainPatch.sampleCountX - 1,
-      sampleZ
-    }))
-  );
-  pushTerrainEdgeSkirt(
-    Array.from({ length: terrainPatch.sampleCountX }, (_entry, index) => ({
-      sampleX: terrainPatch.sampleCountX - 1 - index,
-      sampleZ: terrainPatch.sampleCountZ - 1
-    }))
-  );
-  pushTerrainEdgeSkirt(
-    Array.from({ length: terrainPatch.sampleCountZ }, (_entry, index) => ({
-      sampleX: 0,
-      sampleZ: terrainPatch.sampleCountZ - 1 - index
-    }))
-  );
+    const baseA = Object.freeze({
+      x: a.x,
+      y: blockerBaseHeight,
+      z: a.z
+    });
+    const baseB = Object.freeze({
+      x: b.x,
+      y: blockerBaseHeight,
+      z: b.z
+    });
 
-  if (!hasNonGroundEdgeHeight || indices.length === 0) {
+    pushRawTriangle(a, baseA, b);
+    pushRawTriangle(b, baseA, baseB);
+  };
+  const readSample = (
+    sampleX: number,
+    sampleZ: number
+  ): { readonly x: number; readonly y: number; readonly z: number } =>
+    Object.freeze({
+      x: readLocalX(sampleX),
+      y: resolveBlockerCeilingHeight(
+        resolveTerrainPatchSampleHeight(terrainPatch, sampleX, sampleZ)
+      ),
+      z: readLocalZ(sampleZ)
+    });
+
+  for (let cellZ = 0; cellZ < terrainPatch.sampleCountZ - 1; cellZ += 1) {
+    for (let cellX = 0; cellX < terrainPatch.sampleCountX - 1; cellX += 1) {
+      const topLeft = readSample(cellX, cellZ);
+      const topRight = readSample(cellX + 1, cellZ);
+      const bottomLeft = readSample(cellX, cellZ + 1);
+      const bottomRight = readSample(cellX + 1, cellZ + 1);
+
+      pushTriangleCeiling(topLeft, topRight, bottomLeft);
+      pushTriangleCeiling(topRight, bottomRight, bottomLeft);
+    }
+  }
+
+  for (let sampleX = 0; sampleX < terrainPatch.sampleCountX - 1; sampleX += 1) {
+    pushBoundarySide(readSample(sampleX, 0), readSample(sampleX + 1, 0));
+    pushBoundarySide(
+      readSample(sampleX + 1, terrainPatch.sampleCountZ - 1),
+      readSample(sampleX, terrainPatch.sampleCountZ - 1)
+    );
+  }
+
+  for (let sampleZ = 0; sampleZ < terrainPatch.sampleCountZ - 1; sampleZ += 1) {
+    pushBoundarySide(readSample(0, sampleZ + 1), readSample(0, sampleZ));
+    pushBoundarySide(
+      readSample(terrainPatch.sampleCountX - 1, sampleZ),
+      readSample(terrainPatch.sampleCountX - 1, sampleZ + 1)
+    );
+  }
+
+  if (indices.length === 0) {
     return null;
   }
 
@@ -1259,12 +1260,11 @@ export function compileMetaverseMapBundleSemanticWorld(
       chunkRecord.collisionHeightfields.push(heightfield);
     }
 
-    const blockerTriMesh = createTerrainPatchEdgeSkirtBlockerTriMesh(
-      terrainPatch
-    );
+    const subsurfaceBlockerTriMesh =
+      createTerrainPatchSubsurfaceBlockerTriMesh(terrainPatch);
 
-    if (blockerTriMesh !== null) {
-      chunkRecord.collisionTriMeshes.push(blockerTriMesh);
+    if (subsurfaceBlockerTriMesh !== null) {
+      chunkRecord.collisionTriMeshes.push(subsurfaceBlockerTriMesh);
     }
   }
 

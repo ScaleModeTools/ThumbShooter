@@ -67,6 +67,9 @@ import {
   createMetaverseRealtimePlayerWeaponStateSnapshot
 } from "./metaverse-realtime-player-weapon-state.js";
 import type {
+  MetaverseWorldSurfaceSupportSnapshot
+} from "../metaverse-world-surface-policy.js";
+import type {
   MetaversePlayerActionReceiptSnapshot,
   MetaversePlayerActionReceiptSnapshotInput,
   MetaverseCombatFeedEventSnapshot,
@@ -184,6 +187,8 @@ export interface MetaverseRealtimePlayerPresentationIntentSnapshotInput {
 
 export type MetaverseRealtimePlayerGroundedBodySnapshot =
   MetaverseGroundedBodyRuntimeSnapshot;
+export type MetaverseRealtimePlayerGroundedSupportSnapshot =
+  MetaverseWorldSurfaceSupportSnapshot;
 export type MetaverseRealtimePlayerSwimBodySnapshot =
   MetaverseSurfaceDriveBodyRuntimeSnapshot;
 
@@ -217,6 +222,7 @@ export interface MetaverseRealtimePlayerSnapshot {
   readonly characterId: string;
   readonly combat: MetaversePlayerCombatSnapshot | null;
   readonly groundedBody: MetaverseRealtimePlayerGroundedBodySnapshot;
+  readonly groundedSupport: MetaverseRealtimePlayerGroundedSupportSnapshot | null;
   readonly look: MetaverseRealtimePlayerLookSnapshot;
   readonly locomotionMode: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot | null;
@@ -235,6 +241,7 @@ export interface MetaverseRealtimePlayerSnapshotInput {
   readonly characterId: string;
   readonly combat?: MetaversePlayerCombatSnapshotInput | null;
   readonly groundedBody?: MetaverseRealtimePlayerGroundedBodySnapshotInput;
+  readonly groundedSupport?: MetaverseRealtimePlayerGroundedSupportSnapshot | null;
   readonly look?: MetaverseRealtimePlayerLookSnapshotInput;
   readonly locomotionMode?: MetaversePresenceLocomotionModeId;
   readonly mountedOccupancy?: MetaverseRealtimeMountedOccupancySnapshotInput | null;
@@ -562,6 +569,33 @@ function freezePlayerGroundedBodySnapshot(
   });
 }
 
+function freezePlayerGroundedSupportSnapshot(
+  input: MetaverseRealtimePlayerGroundedSupportSnapshot | null | undefined,
+  locomotionMode: MetaversePresenceLocomotionModeId
+): MetaverseRealtimePlayerGroundedSupportSnapshot | null {
+  if (locomotionMode !== "grounded" || input === null || input === undefined) {
+    return null;
+  }
+
+  return Object.freeze({
+    confidence: normalizeFiniteNumber(input.confidence),
+    ownerEnvironmentAssetId: normalizeOptionalIdentifier(
+      input.ownerEnvironmentAssetId,
+      "Metaverse realtime groundedSupport ownerEnvironmentAssetId"
+    ),
+    slopeAngleRadians: normalizeFiniteNumber(input.slopeAngleRadians),
+    stepEligible: input.stepEligible === true,
+    supportHeightMeters: normalizeFiniteNumber(input.supportHeightMeters),
+    supportId: normalizeRequiredIdentifier(
+      input.supportId,
+      "Metaverse realtime groundedSupport supportId"
+    ),
+    supportKind: input.supportKind,
+    supportNormal: createMetaversePresenceVector3Snapshot(input.supportNormal),
+    walkable: input.walkable === true
+  });
+}
+
 function freezePlayerSwimBodySnapshot(
   input: MetaverseRealtimePlayerSwimBodySnapshotInput | null | undefined,
   locomotionMode: MetaversePresenceLocomotionModeId,
@@ -699,6 +733,10 @@ function freezePlayerSnapshot(
     position,
     yawRadians
   );
+  const groundedSupport = freezePlayerGroundedSupportSnapshot(
+    input.groundedSupport,
+    locomotionMode
+  );
   const swimBody = freezePlayerSwimBodySnapshot(
     input.swimBody,
     locomotionMode,
@@ -754,6 +792,7 @@ function freezePlayerSnapshot(
     characterId: normalizeCharacterId(input.characterId),
     combat,
     groundedBody,
+    groundedSupport,
     look: lookSnapshot,
     locomotionMode,
     mountedOccupancy,

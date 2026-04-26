@@ -10,6 +10,7 @@ export interface MetaverseWorldSurfacePolicyConfig {
   readonly capsuleRadiusMeters: number;
   readonly gravityUnitsPerSecond: number;
   readonly jumpImpulseUnitsPerSecond: number;
+  readonly maxWalkableSlopeAngleRadians?: number;
   readonly oceanHeightMeters: number;
   readonly stepHeightMeters: number;
 }
@@ -26,7 +27,25 @@ export type MetaverseWorldAutomaticSurfaceDecisionReasonId =
 
 export interface MetaverseWorldSurfaceLocomotionDecision {
   readonly locomotionMode: "grounded" | "swim";
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
+}
+
+export type MetaverseWorldSurfaceSupportKind =
+  | "box"
+  | "heightfield"
+  | "trimesh";
+
+export interface MetaverseWorldSurfaceSupportSnapshot {
+  readonly confidence: number;
+  readonly ownerEnvironmentAssetId: string | null;
+  readonly slopeAngleRadians: number;
+  readonly stepEligible: boolean;
+  readonly supportHeightMeters: number;
+  readonly supportId: string;
+  readonly supportKind: MetaverseWorldSurfaceSupportKind;
+  readonly supportNormal: MetaverseWorldSurfaceVector3Snapshot;
+  readonly walkable: boolean;
 }
 
 export interface MetaverseWorldAutomaticSurfaceLocomotionDebugSnapshot {
@@ -51,20 +70,34 @@ const automaticSurfaceGroundedHoldProbeCount = 2;
 const automaticSurfaceGroundedHoldPaddingFactor = 0.45;
 const automaticSurfaceProbeForwardDistanceFactor = 0.88;
 const automaticSurfaceProbeLateralDistanceFactor = 0.72;
-const automaticSurfaceStepHeightLeewayMeters = 0.04;
+export const metaverseWorldSurfaceDefaultStepHeightMeters = 0.28;
+export const metaverseWorldSurfaceStepHeightLeewayMeters = 0.04;
+export const metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians =
+  Math.PI * 0.26;
+const automaticSurfaceStepHeightLeewayMeters =
+  metaverseWorldSurfaceStepHeightLeewayMeters;
 const automaticSurfaceBlockingHeightToleranceMeters = 0.01;
+const automaticSurfaceDefaultMaxWalkableSlopeAngleRadians =
+  metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians;
+const automaticSurfaceSupportTokenPrecision = 1_000;
 
 interface AutomaticSurfaceSupportSnapshot {
   readonly centerStepBlocked: boolean;
+  readonly centerStepSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly centerStepSupportHeightMeters: number | null;
   readonly forwardStepBlocked: boolean;
+  readonly forwardStepSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly forwardStepSupportHeightMeters: number | null;
+  readonly highestStepSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly highestStepSupportHeightMeters: number | null;
+  readonly highestSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly stepSupportedProbeCount: number;
 }
 
 interface AutomaticSurfaceProbeSupportSnapshot {
+  readonly stepSupport: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly stepSupportHeightMeters: number | null;
+  readonly support: MetaverseWorldSurfaceSupportSnapshot | null;
   readonly supportHeightMeters: number | null;
 }
 
@@ -89,6 +122,119 @@ function freezeVector3(
     x: Number.isFinite(x) ? x : 0,
     y: Number.isFinite(y) ? y : 0,
     z: Number.isFinite(z) ? z : 0
+  });
+}
+
+function normalizeSupportTokenNumber(value: number): string {
+  return String(
+    Math.round(
+      toFiniteNumber(value, 0) * automaticSurfaceSupportTokenPrecision
+    )
+  );
+}
+
+function resolveColliderSupportBaseId(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+  supportKind: MetaverseWorldSurfaceSupportKind
+): string {
+  return [
+    collider.ownerEnvironmentAssetId ?? "world",
+    supportKind,
+    normalizeSupportTokenNumber(collider.translation.x),
+    normalizeSupportTokenNumber(collider.translation.y),
+    normalizeSupportTokenNumber(collider.translation.z),
+    normalizeSupportTokenNumber(collider.rotationYRadians)
+  ].join(":");
+}
+
+function normalizeSupportNormal(
+  normal: MetaverseWorldSurfaceVector3Snapshot
+): MetaverseWorldSurfaceVector3Snapshot {
+  let x = toFiniteNumber(normal.x, 0);
+  let y = toFiniteNumber(normal.y, 1);
+  let z = toFiniteNumber(normal.z, 0);
+  const magnitude = Math.hypot(x, y, z);
+
+  if (magnitude <= 0.000001) {
+    return freezeVector3(0, 1, 0);
+  }
+
+  if (y < 0) {
+    x = -x;
+    y = -y;
+    z = -z;
+  }
+
+  return freezeVector3(x / magnitude, y / magnitude, z / magnitude);
+}
+
+function rotatePlanarVector(
+  x: number,
+  z: number,
+  yawRadians: number
+): Pick<MetaverseWorldSurfaceVector3Snapshot, "x" | "z"> {
+  const sine = Math.sin(yawRadians);
+  const cosine = Math.cos(yawRadians);
+
+  return Object.freeze({
+    x: x * cosine + z * sine,
+    z: -x * sine + z * cosine
+  });
+}
+
+function rotateSupportNormalToWorld(
+  normal: MetaverseWorldSurfaceVector3Snapshot,
+  yawRadians: number
+): MetaverseWorldSurfaceVector3Snapshot {
+  const rotatedPlanarNormal = rotatePlanarVector(normal.x, normal.z, yawRadians);
+
+  return normalizeSupportNormal(
+    freezeVector3(rotatedPlanarNormal.x, normal.y, rotatedPlanarNormal.z)
+  );
+}
+
+function resolveWalkableNormalY(
+  config: MetaverseWorldSurfacePolicyConfig
+): number {
+  const maxWalkableSlopeAngleRadians = clamp(
+    toFiniteNumber(
+      config.maxWalkableSlopeAngleRadians ??
+        automaticSurfaceDefaultMaxWalkableSlopeAngleRadians,
+      automaticSurfaceDefaultMaxWalkableSlopeAngleRadians
+    ),
+    0,
+    Math.PI * 0.5
+  );
+
+  return Math.cos(maxWalkableSlopeAngleRadians);
+}
+
+function createSurfaceSupportSnapshot(input: {
+  readonly config: MetaverseWorldSurfacePolicyConfig;
+  readonly collider: MetaverseWorldPlacedSurfaceColliderSnapshot;
+  readonly detailId: string;
+  readonly stepEligible: boolean;
+  readonly supportHeightMeters: number;
+  readonly supportKind: MetaverseWorldSurfaceSupportKind;
+  readonly supportNormal: MetaverseWorldSurfaceVector3Snapshot;
+}): MetaverseWorldSurfaceSupportSnapshot {
+  const supportNormal = normalizeSupportNormal(input.supportNormal);
+  const slopeAngleRadians = Math.acos(clamp(supportNormal.y, -1, 1));
+  const walkable = supportNormal.y >= resolveWalkableNormalY(input.config);
+
+  return Object.freeze({
+    confidence: walkable ? supportNormal.y : 0,
+    ownerEnvironmentAssetId: input.collider.ownerEnvironmentAssetId,
+    slopeAngleRadians,
+    stepEligible: input.stepEligible && walkable,
+    supportHeightMeters: input.supportHeightMeters,
+    supportId: `${resolveColliderSupportBaseId(
+      input.collider,
+      input.supportKind
+    )}:${input.detailId}`,
+    supportKind: input.supportKind,
+    supportNormal,
+    walkable
   });
 }
 
@@ -306,92 +452,6 @@ function resolveClosestPlanarPointOnTriangle(
   output.w = w;
 }
 
-function resolveTriMeshSupportHeightMeters(
-  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
-  x: number,
-  z: number,
-  paddingMeters: number
-): number | null {
-  if (!isSurfaceTriMeshCollider(collider)) {
-    return null;
-  }
-
-  const localPoint = rotatePlanarPoint(
-    x - collider.translation.x,
-    z - collider.translation.z,
-    -collider.rotationYRadians
-  );
-
-  if (
-    Math.abs(localPoint.x) > collider.halfExtents.x + paddingMeters ||
-    Math.abs(localPoint.z) > collider.halfExtents.z + paddingMeters
-  ) {
-    return null;
-  }
-
-  let highestSurfaceY: number | null = null;
-  const maxDistanceSquared = paddingMeters * paddingMeters;
-  const closestPoint = {
-    pointX: 0,
-    pointZ: 0,
-    u: 0,
-    v: 0,
-    w: 0
-  };
-
-  for (let index = 0; index + 2 < collider.indices.length; index += 3) {
-    const vertexAIndex = (collider.indices[index] ?? 0) * 3;
-    const vertexBIndex = (collider.indices[index + 1] ?? 0) * 3;
-    const vertexCIndex = (collider.indices[index + 2] ?? 0) * 3;
-    const ax = collider.vertices[vertexAIndex] ?? 0;
-    const ay = collider.vertices[vertexAIndex + 1] ?? 0;
-    const az = collider.vertices[vertexAIndex + 2] ?? 0;
-    const bx = collider.vertices[vertexBIndex] ?? 0;
-    const by = collider.vertices[vertexBIndex + 1] ?? 0;
-    const bz = collider.vertices[vertexBIndex + 2] ?? 0;
-    const cx = collider.vertices[vertexCIndex] ?? 0;
-    const cy = collider.vertices[vertexCIndex + 1] ?? 0;
-    const cz = collider.vertices[vertexCIndex + 2] ?? 0;
-    resolveClosestPlanarPointOnTriangle(
-      closestPoint,
-      localPoint.x,
-      localPoint.z,
-      ax,
-      az,
-      bx,
-      bz,
-      cx,
-      cz
-    );
-    const deltaX = closestPoint.pointX - localPoint.x;
-    const deltaZ = closestPoint.pointZ - localPoint.z;
-
-    if (
-      paddingMeters > 0 &&
-      deltaX * deltaX + deltaZ * deltaZ > maxDistanceSquared
-    ) {
-      continue;
-    }
-
-    if (
-      paddingMeters <= 0 &&
-      (Math.abs(deltaX) > 0.0001 || Math.abs(deltaZ) > 0.0001)
-    ) {
-      continue;
-    }
-
-    const localSurfaceY =
-      ay * closestPoint.u + by * closestPoint.v + cy * closestPoint.w;
-    const surfaceY = collider.translation.y + localSurfaceY;
-
-    if (highestSurfaceY === null || surfaceY > highestSurfaceY) {
-      highestSurfaceY = surfaceY;
-    }
-  }
-
-  return highestSurfaceY;
-}
-
 function isPlanarPositionBlockedByTriMeshCollider(
   collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
   x: number,
@@ -518,16 +578,23 @@ function resolveHeightfieldSampleHeight(
   return collider.heightSamples[sampleZ * collider.sampleCountX + sampleX] ?? 0;
 }
 
-function resolveHeightfieldSupportHeightMeters(
-  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+function resolveHeightfieldLocalSupportSnapshot(
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot & {
+    readonly heightSamples: Float32Array;
+    readonly sampleCountX: number;
+    readonly sampleCountZ: number;
+    readonly sampleSpacingMeters: number;
+    readonly shape: "heightfield";
+  },
   x: number,
   z: number,
   paddingMeters: number
-): number | null {
-  if (!isSurfaceHeightfieldCollider(collider)) {
-    return null;
-  }
-
+): {
+  readonly cellX: number;
+  readonly cellZ: number;
+  readonly supportHeightMeters: number;
+  readonly supportNormal: MetaverseWorldSurfaceVector3Snapshot;
+} | null {
   if (
     collider.sampleCountX < 2 ||
     collider.sampleCountZ < 2 ||
@@ -553,11 +620,19 @@ function resolveHeightfieldSupportHeightMeters(
 
   const sampleXFloat = Math.min(
     collider.sampleCountX - 1,
-    Math.max(0, localPoint.x / collider.sampleSpacingMeters + (collider.sampleCountX - 1) * 0.5)
+    Math.max(
+      0,
+      localPoint.x / collider.sampleSpacingMeters +
+        (collider.sampleCountX - 1) * 0.5
+    )
   );
   const sampleZFloat = Math.min(
     collider.sampleCountZ - 1,
-    Math.max(0, localPoint.z / collider.sampleSpacingMeters + (collider.sampleCountZ - 1) * 0.5)
+    Math.max(
+      0,
+      localPoint.z / collider.sampleSpacingMeters +
+        (collider.sampleCountZ - 1) * 0.5
+    )
   );
   const cellX = Math.min(
     collider.sampleCountX - 2,
@@ -577,47 +652,262 @@ function resolveHeightfieldSupportHeightMeters(
     cellX + 1,
     cellZ + 1
   );
-
   const localSurfaceY =
     localX + localZ <= 1
       ? topLeft + (topRight - topLeft) * localX + (bottomLeft - topLeft) * localZ
       : topRight * (1 - localZ) +
         bottomLeft * (1 - localX) +
         bottomRight * (localX + localZ - 1);
+  const leftHeight = resolveHeightfieldSampleHeight(
+    collider,
+    Math.max(0, cellX - 1),
+    cellZ
+  );
+  const rightHeight = resolveHeightfieldSampleHeight(
+    collider,
+    Math.min(collider.sampleCountX - 1, cellX + 1),
+    cellZ
+  );
+  const rearHeight = resolveHeightfieldSampleHeight(
+    collider,
+    cellX,
+    Math.max(0, cellZ - 1)
+  );
+  const forwardHeight = resolveHeightfieldSampleHeight(
+    collider,
+    cellX,
+    Math.min(collider.sampleCountZ - 1, cellZ + 1)
+  );
+  const sampleSpanX =
+    (Math.min(collider.sampleCountX - 1, cellX + 1) -
+      Math.max(0, cellX - 1)) *
+    collider.sampleSpacingMeters;
+  const sampleSpanZ =
+    (Math.min(collider.sampleCountZ - 1, cellZ + 1) -
+      Math.max(0, cellZ - 1)) *
+    collider.sampleSpacingMeters;
+  const slopeX = sampleSpanX > 0 ? (rightHeight - leftHeight) / sampleSpanX : 0;
+  const slopeZ =
+    sampleSpanZ > 0 ? (forwardHeight - rearHeight) / sampleSpanZ : 0;
+  const worldNormal = rotateSupportNormalToWorld(
+    freezeVector3(-slopeX, 1, -slopeZ),
+    collider.rotationYRadians
+  );
 
-  return collider.translation.y + localSurfaceY;
+  return Object.freeze({
+    cellX,
+    cellZ,
+    supportHeightMeters: collider.translation.y + localSurfaceY,
+    supportNormal: worldNormal
+  });
 }
 
-function resolveColliderSupportHeightMeters(
+function resolveTriMeshSupportCandidate(
+  config: MetaverseWorldSurfacePolicyConfig,
   collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
   x: number,
   z: number,
   paddingMeters: number
-): number | null {
+): MetaverseWorldSurfaceSupportSnapshot | null {
+  if (!isSurfaceTriMeshCollider(collider)) {
+    return null;
+  }
+
+  const localPoint = rotatePlanarPoint(
+    x - collider.translation.x,
+    z - collider.translation.z,
+    -collider.rotationYRadians
+  );
+
+  if (
+    Math.abs(localPoint.x) > collider.halfExtents.x + paddingMeters ||
+    Math.abs(localPoint.z) > collider.halfExtents.z + paddingMeters
+  ) {
+    return null;
+  }
+
+  let selectedSupport: MetaverseWorldSurfaceSupportSnapshot | null = null;
+  const maxDistanceSquared = paddingMeters * paddingMeters;
+  const closestPoint = {
+    pointX: 0,
+    pointZ: 0,
+    u: 0,
+    v: 0,
+    w: 0
+  };
+
+  for (let index = 0; index + 2 < collider.indices.length; index += 3) {
+    const vertexAIndex = (collider.indices[index] ?? 0) * 3;
+    const vertexBIndex = (collider.indices[index + 1] ?? 0) * 3;
+    const vertexCIndex = (collider.indices[index + 2] ?? 0) * 3;
+    const ax = collider.vertices[vertexAIndex] ?? 0;
+    const ay = collider.vertices[vertexAIndex + 1] ?? 0;
+    const az = collider.vertices[vertexAIndex + 2] ?? 0;
+    const bx = collider.vertices[vertexBIndex] ?? 0;
+    const by = collider.vertices[vertexBIndex + 1] ?? 0;
+    const bz = collider.vertices[vertexBIndex + 2] ?? 0;
+    const cx = collider.vertices[vertexCIndex] ?? 0;
+    const cy = collider.vertices[vertexCIndex + 1] ?? 0;
+    const cz = collider.vertices[vertexCIndex + 2] ?? 0;
+    resolveClosestPlanarPointOnTriangle(
+      closestPoint,
+      localPoint.x,
+      localPoint.z,
+      ax,
+      az,
+      bx,
+      bz,
+      cx,
+      cz
+    );
+    const deltaX = closestPoint.pointX - localPoint.x;
+    const deltaZ = closestPoint.pointZ - localPoint.z;
+
+    if (
+      paddingMeters > 0 &&
+      deltaX * deltaX + deltaZ * deltaZ > maxDistanceSquared
+    ) {
+      continue;
+    }
+
+    if (
+      paddingMeters <= 0 &&
+      (Math.abs(deltaX) > 0.0001 || Math.abs(deltaZ) > 0.0001)
+    ) {
+      continue;
+    }
+
+    const abx = bx - ax;
+    const aby = by - ay;
+    const abz = bz - az;
+    const acx = cx - ax;
+    const acy = cy - ay;
+    const acz = cz - az;
+    const normal = rotateSupportNormalToWorld(
+      freezeVector3(
+        aby * acz - abz * acy,
+        abz * acx - abx * acz,
+        abx * acy - aby * acx
+      ),
+      collider.rotationYRadians
+    );
+    const localSurfaceY =
+      ay * closestPoint.u + by * closestPoint.v + cy * closestPoint.w;
+    const candidate = createSurfaceSupportSnapshot({
+      collider,
+      config,
+      detailId: `tri-${index / 3}`,
+      stepEligible: true,
+      supportHeightMeters: collider.translation.y + localSurfaceY,
+      supportKind: "trimesh",
+      supportNormal: normal
+    });
+
+    if (!candidate.walkable) {
+      continue;
+    }
+
+    if (
+      selectedSupport === null ||
+      candidate.supportHeightMeters > selectedSupport.supportHeightMeters ||
+      (candidate.supportHeightMeters === selectedSupport.supportHeightMeters &&
+        candidate.confidence > selectedSupport.confidence)
+    ) {
+      selectedSupport = candidate;
+    }
+  }
+
+  return selectedSupport;
+}
+
+function resolveColliderSupportCandidate(
+  config: MetaverseWorldSurfacePolicyConfig,
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+  x: number,
+  z: number,
+  paddingMeters: number
+): MetaverseWorldSurfaceSupportSnapshot | null {
   if (isSurfaceHeightfieldCollider(collider)) {
-    return resolveHeightfieldSupportHeightMeters(collider, x, z, paddingMeters);
+    const heightfieldSupport = resolveHeightfieldLocalSupportSnapshot(
+      collider,
+      x,
+      z,
+      paddingMeters
+    );
+
+    return heightfieldSupport === null
+      ? null
+      : createSurfaceSupportSnapshot({
+          collider,
+          config,
+          detailId: `cell-${heightfieldSupport.cellX}-${heightfieldSupport.cellZ}`,
+          stepEligible: true,
+          supportHeightMeters: heightfieldSupport.supportHeightMeters,
+          supportKind: "heightfield",
+          supportNormal: heightfieldSupport.supportNormal
+        });
   }
 
   if (isSurfaceTriMeshCollider(collider)) {
-    return resolveTriMeshSupportHeightMeters(collider, x, z, paddingMeters);
+    return resolveTriMeshSupportCandidate(config, collider, x, z, paddingMeters);
   }
 
   if (!isPlanarPositionInsideCollider(collider, x, z, paddingMeters)) {
     return null;
   }
 
-  return collider.translation.y + collider.halfExtents.y;
+  return createSurfaceSupportSnapshot({
+    collider,
+    config,
+    detailId: "box",
+    stepEligible: true,
+    supportHeightMeters: collider.translation.y + collider.halfExtents.y,
+    supportKind: "box",
+    supportNormal: freezeVector3(0, 1, 0)
+  });
 }
 
-function resolveSurfaceSupportHeightMeters(
+function shouldPreferSupportCandidate(
+  candidate: MetaverseWorldSurfaceSupportSnapshot,
+  selectedCandidate: MetaverseWorldSurfaceSupportSnapshot | null
+): boolean {
+  if (!candidate.walkable) {
+    return false;
+  }
+
+  if (selectedCandidate === null) {
+    return true;
+  }
+
+  if (
+    candidate.supportHeightMeters >
+    selectedCandidate.supportHeightMeters + automaticSurfaceBlockingHeightToleranceMeters
+  ) {
+    return true;
+  }
+
+  if (
+    Math.abs(candidate.supportHeightMeters - selectedCandidate.supportHeightMeters) <=
+      automaticSurfaceBlockingHeightToleranceMeters &&
+    candidate.confidence > selectedCandidate.confidence
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function resolveSurfaceSupportCandidate(
   surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  config: MetaverseWorldSurfacePolicyConfig,
   x: number,
   z: number,
   paddingMeters = 0,
   excludedOwnerEnvironmentAssetId: string | null = null,
-  maxSupportHeightMeters: number | null = null
-): number | null {
-  let highestSurfaceY: number | null = null;
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
+): MetaverseWorldSurfaceSupportSnapshot | null {
+  let selectedCandidate: MetaverseWorldSurfaceSupportSnapshot | null = null;
 
   for (const collider of surfaceColliderSnapshots) {
     if (collider.traversalAffordance !== "support") {
@@ -631,31 +921,60 @@ function resolveSurfaceSupportHeightMeters(
       continue;
     }
 
-    const surfaceY = resolveColliderSupportHeightMeters(
+    const candidate = resolveColliderSupportCandidate(
+      config,
       collider,
       x,
       z,
       paddingMeters
     );
 
-    if (surfaceY === null) {
+    if (candidate === null || !candidate.walkable) {
       continue;
     }
 
     if (
       maxSupportHeightMeters !== null &&
-      surfaceY >
+      candidate.supportHeightMeters >
         maxSupportHeightMeters + automaticSurfaceBlockingHeightToleranceMeters
     ) {
       continue;
     }
 
-    if (highestSurfaceY === null || surfaceY > highestSurfaceY) {
-      highestSurfaceY = surfaceY;
+    if (preferredSupport?.supportId === candidate.supportId) {
+      return candidate;
+    }
+
+    if (shouldPreferSupportCandidate(candidate, selectedCandidate)) {
+      selectedCandidate = candidate;
     }
   }
 
-  return highestSurfaceY;
+  return selectedCandidate;
+}
+
+function resolveSurfaceSupportHeightMeters(
+  surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  config: MetaverseWorldSurfacePolicyConfig,
+  x: number,
+  z: number,
+  paddingMeters = 0,
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
+): number | null {
+  return (
+    resolveSurfaceSupportCandidate(
+      surfaceColliderSnapshots,
+      config,
+      x,
+      z,
+      paddingMeters,
+      excludedOwnerEnvironmentAssetId,
+      maxSupportHeightMeters,
+      preferredSupport
+    )?.supportHeightMeters ?? null
+  );
 }
 
 function isPlanarPositionBlocked(
@@ -720,8 +1039,8 @@ function resolveAutomaticSurfaceProbeSupport(
   excludedOwnerEnvironmentAssetId: string | null = null,
   maxStepSupportHeightMeters: number | null = null
 ): AutomaticSurfaceProbeSupportSnapshot {
-  let highestStepSupportHeightMeters: number | null = null;
-  let highestSupportHeightMeters: number | null = null;
+  let highestStepSupport: MetaverseWorldSurfaceSupportSnapshot | null = null;
+  let highestSupport: MetaverseWorldSurfaceSupportSnapshot | null = null;
   const highestStepRiseAboveWaterMeters =
     config.stepHeightMeters + automaticSurfaceStepHeightLeewayMeters;
   const localWaterSurfaceHeightMeters =
@@ -744,23 +1063,26 @@ function resolveAutomaticSurfaceProbeSupport(
       continue;
     }
 
-    const surfaceY = resolveColliderSupportHeightMeters(
+    const supportCandidate = resolveColliderSupportCandidate(
+      config,
       collider,
       x,
       z,
       paddingMeters
     );
 
-    if (surfaceY === null) {
+    if (supportCandidate === null || !supportCandidate.walkable) {
       continue;
     }
 
+    const surfaceY = supportCandidate.supportHeightMeters;
+
     if (localWaterSurfaceHeightMeters === null) {
       if (
-        highestSupportHeightMeters === null ||
-        surfaceY > highestSupportHeightMeters
+        highestSupport === null ||
+        shouldPreferSupportCandidate(supportCandidate, highestSupport)
       ) {
-        highestSupportHeightMeters = surfaceY;
+        highestSupport = supportCandidate;
       }
 
       if (
@@ -768,10 +1090,10 @@ function resolveAutomaticSurfaceProbeSupport(
           surfaceY <=
             maxStepSupportHeightMeters +
               automaticSurfaceBlockingHeightToleranceMeters) &&
-        (highestStepSupportHeightMeters === null ||
-          surfaceY > highestStepSupportHeightMeters)
+        (highestStepSupport === null ||
+          shouldPreferSupportCandidate(supportCandidate, highestStepSupport))
       ) {
-        highestStepSupportHeightMeters = surfaceY;
+        highestStepSupport = supportCandidate;
       }
 
       continue;
@@ -784,10 +1106,10 @@ function resolveAutomaticSurfaceProbeSupport(
       metaverseWorldAutomaticSurfaceWaterlineThresholdMeters
     ) {
       if (
-        highestSupportHeightMeters === null ||
-        surfaceY > highestSupportHeightMeters
+        highestSupport === null ||
+        shouldPreferSupportCandidate(supportCandidate, highestSupport)
       ) {
-        highestSupportHeightMeters = surfaceY;
+        highestSupport = supportCandidate;
       }
 
       if (
@@ -796,17 +1118,19 @@ function resolveAutomaticSurfaceProbeSupport(
           surfaceY <=
             maxStepSupportHeightMeters +
               automaticSurfaceBlockingHeightToleranceMeters) &&
-        (highestStepSupportHeightMeters === null ||
-          surfaceY > highestStepSupportHeightMeters)
+        (highestStepSupport === null ||
+          shouldPreferSupportCandidate(supportCandidate, highestStepSupport))
       ) {
-        highestStepSupportHeightMeters = surfaceY;
+        highestStepSupport = supportCandidate;
       }
     }
   }
 
   return {
-    stepSupportHeightMeters: highestStepSupportHeightMeters,
-    supportHeightMeters: highestSupportHeightMeters
+    stepSupport: highestStepSupport,
+    stepSupportHeightMeters: highestStepSupport?.supportHeightMeters ?? null,
+    support: highestSupport,
+    supportHeightMeters: highestSupport?.supportHeightMeters ?? null
   };
 }
 
@@ -907,6 +1231,8 @@ function sampleAutomaticSurfaceSupport(
     maxStepSupportHeightMeters
   );
   let highestStepSupportHeightMeters: number | null = null;
+  let highestStepSupport: MetaverseWorldSurfaceSupportSnapshot | null = null;
+  let highestSupport: MetaverseWorldSurfaceSupportSnapshot | null = null;
   let stepSupportedProbeCount = 0;
 
   for (const probeSupport of [
@@ -916,6 +1242,14 @@ function sampleAutomaticSurfaceSupport(
     forwardRightProbeSupport,
     rearProbeSupport
   ]) {
+    if (
+      probeSupport.support !== null &&
+      (highestSupport === null ||
+        shouldPreferSupportCandidate(probeSupport.support, highestSupport))
+    ) {
+      highestSupport = probeSupport.support;
+    }
+
     if (probeSupport.stepSupportHeightMeters === null) {
       continue;
     }
@@ -927,15 +1261,20 @@ function sampleAutomaticSurfaceSupport(
       probeSupport.stepSupportHeightMeters > highestStepSupportHeightMeters
     ) {
       highestStepSupportHeightMeters = probeSupport.stepSupportHeightMeters;
+      highestStepSupport = probeSupport.stepSupport;
     }
   }
 
   return {
     centerStepBlocked: hasBlockingSupport(centerProbeSupport),
+    centerStepSupport: centerProbeSupport.stepSupport,
     centerStepSupportHeightMeters: centerProbeSupport.stepSupportHeightMeters,
     forwardStepBlocked: hasBlockingSupport(forwardProbeSupport),
+    forwardStepSupport: forwardProbeSupport.stepSupport,
     forwardStepSupportHeightMeters: forwardProbeSupport.stepSupportHeightMeters,
+    highestStepSupport,
     highestStepSupportHeightMeters,
+    highestSupport,
     stepSupportedProbeCount
   };
 }
@@ -947,15 +1286,18 @@ export function resolveMetaverseWorldSurfaceHeightMeters(
   x: number,
   z: number,
   excludedOwnerEnvironmentAssetId: string | null = null,
-  maxSupportHeightMeters: number | null = null
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): number | null {
   const supportHeightMeters = resolveSurfaceSupportHeightMeters(
     surfaceColliderSnapshots,
+    config,
     x,
     z,
     config.capsuleRadiusMeters,
     excludedOwnerEnvironmentAssetId,
-    maxSupportHeightMeters
+    maxSupportHeightMeters,
+    preferredSupport
   );
   const waterSurfaceHeightMeters = resolveMetaverseWorldWaterSurfaceHeightMeters(
     waterRegionSnapshots,
@@ -972,6 +1314,28 @@ export function resolveMetaverseWorldSurfaceHeightMeters(
   }
 
   return supportHeightMeters ?? waterSurfaceHeightMeters;
+}
+
+export function resolveMetaverseWorldSurfaceSupportSnapshot(
+  config: MetaverseWorldSurfacePolicyConfig,
+  surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  x: number,
+  z: number,
+  paddingMeters = config.capsuleRadiusMeters,
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
+): MetaverseWorldSurfaceSupportSnapshot | null {
+  return resolveSurfaceSupportCandidate(
+    surfaceColliderSnapshots,
+    config,
+    x,
+    z,
+    paddingMeters,
+    excludedOwnerEnvironmentAssetId,
+    maxSupportHeightMeters,
+    preferredSupport
+  );
 }
 
 export function constrainMetaverseWorldPlanarPositionAgainstBlockers(
@@ -1099,6 +1463,7 @@ export function resolveMetaverseWorldGroundedAutostepHeightMeters(
   ]) {
     const supportHeightMeters = resolveSurfaceSupportHeightMeters(
       surfaceColliderSnapshots,
+      config,
       position.x + probeOffset.x,
       position.z + probeOffset.z,
       0,
@@ -1134,7 +1499,8 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
   position: MetaverseWorldSurfaceVector3Snapshot,
   yawRadians: number,
   currentLocomotionMode: "grounded" | "swim",
-  excludedOwnerEnvironmentAssetId: string | null = null
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): MetaverseWorldAutomaticSurfaceLocomotionSnapshot {
   const supportSnapshot = sampleAutomaticSurfaceSupport(
     config,
@@ -1152,16 +1518,25 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
           automaticSurfaceStepHeightLeewayMeters
       : null
   );
+  const resolvedSupport = resolveMetaverseWorldSurfaceSupportSnapshot(
+    config,
+    surfaceColliderSnapshots,
+    position.x,
+    position.z,
+    config.capsuleRadiusMeters,
+    excludedOwnerEnvironmentAssetId,
+    position.y,
+    preferredSupport
+  );
   const resolvedSupportHeightMeters =
-    resolveMetaverseWorldSurfaceHeightMeters(
-      config,
-      surfaceColliderSnapshots,
+    resolvedSupport?.supportHeightMeters ??
+    resolveMetaverseWorldWaterSurfaceHeightMeters(
       waterRegionSnapshots,
       position.x,
       position.z,
-      excludedOwnerEnvironmentAssetId,
-      position.y
-    ) ?? position.y;
+      config.capsuleRadiusMeters
+    ) ??
+    position.y;
   const waterbornePosition = isMetaverseWorldWaterbornePosition(
     config,
     surfaceColliderSnapshots,
@@ -1180,6 +1555,10 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
     const decision = shouldStayGrounded
       ? Object.freeze({
           locomotionMode: "grounded",
+          support:
+            supportSnapshot.centerStepSupport ??
+            supportSnapshot.highestStepSupport ??
+            resolvedSupport,
           supportHeightMeters:
             supportSnapshot.centerStepSupportHeightMeters ??
             supportSnapshot.highestStepSupportHeightMeters ??
@@ -1187,6 +1566,7 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
         } satisfies MetaverseWorldSurfaceLocomotionDecision)
       : Object.freeze({
           locomotionMode: "swim",
+          support: null,
           supportHeightMeters: null
         } satisfies MetaverseWorldSurfaceLocomotionDecision);
 
@@ -1216,12 +1596,16 @@ export function resolveMetaverseWorldAutomaticSurfaceLocomotion(
   const decision = canExitWater
     ? Object.freeze({
         locomotionMode: "grounded",
+        support:
+          supportSnapshot.centerStepSupport ??
+          supportSnapshot.highestStepSupport,
         supportHeightMeters:
           supportSnapshot.centerStepSupportHeightMeters ??
           supportSnapshot.highestStepSupportHeightMeters
       } satisfies MetaverseWorldSurfaceLocomotionDecision)
     : Object.freeze({
         locomotionMode: "swim",
+        support: null,
         supportHeightMeters: null
       } satisfies MetaverseWorldSurfaceLocomotionDecision);
 
@@ -1267,6 +1651,7 @@ export function isMetaverseWorldWaterbornePosition(
 
   const supportHeight = resolveSurfaceSupportHeightMeters(
     surfaceColliderSnapshots,
+    config,
     position.x,
     position.z,
     paddingMeters,

@@ -5,10 +5,12 @@ import {
   resolveMetaverseTraversalStateFromWorldAffordances,
   resolveMetaverseWorldGroundedAutostepHeightMeters,
   resolveMetaverseWorldSurfaceHeightMeters,
+  resolveMetaverseWorldSurfaceSupportSnapshot,
   resolveMetaverseWorldWaterSurfaceHeightMeters,
   type MetaverseTraversalStateResolutionDebugSnapshot,
   type MetaverseTraversalStateResolutionSnapshot,
-  type MetaverseWorldSurfacePolicyConfig
+  type MetaverseWorldSurfacePolicyConfig,
+  type MetaverseWorldSurfaceSupportSnapshot
 } from "@webgpu-metaverse/shared";
 
 import type { MetaversePlacedCuboidColliderSnapshot } from "../../states/metaverse-environment-collision";
@@ -57,7 +59,8 @@ export function resolveSurfaceHeightMeters(
   x: number,
   z: number,
   excludedOwnerEnvironmentAssetId: string | null = null,
-  maxSupportHeightMeters: number | null = null
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): number | null {
   return resolveMetaverseWorldSurfaceHeightMeters(
     readMetaverseSurfacePolicyConfig(config),
@@ -66,7 +69,29 @@ export function resolveSurfaceHeightMeters(
     x,
     z,
     excludedOwnerEnvironmentAssetId,
-    maxSupportHeightMeters
+    maxSupportHeightMeters,
+    preferredSupport
+  );
+}
+
+export function resolveSurfaceSupportSnapshot(
+  config: MetaverseRuntimeConfig,
+  surfaceColliderSnapshots: readonly MetaversePlacedCuboidColliderSnapshot[],
+  x: number,
+  z: number,
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  maxSupportHeightMeters: number | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
+): MetaverseWorldSurfaceSupportSnapshot | null {
+  return resolveMetaverseWorldSurfaceSupportSnapshot(
+    readMetaverseSurfacePolicyConfig(config),
+    surfaceColliderSnapshots,
+    x,
+    z,
+    config.groundedBody.capsuleRadiusMeters,
+    excludedOwnerEnvironmentAssetId,
+    maxSupportHeightMeters,
+    preferredSupport
   );
 }
 
@@ -161,7 +186,8 @@ export function resolveAutomaticSurfaceLocomotionSnapshot(
   position: PhysicsVector3Snapshot,
   yawRadians: number,
   currentLocomotionMode: AutomaticSurfaceLocomotionModeId,
-  excludedOwnerEnvironmentAssetId: string | null = null
+  excludedOwnerEnvironmentAssetId: string | null = null,
+  preferredSupport: MetaverseWorldSurfaceSupportSnapshot | null = null
 ): AutomaticSurfaceLocomotionSnapshot {
   return resolveMetaverseTraversalStateFromWorldAffordances(
     readMetaverseSurfacePolicyConfig(config),
@@ -170,7 +196,8 @@ export function resolveAutomaticSurfaceLocomotionSnapshot(
     position,
     yawRadians,
     currentLocomotionMode,
-    excludedOwnerEnvironmentAssetId
+    excludedOwnerEnvironmentAssetId,
+    preferredSupport
   );
 }
 

@@ -10,6 +10,7 @@ import {
 export type AuthoritativeLocalPlayerReconciliationSnapshot = Pick<
   MetaverseRealtimePlayerSnapshot,
   | "groundedBody"
+  | "groundedSupport"
   | "look"
   | "locomotionMode"
   | "mountedOccupancy"
@@ -78,6 +79,7 @@ export function readAckedAuthoritativeLocalPlayerPose(
 
   return {
     groundedBody: playerSnapshot.groundedBody,
+    groundedSupport: playerSnapshot.groundedSupport,
     lastProcessedTraversalSequence:
       playerSnapshot.lastProcessedTraversalSequence,
     linearVelocity: activeBodySnapshot.linearVelocity,
