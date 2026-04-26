@@ -10,7 +10,7 @@ import {
   stagingGroundMapBundle
 } from "@webgpu-metaverse/shared/metaverse/world";
 
-test("semantic terrain patches compile deterministic support heightfields", () => {
+test("semantic terrain patches compile deterministic support heightfields with edge blockers", () => {
   const compiledWorld = compileMetaverseMapBundleSemanticWorld(
     Object.freeze({
       compatibilityAssetIds: Object.freeze({
@@ -81,8 +81,8 @@ test("semantic terrain patches compile deterministic support heightfields", () =
   assert.equal(terrainTriMeshes.length, 1);
   assert.equal(terrainTriMeshes[0]?.ownerId, "terrain-a");
   assert.equal(terrainTriMeshes[0]?.traversalAffordance, "blocker");
-  assert.equal(terrainTriMeshes[0]?.vertices.length, 36);
-  assert.equal(terrainTriMeshes[0]?.indices.length, 30);
+  assert.equal(terrainTriMeshes[0]?.vertices.length, 24);
+  assert.equal(terrainTriMeshes[0]?.indices.length, 24);
   assert.equal(
     surfaceColliders.filter(
       (collider) =>
@@ -97,6 +97,79 @@ test("semantic terrain patches compile deterministic support heightfields", () =
     ),
     true
   );
+});
+
+test("semantic terrain patches do not emit blocker tops for interior-only height changes", () => {
+  const compiledWorld = compileMetaverseMapBundleSemanticWorld(
+    Object.freeze({
+      compatibilityAssetIds: Object.freeze({
+        connectorAssetId: null,
+        floorAssetId: null,
+        wallAssetId: null
+      }),
+      connectors: Object.freeze([]),
+      edges: Object.freeze([]),
+      gameplayVolumes: Object.freeze([]),
+      lights: Object.freeze([]),
+      modules: Object.freeze([]),
+      regions: Object.freeze([]),
+      structures: Object.freeze([]),
+      surfaces: Object.freeze([]),
+      terrainPatches: Object.freeze([
+        Object.freeze({
+          grid: Object.freeze({
+            cellX: 0,
+            cellZ: 0,
+            cellsX: 2,
+            cellsZ: 2,
+            layer: 0
+          }),
+          heightSamples: Object.freeze([
+            0, 0, 0,
+            0, 2, 0,
+            0, 0, 0
+          ]),
+          label: "Terrain Interior Hill",
+          materialLayers: Object.freeze([
+            Object.freeze({
+              layerId: "terrain-interior-hill:terrain-grass",
+              materialId: "terrain-grass",
+              weightSamples: Object.freeze([
+                1, 1, 1,
+                1, 1, 1,
+                1, 1, 1
+              ])
+            })
+          ]),
+          origin: Object.freeze({
+            x: 0,
+            y: 0,
+            z: 0
+          }),
+          rotationYRadians: 0,
+          sampleCountX: 3,
+          sampleCountZ: 3,
+          sampleSpacingMeters: 4,
+          terrainPatchId: "terrain-interior-hill",
+          waterLevelMeters: null
+        })
+      ])
+    })
+  );
+  const terrainHeightfields = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.heightfields.filter(
+      (heightfield) => heightfield.ownerKind === "terrain-patch"
+    )
+  );
+  const terrainTriMeshes = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.triMeshes.filter(
+      (triMesh) => triMesh.ownerKind === "terrain-patch"
+    )
+  );
+
+  assert.equal(terrainHeightfields.length, 1);
+  assert.equal(terrainHeightfields[0]?.ownerId, "terrain-interior-hill");
+  assert.equal(terrainTriMeshes.length, 0);
 });
 
 test("compiled world surface colliders keep authored support without compatibility duplicates", () => {
@@ -331,6 +404,92 @@ test("compiled world surface collider resolver leaves dynamic module collision t
 
   assert.equal(surfaceColliders.length, 1);
   assert.equal(surfaceColliders[0]?.translation.x, 10);
+});
+
+test("semantic collision mesh modules do not also compile box surface colliders", () => {
+  const createModule = ({
+    assetId,
+    collisionPath,
+    moduleId,
+    position
+  }) =>
+    Object.freeze({
+      assetId,
+      collisionEnabled: true,
+      collisionPath,
+      collider: null,
+      dynamicBody: null,
+      entries: null,
+      isVisible: true,
+      label: assetId,
+      materialReferenceId: null,
+      moduleId,
+      notes: "",
+      placementMode: "static",
+      position,
+      rotationYRadians: 0,
+      scale: 1,
+      seats: null,
+      surfaceColliders: Object.freeze([
+        Object.freeze({
+          center: Object.freeze({ x: 0, y: 0.25, z: 0 }),
+          size: Object.freeze({ x: 4, y: 0.5, z: 4 }),
+          traversalAffordance: "support"
+        })
+      ]),
+      traversalAffordance: "support"
+    });
+  const compiledWorld = compileMetaverseMapBundleSemanticWorld(
+    Object.freeze({
+      compatibilityAssetIds: Object.freeze({
+        connectorAssetId: null,
+        floorAssetId: null,
+        wallAssetId: null
+      }),
+      connectors: Object.freeze([]),
+      edges: Object.freeze([]),
+      gameplayVolumes: Object.freeze([]),
+      lights: Object.freeze([]),
+      modules: Object.freeze([
+        createModule({
+          assetId: "static-mesh-platform",
+          collisionPath: "/models/metaverse/environment/static-platform-collision.gltf",
+          moduleId: "static-mesh-platform-placement",
+          position: Object.freeze({ x: 0, y: 0, z: 0 })
+        }),
+        createModule({
+          assetId: "static-box-platform",
+          collisionPath: null,
+          moduleId: "static-box-platform-placement",
+          position: Object.freeze({ x: 10, y: 0, z: 0 })
+        })
+      ]),
+      regions: Object.freeze([]),
+      structures: Object.freeze([]),
+      surfaces: Object.freeze([]),
+      terrainPatches: Object.freeze([])
+    })
+  );
+  const moduleCollisionBoxes = compiledWorld.chunks.flatMap((chunk) =>
+    chunk.collision.boxes.filter((box) => box.ownerKind === "module")
+  );
+  const surfaceColliders =
+    resolveMetaverseMapBundleCompiledWorldSurfaceColliders(compiledWorld);
+  const meshEnvironmentAsset = compiledWorld.compatibilityEnvironmentAssets.find(
+    (environmentAsset) => environmentAsset.assetId === "static-mesh-platform"
+  );
+
+  assert.deepEqual(
+    moduleCollisionBoxes.map((box) => box.ownerId),
+    ["static-box-platform-placement"]
+  );
+  assert.equal(surfaceColliders.length, 1);
+  assert.equal(surfaceColliders[0]?.translation.x, 10);
+  assert.equal(
+    meshEnvironmentAsset?.collisionPath,
+    "/models/metaverse/environment/static-platform-collision.gltf"
+  );
+  assert.equal(meshEnvironmentAsset?.surfaceColliders.length, 1);
 });
 
 test("terrain-linked semantic wall compatibility extends blocker walls down to terrain and keeps visuals aligned", () => {

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { RotateCwIcon, SaveIcon } from "lucide-react";
+import { RotateCwIcon } from "lucide-react";
 
 import type { MetaverseWorldBundleRegistryEntry } from "@/metaverse/world/bundle-registry";
 
@@ -19,7 +19,6 @@ import {
 interface MapEditorToolbarProps {
   readonly onBundleChange: (bundleId: string) => void;
   readonly onResetDraftRequest: () => void;
-  readonly onSaveDraftRequest: () => void;
   readonly registryEntries: readonly MetaverseWorldBundleRegistryEntry[];
   readonly selectedBundleId: string;
 }
@@ -44,7 +43,6 @@ function SidebarSection({
 export function MapEditorToolbar({
   onBundleChange,
   onResetDraftRequest,
-  onSaveDraftRequest,
   registryEntries,
   selectedBundleId
 }: MapEditorToolbarProps) {
@@ -85,23 +83,13 @@ export function MapEditorToolbar({
 
       <div className="flex shrink-0 items-center gap-2 border-t border-border/70 p-3">
         <Button
-          className="flex-1"
+          className="w-full"
           onClick={onResetDraftRequest}
           type="button"
           variant="outline"
         >
           <RotateCwIcon data-icon="inline-start" />
           Reset
-        </Button>
-
-        <Button
-          className="flex-1"
-          onClick={onSaveDraftRequest}
-          type="button"
-          variant="outline"
-        >
-          <SaveIcon data-icon="inline-start" />
-          Save
         </Button>
       </div>
     </div>

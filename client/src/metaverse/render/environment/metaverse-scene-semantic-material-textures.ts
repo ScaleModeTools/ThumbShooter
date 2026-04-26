@@ -162,8 +162,15 @@ function isSemanticMaterialId(
     value === "glass" ||
     value === "metal" ||
     value === "terrain-ash" ||
+    value === "terrain-basalt" ||
+    value === "terrain-cliff" ||
+    value === "terrain-dirt" ||
+    value === "terrain-gravel" ||
     value === "terrain-grass" ||
+    value === "terrain-moss" ||
     value === "terrain-rock" ||
+    value === "terrain-sand" ||
+    value === "terrain-snow" ||
     value === "team-blue" ||
     value === "team-red" ||
     value === "warning"
@@ -224,6 +231,34 @@ function resolveBuiltInPreviewPalette(
         base: [0.32, 0.36, 0.42],
         dark: [0.14, 0.16, 0.19]
       };
+    case "terrain-basalt":
+      return {
+        accent: [0.48, 0.5, 0.54],
+        alpha: 1,
+        base: [0.18, 0.2, 0.23],
+        dark: [0.05, 0.06, 0.08]
+      };
+    case "terrain-cliff":
+      return {
+        accent: [0.72, 0.68, 0.58],
+        alpha: 1,
+        base: [0.38, 0.34, 0.28],
+        dark: [0.14, 0.12, 0.1]
+      };
+    case "terrain-dirt":
+      return {
+        accent: [0.62, 0.44, 0.26],
+        alpha: 1,
+        base: [0.35, 0.23, 0.13],
+        dark: [0.13, 0.08, 0.04]
+      };
+    case "terrain-gravel":
+      return {
+        accent: [0.68, 0.68, 0.64],
+        alpha: 1,
+        base: [0.42, 0.41, 0.38],
+        dark: [0.16, 0.16, 0.15]
+      };
     case "terrain-grass":
       return {
         accent: [0.56, 0.78, 0.35],
@@ -231,12 +266,33 @@ function resolveBuiltInPreviewPalette(
         base: [0.2, 0.55, 0.22],
         dark: [0.09, 0.22, 0.08]
       };
+    case "terrain-moss":
+      return {
+        accent: [0.68, 0.82, 0.42],
+        alpha: 1,
+        base: [0.26, 0.42, 0.18],
+        dark: [0.08, 0.15, 0.06]
+      };
     case "terrain-rock":
       return {
         accent: [0.74, 0.71, 0.66],
         alpha: 1,
         base: [0.43, 0.4, 0.36],
         dark: [0.18, 0.16, 0.14]
+      };
+    case "terrain-sand":
+      return {
+        accent: [0.88, 0.78, 0.52],
+        alpha: 1,
+        base: [0.62, 0.5, 0.3],
+        dark: [0.24, 0.18, 0.1]
+      };
+    case "terrain-snow":
+      return {
+        accent: [0.94, 0.98, 1],
+        alpha: 1,
+        base: [0.78, 0.84, 0.88],
+        dark: [0.34, 0.4, 0.46]
       };
     case "shell-floor-grid":
       return {
@@ -362,6 +418,7 @@ export function resolveMetaverseSceneSemanticMaterialProfile(
         transmission: 0
       };
     case "terrain-grass":
+    case "terrain-moss":
       return {
         alphaHash: false,
         bumpScale: 0.04,
@@ -376,6 +433,9 @@ export function resolveMetaverseSceneSemanticMaterialProfile(
         transmission: 0
       };
     case "terrain-rock":
+    case "terrain-basalt":
+    case "terrain-cliff":
+    case "terrain-gravel":
       return {
         alphaHash: false,
         bumpScale: 0.065,
@@ -390,6 +450,9 @@ export function resolveMetaverseSceneSemanticMaterialProfile(
         transmission: 0
       };
     case "terrain-ash":
+    case "terrain-dirt":
+    case "terrain-sand":
+    case "terrain-snow":
       return {
         alphaHash: false,
         bumpScale: 0.05,
@@ -556,7 +619,8 @@ function resolvePreviewColorSample(
 
       break;
     }
-    case "terrain-grass": {
+    case "terrain-grass":
+    case "terrain-moss": {
       const blades = Math.sin((tileU * 7 + tileV * 3) * Math.PI) * 0.5 + 0.5;
       color = mixColors(
         mixColors(
@@ -570,7 +634,13 @@ function resolvePreviewColorSample(
       break;
     }
     case "terrain-rock":
+    case "terrain-basalt":
+    case "terrain-cliff":
+    case "terrain-gravel":
     case "terrain-ash":
+    case "terrain-dirt":
+    case "terrain-sand":
+    case "terrain-snow":
     case "concrete": {
       const fracture =
         Math.max(

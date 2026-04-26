@@ -6,6 +6,7 @@ import {
   createMetaversePlayerId,
   createMetaverseRoomId,
   createMetaverseRoomSessionId,
+  readMetaverseRealtimePlayerActiveBodyKinematicSnapshot,
   createUsername
 } from "@webgpu-metaverse/shared";
 
@@ -31,6 +32,13 @@ function createGroundedJoinPresenceCommand(playerId, username, x = 0) {
     },
     username
   });
+}
+
+function readPlayerSnapshot(worldSnapshot, playerId) {
+  return requireValue(
+    worldSnapshot.players.find((playerSnapshot) => playerSnapshot.playerId === playerId),
+    "playerSnapshot"
+  );
 }
 
 function createTeamDeathmatchRoomRuntime() {
@@ -80,6 +88,11 @@ test("MetaverseRoomRuntime exposes assignment and directory metadata for team de
 
   const assignmentSnapshot = roomRuntime.readAssignmentSnapshot(2);
   const directoryEntry = roomRuntime.readDirectoryEntry(0, 2, "available");
+  const worldSnapshot = roomRuntime.readWorldSnapshot(0);
+  const firstPlayerActiveBody =
+    readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(
+      readPlayerSnapshot(worldSnapshot, firstPlayerId)
+    );
 
   assert.equal(assignmentSnapshot.bundleId, "deathmatch");
   assert.equal(assignmentSnapshot.launchVariationId, "shell-team-deathmatch");
@@ -93,6 +106,10 @@ test("MetaverseRoomRuntime exposes assignment and directory metadata for team de
     directoryEntry.redTeamPlayerCount + directoryEntry.blueTeamPlayerCount,
     2
   );
+  assert.equal(directoryEntry.phase, "active");
+  assert.equal(firstPlayerActiveBody.position.x, 0);
+  assert.equal(firstPlayerActiveBody.position.y, 1.62);
+  assert.equal(firstPlayerActiveBody.position.z, 24);
 });
 
 test("MetaverseRoomRuntime forceRemovePlayer clears the authoritative room roster", () => {

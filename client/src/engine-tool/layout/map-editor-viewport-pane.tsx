@@ -242,7 +242,8 @@ const viewportToolModeLabels = [
   "Portal",
   "Move",
   "Rotate",
-  "Scale"
+  "Scale",
+  "Vertex"
 ] as const;
 
 function formatToolMode(viewportToolMode: MapEditorViewportToolMode): string {
@@ -437,6 +438,8 @@ export function MapEditorViewportPane({
               : `Click to place a ${builderToolState.lightIntensity.toFixed(1)} intensity ${builderToolState.lightKind} light with ${builderToolState.lightRangeMeters.toFixed(1)}m range.`
           : viewportToolMode === "terrain"
             ? `Drag empty ground to draw terrain, or click existing terrain to ${builderToolState.terrainBrushMode} with a ${builderToolState.terrainBrushSizeCells}x${builderToolState.terrainBrushSizeCells} brush.`
+          : viewportToolMode === "vertex"
+            ? "Click a terrain sample, then drag the vertical transform handle to reshape that vertex."
             : viewportToolMode === "wall"
               ? `Click once to anchor a ${builderToolState.wallPresetId} on the clicked support, move to preview, then click again to commit and keep chaining.`
               : viewportToolMode === "path"

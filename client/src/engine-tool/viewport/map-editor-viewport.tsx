@@ -366,6 +366,7 @@ function shouldSuppressOrbitWhileBuildPointerHeld(
     case "rotate":
     case "scale":
     case "select":
+    case "vertex":
       return false;
     default:
       return true;
@@ -603,6 +604,75 @@ function resolveTerrainHeightAtPosition(
   const heightIndex = cellZ * terrainPatch.sampleCountX + cellX;
 
   return terrainPatch.origin.y + (terrainPatch.heightSamples[heightIndex] ?? 0);
+}
+
+interface MapEditorTerrainVertexTransformTarget {
+  readonly cellX: number;
+  readonly cellZ: number;
+  readonly terrainPatchId: string;
+}
+
+function createTerrainVertexTransformTargetId(
+  target: MapEditorTerrainVertexTransformTarget
+): string {
+  return `${encodeURIComponent(target.terrainPatchId)}:${target.cellX}:${target.cellZ}`;
+}
+
+function resolveTerrainPatchCellAtPosition(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
+  position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }
+): {
+  readonly cellX: number;
+  readonly cellZ: number;
+} | null {
+  const deltaX = position.x - terrainPatch.origin.x;
+  const deltaZ = position.z - terrainPatch.origin.z;
+  const sine = Math.sin(terrainPatch.rotationYRadians);
+  const cosine = Math.cos(terrainPatch.rotationYRadians);
+  const localX = deltaX * cosine - deltaZ * sine;
+  const localZ = deltaX * sine + deltaZ * cosine;
+  const cellX = Math.round(
+    localX / terrainPatch.sampleSpacingMeters + (terrainPatch.sampleCountX - 1) * 0.5
+  );
+  const cellZ = Math.round(
+    localZ / terrainPatch.sampleSpacingMeters + (terrainPatch.sampleCountZ - 1) * 0.5
+  );
+
+  return cellX >= 0 &&
+    cellX < terrainPatch.sampleCountX &&
+    cellZ >= 0 &&
+    cellZ < terrainPatch.sampleCountZ
+    ? Object.freeze({ cellX, cellZ })
+    : null;
+}
+
+function resolveTerrainPatchVertexWorldPosition(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
+  target: Pick<MapEditorTerrainVertexTransformTarget, "cellX" | "cellZ">
+): {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+} {
+  const localX =
+    (target.cellX - (terrainPatch.sampleCountX - 1) * 0.5) *
+    terrainPatch.sampleSpacingMeters;
+  const localZ =
+    (target.cellZ - (terrainPatch.sampleCountZ - 1) * 0.5) *
+    terrainPatch.sampleSpacingMeters;
+  const sine = Math.sin(terrainPatch.rotationYRadians);
+  const cosine = Math.cos(terrainPatch.rotationYRadians);
+  const heightIndex = target.cellZ * terrainPatch.sampleCountX + target.cellX;
+
+  return Object.freeze({
+    x: terrainPatch.origin.x + localX * cosine + localZ * sine,
+    y: terrainPatch.origin.y + (terrainPatch.heightSamples[heightIndex] ?? 0),
+    z: terrainPatch.origin.z - localX * sine + localZ * cosine
+  });
 }
 
 function normalizeTerrainBrushSizeCells(brushSizeCells: number): number {
@@ -2023,6 +2093,7 @@ export function MapEditorViewport({
   const buildCursorAnchorRef = useRef<Group | null>(null);
   const buildCursorAssetIdRef = useRef<string | null>(null);
   const builderPreviewGroupRef = useRef<Group | null>(null);
+  const terrainVertexTransformAnchorRef = useRef<Group | null>(null);
   const activeModuleAssetIdRef = useRef(activeModuleAssetId);
   const builderToolStateRef = useRef(builderToolState);
   const connectorDraftsRef = useRef(connectorDrafts);
@@ -2080,6 +2151,8 @@ export function MapEditorViewport({
   } | null>(null);
   const pendingPathAnchorRef = useRef<MapEditorPathAnchorSnapshot | null>(null);
   const pathAnchorPointerYRef = useRef<number | null>(null);
+  const pathBrushDragAnchorRef = useRef<MapEditorPathAnchorSnapshot | null>(null);
+  const pathBrushDidCommitRef = useRef(false);
   const transformControllerRef =
     useRef<MapEditorViewportTransformController | null>(null);
   const helperHandlesRef = useRef<MapEditorViewportHelperHandles | null>(null);
@@ -2113,6 +2186,8 @@ export function MapEditorViewport({
     useState<MapEditorViewportTransformTargetRef | null>(() =>
       createTransformTargetFromSelectedEntity(selectedEntityRef)
     );
+  const [selectedTerrainVertexTarget, setSelectedTerrainVertexTarget] =
+    useState<MapEditorTerrainVertexTransformTarget | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const previewPlacementSignature = useMemo(
     () => createPlacementPreviewSignature(placementDrafts),
@@ -2349,6 +2424,48 @@ export function MapEditorViewport({
       }
     }
   );
+  const syncTerrainVertexTransformAnchor = useEffectEvent(() => {
+    const terrainVertexTransformAnchor = terrainVertexTransformAnchorRef.current;
+
+    if (terrainVertexTransformAnchor === null) {
+      return;
+    }
+
+    if (
+      viewportToolMode !== "vertex" ||
+      selectedTerrainVertexTarget === null
+    ) {
+      terrainVertexTransformAnchor.visible = false;
+      return;
+    }
+
+    const terrainPatch =
+      terrainPatchDrafts.find(
+        (candidateTerrainPatch) =>
+          candidateTerrainPatch.terrainPatchId ===
+          selectedTerrainVertexTarget.terrainPatchId
+      ) ?? null;
+
+    if (terrainPatch === null) {
+      terrainVertexTransformAnchor.visible = false;
+      return;
+    }
+
+    const vertexPosition = resolveTerrainPatchVertexWorldPosition(
+      terrainPatch,
+      selectedTerrainVertexTarget
+    );
+
+    terrainVertexTransformAnchor.position.set(
+      vertexPosition.x,
+      vertexPosition.y,
+      vertexPosition.z
+    );
+    terrainVertexTransformAnchor.rotation.set(0, 0, 0);
+    terrainVertexTransformAnchor.scale.set(1, 1, 1);
+    terrainVertexTransformAnchor.visible = true;
+    terrainVertexTransformAnchor.updateMatrixWorld(true);
+  });
   const syncSelectionPresentation = useEffectEvent(() => {
     const scene = sceneRef.current;
     const helperHandles = helperHandlesRef.current;
@@ -2361,9 +2478,12 @@ export function MapEditorViewport({
     }
 
     transformController.syncToolMode(viewportToolMode);
+    syncTerrainVertexTransformAnchor();
 
     let selectedPresentationAnchor: Group | null = null;
     let selectedTransformAnchor: Group | null = null;
+    let activeTransformTarget: MapEditorViewportTransformTargetRef | null =
+      selectedTransformTarget;
 
     if (selectedEntityRef !== null) {
       switch (selectedEntityRef.kind) {
@@ -2421,7 +2541,20 @@ export function MapEditorViewport({
       }
     }
 
-    if (
+    if (viewportToolMode === "vertex") {
+      selectedTransformAnchor =
+        selectedTerrainVertexTarget === null ||
+        terrainVertexTransformAnchorRef.current?.visible !== true
+          ? null
+          : terrainVertexTransformAnchorRef.current;
+      activeTransformTarget =
+        selectedTerrainVertexTarget === null
+          ? null
+          : Object.freeze({
+              id: createTerrainVertexTransformTargetId(selectedTerrainVertexTarget),
+              kind: "terrain-vertex" as const
+            });
+    } else if (
       (viewportToolMode === "move" ||
         viewportToolMode === "rotate" ||
         viewportToolMode === "scale") &&
@@ -2504,12 +2637,12 @@ export function MapEditorViewport({
       }
     }
 
-    if (selectedTransformAnchor === null || selectedTransformTarget === null) {
+    if (selectedTransformAnchor === null || activeTransformTarget === null) {
       transformController.syncAttachedGroup(null, null);
     } else {
       transformController.syncAttachedGroup(
         selectedTransformAnchor,
-        selectedTransformTarget
+        activeTransformTarget
       );
     }
     replaceMapEditorViewportSelectionBoundsHelper(
@@ -2604,12 +2737,18 @@ export function MapEditorViewport({
     if (viewportToolMode !== "path") {
       pendingPathAnchorRef.current = null;
       pathAnchorPointerYRef.current = null;
+      pathBrushDragAnchorRef.current = null;
+      pathBrushDidCommitRef.current = false;
     }
 
     if (viewportToolMode !== "terrain") {
       terrainBrushDragActiveRef.current = false;
       terrainBrushLastStrokeKeyRef.current = null;
       pendingTerrainPatchAnchorRef.current = null;
+    }
+
+    if (viewportToolMode !== "vertex") {
+      setSelectedTerrainVertexTarget(null);
     }
 
     if (!shouldSuppressOrbitWhileBuildPointerHeld(viewportToolMode)) {
@@ -2675,6 +2814,16 @@ export function MapEditorViewport({
     const builderPreviewGroup = new Group();
     builderPreviewGroupRef.current = builderPreviewGroup;
     scene.add(builderPreviewGroup);
+    const terrainVertexTransformAnchor = new Group();
+    terrainVertexTransformAnchor.visible = false;
+    terrainVertexTransformAnchor.add(
+      createPreviewMesh(
+        new SphereGeometry(0.24, 16, 12),
+        createPreviewMaterial("#fbbf24", 0.78)
+      )
+    );
+    terrainVertexTransformAnchorRef.current = terrainVertexTransformAnchor;
+    scene.add(terrainVertexTransformAnchor);
     const sceneDraftHandles = createMapEditorViewportSceneDraftHandles();
     sceneDraftHandlesRef.current = sceneDraftHandles;
     scene.add(sceneDraftHandles.rootGroup);
@@ -2778,6 +2927,57 @@ export function MapEditorViewport({
       );
 
       return readSelectedEntityFromObject(intersections[0]?.object ?? null);
+    };
+    const readTerrainVertexTarget = (
+      clientX: number,
+      clientY: number
+    ): MapEditorTerrainVertexTransformTarget | null => {
+      const pointer = readCanvasPointer(
+        canvasElement,
+        clientX,
+        clientY,
+        pointerRef.current
+      );
+
+      raycasterRef.current.setFromCamera(pointer, camera);
+
+      const intersections = raycasterRef.current.intersectObjects(
+        readPickableObjects(),
+        true
+      );
+
+      for (const intersection of intersections) {
+        const entityRef = readSelectedEntityFromObject(intersection.object);
+
+        if (entityRef?.kind !== "terrain-patch") {
+          continue;
+        }
+
+        const terrainPatch =
+          terrainPatchDraftsRef.current.find(
+            (candidateTerrainPatch) =>
+              candidateTerrainPatch.terrainPatchId === entityRef.id
+          ) ?? null;
+
+        if (terrainPatch === null) {
+          continue;
+        }
+
+        const targetCell = resolveTerrainPatchCellAtPosition(
+          terrainPatch,
+          intersection.point
+        );
+
+        if (targetCell !== null) {
+          return Object.freeze({
+            cellX: targetCell.cellX,
+            cellZ: targetCell.cellZ,
+            terrainPatchId: terrainPatch.terrainPatchId
+          });
+        }
+      }
+
+      return null;
     };
     const clearBuilderPreview = () => {
       if (builderPreviewGroupRef.current !== null) {
@@ -3238,6 +3438,66 @@ export function MapEditorViewport({
       terrainBrushDragActiveRef.current = false;
       terrainBrushLastStrokeKeyRef.current = null;
     };
+    const stopPathBrushDrag = () => {
+      pathBrushDragAnchorRef.current = null;
+      pathBrushDidCommitRef.current = false;
+    };
+    const commitPathBrushDragAtPointer = (
+      clientX: number,
+      clientY: number
+    ): boolean => {
+      const activeAnchor = pathBrushDragAnchorRef.current;
+
+      if (
+        activeAnchor === null ||
+        viewportToolModeRef.current !== "path" ||
+        builderToolStateRef.current.surfaceMode === "slope"
+      ) {
+        return false;
+      }
+
+      const nextScenePosition = readBuildPlacementPosition(clientX, clientY);
+
+      if (nextScenePosition === null) {
+        return false;
+      }
+
+      const pathScenePosition = resolveMapEditorBuildPathAnchorPosition(
+        nextScenePosition,
+        nextScenePosition.y,
+        builderToolStateRef.current.pathWidthCells
+      );
+      const snappedPathPosition = resolveMapEditorBuildPathSegmentEnd(
+        activeAnchor.center,
+        pathScenePosition,
+        builderToolStateRef.current.pathWidthCells
+      );
+      const targetElevation = activeAnchor.elevation;
+
+      if (
+        activeAnchor.center.x === snappedPathPosition.x &&
+        activeAnchor.center.z === snappedPathPosition.z &&
+        Math.abs(activeAnchor.elevation - targetElevation) <= 0.01
+      ) {
+        return false;
+      }
+
+      const nextPathAnchor = Object.freeze({
+        center: Object.freeze({
+          x: snappedPathPosition.x,
+          y: targetElevation,
+          z: snappedPathPosition.z
+        }),
+        elevation: targetElevation
+      });
+
+      handleCommitPath(nextPathAnchor.center, targetElevation, activeAnchor);
+      pathBrushDragAnchorRef.current = nextPathAnchor;
+      pathBrushDidCommitRef.current = true;
+      pendingPathAnchorRef.current = nextPathAnchor;
+
+      return true;
+    };
 
     const setBuildPointerOrbitLock = (active: boolean) => {
       buildPointerOrbitLockActiveRef.current = active;
@@ -3320,6 +3580,50 @@ export function MapEditorViewport({
         }
       }
 
+      if (
+        viewportToolModeRef.current === "path" &&
+        builderToolStateRef.current.surfaceMode !== "slope"
+      ) {
+        const pathScenePosition = readBuildPlacementPosition(
+          event.clientX,
+          event.clientY
+        );
+
+        if (pathScenePosition !== null) {
+          const pathGroundPosition = resolveMapEditorBuildPathAnchorPosition(
+            pathScenePosition,
+            pathScenePosition.y,
+            builderToolStateRef.current.pathWidthCells
+          );
+          const existingAnchor = readNearestPathAnchorFromDrafts(
+            pathGroundPosition,
+            regionDraftsRef.current,
+            surfaceDraftsRef.current
+          );
+          const activeAnchor =
+            pendingPathAnchorRef.current ??
+            existingAnchor ??
+            Object.freeze({
+              center: pathGroundPosition,
+              elevation: pathGroundPosition.y
+            });
+
+          pathBrushDragAnchorRef.current = activeAnchor;
+          pathBrushDidCommitRef.current = false;
+          pendingPathAnchorRef.current = activeAnchor;
+          pathAnchorPointerYRef.current = event.clientY;
+        }
+      }
+
+      if (
+        viewportToolModeRef.current === "path" &&
+        pathBrushDragAnchorRef.current !== null &&
+        builderToolStateRef.current.surfaceMode !== "slope" &&
+        (event.buttons & 1) === 1
+      ) {
+        commitPathBrushDragAtPointer(event.clientX, event.clientY);
+      }
+
       syncBuildCursor(event.clientX, event.clientY);
       syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
     };
@@ -3329,6 +3633,7 @@ export function MapEditorViewport({
         if ((event.buttons & 1) !== 1) {
           pointerDownPositionRef.current = null;
           pendingTerrainPatchAnchorRef.current = null;
+          stopPathBrushDrag();
           stopBuildPointerInteraction();
         }
 
@@ -3367,6 +3672,21 @@ export function MapEditorViewport({
         return;
       }
 
+      if (
+        viewportToolModeRef.current === "path" &&
+        pathBrushDragAnchorRef.current !== null
+      ) {
+        const pathBrushDidCommit = pathBrushDidCommitRef.current;
+
+        stopPathBrushDrag();
+
+        if (pathBrushDidCommit) {
+          stopBuildPointerInteraction();
+          syncBuilderPreview(event.clientX, event.clientY, event.ctrlKey);
+          return;
+        }
+      }
+
       stopBuildPointerInteraction();
 
       if (pointerDownPosition === null) {
@@ -3403,6 +3723,33 @@ export function MapEditorViewport({
           );
         }
 
+        return;
+      }
+
+      if (viewportToolModeRef.current === "vertex") {
+        const nextTerrainVertexTarget = readTerrainVertexTarget(
+          event.clientX,
+          event.clientY
+        );
+
+        setSelectedTerrainVertexTarget(nextTerrainVertexTarget);
+        setSelectedTransformTarget(
+          nextTerrainVertexTarget === null
+            ? null
+            : Object.freeze({
+                id: nextTerrainVertexTarget.terrainPatchId,
+                kind: "terrain-patch" as const
+              })
+        );
+        handleEntitySelection(
+          nextTerrainVertexTarget === null
+            ? null
+            : Object.freeze({
+                id: nextTerrainVertexTarget.terrainPatchId,
+                kind: "terrain-patch" as const
+              })
+        );
+        syncSelectionPresentation();
         return;
       }
 
@@ -3674,6 +4021,7 @@ export function MapEditorViewport({
       pendingWaterAnchorRef.current = null;
       pendingZoneAnchorRef.current = null;
       pendingTerrainPatchAnchorRef.current = null;
+      stopPathBrushDrag();
     };
     const handlePointerMove = (event: PointerEvent) => {
       if (
@@ -3710,6 +4058,7 @@ export function MapEditorViewport({
       pendingWaterAnchorRef.current = null;
       pendingZoneAnchorRef.current = null;
       pendingTerrainPatchAnchorRef.current = null;
+      stopPathBrushDrag();
 
       if (buildCursorAnchorRef.current !== null) {
         buildCursorAnchorRef.current.visible = false;
@@ -3731,6 +4080,7 @@ export function MapEditorViewport({
       pendingLaneAnchorRef.current = null;
       pendingVehicleRouteAnchorRef.current = null;
       pathAnchorPointerYRef.current = null;
+      stopPathBrushDrag();
       clearBuilderPreview();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3743,6 +4093,7 @@ export function MapEditorViewport({
         pendingWallChainStartRef.current = null;
         pendingPathAnchorRef.current = null;
         pendingZoneAnchorRef.current = null;
+        stopPathBrushDrag();
         clearBuilderPreview();
         return;
       }
@@ -3834,6 +4185,11 @@ export function MapEditorViewport({
         scene.remove(builderPreviewGroupRef.current);
         disposeBuilderPreviewGroup(builderPreviewGroupRef.current);
         builderPreviewGroupRef.current = null;
+      }
+      if (terrainVertexTransformAnchorRef.current !== null) {
+        scene.remove(terrainVertexTransformAnchorRef.current);
+        disposeBuilderPreviewGroup(terrainVertexTransformAnchorRef.current);
+        terrainVertexTransformAnchorRef.current = null;
       }
       if (sceneDraftHandlesRef.current !== null) {
         scene.remove(sceneDraftHandlesRef.current.rootGroup);
@@ -4189,8 +4545,10 @@ export function MapEditorViewport({
     syncSelectionPresentation();
   }, [
     selectedEntityRef,
+    selectedTerrainVertexTarget,
     selectedTransformTarget,
     syncSelectionPresentation,
+    terrainPatchDrafts,
     viewportToolMode
   ]);
 
@@ -4272,12 +4630,14 @@ export function MapEditorViewport({
             ? "Spawn tool: click the scene to place a player spawn marker on the clicked support."
           : viewportToolMode === "portal"
             ? "Portal tool: click the scene to place a portal on the clicked support."
-            : viewportToolMode === "terrain"
+          : viewportToolMode === "terrain"
             ? "Terrain tool: drag empty ground to draw a patch, or paint an existing patch."
+          : viewportToolMode === "vertex"
+            ? "Vertex tool: click a terrain sample, then drag the height handle."
             : viewportToolMode === "wall"
               ? "Wall tool: click once to anchor on a support, hover the next edge, then click again to commit and keep chaining."
               : viewportToolMode === "path"
-                ? "Path tool: click to start or continue, then point toward the next flat or sloped segment."
+                ? "Path tool: drag to paint flat path blocks, or select an authored path to shape a ramp."
                 : viewportToolMode === "water"
                   ? "Water tool: place a snapped rectangular footprint using top elevation and depth."
                   : "Click to focus. Drag to orbit. Right-drag to pan. Scroll to zoom. Use WASD to fly, Q/E for height, and Shift to move faster."}

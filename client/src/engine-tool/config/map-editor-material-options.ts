@@ -43,6 +43,34 @@ export const mapEditorSemanticMaterialOptions = Object.freeze(
       value: "terrain-rock"
     }),
     Object.freeze({
+      label: "Terrain Cliff",
+      value: "terrain-cliff"
+    }),
+    Object.freeze({
+      label: "Terrain Basalt",
+      value: "terrain-basalt"
+    }),
+    Object.freeze({
+      label: "Terrain Gravel",
+      value: "terrain-gravel"
+    }),
+    Object.freeze({
+      label: "Terrain Dirt",
+      value: "terrain-dirt"
+    }),
+    Object.freeze({
+      label: "Terrain Sand",
+      value: "terrain-sand"
+    }),
+    Object.freeze({
+      label: "Terrain Moss",
+      value: "terrain-moss"
+    }),
+    Object.freeze({
+      label: "Terrain Snow",
+      value: "terrain-snow"
+    }),
+    Object.freeze({
       label: "Terrain Ash",
       value: "terrain-ash"
     }),
@@ -55,10 +83,7 @@ export const mapEditorSemanticMaterialOptions = Object.freeze(
 
 export const mapEditorTerrainMaterialOptions = Object.freeze(
   mapEditorSemanticMaterialOptions.filter(
-    (option) =>
-      option.value === "terrain-grass" ||
-      option.value === "terrain-rock" ||
-      option.value === "terrain-ash"
+    (option) => option.value.startsWith("terrain-")
   )
 );
 

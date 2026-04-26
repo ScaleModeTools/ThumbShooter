@@ -1,4 +1,10 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode
+} from "react";
 
 import {
   BoxIcon,
@@ -22,6 +28,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger
 } from "@/components/ui/collapsible";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import type {
   MapEditorProjectSnapshot,
@@ -42,6 +57,7 @@ interface MapEditorSceneOutlinerPanelProps {
   readonly onSelectEntityRef: (
     entityRef: MapEditorSelectedEntityRef | null
   ) => void;
+  readonly onMergeTerrainPatches: (terrainPatchIds: readonly string[]) => void;
   readonly onUpdatePlacementVisibility: (
     placementId: string,
     visible: boolean
@@ -96,6 +112,33 @@ function isSelectedEntity(
   );
 }
 
+function createEntityRefKey(entityRef: MapEditorSelectedEntityRef): string {
+  return `${entityRef.kind}:${entityRef.id}`;
+}
+
+function isEntityRefInSelection(
+  selectedEntityRefs: readonly MapEditorSelectedEntityRef[],
+  entityRef: MapEditorSelectedEntityRef | null
+): boolean {
+  return (
+    entityRef !== null &&
+    selectedEntityRefs.some(
+      (selectedEntityRef) =>
+        selectedEntityRef.kind === entityRef.kind &&
+        selectedEntityRef.id === entityRef.id
+    )
+  );
+}
+
+function areTerrainPatchesMergeable(
+  entityRefs: readonly MapEditorSelectedEntityRef[]
+): boolean {
+  return (
+    entityRefs.length >= 2 &&
+    entityRefs.every((entityRef) => entityRef.kind === "terrain-patch")
+  );
+}
+
 function VisibilityButton({
   label,
   onVisibilityChange,
@@ -131,7 +174,8 @@ function SceneOutlinerRowButton({
   readonly children: ReactNode;
   readonly entityRef: MapEditorSelectedEntityRef | null;
   readonly onSelectEntityRef: (
-    entityRef: MapEditorSelectedEntityRef | null
+    entityRef: MapEditorSelectedEntityRef | null,
+    event: MouseEvent<HTMLButtonElement>
   ) => void;
 }) {
   if (entityRef === null) {
@@ -141,7 +185,7 @@ function SceneOutlinerRowButton({
   return (
     <button
       className="min-w-0 flex-1 text-left"
-      onClick={() => onSelectEntityRef(entityRef)}
+      onClick={(event) => onSelectEntityRef(entityRef, event)}
       type="button"
     >
       {children}
@@ -150,20 +194,38 @@ function SceneOutlinerRowButton({
 }
 
 function SceneOutlinerRowView({
+  onMergeTerrainPatches,
   onSelectEntityRef,
   row,
-  selectedEntityRef
+  selectedEntityRef,
+  selectedEntityRefs
 }: {
+  readonly onMergeTerrainPatches: (terrainPatchIds: readonly string[]) => void;
   readonly onSelectEntityRef: (
-    entityRef: MapEditorSelectedEntityRef | null
+    entityRef: MapEditorSelectedEntityRef | null,
+    event: MouseEvent<HTMLButtonElement>
   ) => void;
   readonly row: SceneOutlinerRow;
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly selectedEntityRefs: readonly MapEditorSelectedEntityRef[];
 }) {
   const Icon = row.icon;
-  const active = isSelectedEntity(selectedEntityRef, row.entityRef);
-
-  return (
+  const active =
+    isSelectedEntity(selectedEntityRef, row.entityRef) ||
+    isEntityRefInSelection(selectedEntityRefs, row.entityRef);
+  const contextSelection =
+    isEntityRefInSelection(selectedEntityRefs, row.entityRef)
+      ? selectedEntityRefs
+      : row.entityRef === null
+        ? Object.freeze([])
+        : Object.freeze([row.entityRef]);
+  const terrainPatchIds = Object.freeze(
+    contextSelection
+      .filter((entityRef) => entityRef.kind === "terrain-patch")
+      .map((entityRef) => entityRef.id)
+  );
+  const mergeEnabled = areTerrainPatchesMergeable(contextSelection);
+  const rowElement = (
     <div
       className={composeMapEditorLayoutClassName(
         "grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-md border px-2 transition-colors",
@@ -191,29 +253,64 @@ function SceneOutlinerRowView({
       )}
     </div>
   );
+
+  if (row.entityRef === null) {
+    return rowElement;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{rowElement}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuGroup>
+          <ContextMenuLabel>
+            {contextSelection.length > 1
+              ? `${contextSelection.length} selected`
+              : row.title}
+          </ContextMenuLabel>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            disabled={!mergeEnabled}
+            onSelect={() => {
+              if (mergeEnabled) {
+                onMergeTerrainPatches(terrainPatchIds);
+              }
+            }}
+          >
+            Merge terrain patches
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 function SceneOutlinerSection({
+  onMergeTerrainPatches,
   onSceneVisibilityChange,
   onSectionOpenChange,
   onSelectEntityRef,
   readSectionOpen,
   sceneVisibility,
   section,
-  selectedEntityRef
+  selectedEntityRef,
+  selectedEntityRefs
 }: {
+  readonly onMergeTerrainPatches: (terrainPatchIds: readonly string[]) => void;
   readonly onSceneVisibilityChange: (
     layerId: MapEditorSceneVisibilityLayerId,
     visible: boolean
   ) => void;
   readonly onSectionOpenChange: (sectionId: string, open: boolean) => void;
   readonly onSelectEntityRef: (
-    entityRef: MapEditorSelectedEntityRef | null
+    entityRef: MapEditorSelectedEntityRef | null,
+    event: MouseEvent<HTMLButtonElement>
   ) => void;
   readonly readSectionOpen: (sectionId: string, defaultOpen?: boolean) => boolean;
   readonly sceneVisibility: MapEditorSceneVisibilitySnapshot;
   readonly section: SceneOutlinerSectionData;
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
+  readonly selectedEntityRefs: readonly MapEditorSelectedEntityRef[];
 }) {
   if (section.rows.length === 0) {
     return null;
@@ -261,9 +358,11 @@ function SceneOutlinerSection({
         {section.rows.map((row) => (
           <SceneOutlinerRowView
             key={row.id}
+            onMergeTerrainPatches={onMergeTerrainPatches}
             onSelectEntityRef={onSelectEntityRef}
             row={row}
             selectedEntityRef={selectedEntityRef}
+            selectedEntityRefs={selectedEntityRefs}
           />
         ))}
       </CollapsibleContent>
@@ -279,6 +378,7 @@ function createEntityRef(
 }
 
 export function MapEditorSceneOutlinerPanel({
+  onMergeTerrainPatches,
   onSceneVisibilityChange,
   onSectionOpenChange,
   onSelectEntityRef,
@@ -289,6 +389,9 @@ export function MapEditorSceneOutlinerPanel({
   selectedEntityRef
 }: MapEditorSceneOutlinerPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedEntityRefs, setSelectedEntityRefs] = useState<
+    readonly MapEditorSelectedEntityRef[]
+  >(Object.freeze([]));
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const environment = project.environmentPresentation.environment;
   const sections = useMemo<readonly SceneOutlinerSectionData[]>(() => {
@@ -580,6 +683,46 @@ export function MapEditorSceneOutlinerPanel({
     (total, section) => total + section.rows.length,
     0
   );
+  const handleSelectEntityRef = (
+    entityRef: MapEditorSelectedEntityRef | null,
+    event: MouseEvent<HTMLButtonElement>
+  ) => {
+    if (entityRef === null) {
+      setSelectedEntityRefs(Object.freeze([]));
+      onSelectEntityRef(null);
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedEntityRefs((currentSelection) => {
+        const compatibleSelection = currentSelection.every(
+          (selectedRef) => selectedRef.kind === entityRef.kind
+        )
+          ? currentSelection
+          : Object.freeze([]);
+        const entityRefKey = createEntityRefKey(entityRef);
+        const entityAlreadySelected = compatibleSelection.some(
+          (selectedRef) => createEntityRefKey(selectedRef) === entityRefKey
+        );
+        const nextSelection = entityAlreadySelected
+          ? compatibleSelection.filter(
+              (selectedRef) => createEntityRefKey(selectedRef) !== entityRefKey
+            )
+          : [...compatibleSelection, entityRef];
+
+        return Object.freeze(nextSelection);
+      });
+      onSelectEntityRef(entityRef);
+      return;
+    }
+
+    setSelectedEntityRefs(Object.freeze([entityRef]));
+    onSelectEntityRef(entityRef);
+  };
+  const handleMergeTerrainPatches = (terrainPatchIds: readonly string[]) => {
+    setSelectedEntityRefs(Object.freeze([]));
+    onMergeTerrainPatches(terrainPatchIds);
+  };
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-muted/20 p-2">
@@ -601,13 +744,15 @@ export function MapEditorSceneOutlinerPanel({
         {sections.map((section) => (
           <SceneOutlinerSection
             key={section.title}
+            onMergeTerrainPatches={handleMergeTerrainPatches}
             onSceneVisibilityChange={onSceneVisibilityChange}
             onSectionOpenChange={onSectionOpenChange}
-            onSelectEntityRef={onSelectEntityRef}
+            onSelectEntityRef={handleSelectEntityRef}
             readSectionOpen={readSectionOpen}
             sceneVisibility={sceneVisibility}
             section={section}
             selectedEntityRef={selectedEntityRef}
+            selectedEntityRefs={selectedEntityRefs}
           />
         ))}
       </div>

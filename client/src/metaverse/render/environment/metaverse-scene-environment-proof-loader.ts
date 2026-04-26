@@ -101,8 +101,15 @@ function readEnvironmentPlacementMaterialTextureId(
     case "team-blue":
     case "team-red":
     case "terrain-ash":
+    case "terrain-basalt":
+    case "terrain-cliff":
+    case "terrain-dirt":
+    case "terrain-gravel":
     case "terrain-grass":
+    case "terrain-moss":
     case "terrain-rock":
+    case "terrain-sand":
+    case "terrain-snow":
     case "warning":
       return materialReferenceId;
     default:

@@ -111,8 +111,15 @@ function readSemanticMaterialId(
     value === "glass" ||
     value === "metal" ||
     value === "terrain-ash" ||
+    value === "terrain-basalt" ||
+    value === "terrain-cliff" ||
+    value === "terrain-dirt" ||
+    value === "terrain-gravel" ||
     value === "terrain-grass" ||
+    value === "terrain-moss" ||
     value === "terrain-rock" ||
+    value === "terrain-sand" ||
+    value === "terrain-snow" ||
     value === "team-blue" ||
     value === "team-red" ||
     value === "warning"
@@ -141,8 +148,15 @@ function readTerrainMaterialId(
   value: string
 ): MapEditorStructuralDraftSnapshot["materialId"] | null {
   return value === "terrain-ash" ||
+    value === "terrain-basalt" ||
+    value === "terrain-cliff" ||
+    value === "terrain-dirt" ||
+    value === "terrain-gravel" ||
     value === "terrain-grass" ||
-    value === "terrain-rock"
+    value === "terrain-moss" ||
+    value === "terrain-rock" ||
+    value === "terrain-sand" ||
+    value === "terrain-snow"
     ? value
     : null;
 }
@@ -252,6 +266,13 @@ const allSemanticMaterialOptions = Object.freeze([
   Object.freeze({ baseMaterialId: "team-blue", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("team-blue"), id: "team-blue", isCustom: false, label: "Blue" }),
   Object.freeze({ baseMaterialId: "team-red", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("team-red"), id: "team-red", isCustom: false, label: "Red" }),
   Object.freeze({ baseMaterialId: "terrain-rock", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-rock"), id: "terrain-rock", isCustom: false, label: "Rock" }),
+  Object.freeze({ baseMaterialId: "terrain-cliff", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-cliff"), id: "terrain-cliff", isCustom: false, label: "Cliff" }),
+  Object.freeze({ baseMaterialId: "terrain-basalt", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-basalt"), id: "terrain-basalt", isCustom: false, label: "Basalt" }),
+  Object.freeze({ baseMaterialId: "terrain-gravel", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-gravel"), id: "terrain-gravel", isCustom: false, label: "Gravel" }),
+  Object.freeze({ baseMaterialId: "terrain-dirt", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-dirt"), id: "terrain-dirt", isCustom: false, label: "Dirt" }),
+  Object.freeze({ baseMaterialId: "terrain-sand", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-sand"), id: "terrain-sand", isCustom: false, label: "Sand" }),
+  Object.freeze({ baseMaterialId: "terrain-moss", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-moss"), id: "terrain-moss", isCustom: false, label: "Moss" }),
+  Object.freeze({ baseMaterialId: "terrain-snow", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-snow"), id: "terrain-snow", isCustom: false, label: "Snow" }),
   Object.freeze({ baseMaterialId: "terrain-ash", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-ash"), id: "terrain-ash", isCustom: false, label: "Ash" }),
   Object.freeze({ baseMaterialId: "terrain-grass", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-grass"), id: "terrain-grass", isCustom: false, label: "Grass" })
 ] satisfies readonly QuickMaterialOption[]);
@@ -291,6 +312,13 @@ const shellMaterialQuickOptions = Object.freeze([
 const allTerrainMaterialOptions = Object.freeze([
   Object.freeze({ baseMaterialId: "terrain-grass", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-grass"), id: "terrain-grass", isCustom: false, label: "Grass" }),
   Object.freeze({ baseMaterialId: "terrain-rock", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-rock"), id: "terrain-rock", isCustom: false, label: "Rock" }),
+  Object.freeze({ baseMaterialId: "terrain-cliff", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-cliff"), id: "terrain-cliff", isCustom: false, label: "Cliff" }),
+  Object.freeze({ baseMaterialId: "terrain-basalt", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-basalt"), id: "terrain-basalt", isCustom: false, label: "Basalt" }),
+  Object.freeze({ baseMaterialId: "terrain-gravel", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-gravel"), id: "terrain-gravel", isCustom: false, label: "Gravel" }),
+  Object.freeze({ baseMaterialId: "terrain-dirt", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-dirt"), id: "terrain-dirt", isCustom: false, label: "Dirt" }),
+  Object.freeze({ baseMaterialId: "terrain-sand", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-sand"), id: "terrain-sand", isCustom: false, label: "Sand" }),
+  Object.freeze({ baseMaterialId: "terrain-moss", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-moss"), id: "terrain-moss", isCustom: false, label: "Moss" }),
+  Object.freeze({ baseMaterialId: "terrain-snow", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-snow"), id: "terrain-snow", isCustom: false, label: "Snow" }),
   Object.freeze({ baseMaterialId: "terrain-ash", colorHex: resolveMetaverseSceneSemanticPreviewColorHex("terrain-ash"), id: "terrain-ash", isCustom: false, label: "Ash" })
 ] satisfies readonly QuickMaterialOption[]);
 
@@ -2111,6 +2139,7 @@ export function MapEditorSelectionMaterialControlsPane({
 
 interface MapEditorSelectionPaneProps {
   readonly builderToolState: MapEditorBuilderToolStateSnapshot;
+  readonly onApplyPathRampToSelection: (riseMeters: number) => void;
   readonly onDeleteSelectedEntityRequest: () => void;
   readonly onBuilderToolStateChange: MapEditorBuilderToolStateChangeHandler;
   readonly onSectionOpenChange: (sectionId: string, open: boolean) => void;
@@ -2186,6 +2215,7 @@ interface MapEditorSelectionPaneProps {
 
 export function MapEditorSelectionPane({
   builderToolState,
+  onApplyPathRampToSelection,
   onBuilderToolStateChange,
   onDeleteSelectedEntityRequest,
   onSectionOpenChange,
@@ -2267,6 +2297,14 @@ export function MapEditorSelectionPane({
           (surface) => surface.surfaceId === selectedEntityRef.id
         ) ?? null)
       : null;
+  const selectedSurfacePathRegion =
+    selectedSurface === null
+      ? null
+      : (project.regionDrafts.find(
+          (region) =>
+            region.regionKind === "path" &&
+            region.surfaceId === selectedSurface.surfaceId
+        ) ?? null);
   const selectedTerrainPatch =
     selectedEntityRef?.kind === "terrain-patch"
       ? (project.terrainPatchDrafts.find(
@@ -2275,6 +2313,12 @@ export function MapEditorSelectionPane({
       : null;
   const selectedSceneObjectTitle =
     selectedSceneObject?.launchTarget === null ? "Scene Object" : "Portal";
+  const selectedPathRampVisible =
+    selectedRegion?.regionKind === "path" || selectedSurfacePathRegion !== null;
+  const selectedPathRampRiseMeters = Math.max(
+    1,
+    Math.abs(Math.round(builderToolState.riseLayers))
+  );
   const showActiveToolSettings =
     shouldShowMapEditorActiveToolSettings(viewportToolMode);
 
@@ -2386,6 +2430,39 @@ export function MapEditorSelectionPane({
                           Math.max(
                             1,
                             Math.min(16, Math.round(builderToolState.terrainBrushSizeCells))
+                          )
+                        ]}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="selection-tool-terrain-cliff-span">Cliff Span</Label>
+                        <span className="text-xs text-muted-foreground">
+                          {Math.max(0, Math.round(builderToolState.terrainCliffSpanCells))} tiles
+                        </span>
+                      </div>
+                      <Slider
+                        id="selection-tool-terrain-cliff-span"
+                        max={8}
+                        min={0}
+                        onValueChange={(values) => {
+                          const nextCliffSpanCells = Math.max(
+                            0,
+                            Math.min(8, Math.round(values[0] ?? 0))
+                          );
+
+                          onBuilderToolStateChange((currentBuilderToolState) =>
+                            Object.freeze({
+                              ...currentBuilderToolState,
+                              terrainCliffSpanCells: nextCliffSpanCells
+                            })
+                          );
+                        }}
+                        step={1}
+                        value={[
+                          Math.max(
+                            0,
+                            Math.min(8, Math.round(builderToolState.terrainCliffSpanCells))
                           )
                         ]}
                       />
@@ -2529,15 +2606,11 @@ export function MapEditorSelectionPane({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="concrete">Concrete</SelectItem>
-                            <SelectItem value="metal">Metal</SelectItem>
-                            <SelectItem value="warning">Warning</SelectItem>
-                            <SelectItem value="glass">Glass</SelectItem>
-                            <SelectItem value="team-blue">Team Blue</SelectItem>
-                            <SelectItem value="team-red">Team Red</SelectItem>
-                            <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
-                            <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
-                            <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                            {allSemanticMaterialOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -2661,16 +2734,11 @@ export function MapEditorSelectionPane({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="concrete">Concrete</SelectItem>
-                          <SelectItem value="metal">Metal</SelectItem>
-                          <SelectItem value="warning">Warning</SelectItem>
-                          <SelectItem value="glass">Glass</SelectItem>
-                          <SelectItem value="team-blue">Team Blue</SelectItem>
-                          <SelectItem value="team-red">Team Red</SelectItem>
-                          <SelectItem value="alien-rock">Alien Rock</SelectItem>
-                          <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
-                          <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
-                          <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                          {allSemanticMaterialOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -2962,15 +3030,11 @@ export function MapEditorSelectionPane({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="concrete">Concrete</SelectItem>
-                          <SelectItem value="metal">Metal</SelectItem>
-                          <SelectItem value="warning">Warning</SelectItem>
-                          <SelectItem value="glass">Glass</SelectItem>
-                          <SelectItem value="team-blue">Team Blue</SelectItem>
-                          <SelectItem value="team-red">Team Red</SelectItem>
-                          <SelectItem value="terrain-rock">Terrain Rock</SelectItem>
-                          <SelectItem value="terrain-ash">Terrain Ash</SelectItem>
-                          <SelectItem value="terrain-grass">Terrain Grass</SelectItem>
+                          {allSemanticMaterialOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -3458,6 +3522,66 @@ export function MapEditorSelectionPane({
                   Runtime size {resolveMapEditorWaterRegionSize(selectedWaterRegion).x.toFixed(1)} x{" "}
                   {resolveMapEditorWaterRegionSize(selectedWaterRegion).z.toFixed(1)}
                 </p>
+              </SelectionCard>
+            </Section>
+          ) : null}
+
+          {selectedPathRampVisible ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:path-ramp", true)}
+              sectionId="selection-pane:path-ramp"
+              title="Path Ramp"
+            >
+              <SelectionCard title="Path Ramp">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-path-ramp-height">Height</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={0}
+                      id="selection-path-ramp-height"
+                      onValueChange={(nextValue) => {
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          Object.freeze({
+                            ...currentBuilderToolState,
+                            riseLayers: Math.max(1, Math.round(Math.abs(nextValue)))
+                          })
+                        );
+                      }}
+                      value={selectedPathRampRiseMeters}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-path-ramp-actions">Shape</Label>
+                    <ButtonGroup
+                      aria-label="Path ramp shape"
+                      className="flex flex-wrap"
+                      id="selection-path-ramp-actions"
+                    >
+                      <ButtonGroupText>Ramp</ButtonGroupText>
+                      <Button
+                        onClick={() =>
+                          onApplyPathRampToSelection(selectedPathRampRiseMeters)
+                        }
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <ArrowUpIcon data-icon="inline-start" />
+                        Apply
+                      </Button>
+                      <Button
+                        onClick={() => onApplyPathRampToSelection(0)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <RotateCcwIcon data-icon="inline-start" />
+                        Flat
+                      </Button>
+                    </ButtonGroup>
+                  </div>
+                </div>
               </SelectionCard>
             </Section>
           ) : null}

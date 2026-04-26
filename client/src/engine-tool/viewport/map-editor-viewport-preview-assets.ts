@@ -46,8 +46,15 @@ function readSemanticPreviewTextureId(
     value === "glass" ||
     value === "metal" ||
     value === "terrain-ash" ||
+    value === "terrain-basalt" ||
+    value === "terrain-cliff" ||
+    value === "terrain-dirt" ||
+    value === "terrain-gravel" ||
     value === "terrain-grass" ||
+    value === "terrain-moss" ||
     value === "terrain-rock" ||
+    value === "terrain-sand" ||
+    value === "terrain-snow" ||
     value === "team-blue" ||
     value === "team-red" ||
     value === "warning" ||

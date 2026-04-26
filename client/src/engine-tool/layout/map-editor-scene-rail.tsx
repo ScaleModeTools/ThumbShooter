@@ -45,9 +45,7 @@ interface MapEditorSceneRailProps {
   readonly onAddConnector: () => void;
   readonly onAddEdge: () => void;
   readonly onAddModuleFromAsset: (asset: EnvironmentAssetDescriptor) => void;
-  readonly onAddPlayerSpawn: () => void;
   readonly onAddRegion: () => void;
-  readonly onAddSceneObject: () => void;
   readonly onAddSurface: () => void;
   readonly onCollapsedChange: (collapsed: boolean) => void;
   readonly onSceneVisibilityChange: (
@@ -58,6 +56,7 @@ interface MapEditorSceneRailProps {
   readonly onSelectEntityRef: (
     entityRef: MapEditorSelectedEntityRef | null
   ) => void;
+  readonly onMergeTerrainPatches: (terrainPatchIds: readonly string[]) => void;
   readonly onUpdatePlacementVisibility: (
     placementId: string,
     visible: boolean
@@ -238,14 +237,13 @@ export function MapEditorSceneRail({
   onAddConnector,
   onAddEdge,
   onAddModuleFromAsset,
-  onAddPlayerSpawn,
   onAddRegion,
-  onAddSceneObject,
   onAddSurface,
   onCollapsedChange,
   onSceneVisibilityChange,
   onSectionOpenChange,
   onSelectEntityRef,
+  onMergeTerrainPatches,
   onUpdatePlacementVisibility,
   project,
   readSectionOpen,
@@ -330,6 +328,7 @@ export function MapEditorSceneRail({
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-3">
           <MapEditorSceneOutlinerPanel
+            onMergeTerrainPatches={onMergeTerrainPatches}
             onSceneVisibilityChange={onSceneVisibilityChange}
             onSectionOpenChange={onSectionOpenChange}
             onSelectEntityRef={onSelectEntityRef}
@@ -340,38 +339,47 @@ export function MapEditorSceneRail({
             selectedEntityRef={selectedEntityRef}
           />
 
-          <Section
-            badge={
-              <Badge variant="outline">
-                {project.playerSpawnDrafts.length + project.sceneObjectDrafts.length}
-              </Badge>
-            }
-            onOpenChange={onSectionOpenChange}
-            open={readSectionOpen("scene-rail:scene-elements", true)}
-            sectionId="scene-rail:scene-elements"
-            title="Scene Elements"
-          >
-            <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-border/70 bg-muted/20 p-2">
-              <Button
-                onClick={onAddPlayerSpawn}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <PlusCircleIcon data-icon="inline-start" />
-                Spawn
-              </Button>
-              <Button
-                onClick={onAddSceneObject}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <PlusCircleIcon data-icon="inline-start" />
-                Portal
-              </Button>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium">Scene</p>
             </div>
-          </Section>
+            <div className="flex flex-col gap-1.5">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/70 bg-background/55 px-2 py-1.5">
+                <span className="truncate text-xs font-medium">Player Spawn</span>
+                <Button
+                  aria-label="Place player spawn"
+                  aria-pressed={activeViewportToolMode === "player-spawn"}
+                  onClick={() => onActivateViewportToolMode("player-spawn")}
+                  size="icon-sm"
+                  title="Place player spawn"
+                  type="button"
+                  variant={
+                    activeViewportToolMode === "player-spawn"
+                      ? "default"
+                      : "outline"
+                  }
+                >
+                  <PlusCircleIcon />
+                </Button>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/70 bg-background/55 px-2 py-1.5">
+                <span className="truncate text-xs font-medium">Portal</span>
+                <Button
+                  aria-label="Place portal"
+                  aria-pressed={activeViewportToolMode === "portal"}
+                  onClick={() => onActivateViewportToolMode("portal")}
+                  size="icon-sm"
+                  title="Place portal"
+                  type="button"
+                  variant={
+                    activeViewportToolMode === "portal" ? "default" : "outline"
+                  }
+                >
+                  <PlusCircleIcon />
+                </Button>
+              </div>
+            </div>
+          </div>
 
           <Section
             onOpenChange={onSectionOpenChange}

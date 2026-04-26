@@ -7,6 +7,7 @@ import {
   type MetaverseUnmountedTraversalStateSnapshot
 } from "@webgpu-metaverse/shared/metaverse/traversal";
 import {
+  createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot,
   type MetaverseWorldSurfacePolicyConfig
 } from "@webgpu-metaverse/shared/metaverse/world";
 import type {
@@ -148,7 +149,21 @@ class MetaverseAuthoritativeDynamicSurfaceCollisionMeshRuntime {
     }
 
     const rotation = createYawQuaternion(poseSnapshot.yawRadians);
-    this.#surfaceColliderSnapshots = Object.freeze([]);
+    this.#surfaceColliderSnapshots = Object.freeze(
+      this.#triMeshes.flatMap((triMesh) => {
+        const supportSnapshot =
+          createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
+            this.#environmentAssetId,
+            triMesh,
+            {
+              position: poseSnapshot.position,
+              yawRadians: poseSnapshot.yawRadians
+            }
+          );
+
+        return supportSnapshot === null ? [] : [supportSnapshot];
+      })
+    );
 
     if (this.#colliders.length === 0) {
       this.#colliders = this.#triMeshes.map((triMesh) =>
@@ -419,6 +434,20 @@ export class MetaverseAuthoritativeWorldSurfaceState<
       const rotation = createYawQuaternion(seedSnapshot.yawRadians);
 
       for (const triMesh of seedSnapshot.triMeshes) {
+        const supportSnapshot =
+          createMetaverseWorldPlacedSurfaceTriMeshSupportSnapshot(
+            seedSnapshot.environmentAssetId,
+            triMesh,
+            {
+              position: seedSnapshot.position,
+              yawRadians: seedSnapshot.yawRadians
+            }
+          );
+
+        if (supportSnapshot !== null) {
+          this.#staticSurfaceColliderSnapshots.push(supportSnapshot);
+        }
+
         const collider = this.#dependencies.physicsRuntime.createTriMeshCollider(
           triMesh.vertices,
           triMesh.indices,

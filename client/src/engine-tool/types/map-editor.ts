@@ -8,7 +8,8 @@ export type MapEditorViewportTransformToolMode =
   | "move"
   | "rotate"
   | "scale"
-  | "select";
+  | "select"
+  | "vertex";
 
 export type MapEditorBuildToolMode =
   | "cover"
@@ -68,9 +69,16 @@ export const defaultMapEditorMaterialPaletteIds =
     "glass",
     "team-blue",
     "team-red",
+    "terrain-basalt",
+    "terrain-cliff",
+    "terrain-dirt",
+    "terrain-gravel",
     "terrain-rock",
     "terrain-ash",
-    "terrain-grass"
+    "terrain-grass",
+    "terrain-moss",
+    "terrain-sand",
+    "terrain-snow"
   ]);
 
 export interface MapEditorBuilderToolStateSnapshot {
@@ -100,6 +108,7 @@ export interface MapEditorBuilderToolStateSnapshot {
   readonly terrainBrushMode: MapEditorTerrainBrushMode;
   readonly terrainBrushStrengthMeters: number;
   readonly terrainBrushSizeCells: MapEditorTerrainBrushSizeCells;
+  readonly terrainCliffSpanCells: number;
   readonly terrainBrushTargetHeightMeters: number;
   readonly terrainMaterialId: MetaverseMapBundleSemanticMaterialId;
   readonly terrainGenerationFrequency: number;
@@ -141,12 +150,13 @@ export const defaultMapEditorBuilderToolState =
     pathElevationMode: "flat",
     pathSlopeLengthCells: 2,
     pathSlopeRotationDegrees: 0,
-    pathWidthCells: 1,
+    pathWidthCells: 2,
     riseLayers: 1,
     surfaceMode: "flat",
     terrainBrushMode: "raise",
     terrainBrushStrengthMeters: 0.5,
     terrainBrushSizeCells: 2,
+    terrainCliffSpanCells: 2,
     terrainBrushTargetHeightMeters: 0,
     terrainMaterialId: "terrain-grass",
     terrainGenerationFrequency: 0.08,
@@ -259,6 +269,7 @@ export type MapEditorViewportTransformTargetKind =
   | "structure"
   | "surface"
   | "terrain-patch"
+  | "terrain-vertex"
   | "water-region";
 
 export interface MapEditorViewportTransformTargetRef {

@@ -182,6 +182,11 @@ export class MapEditorViewportTransformController {
         this.#controls.showY = false;
         this.#controls.showZ = false;
         break;
+      case "vertex":
+        this.#controls.showX = false;
+        this.#controls.showY = true;
+        this.#controls.showZ = false;
+        break;
       case "rotate":
         this.#controls.showX = false;
         this.#controls.showY = true;

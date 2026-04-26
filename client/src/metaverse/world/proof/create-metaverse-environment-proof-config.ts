@@ -428,8 +428,15 @@ function resolveSurfaceMeshMaterialId(
     case "glass":
     case "metal":
     case "terrain-ash":
+    case "terrain-basalt":
+    case "terrain-cliff":
+    case "terrain-dirt":
+    case "terrain-gravel":
     case "terrain-grass":
+    case "terrain-moss":
     case "terrain-rock":
+    case "terrain-sand":
+    case "terrain-snow":
     case "team-blue":
     case "team-red":
     case "warning":

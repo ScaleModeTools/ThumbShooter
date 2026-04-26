@@ -1460,6 +1460,24 @@ export class MetaverseAuthoritativeCombatAuthority<
     this.#trimFeedEvents();
   }
 
+  #preparePlayerForMatchStart(
+    combatState: MutableMetaverseCombatPlayerRuntimeState
+  ): void {
+    combatState.alive = true;
+    combatState.health = combatState.maxHealth;
+    combatState.respawnRemainingMs = 0;
+    combatState.spawnProtectionRemainingMs = spawnProtectionDurationMs;
+    combatState.damageLedgerByAttackerId.clear();
+
+    for (const weaponState of combatState.weaponsById.values()) {
+      const weaponProfile = readMetaverseCombatWeaponProfile(weaponState.weaponId);
+
+      weaponState.ammoInMagazine = weaponProfile.magazine.magazineCapacity;
+      weaponState.ammoInReserve = weaponProfile.magazine.reserveCapacity;
+      weaponState.reloadRemainingMs = 0;
+    }
+  }
+
   #startMatch(nowMs: number): void {
     this.#matchState.completedAtTimeMs = null;
     this.#matchState.phase = "active";
@@ -1485,7 +1503,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       combatState.playerActionReceiptSequenceOrder.length = 0;
       combatState.recentPlayerActionReceiptsBySequence.clear();
       combatState.damageLedgerByAttackerId.clear();
-      this.#respawnPlayer(playerRuntime, combatState, nowMs);
+      this.#preparePlayerForMatchStart(combatState);
     }
   }
 

@@ -1,0 +1,2519 @@
+{
+  "compiledWorld": {
+    "chunkSizeMeters": 24,
+    "chunks": [
+      {
+        "bounds": {
+          "center": {
+            "x": -12,
+            "y": 0,
+            "z": 12
+          },
+          "size": {
+            "x": 24,
+            "y": 24,
+            "z": 24
+          }
+        },
+        "chunkId": "chunk:-1:0",
+        "collision": {
+          "boxes": [],
+          "heightfields": [],
+          "triMeshes": []
+        },
+        "navigation": {
+          "connectorIds": [],
+          "gameplayVolumeIds": [],
+          "regionIds": [],
+          "surfaceIds": []
+        },
+        "render": {
+          "edgeIds": [],
+          "instancedModuleAssetIds": [
+            "metaverse-hub-pushable-crate-v1"
+          ],
+          "lightIds": [],
+          "regionIds": [],
+          "structureIds": [],
+          "terrainPatchIds": [],
+          "transparentEntityIds": []
+        }
+      },
+      {
+        "bounds": {
+          "center": {
+            "x": 12,
+            "y": 0,
+            "z": 12
+          },
+          "size": {
+            "x": 24,
+            "y": 24,
+            "z": 24
+          }
+        },
+        "chunkId": "chunk:0:0",
+        "collision": {
+          "boxes": [
+            {
+              "center": {
+                "x": 0,
+                "y": 0.3,
+                "z": 0
+              },
+              "ownerId": "region:metaverse-playground-range-floor-v1:1",
+              "ownerKind": "region",
+              "rotationYRadians": 0,
+              "size": {
+                "x": 72,
+                "y": 0.6,
+                "z": 82
+              },
+              "traversalAffordance": "support"
+            }
+          ],
+          "heightfields": [],
+          "triMeshes": []
+        },
+        "navigation": {
+          "connectorIds": [],
+          "gameplayVolumeIds": [],
+          "regionIds": [
+            "region:metaverse-playground-range-floor-v1:1"
+          ],
+          "surfaceIds": [
+            "surface:metaverse-playground-range-floor-v1:1"
+          ]
+        },
+        "render": {
+          "edgeIds": [],
+          "instancedModuleAssetIds": [],
+          "lightIds": [],
+          "regionIds": [
+            "region:metaverse-playground-range-floor-v1:1"
+          ],
+          "structureIds": [],
+          "terrainPatchIds": [],
+          "transparentEntityIds": []
+        }
+      },
+      {
+        "bounds": {
+          "center": {
+            "x": 36,
+            "y": 0,
+            "z": 12
+          },
+          "size": {
+            "x": 24,
+            "y": 24,
+            "z": 24
+          }
+        },
+        "chunkId": "chunk:1:0",
+        "collision": {
+          "boxes": [
+            {
+              "center": {
+                "x": 39.5,
+                "y": 0.43000000000000005,
+                "z": 10
+              },
+              "ownerId": "module:metaverse-hub-dock-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 0,
+              "size": {
+                "x": 8.4,
+                "y": 0.5,
+                "z": 4.2
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 47.9,
+                "y": 0.43000000000000005,
+                "z": 10
+              },
+              "ownerId": "module:metaverse-hub-dock-v1:2",
+              "ownerKind": "module",
+              "rotationYRadians": 0,
+              "size": {
+                "x": 8.4,
+                "y": 0.5,
+                "z": 4.2
+              },
+              "traversalAffordance": "support"
+            }
+          ],
+          "heightfields": [],
+          "triMeshes": []
+        },
+        "navigation": {
+          "connectorIds": [],
+          "gameplayVolumeIds": [],
+          "regionIds": [],
+          "surfaceIds": []
+        },
+        "render": {
+          "edgeIds": [],
+          "instancedModuleAssetIds": [
+            "metaverse-hub-dock-v1"
+          ],
+          "lightIds": [],
+          "regionIds": [],
+          "structureIds": [],
+          "terrainPatchIds": [],
+          "transparentEntityIds": []
+        }
+      },
+      {
+        "bounds": {
+          "center": {
+            "x": 60,
+            "y": 0,
+            "z": 12
+          },
+          "size": {
+            "x": 24,
+            "y": 24,
+            "z": 24
+          }
+        },
+        "chunkId": "chunk:2:0",
+        "collision": {
+          "boxes": [
+            {
+              "center": {
+                "x": 58.5,
+                "y": 0.4,
+                "z": 0.5
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 5.8,
+                "y": 0.56,
+                "z": 2.6
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 58.5,
+                "y": 0.74,
+                "z": 0.5
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 5.2,
+                "y": 0.5,
+                "z": 2
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 58.5,
+                "y": 1.06,
+                "z": -0.8500000000000001
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 0.9,
+                "y": 0.5,
+                "z": 0.8
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 58.5,
+                "y": 1.2999999999999998,
+                "z": -1.22
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 0.62,
+                "y": 0.58,
+                "z": 0.84
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 57.76,
+                "y": 1.04,
+                "z": 0.49999999999999994
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 2.6,
+                "y": 0.5,
+                "z": 0.52
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 57.62,
+                "y": 1.2400000000000002,
+                "z": 0.49999999999999994
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 2.6,
+                "y": 0.5,
+                "z": 0.5
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 59.24,
+                "y": 1.04,
+                "z": 0.5
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 2.6,
+                "y": 0.5,
+                "z": 0.52
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 59.38,
+                "y": 1.2400000000000002,
+                "z": 0.5
+              },
+              "ownerId": "module:metaverse-hub-skiff-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.5707963267948966,
+              "size": {
+                "x": 2.6,
+                "y": 0.5,
+                "z": 0.5
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 68.5,
+                "y": 0.44000000000000006,
+                "z": 18
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 10.8,
+                "y": 0.56,
+                "z": 3.6
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 68.5,
+                "y": 0.8,
+                "z": 18
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 9.8,
+                "y": 0.5,
+                "z": 2.6
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 68.76372018202312,
+                "y": 0.8,
+                "z": 22.19171225939874
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 1.6,
+                "y": 0.5,
+                "z": 2.2
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 68.8557185480065,
+                "y": 1.1199999999999999,
+                "z": 15.37247943593125
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 1.1,
+                "y": 0.5,
+                "z": 0.9
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 67.50084989286195,
+                "y": 1.08,
+                "z": 18.363454348448382
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 5.8,
+                "y": 0.5,
+                "z": 0.56
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 67.34116561631343,
+                "y": 1.2999999999999998,
+                "z": 18.37350083157307
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 5.8,
+                "y": 0.5,
+                "z": 0.5
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 69.53682441885563,
+                "y": 1.08,
+                "z": 18.23536168860858
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 5.8,
+                "y": 0.5,
+                "z": 0.56
+              },
+              "traversalAffordance": "support"
+            },
+            {
+              "center": {
+                "x": 69.69650869540415,
+                "y": 1.2999999999999998,
+                "z": 18.22531520548389
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 5.8,
+                "y": 0.5,
+                "z": 0.5
+              },
+              "traversalAffordance": "blocker"
+            },
+            {
+              "center": {
+                "x": 68.75132189127538,
+                "y": 1.3399999999999999,
+                "z": 14.827960071662753
+              },
+              "ownerId": "module:metaverse-hub-dive-boat-v1:1",
+              "ownerKind": "module",
+              "rotationYRadians": 1.6336281798666925,
+              "size": {
+                "x": 0.9,
+                "y": 0.72,
+                "z": 0.92
+              },
+              "traversalAffordance": "blocker"
+            }
+          ],
+          "heightfields": [],
+          "triMeshes": []
+        },
+        "navigation": {
+          "connectorIds": [],
+          "gameplayVolumeIds": [],
+          "regionIds": [],
+          "surfaceIds": []
+        },
+        "render": {
+          "edgeIds": [],
+          "instancedModuleAssetIds": [
+            "metaverse-hub-skiff-v1",
+            "metaverse-hub-dive-boat-v1"
+          ],
+          "lightIds": [],
+          "regionIds": [],
+          "structureIds": [],
+          "terrainPatchIds": [],
+          "transparentEntityIds": []
+        }
+      }
+    ],
+    "compatibilityEnvironmentAssets": [
+      {
+        "assetId": "metaverse-builder-floor-tile-v1",
+        "collisionPath": null,
+        "collider": null,
+        "dynamicBody": null,
+        "entries": null,
+        "placementMode": "instanced",
+        "seats": null,
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.25,
+              "z": 0
+            },
+            "size": {
+              "x": 4,
+              "y": 0.5,
+              "z": 4
+            },
+            "traversalAffordance": "support"
+          }
+        ],
+        "traversalAffordance": "support",
+        "placements": [
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "region:region:metaverse-playground-range-floor-v1:1",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotationYRadians": 0,
+            "scale": {
+              "x": 18,
+              "y": 1.2,
+              "z": 20.5
+            }
+          }
+        ]
+      },
+      {
+        "assetId": "metaverse-hub-dock-v1",
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-dock-high.gltf",
+        "collider": null,
+        "dynamicBody": null,
+        "entries": null,
+        "placementMode": "static",
+        "seats": null,
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.17,
+              "z": 0
+            },
+            "size": {
+              "x": 8.4,
+              "y": 0.34,
+              "z": 4.2
+            },
+            "traversalAffordance": "support"
+          }
+        ],
+        "traversalAffordance": "support",
+        "placements": [
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "module:metaverse-hub-dock-v1:1",
+            "position": {
+              "x": 39.5,
+              "y": 0.26,
+              "z": 10
+            },
+            "rotationYRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          },
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "module:metaverse-hub-dock-v1:2",
+            "position": {
+              "x": 47.9,
+              "y": 0.26,
+              "z": 10
+            },
+            "rotationYRadians": 0,
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ]
+      },
+      {
+        "assetId": "metaverse-hub-pushable-crate-v1",
+        "collisionPath": null,
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.92,
+            "y": 0.92,
+            "z": 0.92
+          }
+        },
+        "dynamicBody": {
+          "additionalMass": 12,
+          "angularDamping": 10,
+          "gravityScale": 1,
+          "kind": "dynamic-rigid-body",
+          "linearDamping": 4.5,
+          "lockRotations": true
+        },
+        "entries": null,
+        "placementMode": "dynamic",
+        "seats": null,
+        "surfaceColliders": [],
+        "traversalAffordance": "blocker",
+        "placements": [
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "module:metaverse-hub-pushable-crate-v1:1",
+            "position": {
+              "x": -8,
+              "y": 0.46,
+              "z": 14
+            },
+            "rotationYRadians": -0.25132741228718347,
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ]
+      },
+      {
+        "assetId": "metaverse-hub-skiff-v1",
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-skiff-collision.gltf",
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 1.05,
+            "z": 0
+          },
+          "size": {
+            "x": 6.2,
+            "y": 2.4,
+            "z": 3.2
+          }
+        },
+        "dynamicBody": null,
+        "entries": [
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "deck-entry",
+            "label": "Board deck",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          }
+        ],
+        "placementMode": "dynamic",
+        "seats": [
+          {
+            "cameraPolicyId": "vehicle-follow",
+            "controlRoutingPolicyId": "vehicle-surface-drive",
+            "directEntryEnabled": true,
+            "label": "Take helm",
+            "lookLimitPolicyId": "driver-forward",
+            "occupancyAnimationId": "seated",
+            "seatId": "driver-seat",
+            "seatRole": "driver"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench front",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench rear",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-rear",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench front",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench rear",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-rear",
+            "seatRole": "passenger"
+          }
+        ],
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.28,
+              "z": 0
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.56,
+              "z": 2.6
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.62,
+              "z": 0
+            },
+            "size": {
+              "x": 5.2,
+              "y": 0.12,
+              "z": 2
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 1.35,
+              "y": 0.94,
+              "z": 0
+            },
+            "size": {
+              "x": 0.9,
+              "y": 0.18,
+              "z": 0.8
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 1.72,
+              "y": 1.18,
+              "z": 0
+            },
+            "size": {
+              "x": 0.62,
+              "y": 0.58,
+              "z": 0.84
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.92,
+              "z": -0.74
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.16,
+              "z": 0.52
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 1.12,
+              "z": -0.88
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.42,
+              "z": 0.24
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.92,
+              "z": 0.74
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.16,
+              "z": 0.52
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 1.12,
+              "z": 0.88
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.42,
+              "z": 0.24
+            },
+            "traversalAffordance": "blocker"
+          }
+        ],
+        "traversalAffordance": "mount",
+        "placements": [
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "module:metaverse-hub-skiff-v1:1",
+            "position": {
+              "x": 58.5,
+              "y": 0.12,
+              "z": 0.5
+            },
+            "rotationYRadians": 1.5707963267948966,
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ]
+      },
+      {
+        "assetId": "metaverse-hub-dive-boat-v1",
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-dive-boat-collision.gltf",
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 1.62,
+            "z": 0
+          },
+          "size": {
+            "x": 11.6,
+            "y": 3.8,
+            "z": 4.2
+          }
+        },
+        "dynamicBody": null,
+        "entries": [
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "stern-port-entry",
+            "label": "Board port stern",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "stern-starboard-entry",
+            "label": "Board starboard stern",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          }
+        ],
+        "placementMode": "dynamic",
+        "seats": [
+          {
+            "cameraPolicyId": "vehicle-follow",
+            "controlRoutingPolicyId": "vehicle-surface-drive",
+            "directEntryEnabled": true,
+            "label": "Take helm",
+            "lookLimitPolicyId": "driver-forward",
+            "occupancyAnimationId": "seated",
+            "seatId": "helm-seat",
+            "seatRole": "driver"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench A",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-a",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench B",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-b",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench C",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-c",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench A",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-a",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench B",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-b",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench C",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-c",
+            "seatRole": "passenger"
+          }
+        ],
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.28,
+              "z": 0
+            },
+            "size": {
+              "x": 10.8,
+              "y": 0.56,
+              "z": 3.6
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.64,
+              "z": 0
+            },
+            "size": {
+              "x": 9.8,
+              "y": 0.12,
+              "z": 2.6
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -4.2,
+              "y": 0.64,
+              "z": 0
+            },
+            "size": {
+              "x": 1.6,
+              "y": 0.12,
+              "z": 2.2
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 2.6,
+              "y": 0.96,
+              "z": 0.52
+            },
+            "size": {
+              "x": 1.1,
+              "y": 0.16,
+              "z": 0.9
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 0.92,
+              "z": -1.02
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.16,
+              "z": 0.56
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 1.14,
+              "z": -1.18
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.46,
+              "z": 0.26
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 0.92,
+              "z": 1.02
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.16,
+              "z": 0.56
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 1.14,
+              "z": 1.18
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.46,
+              "z": 0.26
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 3.15,
+              "y": 1.18,
+              "z": 0.45
+            },
+            "size": {
+              "x": 0.9,
+              "y": 0.72,
+              "z": 0.92
+            },
+            "traversalAffordance": "blocker"
+          }
+        ],
+        "traversalAffordance": "mount",
+        "placements": [
+          {
+            "collisionEnabled": true,
+            "isVisible": true,
+            "materialReferenceId": null,
+            "notes": "",
+            "placementId": "module:metaverse-hub-dive-boat-v1:1",
+            "position": {
+              "x": 68.5,
+              "y": 0.16,
+              "z": 18
+            },
+            "rotationYRadians": 1.6336281798666925,
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Semantic staging-ground shell bundle compiled from the authored support slice.",
+  "environmentAssets": [
+    {
+      "assetId": "metaverse-builder-floor-tile-v1",
+      "collisionPath": null,
+      "collider": null,
+      "dynamicBody": null,
+      "entries": null,
+      "placementMode": "instanced",
+      "seats": null,
+      "surfaceColliders": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0.25,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 0.5,
+            "z": 4
+          },
+          "traversalAffordance": "support"
+        }
+      ],
+      "traversalAffordance": "support",
+      "placements": [
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "region:region:metaverse-playground-range-floor-v1:1",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "rotationYRadians": 0,
+          "scale": {
+            "x": 18,
+            "y": 1.2,
+            "z": 20.5
+          }
+        }
+      ]
+    },
+    {
+      "assetId": "metaverse-hub-dock-v1",
+      "collisionPath": "/models/metaverse/environment/metaverse-hub-dock-high.gltf",
+      "collider": null,
+      "dynamicBody": null,
+      "entries": null,
+      "placementMode": "static",
+      "seats": null,
+      "surfaceColliders": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0.17,
+            "z": 0
+          },
+          "size": {
+            "x": 8.4,
+            "y": 0.34,
+            "z": 4.2
+          },
+          "traversalAffordance": "support"
+        }
+      ],
+      "traversalAffordance": "support",
+      "placements": [
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "module:metaverse-hub-dock-v1:1",
+          "position": {
+            "x": 39.5,
+            "y": 0.26,
+            "z": 10
+          },
+          "rotationYRadians": 0,
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "module:metaverse-hub-dock-v1:2",
+          "position": {
+            "x": 47.9,
+            "y": 0.26,
+            "z": 10
+          },
+          "rotationYRadians": 0,
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ]
+    },
+    {
+      "assetId": "metaverse-hub-pushable-crate-v1",
+      "collisionPath": null,
+      "collider": {
+        "center": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "size": {
+          "x": 0.92,
+          "y": 0.92,
+          "z": 0.92
+        }
+      },
+      "dynamicBody": {
+        "additionalMass": 12,
+        "angularDamping": 10,
+        "gravityScale": 1,
+        "kind": "dynamic-rigid-body",
+        "linearDamping": 4.5,
+        "lockRotations": true
+      },
+      "entries": null,
+      "placementMode": "dynamic",
+      "seats": null,
+      "surfaceColliders": [],
+      "traversalAffordance": "blocker",
+      "placements": [
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "module:metaverse-hub-pushable-crate-v1:1",
+          "position": {
+            "x": -8,
+            "y": 0.46,
+            "z": 14
+          },
+          "rotationYRadians": -0.25132741228718347,
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ]
+    },
+    {
+      "assetId": "metaverse-hub-skiff-v1",
+      "collisionPath": "/models/metaverse/environment/metaverse-hub-skiff-collision.gltf",
+      "collider": {
+        "center": {
+          "x": 0,
+          "y": 1.05,
+          "z": 0
+        },
+        "size": {
+          "x": 6.2,
+          "y": 2.4,
+          "z": 3.2
+        }
+      },
+      "dynamicBody": null,
+      "entries": [
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "entryId": "deck-entry",
+          "label": "Board deck",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "standing",
+          "occupantRole": "passenger"
+        }
+      ],
+      "placementMode": "dynamic",
+      "seats": [
+        {
+          "cameraPolicyId": "vehicle-follow",
+          "controlRoutingPolicyId": "vehicle-surface-drive",
+          "directEntryEnabled": true,
+          "label": "Take helm",
+          "lookLimitPolicyId": "driver-forward",
+          "occupancyAnimationId": "seated",
+          "seatId": "driver-seat",
+          "seatRole": "driver"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Port bench front",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "port-bench-seat",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Port bench rear",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "port-bench-seat-rear",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Starboard bench front",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "starboard-bench-seat",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Starboard bench rear",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "starboard-bench-seat-rear",
+          "seatRole": "passenger"
+        }
+      ],
+      "surfaceColliders": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0.28,
+            "z": 0
+          },
+          "size": {
+            "x": 5.8,
+            "y": 0.56,
+            "z": 2.6
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0.62,
+            "z": 0
+          },
+          "size": {
+            "x": 5.2,
+            "y": 0.12,
+            "z": 2
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": 1.35,
+            "y": 0.94,
+            "z": 0
+          },
+          "size": {
+            "x": 0.9,
+            "y": 0.18,
+            "z": 0.8
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": 1.72,
+            "y": 1.18,
+            "z": 0
+          },
+          "size": {
+            "x": 0.62,
+            "y": 0.58,
+            "z": 0.84
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0.92,
+            "z": -0.74
+          },
+          "size": {
+            "x": 2.6,
+            "y": 0.16,
+            "z": 0.52
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 1.12,
+            "z": -0.88
+          },
+          "size": {
+            "x": 2.6,
+            "y": 0.42,
+            "z": 0.24
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0.92,
+            "z": 0.74
+          },
+          "size": {
+            "x": 2.6,
+            "y": 0.16,
+            "z": 0.52
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 1.12,
+            "z": 0.88
+          },
+          "size": {
+            "x": 2.6,
+            "y": 0.42,
+            "z": 0.24
+          },
+          "traversalAffordance": "blocker"
+        }
+      ],
+      "traversalAffordance": "mount",
+      "placements": [
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "module:metaverse-hub-skiff-v1:1",
+          "position": {
+            "x": 58.5,
+            "y": 0.12,
+            "z": 0.5
+          },
+          "rotationYRadians": 1.5707963267948966,
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ]
+    },
+    {
+      "assetId": "metaverse-hub-dive-boat-v1",
+      "collisionPath": "/models/metaverse/environment/metaverse-hub-dive-boat-collision.gltf",
+      "collider": {
+        "center": {
+          "x": 0,
+          "y": 1.62,
+          "z": 0
+        },
+        "size": {
+          "x": 11.6,
+          "y": 3.8,
+          "z": 4.2
+        }
+      },
+      "dynamicBody": null,
+      "entries": [
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "entryId": "stern-port-entry",
+          "label": "Board port stern",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "standing",
+          "occupantRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "entryId": "stern-starboard-entry",
+          "label": "Board starboard stern",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "standing",
+          "occupantRole": "passenger"
+        }
+      ],
+      "placementMode": "dynamic",
+      "seats": [
+        {
+          "cameraPolicyId": "vehicle-follow",
+          "controlRoutingPolicyId": "vehicle-surface-drive",
+          "directEntryEnabled": true,
+          "label": "Take helm",
+          "lookLimitPolicyId": "driver-forward",
+          "occupancyAnimationId": "seated",
+          "seatId": "helm-seat",
+          "seatRole": "driver"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Port bench A",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "port-bench-seat-a",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Port bench B",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "port-bench-seat-b",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Port bench C",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "port-bench-seat-c",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Starboard bench A",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "starboard-bench-seat-a",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Starboard bench B",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "starboard-bench-seat-b",
+          "seatRole": "passenger"
+        },
+        {
+          "cameraPolicyId": "seat-follow",
+          "controlRoutingPolicyId": "look-only",
+          "directEntryEnabled": false,
+          "label": "Starboard bench C",
+          "lookLimitPolicyId": "passenger-bench",
+          "occupancyAnimationId": "seated",
+          "seatId": "starboard-bench-seat-c",
+          "seatRole": "passenger"
+        }
+      ],
+      "surfaceColliders": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0.28,
+            "z": 0
+          },
+          "size": {
+            "x": 10.8,
+            "y": 0.56,
+            "z": 3.6
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0.64,
+            "z": 0
+          },
+          "size": {
+            "x": 9.8,
+            "y": 0.12,
+            "z": 2.6
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": -4.2,
+            "y": 0.64,
+            "z": 0
+          },
+          "size": {
+            "x": 1.6,
+            "y": 0.12,
+            "z": 2.2
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": 2.6,
+            "y": 0.96,
+            "z": 0.52
+          },
+          "size": {
+            "x": 1.1,
+            "y": 0.16,
+            "z": 0.9
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": -0.3,
+            "y": 0.92,
+            "z": -1.02
+          },
+          "size": {
+            "x": 5.8,
+            "y": 0.16,
+            "z": 0.56
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": -0.3,
+            "y": 1.14,
+            "z": -1.18
+          },
+          "size": {
+            "x": 5.8,
+            "y": 0.46,
+            "z": 0.26
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": -0.3,
+            "y": 0.92,
+            "z": 1.02
+          },
+          "size": {
+            "x": 5.8,
+            "y": 0.16,
+            "z": 0.56
+          },
+          "traversalAffordance": "support"
+        },
+        {
+          "center": {
+            "x": -0.3,
+            "y": 1.14,
+            "z": 1.18
+          },
+          "size": {
+            "x": 5.8,
+            "y": 0.46,
+            "z": 0.26
+          },
+          "traversalAffordance": "blocker"
+        },
+        {
+          "center": {
+            "x": 3.15,
+            "y": 1.18,
+            "z": 0.45
+          },
+          "size": {
+            "x": 0.9,
+            "y": 0.72,
+            "z": 0.92
+          },
+          "traversalAffordance": "blocker"
+        }
+      ],
+      "traversalAffordance": "mount",
+      "placements": [
+        {
+          "collisionEnabled": true,
+          "isVisible": true,
+          "materialReferenceId": null,
+          "notes": "",
+          "placementId": "module:metaverse-hub-dive-boat-v1:1",
+          "position": {
+            "x": 68.5,
+            "y": 0.16,
+            "z": 18
+          },
+          "rotationYRadians": 1.6336281798666925,
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ]
+    }
+  ],
+  "environmentPresentation": null,
+  "gameplayProfileId": "shell-default-gameplay",
+  "label": "Private",
+  "launchVariations": [
+    {
+      "description": "Stay in the shell and preview the authored staging-ground map.",
+      "experienceId": null,
+      "gameplayVariationId": null,
+      "label": "Free Roam",
+      "matchMode": "free-roam",
+      "variationId": "shell-free-roam",
+      "vehicleLayoutId": null,
+      "weaponLayoutId": null
+    },
+    {
+      "description": "Boot the staging-ground instance into authoritative red-vs-blue team deathmatch.",
+      "experienceId": null,
+      "gameplayVariationId": "metaverse-shell-team-deathmatch-v1",
+      "label": "Shell Team Deathmatch",
+      "matchMode": "team-deathmatch",
+      "variationId": "shell-team-deathmatch",
+      "vehicleLayoutId": null,
+      "weaponLayoutId": "duck-hunt-default-pistol-layout"
+    },
+    {
+      "description": "Launch the current Duck Hunt preview slice from this authored map variation.",
+      "experienceId": "duck-hunt",
+      "gameplayVariationId": "duck-hunt-standard-preview",
+      "label": "Duck Hunt Preview",
+      "matchMode": "free-roam",
+      "variationId": "duck-hunt-preview",
+      "vehicleLayoutId": "staging-ground-default-vehicle-layout",
+      "weaponLayoutId": "duck-hunt-default-pistol-layout"
+    }
+  ],
+  "mapId": "private-build",
+  "playerSpawnNodes": [
+    {
+      "label": "Default shell spawn",
+      "position": {
+        "x": -8.2,
+        "y": 0.6,
+        "z": -14.8
+      },
+      "spawnId": "shell-default-spawn",
+      "teamId": "neutral",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "label": "Blue team north",
+      "position": {
+        "x": -17.2,
+        "y": 0.6,
+        "z": -22.2
+      },
+      "spawnId": "shell-blue-north",
+      "teamId": "blue",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "label": "Blue team south",
+      "position": {
+        "x": -17.2,
+        "y": 0.6,
+        "z": -7.4
+      },
+      "spawnId": "shell-blue-south",
+      "teamId": "blue",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "label": "Red team north",
+      "position": {
+        "x": 0.8,
+        "y": 0.6,
+        "z": -22.2
+      },
+      "spawnId": "shell-red-north",
+      "teamId": "red",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "label": "Red team south",
+      "position": {
+        "x": 0.8,
+        "y": 0.6,
+        "z": -7.4
+      },
+      "spawnId": "shell-red-south",
+      "teamId": "red",
+      "yawRadians": 0.18849555921538758
+    }
+  ],
+  "playerSpawnSelection": {
+    "enemyAvoidanceRadiusMeters": 18,
+    "homeTeamBiasMeters": 12
+  },
+  "presentationProfileIds": {
+    "cameraProfileId": "shell-default-camera",
+    "characterPresentationProfileId": "shell-default-character-presentation",
+    "environmentPresentationProfileId": "shell-default-environment-presentation",
+    "hudProfileId": "shell-default-hud"
+  },
+  "resourceSpawns": [],
+  "sceneObjects": [
+    {
+      "assetId": null,
+      "capabilities": [
+        {
+          "beamColor": [
+            0.96,
+            0.81,
+            0.38
+          ],
+          "experienceId": "duck-hunt",
+          "highlightRadius": 34,
+          "interactionRadius": 18,
+          "kind": "launch-target",
+          "ringColor": [
+            0.96,
+            0.73,
+            0.25
+          ]
+        }
+      ],
+      "label": "Duck Hunt!",
+      "objectId": "duck-hunt-launch-portal",
+      "position": {
+        "x": 0,
+        "y": 6,
+        "z": -34
+      },
+      "rotationYRadians": 0,
+      "scale": 1
+    }
+  ],
+  "semanticWorld": {
+    "compatibilityAssetIds": {
+      "connectorAssetId": "metaverse-builder-step-tile-v1",
+      "floorAssetId": "metaverse-builder-floor-tile-v1",
+      "wallAssetId": "metaverse-builder-wall-tile-v1"
+    },
+    "connectors": [],
+    "edges": [],
+    "gameplayVolumes": [],
+    "lights": [],
+    "materialDefinitions": [],
+    "modules": [
+      {
+        "assetId": "metaverse-hub-dock-v1",
+        "collisionEnabled": true,
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-dock-high.gltf",
+        "collider": null,
+        "dynamicBody": null,
+        "entries": null,
+        "isVisible": true,
+        "label": "metaverse-hub-dock-v1",
+        "materialReferenceId": null,
+        "moduleId": "module:metaverse-hub-dock-v1:1",
+        "notes": "",
+        "placementMode": "static",
+        "position": {
+          "x": 39.5,
+          "y": 0.26,
+          "z": 10
+        },
+        "rotationYRadians": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "seats": null,
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.17,
+              "z": 0
+            },
+            "size": {
+              "x": 8.4,
+              "y": 0.34,
+              "z": 4.2
+            },
+            "traversalAffordance": "support"
+          }
+        ],
+        "traversalAffordance": "support"
+      },
+      {
+        "assetId": "metaverse-hub-dock-v1",
+        "collisionEnabled": true,
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-dock-high.gltf",
+        "collider": null,
+        "dynamicBody": null,
+        "entries": null,
+        "isVisible": true,
+        "label": "metaverse-hub-dock-v1",
+        "materialReferenceId": null,
+        "moduleId": "module:metaverse-hub-dock-v1:2",
+        "notes": "",
+        "placementMode": "static",
+        "position": {
+          "x": 47.9,
+          "y": 0.26,
+          "z": 10
+        },
+        "rotationYRadians": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "seats": null,
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.17,
+              "z": 0
+            },
+            "size": {
+              "x": 8.4,
+              "y": 0.34,
+              "z": 4.2
+            },
+            "traversalAffordance": "support"
+          }
+        ],
+        "traversalAffordance": "support"
+      },
+      {
+        "assetId": "metaverse-hub-pushable-crate-v1",
+        "collisionEnabled": true,
+        "collisionPath": null,
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.92,
+            "y": 0.92,
+            "z": 0.92
+          }
+        },
+        "dynamicBody": {
+          "additionalMass": 12,
+          "angularDamping": 10,
+          "gravityScale": 1,
+          "kind": "dynamic-rigid-body",
+          "linearDamping": 4.5,
+          "lockRotations": true
+        },
+        "entries": null,
+        "isVisible": true,
+        "label": "metaverse-hub-pushable-crate-v1",
+        "materialReferenceId": null,
+        "moduleId": "module:metaverse-hub-pushable-crate-v1:1",
+        "notes": "",
+        "placementMode": "dynamic",
+        "position": {
+          "x": -8,
+          "y": 0.46,
+          "z": 14
+        },
+        "rotationYRadians": -0.25132741228718347,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "seats": null,
+        "surfaceColliders": [],
+        "traversalAffordance": "blocker"
+      },
+      {
+        "assetId": "metaverse-hub-skiff-v1",
+        "collisionEnabled": true,
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-skiff-collision.gltf",
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 1.05,
+            "z": 0
+          },
+          "size": {
+            "x": 6.2,
+            "y": 2.4,
+            "z": 3.2
+          }
+        },
+        "dynamicBody": null,
+        "entries": [
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "deck-entry",
+            "label": "Board deck",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          }
+        ],
+        "isVisible": true,
+        "label": "metaverse-hub-skiff-v1",
+        "materialReferenceId": null,
+        "moduleId": "module:metaverse-hub-skiff-v1:1",
+        "notes": "",
+        "placementMode": "dynamic",
+        "position": {
+          "x": 58.5,
+          "y": 0.12,
+          "z": 0.5
+        },
+        "rotationYRadians": 1.5707963267948966,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "seats": [
+          {
+            "cameraPolicyId": "vehicle-follow",
+            "controlRoutingPolicyId": "vehicle-surface-drive",
+            "directEntryEnabled": true,
+            "label": "Take helm",
+            "lookLimitPolicyId": "driver-forward",
+            "occupancyAnimationId": "seated",
+            "seatId": "driver-seat",
+            "seatRole": "driver"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench front",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench rear",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-rear",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench front",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench rear",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-rear",
+            "seatRole": "passenger"
+          }
+        ],
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.28,
+              "z": 0
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.56,
+              "z": 2.6
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.62,
+              "z": 0
+            },
+            "size": {
+              "x": 5.2,
+              "y": 0.12,
+              "z": 2
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 1.35,
+              "y": 0.94,
+              "z": 0
+            },
+            "size": {
+              "x": 0.9,
+              "y": 0.18,
+              "z": 0.8
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 1.72,
+              "y": 1.18,
+              "z": 0
+            },
+            "size": {
+              "x": 0.62,
+              "y": 0.58,
+              "z": 0.84
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.92,
+              "z": -0.74
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.16,
+              "z": 0.52
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 1.12,
+              "z": -0.88
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.42,
+              "z": 0.24
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.92,
+              "z": 0.74
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.16,
+              "z": 0.52
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 1.12,
+              "z": 0.88
+            },
+            "size": {
+              "x": 2.6,
+              "y": 0.42,
+              "z": 0.24
+            },
+            "traversalAffordance": "blocker"
+          }
+        ],
+        "traversalAffordance": "mount"
+      },
+      {
+        "assetId": "metaverse-hub-dive-boat-v1",
+        "collisionEnabled": true,
+        "collisionPath": "/models/metaverse/environment/metaverse-hub-dive-boat-collision.gltf",
+        "collider": {
+          "center": {
+            "x": 0,
+            "y": 1.62,
+            "z": 0
+          },
+          "size": {
+            "x": 11.6,
+            "y": 3.8,
+            "z": 4.2
+          }
+        },
+        "dynamicBody": null,
+        "entries": [
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "stern-port-entry",
+            "label": "Board port stern",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "entryId": "stern-starboard-entry",
+            "label": "Board starboard stern",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "standing",
+            "occupantRole": "passenger"
+          }
+        ],
+        "isVisible": true,
+        "label": "metaverse-hub-dive-boat-v1",
+        "materialReferenceId": null,
+        "moduleId": "module:metaverse-hub-dive-boat-v1:1",
+        "notes": "",
+        "placementMode": "dynamic",
+        "position": {
+          "x": 68.5,
+          "y": 0.16,
+          "z": 18
+        },
+        "rotationYRadians": 1.6336281798666925,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "seats": [
+          {
+            "cameraPolicyId": "vehicle-follow",
+            "controlRoutingPolicyId": "vehicle-surface-drive",
+            "directEntryEnabled": true,
+            "label": "Take helm",
+            "lookLimitPolicyId": "driver-forward",
+            "occupancyAnimationId": "seated",
+            "seatId": "helm-seat",
+            "seatRole": "driver"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench A",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-a",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench B",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-b",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Port bench C",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "port-bench-seat-c",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench A",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-a",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench B",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-b",
+            "seatRole": "passenger"
+          },
+          {
+            "cameraPolicyId": "seat-follow",
+            "controlRoutingPolicyId": "look-only",
+            "directEntryEnabled": false,
+            "label": "Starboard bench C",
+            "lookLimitPolicyId": "passenger-bench",
+            "occupancyAnimationId": "seated",
+            "seatId": "starboard-bench-seat-c",
+            "seatRole": "passenger"
+          }
+        ],
+        "surfaceColliders": [
+          {
+            "center": {
+              "x": 0,
+              "y": 0.28,
+              "z": 0
+            },
+            "size": {
+              "x": 10.8,
+              "y": 0.56,
+              "z": 3.6
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 0,
+              "y": 0.64,
+              "z": 0
+            },
+            "size": {
+              "x": 9.8,
+              "y": 0.12,
+              "z": 2.6
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -4.2,
+              "y": 0.64,
+              "z": 0
+            },
+            "size": {
+              "x": 1.6,
+              "y": 0.12,
+              "z": 2.2
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": 2.6,
+              "y": 0.96,
+              "z": 0.52
+            },
+            "size": {
+              "x": 1.1,
+              "y": 0.16,
+              "z": 0.9
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 0.92,
+              "z": -1.02
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.16,
+              "z": 0.56
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 1.14,
+              "z": -1.18
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.46,
+              "z": 0.26
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 0.92,
+              "z": 1.02
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.16,
+              "z": 0.56
+            },
+            "traversalAffordance": "support"
+          },
+          {
+            "center": {
+              "x": -0.3,
+              "y": 1.14,
+              "z": 1.18
+            },
+            "size": {
+              "x": 5.8,
+              "y": 0.46,
+              "z": 0.26
+            },
+            "traversalAffordance": "blocker"
+          },
+          {
+            "center": {
+              "x": 3.15,
+              "y": 1.18,
+              "z": 0.45
+            },
+            "size": {
+              "x": 0.9,
+              "y": 0.72,
+              "z": 0.92
+            },
+            "traversalAffordance": "blocker"
+          }
+        ],
+        "traversalAffordance": "mount"
+      }
+    ],
+    "regions": [
+      {
+        "holes": [],
+        "label": "Playground Floor",
+        "materialReferenceId": null,
+        "outerLoop": {
+          "points": [
+            {
+              "x": -36,
+              "z": -41
+            },
+            {
+              "x": 36,
+              "z": -41
+            },
+            {
+              "x": 36,
+              "z": 41
+            },
+            {
+              "x": -36,
+              "z": 41
+            }
+          ]
+        },
+        "regionId": "region:metaverse-playground-range-floor-v1:1",
+        "regionKind": "floor",
+        "surfaceId": "surface:metaverse-playground-range-floor-v1:1"
+      }
+    ],
+    "surfaces": [
+      {
+        "center": {
+          "x": 0,
+          "y": 0.6,
+          "z": 0
+        },
+        "elevation": 0.6,
+        "kind": "flat-slab",
+        "label": "Playground Surface",
+        "rotationYRadians": 0,
+        "size": {
+          "x": 72,
+          "y": 0.6,
+          "z": 82
+        },
+        "slopeRiseMeters": 0,
+        "surfaceId": "surface:metaverse-playground-range-floor-v1:1",
+        "terrainPatchId": null
+      }
+    ],
+    "structures": [],
+    "terrainPatches": []
+  },
+  "waterRegions": [
+    {
+      "center": {
+        "x": 66,
+        "y": -3.6,
+        "z": 10
+      },
+      "rotationYRadians": 0,
+      "size": {
+        "x": 56,
+        "y": 7.2,
+        "z": 46
+      },
+      "waterRegionId": "metaverse-playground-water-bay-v1"
+    }
+  ]
+}

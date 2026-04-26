@@ -939,6 +939,15 @@ function buildModuleCompatibilityAsset(
   });
 }
 
+function shouldUseModuleCollisionMeshSurface(
+  module: Pick<
+    MetaverseMapBundleSemanticModuleSnapshot,
+    "collisionPath" | "dynamicBody"
+  >
+): boolean {
+  return module.dynamicBody === null && module.collisionPath !== null;
+}
+
 interface MutableCompiledChunkRecord {
   readonly chunkId: string;
   readonly collisionBoxes: MetaverseMapBundleCompiledCollisionBoxSnapshot[];
@@ -1073,7 +1082,7 @@ function createTerrainPatchHeightfield(
   });
 }
 
-function createTerrainPatchBlockerTriMesh(
+function createTerrainPatchEdgeSkirtBlockerTriMesh(
   terrainPatch: MetaverseMapBundleSemanticTerrainPatchSnapshot
 ): MetaverseMapBundleCompiledCollisionTriMeshSnapshot | null {
   if (
@@ -1084,7 +1093,7 @@ function createTerrainPatchBlockerTriMesh(
     return null;
   }
 
-  let hasNonGroundHeight = false;
+  let hasNonGroundEdgeHeight = false;
   const vertices: number[] = [];
   const indices: number[] = [];
   const halfX =
@@ -1095,14 +1104,54 @@ function createTerrainPatchBlockerTriMesh(
     sampleX * terrainPatch.sampleSpacingMeters - halfX;
   const readLocalZ = (sampleZ: number): number =>
     sampleZ * terrainPatch.sampleSpacingMeters - halfZ;
-  const readTopIndex = (sampleX: number, sampleZ: number): number =>
-    sampleZ * terrainPatch.sampleCountX + sampleX;
   const pushVertex = (x: number, y: number, z: number): number => {
     const vertexIndex = vertices.length / 3;
 
     vertices.push(x, y, z);
 
     return vertexIndex;
+  };
+  const edgeVertexIndicesBySampleKey = new Map<
+    string,
+    {
+      readonly bottomIndex: number;
+      readonly topIndex: number;
+    }
+  >();
+  const createSampleKey = (sampleX: number, sampleZ: number): string =>
+    `${sampleX}:${sampleZ}`;
+  const readEdgeVertexIndices = (
+    sampleX: number,
+    sampleZ: number
+  ): {
+    readonly bottomIndex: number;
+    readonly topIndex: number;
+  } => {
+    const sampleKey = createSampleKey(sampleX, sampleZ);
+    const existingIndices = edgeVertexIndicesBySampleKey.get(sampleKey);
+
+    if (existingIndices !== undefined) {
+      return existingIndices;
+    }
+
+    const height = resolveTerrainPatchSampleHeight(
+      terrainPatch,
+      sampleX,
+      sampleZ
+    );
+
+    hasNonGroundEdgeHeight =
+      hasNonGroundEdgeHeight ||
+      Math.abs(height) > terrainPatchCollisionHeightEpsilonMeters;
+
+    const nextIndices = Object.freeze({
+      bottomIndex: pushVertex(readLocalX(sampleX), 0, readLocalZ(sampleZ)),
+      topIndex: pushVertex(readLocalX(sampleX), height, readLocalZ(sampleZ))
+    });
+
+    edgeVertexIndicesBySampleKey.set(sampleKey, nextIndices);
+
+    return nextIndices;
   };
   const pushTerrainEdgeSkirt = (
     samples: readonly {
@@ -1114,73 +1163,28 @@ function createTerrainPatchBlockerTriMesh(
       return;
     }
 
-    const bottomIndices = samples.map(({ sampleX, sampleZ }) =>
-      pushVertex(readLocalX(sampleX), 0, readLocalZ(sampleZ))
+    const edgeVertices = samples.map(({ sampleX, sampleZ }) =>
+      readEdgeVertexIndices(sampleX, sampleZ)
     );
 
     for (let index = 0; index < samples.length - 1; index += 1) {
-      const currentSample = samples[index];
-      const nextSample = samples[index + 1];
+      const currentVertex = edgeVertices[index];
+      const nextVertex = edgeVertices[index + 1];
 
-      if (currentSample === undefined || nextSample === undefined) {
+      if (currentVertex === undefined || nextVertex === undefined) {
         continue;
       }
 
-      const topCurrent = readTopIndex(
-        currentSample.sampleX,
-        currentSample.sampleZ
-      );
-      const topNext = readTopIndex(nextSample.sampleX, nextSample.sampleZ);
-      const bottomCurrent = bottomIndices[index] ?? topCurrent;
-      const bottomNext = bottomIndices[index + 1] ?? topNext;
-
       indices.push(
-        topCurrent,
-        bottomCurrent,
-        topNext,
-        topNext,
-        bottomCurrent,
-        bottomNext
+        currentVertex.topIndex,
+        currentVertex.bottomIndex,
+        nextVertex.topIndex,
+        nextVertex.topIndex,
+        currentVertex.bottomIndex,
+        nextVertex.bottomIndex
       );
     }
   };
-
-  for (let sampleZ = 0; sampleZ < terrainPatch.sampleCountZ; sampleZ += 1) {
-    for (let sampleX = 0; sampleX < terrainPatch.sampleCountX; sampleX += 1) {
-      const height = resolveTerrainPatchSampleHeight(
-        terrainPatch,
-        sampleX,
-        sampleZ
-      );
-
-      hasNonGroundHeight =
-        hasNonGroundHeight ||
-        Math.abs(height) > terrainPatchCollisionHeightEpsilonMeters;
-      pushVertex(readLocalX(sampleX), height, readLocalZ(sampleZ));
-    }
-  }
-
-  if (!hasNonGroundHeight) {
-    return null;
-  }
-
-  for (let sampleZ = 0; sampleZ < terrainPatch.sampleCountZ - 1; sampleZ += 1) {
-    for (let sampleX = 0; sampleX < terrainPatch.sampleCountX - 1; sampleX += 1) {
-      const topLeft = readTopIndex(sampleX, sampleZ);
-      const topRight = topLeft + 1;
-      const bottomLeft = topLeft + terrainPatch.sampleCountX;
-      const bottomRight = bottomLeft + 1;
-
-      indices.push(
-        topLeft,
-        bottomLeft,
-        topRight,
-        topRight,
-        bottomLeft,
-        bottomRight
-      );
-    }
-  }
 
   pushTerrainEdgeSkirt(
     Array.from({ length: terrainPatch.sampleCountX }, (_entry, sampleX) => ({
@@ -1206,6 +1210,10 @@ function createTerrainPatchBlockerTriMesh(
       sampleZ: terrainPatch.sampleCountZ - 1 - index
     }))
   );
+
+  if (!hasNonGroundEdgeHeight || indices.length === 0) {
+    return null;
+  }
 
   return Object.freeze({
     indices: Object.freeze(indices),
@@ -1251,7 +1259,9 @@ export function compileMetaverseMapBundleSemanticWorld(
       chunkRecord.collisionHeightfields.push(heightfield);
     }
 
-    const blockerTriMesh = createTerrainPatchBlockerTriMesh(terrainPatch);
+    const blockerTriMesh = createTerrainPatchEdgeSkirtBlockerTriMesh(
+      terrainPatch
+    );
 
     if (blockerTriMesh !== null) {
       chunkRecord.collisionTriMeshes.push(blockerTriMesh);
@@ -1400,19 +1410,21 @@ export function compileMetaverseMapBundleSemanticWorld(
     );
 
     chunkRecord.instancedModuleAssetIds.add(module.assetId);
-    chunkRecord.collisionBoxes.push(
-      ...createCompiledCollisionBoxesForPlacement(
-        module.moduleId,
-        "module",
-        module.assetId,
-        {
-          position: module.position,
-          rotationYRadians: module.rotationYRadians,
-          scale: freezePlacementScale(module.scale)
-        },
-        module.surfaceColliders
-      )
-    );
+    if (!shouldUseModuleCollisionMeshSurface(module)) {
+      chunkRecord.collisionBoxes.push(
+        ...createCompiledCollisionBoxesForPlacement(
+          module.moduleId,
+          "module",
+          module.assetId,
+          {
+            position: module.position,
+            rotationYRadians: module.rotationYRadians,
+            scale: freezePlacementScale(module.scale)
+          },
+          module.surfaceColliders
+        )
+      );
+    }
 
     ensureEnvironmentAssetGroup(
       environmentAssetsById,

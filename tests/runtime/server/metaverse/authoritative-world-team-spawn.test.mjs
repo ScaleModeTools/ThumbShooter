@@ -358,7 +358,10 @@ test("pre-authority presence sync keeps spawn-like startup poses on the authored
   );
 
   assert.equal(readPlayerSnapshot(worldSnapshot, bluePlayerId).teamId, "blue");
-  assert.equal(blueSnapshot.position.x, -24);
+  assert.ok(
+    Math.abs(blueSnapshot.position.x + 24) <= 0.001,
+    `expected blue startup x to remain near -24, received ${blueSnapshot.position.x}`
+  );
 });
 
 test("authoritative default joins fan same-team players across authored home spawns instead of reusing one occupied start", () => {

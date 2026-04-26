@@ -20,8 +20,10 @@ interface MapEditorMenubarProps {
   readonly canUndoProjectChange: boolean;
   readonly onCloseRequest: () => void;
   readonly onDeleteSelectedEntityRequest: () => void;
+  readonly onNewProjectRequest: () => void;
   readonly onResetDraftRequest: () => void;
   readonly onResetSelectedTransformRequest: () => void;
+  readonly onSaveAsProjectRequest: () => void;
   readonly onSaveDraftRequest: () => void;
   readonly onUndoProjectChangeRequest: () => void;
   readonly onValidateAndRunRequest: () => void;
@@ -38,8 +40,10 @@ export function MapEditorMenubar({
   canUndoProjectChange,
   onCloseRequest,
   onDeleteSelectedEntityRequest,
+  onNewProjectRequest,
   onResetDraftRequest,
   onResetSelectedTransformRequest,
+  onSaveAsProjectRequest,
   onSaveDraftRequest,
   onUndoProjectChangeRequest,
   onValidateAndRunRequest,
@@ -51,9 +55,18 @@ export function MapEditorMenubar({
       <MenubarMenu>
         <MenubarTrigger>File</MenubarTrigger>
         <MenubarContent>
+          <MenubarItem onClick={onNewProjectRequest}>
+            New Project
+            <MenubarShortcut>Ctrl+N</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
           <MenubarItem onClick={onSaveDraftRequest}>
-            Save Draft
+            Save
             <MenubarShortcut>Ctrl+S</MenubarShortcut>
+          </MenubarItem>
+          <MenubarItem onClick={onSaveAsProjectRequest}>
+            Save As
+            <MenubarShortcut>Shift+Ctrl+S</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem onClick={onResetDraftRequest}>

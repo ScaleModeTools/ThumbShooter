@@ -29,11 +29,21 @@ export interface MapEditorProjectStorageLike {
   setItem(key: string, value: string): void;
 }
 
+export interface MapEditorProjectCatalogEntry {
+  readonly bundleId: string;
+  readonly label: string;
+}
+
 interface StoredMapEditorProjectRecord {
   readonly bundle: unknown;
   readonly selectedEntityRef?: unknown;
   readonly selectedLaunchVariationId?: unknown;
   readonly selectedPlacementId?: unknown;
+  readonly version: number;
+}
+
+interface StoredMapEditorProjectCatalogRecord {
+  readonly entries?: unknown;
   readonly version: number;
 }
 
@@ -44,6 +54,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readStorageKey(bundleId: string): string {
   return readStoredMetaverseWorldBundleStorageKey(bundleId);
 }
+
+const storedMapEditorProjectCatalogKey =
+  "webgpu-metaverse:engine-tool:map-editor-project-catalog";
+const storedMapEditorProjectCatalogVersion = 1 as const;
 
 function createLoadedMetaverseMapBundleFromBundle(
   bundle: MetaverseMapBundleSnapshot
@@ -136,6 +150,126 @@ function writeStoredProjectRecord(
         version: storedMetaverseWorldBundleRecordVersion
       })
     )
+  );
+}
+
+function normalizeCatalogEntry(
+  value: unknown
+): MapEditorProjectCatalogEntry | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const bundleId =
+    typeof value.bundleId === "string" && value.bundleId.trim().length > 0
+      ? value.bundleId.trim()
+      : null;
+  const label =
+    typeof value.label === "string" && value.label.trim().length > 0
+      ? value.label.trim()
+      : null;
+
+  return bundleId === null || label === null
+    ? null
+    : Object.freeze({
+        bundleId,
+        label
+      });
+}
+
+function writeMapEditorProjectCatalogEntries(
+  storage: MapEditorProjectStorageLike,
+  entries: readonly MapEditorProjectCatalogEntry[]
+): void {
+  storage.setItem(
+    storedMapEditorProjectCatalogKey,
+    JSON.stringify(
+      Object.freeze({
+        entries: Object.freeze(
+          entries.map((entry) =>
+            Object.freeze({
+              bundleId: entry.bundleId,
+              label: entry.label
+            })
+          )
+        ),
+        version: storedMapEditorProjectCatalogVersion
+      })
+    )
+  );
+}
+
+export function loadMapEditorProjectCatalogEntries(
+  storage: MapEditorProjectStorageLike | null
+): readonly MapEditorProjectCatalogEntry[] {
+  if (storage === null) {
+    return Object.freeze([]);
+  }
+
+  const rawValue = storage.getItem(storedMapEditorProjectCatalogKey);
+
+  if (rawValue === null) {
+    return Object.freeze([]);
+  }
+
+  try {
+    const parsedValue = JSON.parse(
+      rawValue
+    ) as StoredMapEditorProjectCatalogRecord;
+
+    if (
+      !isRecord(parsedValue) ||
+      parsedValue.version !== storedMapEditorProjectCatalogVersion ||
+      !Array.isArray(parsedValue.entries)
+    ) {
+      return Object.freeze([]);
+    }
+
+    const entries: MapEditorProjectCatalogEntry[] = [];
+
+    for (const candidate of parsedValue.entries) {
+      const entry = normalizeCatalogEntry(candidate);
+
+      if (
+        entry !== null &&
+        !entries.some((existingEntry) => existingEntry.bundleId === entry.bundleId)
+      ) {
+        entries.push(entry);
+      }
+    }
+
+    return Object.freeze(entries);
+  } catch {
+    return Object.freeze([]);
+  }
+}
+
+export function upsertMapEditorProjectCatalogEntry(
+  storage: MapEditorProjectStorageLike | null,
+  entry: MapEditorProjectCatalogEntry
+): void {
+  if (storage === null) {
+    return;
+  }
+
+  const currentEntries = loadMapEditorProjectCatalogEntries(storage);
+  const nextEntry = Object.freeze({
+    bundleId: entry.bundleId.trim(),
+    label: entry.label.trim()
+  });
+
+  if (nextEntry.bundleId.length === 0 || nextEntry.label.length === 0) {
+    return;
+  }
+
+  writeMapEditorProjectCatalogEntries(
+    storage,
+    Object.freeze([
+      ...currentEntries.filter(
+        (currentEntry) => currentEntry.bundleId !== nextEntry.bundleId
+      ),
+      nextEntry
+    ])
   );
 }
 

@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { stagingGroundMapBundle } from "@webgpu-metaverse/shared/metaverse/world";
@@ -131,6 +138,64 @@ test("MetaverseWorldPreviewHttpAdapter registers preview bundles for later room 
       .mapId,
     "server-preview-http-adapter-test"
   );
+});
+
+test("MetaverseWorldPreviewHttpAdapter persists public map bundles for authoring projects", async () => {
+  const publicProjectRootPath = mkdtempSync(
+    join(tmpdir(), "webgpu-metaverse-public-map-")
+  );
+  const adapter = new MetaverseWorldPreviewHttpAdapter({
+    publicProjectRootPath
+  });
+  const previewBundle = createPreviewBundle("server-public-map-bundle-test");
+  const response = createResponseCapture();
+
+  try {
+    const handled = await adapter.handleRequest(
+      createJsonRequest({
+        bundle: previewBundle,
+        sourceBundleId: "staging-ground"
+      }),
+      response,
+      new URL("http://127.0.0.1:3210/metaverse/world/public-map-bundles")
+    );
+
+    assert.equal(handled, true);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json.status, "persisted");
+    assert.equal(response.json.bundleId, "server-public-map-bundle-test");
+    assert.equal(
+      response.json.path,
+      "/map-editor/projects/server-public-map-bundle-test.json"
+    );
+
+    const savedBundle = JSON.parse(
+      readFileSync(
+        join(publicProjectRootPath, "server-public-map-bundle-test.json"),
+        "utf8"
+      )
+    );
+    const savedManifest = JSON.parse(
+      readFileSync(join(publicProjectRootPath, "manifest.json"), "utf8")
+    );
+
+    assert.equal(savedBundle.mapId, "server-public-map-bundle-test");
+    assert.equal(savedBundle.label, "Preview server-public-map-bundle-test");
+    assert.equal(savedManifest.version, 1);
+    assert.deepEqual(savedManifest.projects.map((entry) => entry.bundleId), [
+      "server-public-map-bundle-test"
+    ]);
+    assert.equal(
+      loadAuthoritativeMetaverseMapBundle("server-public-map-bundle-test").bundle
+        .mapId,
+      "server-public-map-bundle-test"
+    );
+  } finally {
+    rmSync(publicProjectRootPath, {
+      force: true,
+      recursive: true
+    });
+  }
 });
 
 test("authoritative preview inputs expose compiled procedural structures as static colliders", () => {

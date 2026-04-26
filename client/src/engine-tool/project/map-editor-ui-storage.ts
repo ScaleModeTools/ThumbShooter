@@ -116,8 +116,15 @@ function readMaterialId(
     value === "glass" ||
     value === "metal" ||
     value === "terrain-ash" ||
+    value === "terrain-basalt" ||
+    value === "terrain-cliff" ||
+    value === "terrain-dirt" ||
+    value === "terrain-gravel" ||
     value === "terrain-grass" ||
+    value === "terrain-moss" ||
     value === "terrain-rock" ||
+    value === "terrain-sand" ||
+    value === "terrain-snow" ||
     value === "team-blue" ||
     value === "team-red" ||
     value === "warning"
@@ -345,6 +352,11 @@ function readBuilderToolState(value: unknown): MapEditorBuilderToolStateSnapshot
     terrainBrushSizeCells:
       readTerrainBrushSizeCells(value.terrainBrushSizeCells) ??
       defaultMapEditorBuilderToolState.terrainBrushSizeCells,
+    terrainCliffSpanCells:
+      typeof value.terrainCliffSpanCells === "number" &&
+      Number.isFinite(value.terrainCliffSpanCells)
+        ? Math.max(0, Math.min(8, Math.round(value.terrainCliffSpanCells)))
+        : defaultMapEditorBuilderToolState.terrainCliffSpanCells,
     terrainBrushTargetHeightMeters:
       typeof value.terrainBrushTargetHeightMeters === "number" &&
       Number.isFinite(value.terrainBrushTargetHeightMeters)

@@ -876,22 +876,7 @@ export class MetaverseAuthoritativeWorldRuntime
   #resolveAcceptedPlayerTeamId(
     requestedTeamId: MetaversePlayerTeamId
   ): MetaversePlayerTeamId {
-    let redCount = 0;
-    let blueCount = 0;
-
-    for (const playerRuntime of this.#playersById.values()) {
-      if (playerRuntime.teamId === "red") {
-        redCount += 1;
-      } else if (playerRuntime.teamId === "blue") {
-        blueCount += 1;
-      }
-    }
-
-    if (redCount === blueCount) {
-      return requestedTeamId;
-    }
-
-    return redCount < blueCount ? "red" : "blue";
+    return requestedTeamId;
   }
 
   #shouldResolveJoinSpawnPose(

@@ -196,6 +196,7 @@ export function createMetaverseAuthoritativeWorldBundleInputs(
       surfaceAssets.flatMap((surfaceAsset) => {
         if (
           surfaceAsset.placement !== "dynamic" ||
+          shouldBootCollisionMeshColliders(surfaceAsset) ||
           surfaceAsset.surfaceColliders.length === 0 ||
           surfaceAsset.placements.length === 0
         ) {

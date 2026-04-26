@@ -185,6 +185,135 @@ test("metaverse world bundle registration posts the selected runtime bundle and 
   assert.equal(requestBody.sourceBundleId, "staging-ground");
 });
 
+test("map editor public project save posts exported bundles to the server public-folder endpoint", async () => {
+  const {
+    persistMapEditorPublicProjectBundleOnServer
+  } = await clientLoader.load(
+    "/src/engine-tool/run/persist-map-editor-public-project-bundle-on-server.ts"
+  );
+  const fetchCalls = [];
+  const bundle = Object.freeze({
+    ...stagingGroundMapBundle,
+    label: "Client Public Project",
+    mapId: "client-public-project-save-test"
+  });
+  const result = await persistMapEditorPublicProjectBundleOnServer(
+    bundle,
+    "staging-ground",
+    {
+      async fetch(url, init = {}) {
+        fetchCalls.push({
+          init,
+          url
+        });
+
+        return {
+          async json() {
+            return {
+              bundleId: "client-public-project-save-test",
+              label: "Client Public Project",
+              manifestPath: "/map-editor/projects/manifest.json",
+              path: "/map-editor/projects/client-public-project-save-test.json",
+              sourceBundleId: "staging-ground",
+              status: "persisted",
+              updatedAt: "2026-04-25T00:00:00.000Z"
+            };
+          },
+          ok: true
+        };
+      }
+    }
+  );
+
+  assert.equal(fetchCalls.length, 1);
+  assert.match(fetchCalls[0].url, /\/metaverse\/world\/public-map-bundles$/);
+  assert.equal(fetchCalls[0].init.method, "POST");
+  assert.equal(fetchCalls[0].init.headers["content-type"], "application/json");
+  assert.equal(result.status, "persisted");
+  assert.equal(result.path, "/map-editor/projects/client-public-project-save-test.json");
+
+  const requestBody = JSON.parse(fetchCalls[0].init.body);
+
+  assert.equal(requestBody.bundle.mapId, "client-public-project-save-test");
+  assert.equal(requestBody.sourceBundleId, "staging-ground");
+});
+
+test("map editor public project manifest registers file-backed bundles without local storage", async () => {
+  const {
+    clearMetaverseWorldBundlePreviewEntry,
+    readMetaverseWorldBundleRegistryEntry
+  } = await clientLoader.load("/src/metaverse/world/bundle-registry/index.ts");
+  const {
+    registerPublicMapEditorProjectRegistryEntries
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-public-project-storage.ts"
+  );
+  const bundle = Object.freeze({
+    ...stagingGroundMapBundle,
+    label: "Client Public Loaded Project",
+    mapId: "client-public-project-load-test"
+  });
+  const fetchCalls = [];
+
+  try {
+    const entries = await registerPublicMapEditorProjectRegistryEntries({
+      async fetch(url, init = {}) {
+        fetchCalls.push({
+          init,
+          url
+        });
+
+        if (url === "/map-editor/projects/manifest.json") {
+          return {
+            async json() {
+              return {
+                projects: [
+                  {
+                    bundleId: "client-public-project-load-test",
+                    label: "Client Public Loaded Project",
+                    path: "/map-editor/projects/client-public-project-load-test.json",
+                    sourceBundleId: "staging-ground",
+                    updatedAt: "2026-04-25T00:00:00.000Z"
+                  }
+                ],
+                version: 1
+              };
+            },
+            ok: true,
+            status: 200
+          };
+        }
+
+        assert.equal(
+          url,
+          "/map-editor/projects/client-public-project-load-test.json"
+        );
+
+        return {
+          async json() {
+            return bundle;
+          },
+          ok: true,
+          status: 200
+        };
+      }
+    });
+
+    const registryEntry = readMetaverseWorldBundleRegistryEntry(
+      "client-public-project-load-test"
+    );
+
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].bundleId, "client-public-project-load-test");
+    assert.equal(fetchCalls[0].init.cache, "no-store");
+    assert.equal(fetchCalls[1].init.cache, "no-store");
+    assert.equal(registryEntry?.bundle.mapId, "client-public-project-load-test");
+    assert.equal(registryEntry?.sourceBundleId, "staging-ground");
+  } finally {
+    clearMetaverseWorldBundlePreviewEntry("client-public-project-load-test");
+  }
+});
+
 test("map editor viewport scene draft handles keep player spawns addressable for viewport transforms", async () => {
   const {
     createMapEditorViewportSceneDraftHandles,
@@ -1015,6 +1144,122 @@ test("map editor flat path segments preserve arbitrary endpoint angles", async (
   assert.equal(pathSurface.size.z, Math.hypot(12, 4));
   assert.equal(pathSurface.rotationYRadians, Math.atan2(12, 4));
   assert.equal(pathRegion.rotationYRadians, pathSurface.rotationYRadians);
+});
+
+test("map editor wide path segments create endpoint landings for connected corners", async () => {
+  const {
+    addMapEditorPathSegment,
+    createMapEditorProject
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const start = Object.freeze({ x: 1000, y: 0, z: 1000 });
+  const corner = Object.freeze({ x: 1008, y: 0, z: 1000 });
+  const end = Object.freeze({ x: 1008, y: 0, z: 1008 });
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+  const initialRegionCount = project.regionDrafts.length;
+
+  project = addMapEditorPathSegment(
+    project,
+    corner,
+    0,
+    Object.freeze({
+      center: start,
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+  project = addMapEditorPathSegment(
+    project,
+    end,
+    0,
+    Object.freeze({
+      center: corner,
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+
+  const newPathRegions = project.regionDrafts
+    .slice(initialRegionCount)
+    .filter((region) => region.regionKind === "path");
+  const cornerLanding = newPathRegions.find((region) => {
+    const surface = project.surfaceDrafts.find(
+      (surfaceDraft) => surfaceDraft.surfaceId === region.surfaceId
+    );
+
+    return (
+      Math.abs(region.center.x - corner.x) <= 0.01 &&
+      Math.abs(region.center.z - corner.z) <= 0.01 &&
+      surface?.kind === "flat-slab" &&
+      surface.size.x === 8 &&
+      surface.size.z === 8
+    );
+  });
+
+  assert.equal(newPathRegions.length, 5);
+  assert.notEqual(cornerLanding, undefined);
+});
+
+test("map editor selected path landings can quick-shape a connected ramp", async () => {
+  const {
+    addMapEditorPathSegment,
+    applyMapEditorPathRampToSelection,
+    createMapEditorProject
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const start = Object.freeze({ x: 1040, y: 0, z: 1000 });
+  const end = Object.freeze({ x: 1056, y: 0, z: 1000 });
+  let project = createMapEditorProject(loadMetaverseMapBundle("staging-ground"));
+  const initialRegionCount = project.regionDrafts.length;
+
+  project = addMapEditorPathSegment(
+    project,
+    end,
+    0,
+    Object.freeze({
+      center: start,
+      elevation: 0
+    }),
+    2,
+    "warning"
+  );
+
+  const newPathRegions = project.regionDrafts.slice(initialRegionCount);
+  const startLanding = newPathRegions.find(
+    (region) =>
+      region.regionKind === "path" &&
+      Math.abs(region.center.x - start.x) <= 0.01 &&
+      Math.abs(region.center.z - start.z) <= 0.01
+  );
+  const segmentRegion = project.regionDrafts.at(-1);
+
+  assert.notEqual(startLanding, undefined);
+  assert.notEqual(segmentRegion, undefined);
+
+  project = applyMapEditorPathRampToSelection(project, 4, {
+    id: startLanding.regionId,
+    kind: "region"
+  });
+
+  const rampSurface = project.surfaceDrafts.find(
+    (surfaceDraft) => surfaceDraft.surfaceId === segmentRegion.surfaceId
+  );
+
+  assert.equal(project.selectedEntityRef?.id, segmentRegion.regionId);
+  assert.equal(rampSurface?.kind, "sloped-plane");
+  assert.equal(rampSurface?.slopeRiseMeters, 4);
+  assert.equal(rampSurface?.elevation, 2);
+  assert.equal(rampSurface?.center.y, 2);
 });
 
 test("map editor removing a generated path region removes its orphan support surface", async () => {

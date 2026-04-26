@@ -8,11 +8,20 @@ import {
   metaverseHubSkiffEnvironmentAssetId,
   stagingGroundMapBundle
 } from "@webgpu-metaverse/shared/metaverse/world";
+import {
+  metaverseGroundedSurfacePolicyConfig
+} from "@webgpu-metaverse/shared/metaverse/traversal";
 
 import {
   createMetaverseAuthoritativeWorldBundleInputs
 } from "../../../../server/dist/metaverse/world/map-bundles/metaverse-authoritative-world-bundle-inputs.js";
 import { loadAuthoritativeMetaverseMapBundle } from "../../../../server/dist/metaverse/world/map-bundles/load-authoritative-metaverse-map-bundle.js";
+import {
+  MetaverseAuthoritativeWorldSurfaceState
+} from "../../../../server/dist/metaverse/authority/traversal/metaverse-authoritative-world-surface-state.js";
+import {
+  MetaverseAuthoritativeRapierPhysicsRuntime
+} from "../../../../server/dist/metaverse/classes/metaverse-authoritative-rapier-physics-runtime.js";
 
 test("authoritative metaverse bootstrap derives bundle, spawn, and authored world state from the shared staging-ground map bundle", () => {
   const loadedBundle = loadAuthoritativeMetaverseMapBundle("staging-ground");
@@ -22,6 +31,10 @@ test("authoritative metaverse bootstrap derives bundle, spawn, and authored worl
   const expectedDynamicSeedCount = stagingGroundMapBundle.environmentAssets.filter(
     (environmentAsset) =>
       environmentAsset.placementMode === "dynamic" &&
+      !(
+        environmentAsset.dynamicBody === null &&
+        environmentAsset.collisionPath !== null
+      ) &&
       environmentAsset.surfaceColliders.length > 0 &&
       environmentAsset.placements.length > 0
   ).length;
@@ -126,6 +139,20 @@ test("authoritative metaverse bootstrap derives bundle, spawn, and authored worl
     true
   );
   assert.equal(
+    bundleInputs.dynamicSurfaceSeedSnapshots.some(
+      (seedSnapshot) =>
+        seedSnapshot.environmentAssetId === metaverseHubSkiffEnvironmentAssetId
+    ),
+    false
+  );
+  assert.equal(
+    bundleInputs.dynamicSurfaceSeedSnapshots.some(
+      (seedSnapshot) =>
+        seedSnapshot.environmentAssetId === metaverseHubDiveBoatEnvironmentAssetId
+    ),
+    false
+  );
+  assert.equal(
     bundleInputs.readSurfaceAsset(metaverseHubDockEnvironmentAssetId)
       ?.surfaceColliders.length,
     1
@@ -171,4 +198,43 @@ test("authoritative metaverse bootstrap derives bundle, spawn, and authored worl
     "dynamic-rigid-body"
   );
   assert.ok(bundleInputs.staticSurfaceColliders.length > 0);
+});
+
+test("authoritative collision mesh assets expose mesh support without duplicate dynamic box seeds", () => {
+  const bundleInputs =
+    createMetaverseAuthoritativeWorldBundleInputs("staging-ground");
+  const physicsRuntime = new MetaverseAuthoritativeRapierPhysicsRuntime();
+  const surfaceState = new MetaverseAuthoritativeWorldSurfaceState({
+    dynamicCollisionMeshSeedSnapshots:
+      bundleInputs.dynamicCollisionMeshSeedSnapshots,
+    dynamicSurfaceSeedSnapshots: bundleInputs.dynamicSurfaceSeedSnapshots,
+    groundedBodyConfig: metaverseGroundedSurfacePolicyConfig,
+    physicsRuntime,
+    playerTraversalColliderHandles: new Set(),
+    resolveDynamicSurfaceColliders: bundleInputs.resolveDynamicSurfaceColliders,
+    staticCollisionMeshSeedSnapshots: bundleInputs.staticCollisionMeshSeedSnapshots,
+    staticSurfaceColliders: bundleInputs.staticSurfaceColliders,
+    syncUnmountedPlayerToGroundedSupport() {},
+    syncUnmountedPlayerToSwimWaterline() {},
+    vehicleDriveColliderHandles: new Set(),
+    waterRegionSnapshots: bundleInputs.waterRegionSnapshots
+  });
+  const supportColliders = surfaceState
+    .resolveAuthoritativeSurfaceColliders()
+    .filter((collider) => collider.traversalAffordance === "support");
+
+  for (const environmentAssetId of [
+    metaverseHubDockEnvironmentAssetId,
+    metaverseHubSkiffEnvironmentAssetId,
+    metaverseHubDiveBoatEnvironmentAssetId
+  ]) {
+    assert.equal(
+      supportColliders.some(
+        (collider) =>
+          collider.ownerEnvironmentAssetId === environmentAssetId &&
+          collider.shape === "trimesh"
+      ),
+      true
+    );
+  }
 });

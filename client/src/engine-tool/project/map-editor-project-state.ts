@@ -1494,6 +1494,57 @@ function normalizeTerrainBrushSizeCells(
   return Math.max(1, Math.min(16, Math.round(brushSizeCells)));
 }
 
+function normalizeTerrainCliffSpanCells(cliffSpanCells: number): number {
+  return Math.max(0, Math.min(8, Math.round(cliffSpanCells)));
+}
+
+const minimumTerrainCliffPitchRadians = 70 * (Math.PI / 180);
+
+function resolveTerrainCliffHeight(
+  input: {
+    readonly brushStrengthMeters: number;
+    readonly cellX: number;
+    readonly normalizedNoise: number;
+    readonly sampleSpacingMeters: number;
+    readonly targetCellX: number;
+    readonly targetHeightMeters: number;
+    readonly terrainCliffSpanCells: number;
+  }
+): number {
+  const lowHeight = input.targetHeightMeters - input.brushStrengthMeters;
+  const highHeight = input.targetHeightMeters + input.brushStrengthMeters;
+  const heightDelta = Math.max(0, highHeight - lowHeight);
+  const requestedSpanCells = normalizeTerrainCliffSpanCells(
+    input.terrainCliffSpanCells
+  );
+  const maxPitchSafeSpanCells =
+    heightDelta <= 0
+      ? 0
+      : Math.floor(
+          heightDelta /
+            (Math.tan(minimumTerrainCliffPitchRadians) *
+              Math.max(0.001, input.sampleSpacingMeters))
+        );
+  const spanCells = Math.max(
+    0,
+    Math.min(requestedSpanCells, maxPitchSafeSpanCells)
+  );
+  const signedCellDistance = input.cellX - input.targetCellX;
+
+  if (spanCells <= 0) {
+    return signedCellDistance >= 0 ? highHeight : lowHeight;
+  }
+
+  const alpha = Math.min(1, Math.max(0, signedCellDistance / spanCells));
+  const shapedAlpha = alpha * alpha * (3 - 2 * alpha);
+  const strataNoise =
+    (input.normalizedNoise - 0.5) *
+    Math.min(0.45, Math.max(0.08, input.brushStrengthMeters * 0.16)) *
+    (1 - Math.abs(shapedAlpha - 0.5));
+
+  return lowHeight + heightDelta * shapedAlpha + strataNoise;
+}
+
 function isTerrainBoundaryCell(
   terrainPatch: MapEditorTerrainPatchDraftSnapshot,
   cellX: number,
@@ -1752,6 +1803,262 @@ function propagateTerrainPatchBoundariesToNeighbors(
     project.terrainPatchDrafts
       .filter((terrainPatch) => terrainPatch.terrainPatchId !== terrainPatchId)
       .map((terrainPatch) => terrainPatch.terrainPatchId)
+  );
+}
+
+function areTerrainPatchMergeInputsCompatible(
+  terrainPatches: readonly MapEditorTerrainPatchDraftSnapshot[]
+): boolean {
+  const firstTerrainPatch = terrainPatches[0] ?? null;
+
+  if (firstTerrainPatch === null) {
+    return false;
+  }
+
+  return terrainPatches.every(
+    (terrainPatch) =>
+      Math.abs(terrainPatch.sampleSpacingMeters - firstTerrainPatch.sampleSpacingMeters) <=
+        0.001 &&
+      Math.abs(terrainPatch.rotationYRadians - firstTerrainPatch.rotationYRadians) <=
+        0.001
+  );
+}
+
+function resolveTerrainPatchWorldBounds(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot
+): {
+  readonly maxX: number;
+  readonly maxZ: number;
+  readonly minX: number;
+  readonly minZ: number;
+} {
+  const halfSpanX = resolveTerrainHalfSpanMeters(
+    terrainPatch.sampleCountX,
+    terrainPatch.sampleSpacingMeters
+  );
+  const halfSpanZ = resolveTerrainHalfSpanMeters(
+    terrainPatch.sampleCountZ,
+    terrainPatch.sampleSpacingMeters
+  );
+
+  return Object.freeze({
+    maxX: terrainPatch.origin.x + halfSpanX,
+    maxZ: terrainPatch.origin.z + halfSpanZ,
+    minX: terrainPatch.origin.x - halfSpanX,
+    minZ: terrainPatch.origin.z - halfSpanZ
+  });
+}
+
+function mergeTerrainMaterialLayerSamples(
+  terrainPatches: readonly MapEditorTerrainPatchDraftSnapshot[],
+  mergedTerrainPatchId: string,
+  mergedSampleCount: number
+): {
+  readonly materialId: MapEditorStructuralDraftSnapshot["materialId"];
+  readonly layerId: string;
+  readonly weightSamples: number[];
+}[] {
+  const materialIds = [
+    ...new Set(
+      terrainPatches.flatMap((terrainPatch) =>
+        terrainPatch.materialLayers.map((layer) => layer.materialId)
+      )
+    )
+  ];
+
+  return materialIds.map((materialId) => ({
+    layerId: `${mergedTerrainPatchId}:${materialId}`,
+    materialId,
+    weightSamples: Array.from({ length: mergedSampleCount }, () => 0)
+  }));
+}
+
+export function mergeMapEditorTerrainPatches(
+  project: MapEditorProjectSnapshot,
+  terrainPatchIds: readonly string[]
+): MapEditorProjectSnapshot {
+  const terrainPatchIdSet = new Set(terrainPatchIds);
+  const terrainPatches = project.terrainPatchDrafts.filter((terrainPatch) =>
+    terrainPatchIdSet.has(terrainPatch.terrainPatchId)
+  );
+
+  if (
+    terrainPatches.length < 2 ||
+    !areTerrainPatchMergeInputsCompatible(terrainPatches)
+  ) {
+    return project;
+  }
+
+  const sampleSpacingMeters = terrainPatches[0]!.sampleSpacingMeters;
+  const bounds = terrainPatches.reduce(
+    (currentBounds, terrainPatch) => {
+      const terrainBounds = resolveTerrainPatchWorldBounds(terrainPatch);
+
+      return Object.freeze({
+        maxX: Math.max(currentBounds.maxX, terrainBounds.maxX),
+        maxZ: Math.max(currentBounds.maxZ, terrainBounds.maxZ),
+        minX: Math.min(currentBounds.minX, terrainBounds.minX),
+        minZ: Math.min(currentBounds.minZ, terrainBounds.minZ)
+      });
+    },
+    Object.freeze({
+      maxX: Number.NEGATIVE_INFINITY,
+      maxZ: Number.NEGATIVE_INFINITY,
+      minX: Number.POSITIVE_INFINITY,
+      minZ: Number.POSITIVE_INFINITY
+    })
+  );
+
+  if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minZ)) {
+    return project;
+  }
+
+  const mergedSampleCountX =
+    Math.max(1, Math.round((bounds.maxX - bounds.minX) / sampleSpacingMeters)) + 1;
+  const mergedSampleCountZ =
+    Math.max(1, Math.round((bounds.maxZ - bounds.minZ) / sampleSpacingMeters)) + 1;
+  const mergedSampleCount = mergedSampleCountX * mergedSampleCountZ;
+  const mergedTerrainPatchId = terrainPatches[0]!.terrainPatchId;
+  const mergedOrigin = Object.freeze({
+    x: (bounds.minX + bounds.maxX) * 0.5,
+    y: Math.min(...terrainPatches.map((terrainPatch) => terrainPatch.origin.y)),
+    z: (bounds.minZ + bounds.maxZ) * 0.5
+  });
+  const mergedHeights = Array.from({ length: mergedSampleCount }, () => 0);
+  const mergedMaterialLayers = mergeTerrainMaterialLayerSamples(
+    terrainPatches,
+    mergedTerrainPatchId,
+    mergedSampleCount
+  );
+  const mergedMaterialLayersByMaterialId = new Map(
+    mergedMaterialLayers.map((layer) => [layer.materialId, layer] as const)
+  );
+  const mergedWrittenSamples = new Set<number>();
+
+  for (const terrainPatch of terrainPatches) {
+    for (let cellZ = 0; cellZ < terrainPatch.sampleCountZ; cellZ += 1) {
+      for (let cellX = 0; cellX < terrainPatch.sampleCountX; cellX += 1) {
+        const sourceIndex = createTerrainHeightIndex(terrainPatch, cellX, cellZ);
+        const sourcePosition = resolveMapEditorTerrainCellPosition(
+          terrainPatch,
+          cellX,
+          cellZ
+        );
+        const mergedCellX = Math.round(
+          (sourcePosition.x - bounds.minX) / sampleSpacingMeters
+        );
+        const mergedCellZ = Math.round(
+          (sourcePosition.z - bounds.minZ) / sampleSpacingMeters
+        );
+
+        if (
+          mergedCellX < 0 ||
+          mergedCellX >= mergedSampleCountX ||
+          mergedCellZ < 0 ||
+          mergedCellZ >= mergedSampleCountZ
+        ) {
+          continue;
+        }
+
+        const mergedIndex = mergedCellZ * mergedSampleCountX + mergedCellX;
+
+        mergedHeights[mergedIndex] =
+          Math.round(
+            ((terrainPatch.origin.y + (terrainPatch.heightSamples[sourceIndex] ?? 0)) -
+              mergedOrigin.y) *
+              100
+          ) / 100;
+        mergedWrittenSamples.add(mergedIndex);
+
+        for (const sourceLayer of terrainPatch.materialLayers) {
+          const mergedLayer =
+            mergedMaterialLayersByMaterialId.get(sourceLayer.materialId) ?? null;
+
+          if (mergedLayer === null) {
+            continue;
+          }
+
+          mergedLayer.weightSamples[mergedIndex] = Math.max(
+            mergedLayer.weightSamples[mergedIndex] ?? 0,
+            sourceLayer.weightSamples[sourceIndex] ?? 0
+          );
+        }
+      }
+    }
+  }
+
+  const fallbackLayer =
+    mergedMaterialLayers[0] ??
+    ensureEditableTerrainMaterialLayer(
+      mergedTerrainPatchId,
+      mergedSampleCount,
+      mergedMaterialLayers,
+      "terrain-grass"
+    );
+
+  for (let sampleIndex = 0; sampleIndex < mergedSampleCount; sampleIndex += 1) {
+    if (mergedWrittenSamples.has(sampleIndex)) {
+      continue;
+    }
+
+    fallbackLayer.weightSamples[sampleIndex] = 1;
+  }
+
+  const mergedSize = Object.freeze({
+    x: Math.max(mapEditorBuildGridUnitMeters, bounds.maxX - bounds.minX),
+    y: 0.5,
+    z: Math.max(mapEditorBuildGridUnitMeters, bounds.maxZ - bounds.minZ)
+  });
+  const mergedTerrainPatch = freezeTerrainPatchDraft({
+    grid: createMapEditorStructuralGrid(mergedOrigin, mergedSize),
+    heightSamples: Object.freeze(mergedHeights),
+    label: terrainPatches[0]!.label,
+    materialLayers: freezeTerrainMaterialLayers(mergedMaterialLayers),
+    origin: mergedOrigin,
+    rotationYRadians: terrainPatches[0]!.rotationYRadians,
+    sampleCountX: mergedSampleCountX,
+    sampleCountZ: mergedSampleCountZ,
+    sampleSpacingMeters,
+    terrainPatchId: mergedTerrainPatchId,
+    waterLevelMeters:
+      terrainPatches.find((terrainPatch) => terrainPatch.waterLevelMeters !== null)
+        ?.waterLevelMeters ?? null
+  });
+  const removedTerrainPatchIds = new Set(
+    terrainPatches
+      .slice(1)
+      .map((terrainPatch) => terrainPatch.terrainPatchId)
+  );
+  const mergedProject = Object.freeze({
+    ...project,
+    surfaceDrafts: Object.freeze(
+      project.surfaceDrafts.map((surface) =>
+        surface.terrainPatchId !== null &&
+        terrainPatchIdSet.has(surface.terrainPatchId)
+          ? freezeSurfaceDraft({
+              ...surface,
+              terrainPatchId: mergedTerrainPatchId
+            })
+          : surface
+      )
+    ),
+    terrainPatchDrafts: Object.freeze([
+      ...project.terrainPatchDrafts
+        .filter(
+          (terrainPatch) =>
+            terrainPatch.terrainPatchId !== mergedTerrainPatchId &&
+            !removedTerrainPatchIds.has(terrainPatch.terrainPatchId)
+        ),
+      mergedTerrainPatch
+    ])
+  });
+
+  return withSelectedEntity(
+    mergedProject,
+    Object.freeze({
+      id: mergedTerrainPatchId,
+      kind: "terrain-patch"
+    })
   );
 }
 
@@ -2051,19 +2358,29 @@ function ensurePathSurfaceAndRegion(
   elevation: number,
   pathWidthCells = 1,
   materialId: MapEditorStructuralDraftSnapshot["materialId"] = "warning",
-  materialReferenceId: string = materialId
+  materialReferenceId: string = materialId,
+  options?: {
+    readonly snapCenter?: boolean;
+  }
 ): {
   readonly center: MetaverseWorldSurfaceVector3Snapshot;
   readonly project: MapEditorProjectSnapshot;
   readonly regionId: string;
   readonly surfaceId: string;
 } {
-  const snappedCenter = resolveMapEditorBuildFootprintCenterPosition(
-    center,
-    elevation,
-    pathWidthCells,
-    pathWidthCells
-  );
+  const snappedCenter =
+    options?.snapCenter === false
+      ? freezeBuildPosition({
+          x: center.x,
+          y: elevation,
+          z: center.z
+        })
+      : resolveMapEditorBuildFootprintCenterPosition(
+          center,
+          elevation,
+          pathWidthCells,
+          pathWidthCells
+        );
   const existingSurface = findSurfaceDraftAtPosition(
     project,
     snappedCenter,
@@ -2151,6 +2468,373 @@ function hasStructuralDraftAtGridPosition(
       structure.center.x === center.x &&
       Math.abs(structure.center.y - center.y) <= 0.01 &&
       structure.center.z === center.z
+  );
+}
+
+type MapEditorPathRampEndpointSign = -1 | 1;
+
+interface MapEditorPathRampEndpoint {
+  readonly elevation: number;
+  readonly endpointSign: MapEditorPathRampEndpointSign;
+  readonly position: MetaverseWorldSurfaceVector3Snapshot;
+}
+
+interface MapEditorPathRampTarget {
+  readonly region: MapEditorRegionDraftSnapshot;
+  readonly surface: MapEditorSurfaceDraftSnapshot;
+}
+
+function resolvePathSurfaceEndpoint(
+  surface: MapEditorSurfaceDraftSnapshot,
+  endpointSign: MapEditorPathRampEndpointSign
+): MapEditorPathRampEndpoint {
+  const halfLength = Math.max(
+    mapEditorBuildGridUnitMeters * 0.5,
+    Math.abs(surface.size.z) * 0.5
+  );
+  const elevation = surface.elevation + surface.slopeRiseMeters * endpointSign * 0.5;
+
+  return Object.freeze({
+    elevation,
+    endpointSign,
+    position: freezeBuildPosition({
+      x:
+        surface.center.x +
+        Math.sin(surface.rotationYRadians) * halfLength * endpointSign,
+      y: elevation,
+      z:
+        surface.center.z +
+        Math.cos(surface.rotationYRadians) * halfLength * endpointSign
+    })
+  });
+}
+
+function resolvePathSurfaceConnectionAnchors(
+  surface: MapEditorSurfaceDraftSnapshot
+): readonly {
+  readonly elevation: number;
+  readonly position: MetaverseWorldSurfaceVector3Snapshot;
+}[] {
+  const negativeEndpoint = resolvePathSurfaceEndpoint(surface, -1);
+  const positiveEndpoint = resolvePathSurfaceEndpoint(surface, 1);
+
+  return Object.freeze([
+    Object.freeze({
+      elevation: negativeEndpoint.elevation,
+      position: negativeEndpoint.position
+    }),
+    Object.freeze({
+      elevation: positiveEndpoint.elevation,
+      position: positiveEndpoint.position
+    }),
+    Object.freeze({
+      elevation: surface.elevation,
+      position: freezeBuildPosition({
+        x: surface.center.x,
+        y: surface.elevation,
+        z: surface.center.z
+      })
+    })
+  ]);
+}
+
+function resolvePathSurfaceConnectionDistanceSquared(
+  firstSurface: MapEditorSurfaceDraftSnapshot,
+  secondSurface: MapEditorSurfaceDraftSnapshot
+): number {
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+
+  for (const firstAnchor of resolvePathSurfaceConnectionAnchors(firstSurface)) {
+    for (const secondAnchor of resolvePathSurfaceConnectionAnchors(secondSurface)) {
+      const deltaX = firstAnchor.position.x - secondAnchor.position.x;
+      const deltaZ = firstAnchor.position.z - secondAnchor.position.z;
+
+      nearestDistanceSquared = Math.min(
+        nearestDistanceSquared,
+        deltaX * deltaX + deltaZ * deltaZ
+      );
+    }
+  }
+
+  return nearestDistanceSquared;
+}
+
+function isPathSurfaceLongRampCandidate(
+  surface: MapEditorSurfaceDraftSnapshot
+): boolean {
+  return (
+    surface.kind === "sloped-plane" ||
+    Math.abs(surface.size.z) > Math.abs(surface.size.x) + 0.01
+  );
+}
+
+function readPathRampTargetFromEntity(
+  project: MapEditorProjectSnapshot,
+  entityRef: MapEditorSelectedEntityRef | null
+): MapEditorPathRampTarget | null {
+  if (entityRef === null) {
+    return null;
+  }
+
+  const selectedRegion =
+    entityRef.kind === "region"
+      ? (project.regionDrafts.find(
+          (region) =>
+            region.regionId === entityRef.id && region.regionKind === "path"
+        ) ?? null)
+      : null;
+  const selectedSurface =
+    entityRef.kind === "surface"
+      ? findSurfaceDraftById(project, entityRef.id)
+      : selectedRegion === null
+        ? null
+        : findSurfaceDraftById(project, selectedRegion.surfaceId);
+  const selectedSurfacePathRegion =
+    selectedSurface === null
+      ? null
+      : (selectedRegion ??
+        project.regionDrafts.find(
+          (region) =>
+            region.regionKind === "path" &&
+            region.surfaceId === selectedSurface.surfaceId
+        ) ??
+        null);
+
+  if (selectedSurface === null || selectedSurfacePathRegion === null) {
+    return null;
+  }
+
+  const selectedTarget = Object.freeze({
+    region: selectedSurfacePathRegion,
+    surface: selectedSurface
+  });
+
+  if (isPathSurfaceLongRampCandidate(selectedSurface)) {
+    return selectedTarget;
+  }
+
+  const connectionToleranceMeters = mapEditorBuildGridUnitMeters + 0.01;
+  let nearestConnectedTarget:
+    | {
+        readonly distanceSquared: number;
+        readonly target: MapEditorPathRampTarget;
+      }
+    | null = null;
+
+  for (const region of project.regionDrafts) {
+    if (
+      region.regionKind !== "path" ||
+      region.surfaceId === selectedSurface.surfaceId
+    ) {
+      continue;
+    }
+
+    const surface = findSurfaceDraftById(project, region.surfaceId);
+
+    if (surface === null || !isPathSurfaceLongRampCandidate(surface)) {
+      continue;
+    }
+
+    const distanceSquared = resolvePathSurfaceConnectionDistanceSquared(
+      selectedSurface,
+      surface
+    );
+
+    if (
+      distanceSquared >
+      connectionToleranceMeters * connectionToleranceMeters
+    ) {
+      continue;
+    }
+
+    if (
+      nearestConnectedTarget === null ||
+      distanceSquared < nearestConnectedTarget.distanceSquared
+    ) {
+      nearestConnectedTarget = Object.freeze({
+        distanceSquared,
+        target: Object.freeze({
+          region,
+          surface
+        })
+      });
+    }
+  }
+
+  return nearestConnectedTarget?.target ?? selectedTarget;
+}
+
+function readNearestPathNeighborElevation(
+  project: MapEditorProjectSnapshot,
+  position: MetaverseWorldSurfaceVector3Snapshot,
+  excludedSurfaceIds: ReadonlySet<string>
+): {
+  readonly distanceSquared: number;
+  readonly elevation: number;
+} | null {
+  const connectionToleranceMeters = mapEditorBuildGridUnitMeters + 0.01;
+  let nearestNeighbor:
+    | {
+        readonly distanceSquared: number;
+        readonly elevation: number;
+      }
+    | null = null;
+
+  for (const region of project.regionDrafts) {
+    if (region.regionKind !== "path" || excludedSurfaceIds.has(region.surfaceId)) {
+      continue;
+    }
+
+    const surface = findSurfaceDraftById(project, region.surfaceId);
+
+    if (surface === null) {
+      continue;
+    }
+
+    for (const anchor of resolvePathSurfaceConnectionAnchors(surface)) {
+      const deltaX = anchor.position.x - position.x;
+      const deltaZ = anchor.position.z - position.z;
+      const distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
+
+      if (
+        distanceSquared >
+        connectionToleranceMeters * connectionToleranceMeters
+      ) {
+        continue;
+      }
+
+      if (
+        nearestNeighbor === null ||
+        distanceSquared < nearestNeighbor.distanceSquared
+      ) {
+        nearestNeighbor = Object.freeze({
+          distanceSquared,
+          elevation: anchor.elevation
+        });
+      }
+    }
+  }
+
+  return nearestNeighbor;
+}
+
+export function applyMapEditorPathRampToSelection(
+  project: MapEditorProjectSnapshot,
+  riseMeters: number,
+  entityRef = project.selectedEntityRef
+): MapEditorProjectSnapshot {
+  if (!Number.isFinite(riseMeters)) {
+    return project;
+  }
+
+  const target = readPathRampTargetFromEntity(project, entityRef);
+
+  if (target === null) {
+    return project;
+  }
+
+  const absoluteRiseMeters = Math.abs(riseMeters);
+  const nextSurface = (() => {
+    if (absoluteRiseMeters <= 0.01) {
+      return freezeSurfaceDraft({
+        ...target.surface,
+        center: Object.freeze({
+          ...target.surface.center,
+          y: target.surface.elevation
+        }),
+        kind: "flat-slab",
+        slopeRiseMeters: 0
+      });
+    }
+
+    const negativeEndpoint = resolvePathSurfaceEndpoint(target.surface, -1);
+    const positiveEndpoint = resolvePathSurfaceEndpoint(target.surface, 1);
+    const excludedSurfaceIds = new Set([target.surface.surfaceId]);
+    const negativeNeighbor = readNearestPathNeighborElevation(
+      project,
+      negativeEndpoint.position,
+      excludedSurfaceIds
+    );
+    const positiveNeighbor = readNearestPathNeighborElevation(
+      project,
+      positiveEndpoint.position,
+      excludedSurfaceIds
+    );
+    const lowerEndpoint =
+      negativeNeighbor !== null && positiveNeighbor !== null
+        ? negativeNeighbor.elevation <= positiveNeighbor.elevation
+          ? Object.freeze({
+              elevation: negativeNeighbor.elevation,
+              endpointSign: -1 as const
+            })
+          : Object.freeze({
+              elevation: positiveNeighbor.elevation,
+              endpointSign: 1 as const
+            })
+        : negativeNeighbor !== null
+          ? Object.freeze({
+              elevation: negativeNeighbor.elevation,
+              endpointSign: -1 as const
+            })
+          : positiveNeighbor !== null
+            ? Object.freeze({
+                elevation: positiveNeighbor.elevation,
+                endpointSign: 1 as const
+              })
+            : negativeEndpoint.elevation <= positiveEndpoint.elevation
+              ? Object.freeze({
+                  elevation: negativeEndpoint.elevation,
+                  endpointSign: -1 as const
+                })
+              : Object.freeze({
+                  elevation: positiveEndpoint.elevation,
+                  endpointSign: 1 as const
+                });
+    const centerElevation = lowerEndpoint.elevation + absoluteRiseMeters * 0.5;
+    const signedRiseMeters =
+      lowerEndpoint.endpointSign === -1
+        ? absoluteRiseMeters
+        : -absoluteRiseMeters;
+
+    return freezeSurfaceDraft({
+      ...target.surface,
+      center: Object.freeze({
+        ...target.surface.center,
+        y: centerElevation
+      }),
+      elevation: centerElevation,
+      kind: "sloped-plane",
+      slopeRiseMeters: signedRiseMeters
+    });
+  })();
+  const nextProject = Object.freeze({
+    ...project,
+    regionDrafts: Object.freeze(
+      project.regionDrafts.map((region) =>
+        region.surfaceId === target.surface.surfaceId
+          ? freezeRegionDraft({
+              ...region,
+              center: Object.freeze({
+                ...region.center,
+                y: nextSurface.elevation
+              })
+            })
+          : region
+      )
+    ),
+    surfaceDrafts: Object.freeze(
+      project.surfaceDrafts.map((surface) =>
+        surface.surfaceId === target.surface.surfaceId ? nextSurface : surface
+      )
+    )
+  });
+
+  return withSelectedEntity(
+    nextProject,
+    Object.freeze({
+      id: target.region.regionId,
+      kind: "region"
+    })
   );
 }
 
@@ -2316,6 +3000,29 @@ export function createMapEditorProject(
     surfaceDrafts: semanticDrafts.surfaceDrafts,
     terrainPatchDrafts: semanticDrafts.terrainPatchDrafts,
     waterRegionDrafts: createWaterRegionDrafts(loadedBundle)
+  });
+}
+
+export function updateMapEditorProjectIdentity(
+  project: MapEditorProjectSnapshot,
+  identity: {
+    readonly bundleId: string;
+    readonly bundleLabel: string;
+    readonly description?: string;
+  }
+): MapEditorProjectSnapshot {
+  const nextBundleId = identity.bundleId.trim();
+  const nextBundleLabel = identity.bundleLabel.trim();
+
+  if (nextBundleId.length === 0 || nextBundleLabel.length === 0) {
+    return project;
+  }
+
+  return Object.freeze({
+    ...project,
+    bundleId: nextBundleId,
+    bundleLabel: nextBundleLabel,
+    description: identity.description ?? project.description
   });
 }
 
@@ -4303,7 +5010,8 @@ export function applyMapEditorTerrainBrush(
   brushStrengthMeters = defaultTerrainBrushHeightDeltaMeters,
   targetHeightMeters = 0,
   materialId: MapEditorStructuralDraftSnapshot["materialId"] = "terrain-grass",
-  noiseSeed = 0
+  noiseSeed = 0,
+  terrainCliffSpanCells = 2
 ): MapEditorProjectSnapshot {
   const snappedPosition = snapMapEditorPositionToGrid(position);
   const normalizedBrushSizeCells = normalizeTerrainBrushSizeCells(brushSizeCells);
@@ -4398,10 +5106,25 @@ export function applyMapEditorTerrainBrush(
           nextHeight = currentHeight + (targetHeightMeters - currentHeight) * weight;
           break;
         case "cliff":
-          nextHeight =
-            cellX >= targetCell.cellX
-              ? targetHeightMeters + brushStrengthMeters
-              : targetHeightMeters - brushStrengthMeters;
+          nextHeight = resolveTerrainCliffHeight({
+            brushStrengthMeters,
+            cellX,
+            normalizedNoise,
+            sampleSpacingMeters: terrainPatch.sampleSpacingMeters,
+            targetCellX: targetCell.cellX,
+            targetHeightMeters,
+            terrainCliffSpanCells
+          });
+          {
+            const activeLayer = nextMaterialLayers[materialLayerIndex];
+
+            if (activeLayer !== undefined) {
+              activeLayer.weightSamples[heightIndex] = Math.min(
+                1,
+                Math.max(activeLayer.weightSamples[heightIndex] ?? 0, weight)
+              );
+            }
+          }
           break;
         case "material": {
           const activeLayer = nextMaterialLayers[materialLayerIndex];
@@ -4563,12 +5286,34 @@ export function addMapEditorPathSegment(
     );
   }
 
+  const { project: projectWithStartLanding } = ensurePathSurfaceAndRegion(
+    project,
+    fromAnchor.center,
+    fromAnchor.elevation,
+    pathWidthCells,
+    materialId,
+    materialReferenceId,
+    {
+      snapCenter: false
+    }
+  );
+  const { project: projectWithEndpointLandings } = ensurePathSurfaceAndRegion(
+    projectWithStartLanding,
+    targetPosition,
+    targetElevationMeters,
+    pathWidthCells,
+    materialId,
+    materialReferenceId,
+    {
+      snapCenter: false
+    }
+  );
   const deltaX = targetPosition.x - fromAnchor.center.x;
   const deltaZ = targetPosition.z - fromAnchor.center.z;
   const segmentLengthMeters = Math.hypot(deltaX, deltaZ);
 
   if (segmentLengthMeters <= 0.01) {
-    return project;
+    return projectWithEndpointLandings;
   }
 
   const pathWidthMeters =
@@ -4586,8 +5331,8 @@ export function addMapEditorPathSegment(
     z: (fromAnchor.center.z + targetPosition.z) * 0.5
   });
   const { project: projectWithSurface, surfaceId } = createSemanticSurfaceForPlacement(
-    project,
-    `Path Surface ${project.surfaceDrafts.length + 1}`,
+    projectWithEndpointLandings,
+    `Path Surface ${projectWithEndpointLandings.surfaceDrafts.length + 1}`,
     surfaceCenter,
     rotationYRadians,
     surfaceSize,

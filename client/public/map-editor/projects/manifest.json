@@ -1,0 +1,12 @@
+{
+  "projects": [
+    {
+      "bundleId": "private-build",
+      "label": "Private",
+      "path": "/map-editor/projects/private-build.json",
+      "sourceBundleId": "staging-ground",
+      "updatedAt": "2026-04-26T00:42:07.197Z"
+    }
+  ],
+  "version": 1
+}

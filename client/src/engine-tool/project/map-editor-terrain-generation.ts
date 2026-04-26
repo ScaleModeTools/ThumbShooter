@@ -33,9 +33,15 @@ export const defaultMapEditorTerrainGenerationConfig =
     materialBands: Object.freeze([
       Object.freeze({
         edgeFadeMeters: 0.8,
-        materialId: "terrain-ash",
+        materialId: "terrain-sand",
         maxHeightMeters: 0.2,
         minHeightMeters: Number.NEGATIVE_INFINITY
+      }),
+      Object.freeze({
+        edgeFadeMeters: 1,
+        materialId: "terrain-dirt",
+        maxHeightMeters: 1.8,
+        minHeightMeters: -0.4
       }),
       Object.freeze({
         edgeFadeMeters: 1.2,
@@ -51,7 +57,7 @@ export const defaultMapEditorTerrainGenerationConfig =
       }),
       Object.freeze({
         edgeFadeMeters: 1.6,
-        materialId: "terrain-ash",
+        materialId: "terrain-snow",
         maxHeightMeters: Number.POSITIVE_INFINITY,
         minHeightMeters: 6
       })
@@ -188,7 +194,11 @@ function createGeneratedMaterialLayers(
           continue;
         }
 
-        const slopeBoost = band.materialId === "terrain-rock" ? slopeWeight : 0;
+        const slopeBoost =
+          band.materialId === "terrain-rock" ||
+          band.materialId === "terrain-cliff"
+            ? slopeWeight
+            : 0;
         const bandWeight = Math.max(
           materialWeights[sampleIndex] ?? 0,
           resolveBandWeight(heightMeters, band) + slopeBoost

@@ -94,7 +94,6 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
     y: 0,
     z: -9
   });
-  const blueInitialSpawnPosition = blueRootPosition;
   const blueRespawnPosition = Object.freeze({
     x: 12,
     y: 0,
@@ -132,7 +131,6 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
       createPlayerRuntimeState(bluePlayerId, "blue", blueRootPosition)
     ]
   ]);
-  let blueRespawnCount = 0;
   const combatAuthority = new MetaverseAuthoritativeCombatAuthority({
     clearDriverVehicleControl() {},
     clearPlayerTraversalIntent() {},
@@ -148,12 +146,7 @@ test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits a
     readTickIntervalMs: () => 33,
     resolveRespawnPose(_playerId, teamId) {
       return {
-        position:
-          teamId === "red"
-            ? redRootPosition
-            : blueRespawnCount++ === 0
-              ? blueInitialSpawnPosition
-              : blueRespawnPosition,
+        position: teamId === "red" ? redRootPosition : blueRespawnPosition,
         yawRadians: teamId === "red" ? 0 : blueRespawnYawRadians
       };
     },
