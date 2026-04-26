@@ -613,6 +613,13 @@ function normalizeFiniteNonNegativeInteger(
   return Math.floor(normalizeFiniteNonNegativeNumber(rawValue, fallback));
 }
 
+function normalizeFiniteInteger(
+  rawValue: number | undefined,
+  fallback = 0
+): number {
+  return Math.trunc(normalizeFiniteNumber(rawValue ?? fallback, fallback));
+}
+
 function normalizeIdentifier(value: string, label: string): string {
   const normalizedValue = value.trim();
 
@@ -1061,7 +1068,7 @@ export function createMetaversePlayerCombatSnapshot(
     deaths: normalizeFiniteNonNegativeInteger(input.deaths),
     headshotKills: normalizeFiniteNonNegativeInteger(input.headshotKills),
     health: normalizedHealth,
-    kills: normalizeFiniteNonNegativeInteger(input.kills),
+    kills: normalizeFiniteInteger(input.kills),
     maxHealth,
     respawnRemainingMs: createMilliseconds(
       normalizeFiniteNonNegativeNumber(input.respawnRemainingMs)
@@ -1080,7 +1087,7 @@ export function createMetaverseCombatTeamSnapshot(
 ): MetaverseCombatTeamSnapshot {
   return Object.freeze({
     playerIds: Object.freeze([...(input.playerIds ?? [])]),
-    score: normalizeFiniteNonNegativeInteger(input.score),
+    score: normalizeFiniteInteger(input.score),
     teamId: input.teamId
   });
 }

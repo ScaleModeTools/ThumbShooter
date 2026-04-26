@@ -44,7 +44,6 @@ import type {
   MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 import {
-  applyStoredMetaverseWorldBundleOverride,
   clearMetaverseWorldBundlePreviewEntry,
   listMetaverseWorldBundleRegistryEntries,
   readMetaverseWorldBundleRegistryEntry,
@@ -53,7 +52,10 @@ import {
   resolveMetaverseWorldBundleSourceBundleId,
   type MetaverseWorldBundleRegistryEntry
 } from "@/metaverse/world/bundle-registry";
-import { loadMetaverseMapBundle } from "@/metaverse/world/map-bundles";
+import {
+  createLoadedMetaverseMapBundleSnapshot,
+  loadMetaverseMapBundle
+} from "@/metaverse/world/map-bundles";
 
 import { Button } from "@/components/ui/button";
 import { StableInlineText } from "@/components/text-stability";
@@ -82,6 +84,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup
 } from "@/components/ui/resizable";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
 import { MapEditorMenubar } from "@/engine-tool/layout/map-editor-menubar";
 import { MapEditorGameplayPane } from "@/engine-tool/layout/map-editor-gameplay-pane";
 import { MapEditorSceneRail } from "@/engine-tool/layout/map-editor-scene-rail";
@@ -99,6 +102,9 @@ import {
   snapMapEditorBuildCoordinateToCellCenter,
   snapMapEditorBuildCoordinateToGrid
 } from "@/engine-tool/build/map-editor-build-placement";
+import {
+  createLoadedMapEditorBlankTemplateBundle
+} from "@/engine-tool/config/map-editor-blank-template-bundle";
 import {
   addMapEditorFloorPolygonRegionDraft,
   addMapEditorPathSegment,
@@ -145,6 +151,7 @@ import {
   updateMapEditorGameplayVolumeDraft,
   updateMapEditorGameplayProfileId,
   updateMapEditorProjectIdentity,
+  updateMapEditorProjectSettings,
   updateMapEditorLightDraft,
   updateMapEditorMaterialDefinitionDraft,
   updateMapEditorPlayerSpawnDraft,
@@ -170,14 +177,6 @@ import {
   undoMapEditorProjectSessionChange,
   updateMapEditorProjectSessionProject
 } from "@/engine-tool/project/map-editor-project-session";
-import {
-  clearStoredMapEditorProject,
-  loadMapEditorProjectCatalogEntries,
-  loadStoredMapEditorProject,
-  saveMapEditorProject,
-  upsertMapEditorProjectCatalogEntry,
-  type MapEditorProjectStorageLike
-} from "@/engine-tool/project/map-editor-project-storage";
 import {
   registerPublicMapEditorProjectRegistryEntries
 } from "@/engine-tool/project/map-editor-public-project-storage";
@@ -206,6 +205,7 @@ import {
   TabsTrigger
 } from "@/components/ui/tabs";
 import {
+  defaultMapEditorProjectSettings,
   defaultMapEditorBuilderToolState,
   defaultMapEditorViewportHelperVisibility
 } from "@/engine-tool/types/map-editor";
@@ -231,7 +231,7 @@ import {
 } from "@/components/ui/button-group";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-function readBrowserStorage(): MapEditorProjectStorageLike | null {
+function readBrowserStorage(): Storage | null {
   try {
     return globalThis.localStorage;
   } catch {
@@ -239,13 +239,41 @@ function readBrowserStorage(): MapEditorProjectStorageLike | null {
   }
 }
 
+function readMapEditorProjectRegistryEntry(
+  bundleId: string,
+  publicRegistryEntries: readonly MetaverseWorldBundleRegistryEntry[] =
+    Object.freeze([])
+): MetaverseWorldBundleRegistryEntry | null {
+  return (
+    readMetaverseWorldBundleRegistryEntry(bundleId) ??
+    publicRegistryEntries.find((entry) => entry.bundleId === bundleId) ??
+    listMetaverseWorldBundleRegistryEntries().find(
+      (entry) => entry.bundleId === bundleId
+    ) ??
+    null
+  );
+}
+
 function createProjectForBundle(
   bundleId: string,
-  storage: MapEditorProjectStorageLike | null
+  publicRegistryEntries: readonly MetaverseWorldBundleRegistryEntry[] =
+    Object.freeze([])
 ): MapEditorProjectSnapshot {
-  return (
-    loadStoredMapEditorProject(storage, bundleId) ??
-    createMapEditorProject(loadMetaverseMapBundle(bundleId))
+  const registryEntry = readMapEditorProjectRegistryEntry(
+    bundleId,
+    publicRegistryEntries
+  );
+
+  return createMapEditorProject(
+    registryEntry === null
+      ? loadMetaverseMapBundle(bundleId)
+      : createLoadedMetaverseMapBundleSnapshot(registryEntry.bundle),
+    registryEntry?.mapEditorProjectSettings === null ||
+      registryEntry?.mapEditorProjectSettings === undefined
+      ? undefined
+      : {
+          projectSettings: registryEntry.mapEditorProjectSettings
+        }
   );
 }
 
@@ -258,41 +286,20 @@ function selectDefaultBundleId(
 }
 
 function readAvailableMapEditorProjectRegistryEntries(
-  storage: MapEditorProjectStorageLike | null,
   publicRegistryEntries: readonly MetaverseWorldBundleRegistryEntry[] =
     Object.freeze([])
 ): readonly MetaverseWorldBundleRegistryEntry[] {
-  const catalogEntries = loadMapEditorProjectCatalogEntries(storage);
-
-  for (const entry of catalogEntries) {
-    if (loadStoredMapEditorProject(storage, entry.bundleId) !== null) {
-      applyStoredMetaverseWorldBundleOverride(storage, entry.bundleId);
-    }
-  }
-
   const entries = [...listMetaverseWorldBundleRegistryEntries()];
-
-  for (const catalogEntry of catalogEntries) {
-    if (entries.some((entry) => entry.bundleId === catalogEntry.bundleId)) {
-      continue;
-    }
-
-    const registryEntry = readMetaverseWorldBundleRegistryEntry(
-      catalogEntry.bundleId
-    );
-
-    if (registryEntry !== null) {
-      entries.push(registryEntry);
-    }
-  }
 
   for (const publicRegistryEntry of publicRegistryEntries) {
     if (
       !entries.some((entry) => entry.bundleId === publicRegistryEntry.bundleId)
     ) {
       entries.push(
-        readMetaverseWorldBundleRegistryEntry(publicRegistryEntry.bundleId) ??
-          publicRegistryEntry
+        readMapEditorProjectRegistryEntry(
+          publicRegistryEntry.bundleId,
+          publicRegistryEntries
+        ) ?? publicRegistryEntry
       );
     }
   }
@@ -332,31 +339,18 @@ function createUniqueMapEditorProjectId(
   return `${baseProjectId}-${Date.now().toString(36)}`;
 }
 
-function createMetaverseMapBundleWithIdentity(
-  bundle: MetaverseMapBundleSnapshot,
-  identity: {
-    readonly bundleId: string;
-    readonly bundleLabel: string;
-    readonly description?: string;
-  }
-): MetaverseMapBundleSnapshot {
-  return Object.freeze({
-    ...bundle,
-    description: identity.description ?? bundle.description,
-    label: identity.bundleLabel,
-    mapId: identity.bundleId
-  });
-}
-
 function registerMapEditorProjectPreviewBundle(
   bundle: MetaverseMapBundleSnapshot,
-  sourceBundleId = bundle.mapId
+  sourceBundleId = bundle.mapId,
+  mapEditorProjectSettings:
+    MetaverseWorldBundleRegistryEntry["mapEditorProjectSettings"] = null
 ): void {
   registerMetaverseWorldBundlePreviewEntry(
     Object.freeze({
       bundle,
       bundleId: bundle.mapId,
       label: bundle.label,
+      mapEditorProjectSettings,
       sourceBundleId
     })
   );
@@ -715,6 +709,7 @@ type MapEditorProjectIdentityDialogMode = "new" | "save-as";
 interface MapEditorProjectIdentityDialogState {
   readonly bundleId: string;
   readonly errorMessage: string | null;
+  readonly helperGridSizeMeters: number;
   readonly label: string;
   readonly mode: MapEditorProjectIdentityDialogMode;
 }
@@ -722,6 +717,7 @@ interface MapEditorProjectIdentityDialogState {
 function MapEditorProjectIdentityDialog({
   dialogState,
   onBundleIdChange,
+  onHelperGridSizeMetersChange,
   onLabelChange,
   onOpenChange,
   onSubmit,
@@ -729,6 +725,7 @@ function MapEditorProjectIdentityDialog({
 }: {
   readonly dialogState: MapEditorProjectIdentityDialogState | null;
   readonly onBundleIdChange: (bundleId: string) => void;
+  readonly onHelperGridSizeMetersChange: (helperGridSizeMeters: number) => void;
   readonly onLabelChange: (label: string) => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -747,7 +744,7 @@ function MapEditorProjectIdentityDialog({
             </DialogTitle>
             <DialogDescription>
               {isNewProject
-                ? "Create a saved project file from the current bundle template."
+                ? "Create a saved project file from the blank template."
                 : "Save a copy of the current draft to the public project folder."}
             </DialogDescription>
           </DialogHeader>
@@ -771,6 +768,22 @@ function MapEditorProjectIdentityDialog({
                 value={dialogState?.bundleId ?? ""}
               />
             </div>
+            {isNewProject ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="map-editor-project-helper-grid-size">
+                  Helper Grid Size
+                </Label>
+                <MapEditorEditableNumberInput
+                  decimals={0}
+                  id="map-editor-project-helper-grid-size"
+                  onValueChange={onHelperGridSizeMetersChange}
+                  value={dialogState?.helperGridSizeMeters ?? 0}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Snaps to the {mapEditorBuildGridUnitMeters}m authoring grid.
+                </p>
+              </div>
+            ) : null}
             {dialogState?.errorMessage === null ||
             dialogState?.errorMessage === undefined ? null : (
               <p className="text-sm text-destructive">
@@ -843,14 +856,14 @@ export function MapEditorStageScreen({
   onCloseRequest,
   onRunPreviewRequest
 }: MapEditorStageScreenProps) {
-  const [browserStorage] = useState<MapEditorProjectStorageLike | null>(() =>
+  const [browserStorage] = useState<Storage | null>(() =>
     readBrowserStorage()
   );
   const [publicRegistryEntries, setPublicRegistryEntries] = useState<
     readonly MetaverseWorldBundleRegistryEntry[]
   >(() => Object.freeze([]));
   const [registryEntries, setRegistryEntries] = useState(() =>
-    readAvailableMapEditorProjectRegistryEntries(browserStorage)
+    readAvailableMapEditorProjectRegistryEntries()
   );
   const defaultBundleId = selectDefaultBundleId(initialBundleId);
   const bundleLabelReserveTexts = useMemo(
@@ -861,7 +874,7 @@ export function MapEditorStageScreen({
   const [selectedBundleId, setSelectedBundleId] = useState(defaultBundleId);
   const [projectSession, setProjectSession] = useState(() =>
     createMapEditorProjectSession(
-      createProjectForBundle(defaultBundleId, browserStorage)
+      createProjectForBundle(defaultBundleId)
     )
   );
   const sceneRailPanelApiRef = useRef<MapEditorPanelApi | null>(null);
@@ -917,7 +930,7 @@ export function MapEditorStageScreen({
 
         setPublicRegistryEntries(entries);
         setRegistryEntries(
-          readAvailableMapEditorProjectRegistryEntries(browserStorage, entries)
+          readAvailableMapEditorProjectRegistryEntries(entries)
         );
       })
       .catch((error) => {
@@ -935,7 +948,7 @@ export function MapEditorStageScreen({
     return () => {
       cancelled = true;
     };
-  }, [browserStorage]);
+  }, []);
 
   const handleProjectSelectionUpdate = useEffectEvent(
     (
@@ -1019,7 +1032,7 @@ export function MapEditorStageScreen({
       setProjectSession((currentSession) =>
         replaceMapEditorProjectSessionProject(
           currentSession,
-          createProjectForBundle(nextBundleId, browserStorage)
+          createProjectForBundle(nextBundleId, publicRegistryEntries)
         )
       );
       setHasUnsavedProjectChanges(false);
@@ -1029,14 +1042,13 @@ export function MapEditorStageScreen({
 
   const handleResetDraftRequest = () => {
     startTransition(() => {
-      clearStoredMapEditorProject(browserStorage, selectedBundleId);
       clearMetaverseWorldBundlePreviewEntry(selectedBundleId);
       setActiveModuleAssetId(null);
       setViewportToolMode("select");
       setProjectSession((currentSession) =>
         replaceMapEditorProjectSessionProject(
           currentSession,
-          createMapEditorProject(loadMetaverseMapBundle(selectedBundleId))
+          createProjectForBundle(selectedBundleId, publicRegistryEntries)
         )
       );
       setHasUnsavedProjectChanges(false);
@@ -1044,27 +1056,70 @@ export function MapEditorStageScreen({
     });
   };
 
-  const handleSaveDraftRequest = () => {
-    saveMapEditorProject(browserStorage, project);
-    if (browserStorage === null) {
-      registerMapEditorProjectPreviewBundle(
-        exportMapEditorProjectToMetaverseMapBundle(project)
-      );
-    } else {
-      applyStoredMetaverseWorldBundleOverride(browserStorage, project.bundleId);
-    }
+  const persistProjectToPublicFolder = async (
+    projectToSave: MapEditorProjectSnapshot,
+    sourceBundleId: string
+  ): Promise<{
+    readonly publicPath: string;
+    readonly publicRegistryEntries:
+      readonly MetaverseWorldBundleRegistryEntry[];
+  }> => {
+    const bundle = exportMapEditorProjectToMetaverseMapBundle(projectToSave);
+    const publicSaveResult = await persistMapEditorPublicProjectBundleOnServer(
+      bundle,
+      {
+        mapEditorProjectSettings: projectToSave.projectSettings,
+        sourceBundleId
+      }
+    );
+    const publicRegistryEntry = Object.freeze({
+      bundle,
+      bundleId: bundle.mapId,
+      label: bundle.label,
+      mapEditorProjectSettings: projectToSave.projectSettings,
+      sourceBundleId: publicSaveResult.sourceBundleId
+    } satisfies MetaverseWorldBundleRegistryEntry);
+    const nextPublicRegistryEntries = Object.freeze([
+      ...publicRegistryEntries.filter(
+        (entry) => entry.bundleId !== publicRegistryEntry.bundleId
+      ),
+      publicRegistryEntry
+    ]);
+
+    registerMapEditorProjectPreviewBundle(
+      bundle,
+      publicSaveResult.sourceBundleId,
+      projectToSave.projectSettings
+    );
+    setPublicRegistryEntries(nextPublicRegistryEntries);
     setRegistryEntries(
-      readAvailableMapEditorProjectRegistryEntries(
-        browserStorage,
-        publicRegistryEntries
-      )
+      readAvailableMapEditorProjectRegistryEntries(nextPublicRegistryEntries)
     );
-    setHasUnsavedProjectChanges(false);
-    setRunStatusMessage(
-      `Saved ${project.bundleLabel} with ${
-        project.launchVariationDrafts.length
-      } launch variation${project.launchVariationDrafts.length === 1 ? "" : "s"}.`
-    );
+
+    return Object.freeze({
+      publicPath: publicSaveResult.path,
+      publicRegistryEntries: nextPublicRegistryEntries
+    });
+  };
+
+  const handleSaveDraftRequest = async (): Promise<boolean> => {
+    try {
+      const { publicPath } = await persistProjectToPublicFolder(
+        project,
+        resolveMetaverseWorldBundleSourceBundleId(project.bundleId)
+      );
+
+      setHasUnsavedProjectChanges(false);
+      setRunStatusMessage(`Saved ${project.bundleLabel} to ${publicPath}.`);
+      return true;
+    } catch (error) {
+      setRunStatusMessage(
+        error instanceof Error
+          ? `Public project save failed: ${error.message}`
+          : "Public project save failed."
+      );
+      return false;
+    }
   };
 
   const openProjectIdentityDialog = (
@@ -1078,6 +1133,10 @@ export function MapEditorStageScreen({
       Object.freeze({
         bundleId,
         errorMessage: null,
+        helperGridSizeMeters:
+          mode === "new"
+            ? defaultMapEditorProjectSettings.helperGridSizeMeters
+            : project.projectSettings.helperGridSizeMeters,
         label,
         mode
       })
@@ -1112,6 +1171,20 @@ export function MapEditorStageScreen({
     );
   };
 
+  const updateProjectIdentityDialogHelperGridSizeMeters = (
+    helperGridSizeMeters: number
+  ) => {
+    setProjectIdentityDialogState((currentState) =>
+      currentState === null
+        ? null
+        : Object.freeze({
+            ...currentState,
+            errorMessage: null,
+            helperGridSizeMeters
+          })
+    );
+  };
+
   const rejectProjectIdentityDialogSubmit = (message: string) => {
     setProjectIdentityDialogState((currentState) =>
       currentState === null
@@ -1130,61 +1203,21 @@ export function MapEditorStageScreen({
       readonly bundleLabel: string;
       readonly description?: string;
     },
-    seedBundle: MetaverseMapBundleSnapshot,
     sourceBundleId: string
   ): Promise<{
     readonly nextProject: MapEditorProjectSnapshot;
     readonly publicPath: string;
   }> => {
     const nextProject = updateMapEditorProjectIdentity(projectToSave, identity);
-    const previewBundle = createMetaverseMapBundleWithIdentity(
-      seedBundle,
-      identity
-    );
-    const publicSaveResult = await persistMapEditorPublicProjectBundleOnServer(
-      previewBundle,
+    const { publicPath } = await persistProjectToPublicFolder(
+      nextProject,
       sourceBundleId
-    );
-    const publicRegistryEntry = Object.freeze({
-      bundle: previewBundle,
-      bundleId: previewBundle.mapId,
-      label: previewBundle.label,
-      sourceBundleId: publicSaveResult.sourceBundleId
-    } satisfies MetaverseWorldBundleRegistryEntry);
-    const nextPublicRegistryEntries = Object.freeze([
-      ...publicRegistryEntries.filter(
-        (entry) => entry.bundleId !== publicRegistryEntry.bundleId
-      ),
-      publicRegistryEntry
-    ]);
-
-    registerMapEditorProjectPreviewBundle(
-      previewBundle,
-      publicSaveResult.sourceBundleId
-    );
-    setPublicRegistryEntries(nextPublicRegistryEntries);
-    upsertMapEditorProjectCatalogEntry(browserStorage, {
-      bundleId: nextProject.bundleId,
-      label: nextProject.bundleLabel
-    });
-    saveMapEditorProject(browserStorage, nextProject);
-    if (browserStorage !== null) {
-      applyStoredMetaverseWorldBundleOverride(
-        browserStorage,
-        nextProject.bundleId
-      );
-    }
-    setRegistryEntries(
-      readAvailableMapEditorProjectRegistryEntries(
-        browserStorage,
-        nextPublicRegistryEntries
-      )
     );
     setHasUnsavedProjectChanges(false);
 
     return Object.freeze({
       nextProject,
-      publicPath: publicSaveResult.path
+      publicPath
     });
   };
 
@@ -1223,11 +1256,9 @@ export function MapEditorStageScreen({
 
     try {
       if (projectIdentityDialogState.mode === "save-as") {
-        const seedBundle = exportMapEditorProjectToMetaverseMapBundle(project);
         const { nextProject, publicPath } = await saveProjectUnderIdentity(
           project,
           identity,
-          seedBundle,
           selectedBundleId
         );
 
@@ -1244,14 +1275,17 @@ export function MapEditorStageScreen({
         return;
       }
 
-      const sourceLoadedBundle = loadMetaverseMapBundle(selectedBundleId);
-      const sourceProject = createMapEditorProject(sourceLoadedBundle);
+      const sourceLoadedBundle = createLoadedMapEditorBlankTemplateBundle();
+      const sourceProject = createMapEditorProject(sourceLoadedBundle, {
+        projectSettings: {
+          helperGridSizeMeters: projectIdentityDialogState.helperGridSizeMeters
+        }
+      });
       const sourceBundle = sourceLoadedBundle.bundle;
       const { nextProject, publicPath } = await saveProjectUnderIdentity(
         sourceProject,
         identity,
-        sourceBundle,
-        selectedBundleId
+        sourceBundle.mapId
       );
 
       startTransition(() => {
@@ -1287,8 +1321,11 @@ export function MapEditorStageScreen({
   };
 
   const handleSaveAndReturnToShellRequest = () => {
-    handleSaveDraftRequest();
-    onCloseRequest();
+    void handleSaveDraftRequest().then((saved) => {
+      if (saved) {
+        onCloseRequest();
+      }
+    });
   };
 
   useEffect(() => {
@@ -1361,6 +1398,16 @@ export function MapEditorStageScreen({
   const handleUpdateGameplayProfileId = (gameplayProfileId: string) => {
     handleProjectAuthoringChange((currentProject) =>
       updateMapEditorGameplayProfileId(currentProject, gameplayProfileId)
+    );
+  };
+
+  const handleUpdateProjectHelperGridSizeMeters = (
+    helperGridSizeMeters: number
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorProjectSettings(currentProject, () => ({
+        helperGridSizeMeters
+      }))
     );
   };
 
@@ -2432,15 +2479,13 @@ export function MapEditorStageScreen({
         ? `Preview bundle ${runPreviewResult.launchSelection.bundleLabel} exported to the runtime registry.`
         : `Running ${selectedLaunchVariation.label} on ${runPreviewResult.launchSelection.bundleLabel}.`
     );
-    saveMapEditorProject(browserStorage, project);
-    if (browserStorage !== null) {
-      applyStoredMetaverseWorldBundleOverride(browserStorage, project.bundleId);
-    }
+    registerMapEditorProjectPreviewBundle(
+      exportMapEditorProjectToMetaverseMapBundle(project),
+      resolveMetaverseWorldBundleSourceBundleId(project.bundleId),
+      project.projectSettings
+    );
     setRegistryEntries(
-      readAvailableMapEditorProjectRegistryEntries(
-        browserStorage,
-        publicRegistryEntries
-      )
+      readAvailableMapEditorProjectRegistryEntries(publicRegistryEntries)
     );
     setHasUnsavedProjectChanges(false);
     onRunPreviewRequest(runPreviewResult.launchSelection);
@@ -2570,7 +2615,13 @@ export function MapEditorStageScreen({
                 >
                   <MapEditorToolbar
                     onBundleChange={handleBundleChange}
+                    onHelperGridSizeMetersChange={
+                      handleUpdateProjectHelperGridSizeMeters
+                    }
                     onResetDraftRequest={handleResetDraftRequest}
+                    helperGridSizeMeters={
+                      project.projectSettings.helperGridSizeMeters
+                    }
                     registryEntries={registryEntries}
                     selectedBundleId={selectedBundleId}
                   />
@@ -2640,6 +2691,7 @@ export function MapEditorStageScreen({
               edgeDrafts={project.edgeDrafts}
               environmentPresentation={project.environmentPresentation}
               gameplayVolumeDrafts={project.gameplayVolumeDrafts}
+              helperGridSizeMeters={project.projectSettings.helperGridSizeMeters}
               lightDrafts={project.lightDrafts}
               materialDefinitionDrafts={project.materialDefinitionDrafts}
               onApplyTerrainBrushAtPosition={handleApplyTerrainBrushAtPosition}
@@ -2794,6 +2846,9 @@ export function MapEditorStageScreen({
       <MapEditorProjectIdentityDialog
         dialogState={projectIdentityDialogState}
         onBundleIdChange={updateProjectIdentityDialogBundleId}
+        onHelperGridSizeMetersChange={
+          updateProjectIdentityDialogHelperGridSizeMeters
+        }
         onLabelChange={updateProjectIdentityDialogLabel}
         onOpenChange={(open) => {
           if (!open && !projectIdentityDialogSaving) {

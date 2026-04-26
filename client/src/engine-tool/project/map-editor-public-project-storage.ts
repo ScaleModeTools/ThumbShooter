@@ -14,6 +14,8 @@ const publicMapEditorProjectManifestPath =
 interface PublicMapEditorProjectManifestEntry {
   readonly bundleId: string;
   readonly label: string;
+  readonly mapEditorProjectSettings:
+    MetaverseWorldBundleRegistryEntry["mapEditorProjectSettings"];
   readonly path: string;
   readonly sourceBundleId: string;
 }
@@ -64,6 +66,10 @@ function readManifestEntry(
     return Object.freeze({
       bundleId: readStringField(value.bundleId, "manifest.projects[].bundleId"),
       label: readStringField(value.label, "manifest.projects[].label"),
+      mapEditorProjectSettings: readMapEditorProjectSettings(
+        value.mapEditorProjectSettings,
+        "manifest.projects[].mapEditorProjectSettings"
+      ),
       path: readStringField(value.path, "manifest.projects[].path"),
       sourceBundleId: readStringField(
         value.sourceBundleId,
@@ -73,6 +79,27 @@ function readManifestEntry(
   } catch {
     return null;
   }
+}
+
+function readMapEditorProjectSettings(
+  value: unknown,
+  fieldName: string
+): MetaverseWorldBundleRegistryEntry["mapEditorProjectSettings"] {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isRecord(value) || typeof value.helperGridSizeMeters !== "number") {
+    throw new Error(`Expected object field: ${fieldName}`);
+  }
+
+  if (!Number.isFinite(value.helperGridSizeMeters)) {
+    throw new Error(`Expected finite numeric field: ${fieldName}.helperGridSizeMeters`);
+  }
+
+  return Object.freeze({
+    helperGridSizeMeters: value.helperGridSizeMeters
+  });
 }
 
 function readManifest(payload: unknown): PublicMapEditorProjectManifest {
@@ -111,6 +138,7 @@ function createRegistryEntry(
     bundle,
     bundleId: bundle.mapId,
     label: bundle.label,
+    mapEditorProjectSettings: manifestEntry.mapEditorProjectSettings,
     sourceBundleId: manifestEntry.sourceBundleId
   });
 }

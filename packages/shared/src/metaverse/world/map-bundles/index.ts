@@ -69,4 +69,5 @@ export {
 } from "./resolve-metaverse-map-bundle-compiled-world-surface-colliders.js";
 export { resolveMetaversePlayerTeamId } from "../../metaverse-player-team.js";
 export { deathmatchMapBundle } from "./deathmatch/index.js";
+export { privateBuildMapBundle } from "./private-build/index.js";
 export { stagingGroundMapBundle } from "./staging-ground/index.js";

@@ -22,6 +22,9 @@ interface MetaverseWorldPreviewHttpAdapterOptions {
 interface PublicMetaverseMapBundleManifestEntry {
   readonly bundleId: string;
   readonly label: string;
+  readonly mapEditorProjectSettings: {
+    readonly helperGridSizeMeters: number;
+  } | null;
   readonly path: string;
   readonly sourceBundleId: string;
   readonly updatedAt: string;
@@ -98,6 +101,32 @@ function readOptionalStringField(
   }
 
   return normalizedValue;
+}
+
+function readOptionalMapEditorProjectSettings(
+  value: unknown,
+  fieldName: string
+): PublicMetaverseMapBundleManifestEntry["mapEditorProjectSettings"] {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Expected object field: ${fieldName}`);
+  }
+
+  if (
+    typeof value.helperGridSizeMeters !== "number" ||
+    !Number.isFinite(value.helperGridSizeMeters)
+  ) {
+    throw new Error(
+      `Expected finite numeric field: ${fieldName}.helperGridSizeMeters`
+    );
+  }
+
+  return Object.freeze({
+    helperGridSizeMeters: value.helperGridSizeMeters
+  });
 }
 
 function readJsonBody(
@@ -196,6 +225,10 @@ function readManifestEntry(
     return Object.freeze({
       bundleId: readStringField(value.bundleId, "manifest.projects[].bundleId"),
       label: readStringField(value.label, "manifest.projects[].label"),
+      mapEditorProjectSettings: readOptionalMapEditorProjectSettings(
+        value.mapEditorProjectSettings,
+        "manifest.projects[].mapEditorProjectSettings"
+      ),
       path: readStringField(value.path, "manifest.projects[].path"),
       sourceBundleId: readStringField(
         value.sourceBundleId,
@@ -276,7 +309,9 @@ export class MetaverseWorldPreviewHttpAdapter {
 
   private persistPublicMapBundle(
     bundleSnapshot: unknown,
-    sourceBundleId: string | undefined
+    sourceBundleId: string | undefined,
+    mapEditorProjectSettings:
+      PublicMetaverseMapBundleManifestEntry["mapEditorProjectSettings"]
   ): PublicMetaverseMapBundleManifestEntry {
     const previewEntry = registerAuthoritativeMetaverseMapBundlePreview(
       bundleSnapshot,
@@ -291,6 +326,7 @@ export class MetaverseWorldPreviewHttpAdapter {
     const manifestEntry = Object.freeze({
       bundleId: previewEntry.bundleId,
       label: previewEntry.bundle.label,
+      mapEditorProjectSettings,
       path: publicPath,
       sourceBundleId: previewEntry.sourceBundleId,
       updatedAt
@@ -368,11 +404,16 @@ export class MetaverseWorldPreviewHttpAdapter {
         requestBody.sourceBundleId,
         "request.sourceBundleId"
       );
+      const mapEditorProjectSettings = readOptionalMapEditorProjectSettings(
+        requestBody.mapEditorProjectSettings,
+        "request.mapEditorProjectSettings"
+      );
 
       if (publicMapBundlePath) {
         const publicEntry = this.persistPublicMapBundle(
           requestBody.bundle,
-          sourceBundleId
+          sourceBundleId,
+          mapEditorProjectSettings
         );
 
         writeJson(response, 200, {

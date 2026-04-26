@@ -1,6 +1,7 @@
 import {
   deathmatchMapBundle,
   parseMetaverseMapBundleSnapshot,
+  privateBuildMapBundle,
   stagingGroundMapBundle,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
@@ -12,6 +13,11 @@ export interface LoadedAuthoritativeMetaverseMapBundleSnapshot {
 }
 
 const authoritativeMetaverseMapBundleEntries = Object.freeze([
+  Object.freeze({
+    bundle: privateBuildMapBundle,
+    bundleId: privateBuildMapBundle.mapId,
+    sourceBundleId: privateBuildMapBundle.mapId
+  } satisfies LoadedAuthoritativeMetaverseMapBundleSnapshot),
   Object.freeze({
     bundle: stagingGroundMapBundle,
     bundleId: stagingGroundMapBundle.mapId,

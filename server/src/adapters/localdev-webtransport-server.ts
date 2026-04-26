@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 
 import {
@@ -263,17 +264,7 @@ function resolveOptionalPathHeader(
 
 function decodeSha256Hex(rawValue: string): Uint8Array {
   const normalizedValue = validateSha256Hex(rawValue);
-  const bytes = new Uint8Array(32);
-
-  for (let index = 0; index < bytes.length; index += 1) {
-    const start = index * 2;
-    bytes[index] = Number.parseInt(
-      normalizedValue.slice(start, start + 2),
-      16
-    );
-  }
-
-  return bytes;
+  return Buffer.from(normalizedValue, "hex");
 }
 
 function sanitizeSingleLineEnvValue(rawValue: string): string {

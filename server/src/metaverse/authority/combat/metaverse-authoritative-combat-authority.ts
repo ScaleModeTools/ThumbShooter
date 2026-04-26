@@ -32,6 +32,9 @@ import type {
 import type {
   MetaverseRealtimePlayerWeaponStateSnapshot
 } from "@webgpu-metaverse/shared/metaverse/realtime";
+import type {
+  MetaverseMapBundleSemanticGameplayVolumeSnapshot
+} from "@webgpu-metaverse/shared/metaverse/world";
 
 import type {
   PhysicsVector3Snapshot,
@@ -145,6 +148,8 @@ interface MetaverseAuthoritativeCombatAuthorityDependencies<
   readonly clearPlayerVehicleOccupancy: (playerId: MetaversePlayerId) => void;
   readonly hurtVolumeConfig?: Partial<MetaversePlayerCombatHurtVolumeConfig>;
   readonly incrementSnapshotSequence: () => void;
+  readonly killFloorVolumes?:
+    readonly MetaverseMapBundleSemanticGameplayVolumeSnapshot[];
   readonly physicsRuntime: MetaverseAuthoritativeRapierPhysicsRuntime;
   readonly playerTraversalColliderHandles: ReadonlySet<RapierColliderHandle>;
   readonly playersById: ReadonlyMap<MetaversePlayerId, PlayerRuntime>;
@@ -173,6 +178,7 @@ const combatActionReceiptRingMaxEntries = 8;
 const combatPlayerActionDedupeCacheMaxEntries = 16;
 const combatRewindWindowMs = 200;
 const combatHurtVolumeHistoryWindowMs = 200;
+const killFloorCombatWeaponId = "metaverse-environment-kill-floor-v1" as const;
 const projectileRetentionAfterResolutionMs = 250;
 const spawnProtectionDurationMs = 1_000;
 
@@ -265,6 +271,30 @@ function createProjectilePositionSnapshot(
     projectileRuntime.positionX,
     projectileRuntime.positionY,
     projectileRuntime.positionZ
+  );
+}
+
+function isPlayerPositionInsideKillFloorVolume(
+  playerRuntime: Pick<
+    MetaverseAuthoritativeCombatPlayerRuntimeState,
+    "positionX" | "positionY" | "positionZ"
+  >,
+  volume: Pick<
+    MetaverseMapBundleSemanticGameplayVolumeSnapshot,
+    "center" | "rotationYRadians" | "size"
+  >
+): boolean {
+  const planarDeltaX = playerRuntime.positionX - volume.center.x;
+  const planarDeltaZ = playerRuntime.positionZ - volume.center.z;
+  const cosRotation = Math.cos(volume.rotationYRadians);
+  const sinRotation = Math.sin(volume.rotationYRadians);
+  const localX = planarDeltaX * cosRotation - planarDeltaZ * sinRotation;
+  const localZ = planarDeltaX * sinRotation + planarDeltaZ * cosRotation;
+
+  return (
+    Math.abs(localX) <= Math.max(0.125, volume.size.x * 0.5) &&
+    Math.abs(localZ) <= Math.max(0.125, volume.size.z * 0.5) &&
+    playerRuntime.positionY <= volume.center.y
   );
 }
 
@@ -727,6 +757,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       this.#advanceProjectile(projectileRuntime, tickIntervalSeconds, normalizedNowMs);
     }
 
+    this.#advanceKillFloorEliminations(normalizedNowMs);
     this.#pruneResolvedProjectiles(normalizedNowMs);
     this.#recordHurtVolumeHistory(normalizedNowMs);
   }
@@ -1176,31 +1207,77 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
+    this.#applyCombatElimination({
+      attackerPlayerId: source.ownerPlayerId,
+      headshot: hitZone === "head",
+      killDelta: 1,
+      sourceActionSequence: source.sourceActionSequence,
+      sourceProjectileId: source.sourceProjectileId,
+      targetPlayerId,
+      teamScoreDelta: 1,
+      timeMs: nowMs,
+      weaponId: source.weaponId
+    });
+  }
+
+  #applyCombatElimination(input: {
+    readonly attackerPlayerId: MetaversePlayerId;
+    readonly headshot: boolean;
+    readonly killDelta: number;
+    readonly sourceActionSequence: number;
+    readonly sourceProjectileId: string | null;
+    readonly targetPlayerId: MetaversePlayerId;
+    readonly teamScoreDelta: number;
+    readonly timeMs: number;
+    readonly weaponId: string;
+  }): void {
+    const targetCombatState =
+      this.#playerCombatStateByPlayerId.get(input.targetPlayerId) ?? null;
+    const attackerCombatState =
+      this.#playerCombatStateByPlayerId.get(input.attackerPlayerId) ?? null;
+    const targetRuntime =
+      this.#dependencies.playersById.get(input.targetPlayerId) ?? null;
+    const attackerRuntime =
+      this.#dependencies.playersById.get(input.attackerPlayerId) ?? null;
+
+    if (
+      targetCombatState === null ||
+      attackerCombatState === null ||
+      targetRuntime === null ||
+      attackerRuntime === null
+    ) {
+      return;
+    }
+
     targetCombatState.alive = false;
     targetCombatState.deaths += 1;
     targetCombatState.health = 0;
     targetCombatState.respawnRemainingMs = this.#matchState.respawnDelayMs;
     targetCombatState.spawnProtectionRemainingMs = 0;
-    ownerCombatState.kills += 1;
+    attackerCombatState.kills += input.killDelta;
 
-    if (hitZone === "head") {
-      ownerCombatState.headshotKills += 1;
+    if (input.headshot && input.attackerPlayerId !== input.targetPlayerId) {
+      attackerCombatState.headshotKills += 1;
     }
 
     this.#matchState.teamScoresByTeamId.set(
-      this.#dependencies.playersById.get(source.ownerPlayerId)?.teamId ?? "red",
-      (this.#matchState.teamScoresByTeamId.get(
-        this.#dependencies.playersById.get(source.ownerPlayerId)?.teamId ?? "red"
-      ) ?? 0) + 1
+      attackerRuntime.teamId,
+      (this.#matchState.teamScoresByTeamId.get(attackerRuntime.teamId) ?? 0) +
+        input.teamScoreDelta
     );
 
-    const assisterPlayerIds = [...targetCombatState.damageLedgerByAttackerId.entries()]
-      .filter(
-        ([attackerPlayerId, totalDamage]) =>
-          attackerPlayerId !== source.ownerPlayerId &&
-          totalDamage >= this.#matchState.assistDamageThreshold
-      )
-      .map(([attackerPlayerId]) => attackerPlayerId);
+    const assisterPlayerIds =
+      input.killDelta <= 0
+        ? Object.freeze([]) as readonly MetaversePlayerId[]
+        : Object.freeze(
+            [...targetCombatState.damageLedgerByAttackerId.entries()]
+              .filter(
+                ([attackerPlayerId, totalDamage]) =>
+                  attackerPlayerId !== input.attackerPlayerId &&
+                  totalDamage >= this.#matchState.assistDamageThreshold
+              )
+              .map(([attackerPlayerId]) => attackerPlayerId)
+          );
 
     for (const assisterPlayerId of assisterPlayerIds) {
       const assisterCombatState =
@@ -1212,19 +1289,114 @@ export class MetaverseAuthoritativeCombatAuthority<
     }
 
     this.#feedEvents.push({
-      assisterPlayerIds: Object.freeze(assisterPlayerIds),
-      attackerPlayerId: source.ownerPlayerId,
-      headshot: hitZone === "head",
+      assisterPlayerIds,
+      attackerPlayerId: input.attackerPlayerId,
+      headshot: input.headshot,
       sequence: ++this.#feedSequence,
-      sourceActionSequence: source.sourceActionSequence,
-      sourceProjectileId: source.sourceProjectileId,
-      targetPlayerId,
+      sourceActionSequence: input.sourceActionSequence,
+      sourceProjectileId: input.sourceProjectileId,
+      targetPlayerId: input.targetPlayerId,
       targetTeamId: targetRuntime.teamId,
-      timeMs: nowMs,
+      timeMs: input.timeMs,
       type: "kill",
-      weaponId: source.weaponId
+      weaponId: input.weaponId
     });
     this.#trimFeedEvents();
+  }
+
+  #resolveKillFloorAttackerPlayerId(
+    targetPlayerId: MetaversePlayerId,
+    targetCombatState: MutableMetaverseCombatPlayerRuntimeState
+  ): MetaversePlayerId | null {
+    let leadingAttacker: {
+      readonly attackerPlayerId: MetaversePlayerId;
+      readonly totalDamage: number;
+    } | null = null;
+
+    for (const [
+      attackerPlayerId,
+      totalDamage
+    ] of targetCombatState.damageLedgerByAttackerId.entries()) {
+      if (
+        attackerPlayerId === targetPlayerId ||
+        totalDamage <= 0 ||
+        !this.#dependencies.playersById.has(attackerPlayerId) ||
+        !this.#playerCombatStateByPlayerId.has(attackerPlayerId)
+      ) {
+        continue;
+      }
+
+      if (
+        leadingAttacker === null ||
+        totalDamage > leadingAttacker.totalDamage
+      ) {
+        leadingAttacker = {
+          attackerPlayerId,
+          totalDamage
+        };
+      }
+    }
+
+    return leadingAttacker?.attackerPlayerId ?? null;
+  }
+
+  #advanceKillFloorEliminations(nowMs: number): void {
+    if (
+      this.#matchState.phase !== "active" ||
+      (this.#dependencies.killFloorVolumes?.length ?? 0) === 0
+    ) {
+      return;
+    }
+
+    for (const [playerId, combatState] of this.#playerCombatStateByPlayerId) {
+      if (!combatState.alive) {
+        continue;
+      }
+
+      const playerRuntime = this.#dependencies.playersById.get(playerId) ?? null;
+
+      if (playerRuntime === null) {
+        continue;
+      }
+
+      const activeKillFloor =
+        this.#dependencies.killFloorVolumes?.find((volume) =>
+          isPlayerPositionInsideKillFloorVolume(playerRuntime, volume)
+        ) ?? null;
+
+      if (activeKillFloor === null) {
+        continue;
+      }
+
+      const creditedAttackerPlayerId = this.#resolveKillFloorAttackerPlayerId(
+        playerId,
+        combatState
+      );
+
+      this.#applyCombatElimination({
+        attackerPlayerId: creditedAttackerPlayerId ?? playerId,
+        headshot: false,
+        killDelta: creditedAttackerPlayerId === null ? -1 : 1,
+        sourceActionSequence: 0,
+        sourceProjectileId: null,
+        targetPlayerId: playerId,
+        teamScoreDelta: creditedAttackerPlayerId === null ? -1 : 1,
+        timeMs: nowMs,
+        weaponId: killFloorCombatWeaponId
+      });
+      this.#dependencies.incrementSnapshotSequence();
+
+      if (
+        (this.#matchState.teamScoresByTeamId.get("red") ?? 0) >=
+          this.#matchState.scoreLimit ||
+        (this.#matchState.teamScoresByTeamId.get("blue") ?? 0) >=
+          this.#matchState.scoreLimit
+      ) {
+        this.#completeMatch(nowMs);
+        this.#dependencies.incrementSnapshotSequence();
+        return;
+      }
+    }
   }
 
   #collectTeamRoster(

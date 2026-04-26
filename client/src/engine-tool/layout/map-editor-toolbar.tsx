@@ -7,6 +7,8 @@ import type { MetaverseWorldBundleRegistryEntry } from "@/metaverse/world/bundle
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MapEditorEditableNumberInput } from "@/engine-tool/components/map-editor-editable-number-input";
+import { mapEditorBuildGridUnitMeters } from "@/engine-tool/build/map-editor-build-placement";
 import {
   Select,
   SelectContent,
@@ -18,7 +20,9 @@ import {
 
 interface MapEditorToolbarProps {
   readonly onBundleChange: (bundleId: string) => void;
+  readonly onHelperGridSizeMetersChange: (helperGridSizeMeters: number) => void;
   readonly onResetDraftRequest: () => void;
+  readonly helperGridSizeMeters: number;
   readonly registryEntries: readonly MetaverseWorldBundleRegistryEntry[];
   readonly selectedBundleId: string;
 }
@@ -42,7 +46,9 @@ function SidebarSection({
 
 export function MapEditorToolbar({
   onBundleChange,
+  onHelperGridSizeMetersChange,
   onResetDraftRequest,
+  helperGridSizeMeters,
   registryEntries,
   selectedBundleId
 }: MapEditorToolbarProps) {
@@ -77,6 +83,21 @@ export function MapEditorToolbar({
                 </SelectGroup>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="map-editor-helper-grid-size">
+              Helper Grid Size
+            </Label>
+            <MapEditorEditableNumberInput
+              decimals={0}
+              id="map-editor-helper-grid-size"
+              onValueChange={onHelperGridSizeMetersChange}
+              value={helperGridSizeMeters}
+            />
+            <p className="text-xs text-muted-foreground">
+              Snaps to the {mapEditorBuildGridUnitMeters}m authoring grid.
+            </p>
           </div>
         </SidebarSection>
       </ScrollArea>

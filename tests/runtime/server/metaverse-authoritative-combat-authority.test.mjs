@@ -77,6 +77,33 @@ function createFireWeaponPlayerActionCommand({
   });
 }
 
+function createKillFloorVolume({
+  centerY = -5,
+  sizeX = 64,
+  sizeZ = 64
+} = {}) {
+  return Object.freeze({
+    center: Object.freeze({
+      x: 0,
+      y: centerY,
+      z: 0
+    }),
+    label: "Kill Floor",
+    priority: -1,
+    rotationYRadians: 0,
+    routePoints: Object.freeze([]),
+    size: Object.freeze({
+      x: sizeX,
+      y: 0.5,
+      z: sizeZ
+    }),
+    tags: Object.freeze(["environment", "kill-floor"]),
+    teamId: null,
+    volumeId: "kill-floor",
+    volumeKind: "kill-floor"
+  });
+}
+
 test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits and respawns players after 3 seconds", () => {
   const redPlayerId = createMetaversePlayerId("combat-red-1");
   const bluePlayerId = createMetaversePlayerId("combat-blue-1");
@@ -457,4 +484,162 @@ test("MetaverseAuthoritativeCombatAuthority publishes exactly-once combat action
     rejectedReceiptSnapshot?.recentPlayerActionReceipts[1]?.sourceProjectileId,
     null
   );
+});
+
+test("MetaverseAuthoritativeCombatAuthority applies kill-floor suicides as deaths with minus one kill and negative team score", () => {
+  const redPlayerId = createMetaversePlayerId("combat-kill-floor-red-1");
+  const bluePlayerId = createMetaversePlayerId("combat-kill-floor-blue-1");
+
+  assert.notEqual(redPlayerId, null);
+  assert.notEqual(bluePlayerId, null);
+
+  const combatAuthority = new MetaverseAuthoritativeCombatAuthority({
+    clearDriverVehicleControl() {},
+    clearPlayerTraversalIntent() {},
+    clearPlayerVehicleOccupancy() {},
+    incrementSnapshotSequence() {},
+    killFloorVolumes: Object.freeze([createKillFloorVolume()]),
+    physicsRuntime: {
+      castRay() {
+        return null;
+      }
+    },
+    playerTraversalColliderHandles: new Set(),
+    playersById: new Map([
+      [
+        redPlayerId,
+        createPlayerRuntimeState(redPlayerId, "red", Object.freeze({ x: 16, y: 0, z: 0 }))
+      ],
+      [
+        bluePlayerId,
+        createPlayerRuntimeState(bluePlayerId, "blue", Object.freeze({ x: 0, y: -6, z: 0 }))
+      ]
+    ]),
+    readTickIntervalMs: () => 33,
+    resolveRespawnPose(_playerId, teamId) {
+      return {
+        position: teamId === "red"
+          ? Object.freeze({ x: 16, y: 0, z: 0 })
+          : Object.freeze({ x: 0, y: 0, z: 0 }),
+        yawRadians: 0
+      };
+    },
+    syncAuthoritativePlayerLookToCurrentFacing() {},
+    syncPlayerTraversalAuthorityState() {},
+    syncPlayerTraversalBodyRuntimes() {}
+  });
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+
+  const blueCombatSnapshot = combatAuthority.readPlayerCombatSnapshot(bluePlayerId);
+  const combatMatchSnapshot = combatAuthority.readCombatMatchSnapshot();
+  const killFeedEvent = combatAuthority
+    .readCombatFeedSnapshots()
+    .find((eventSnapshot) => eventSnapshot.type === "kill");
+
+  assert.equal(blueCombatSnapshot?.alive, false);
+  assert.equal(blueCombatSnapshot?.deaths, 1);
+  assert.equal(blueCombatSnapshot?.kills, -1);
+  assert.equal(killFeedEvent?.type, "kill");
+  assert.equal(killFeedEvent?.attackerPlayerId, bluePlayerId);
+  assert.equal(killFeedEvent?.targetPlayerId, bluePlayerId);
+  assert.equal(killFeedEvent?.weaponId, "metaverse-environment-kill-floor-v1");
+  assert.equal(combatMatchSnapshot.teams[0]?.score, 0);
+  assert.equal(combatMatchSnapshot.teams[1]?.score, -1);
+});
+
+test("MetaverseAuthoritativeCombatAuthority credits prior attacker damage when a player falls into the kill floor", () => {
+  const redPlayerId = createMetaversePlayerId("combat-kill-floor-credit-red-1");
+  const bluePlayerId = createMetaversePlayerId("combat-kill-floor-credit-blue-1");
+
+  assert.notEqual(redPlayerId, null);
+  assert.notEqual(bluePlayerId, null);
+
+  const redRootPosition = Object.freeze({
+    x: 0,
+    y: 0,
+    z: 0
+  });
+  const blueRootPosition = Object.freeze({
+    x: 0,
+    y: 0,
+    z: -9
+  });
+  const redMuzzleOrigin = Object.freeze({
+    x: 0,
+    y: 1.62,
+    z: 0
+  });
+  const blueBodyTarget = Object.freeze({
+    x: 0,
+    y: 0.95,
+    z: -9
+  });
+  const playersById = new Map([
+    [
+      redPlayerId,
+      createPlayerRuntimeState(redPlayerId, "red", redRootPosition)
+    ],
+    [
+      bluePlayerId,
+      createPlayerRuntimeState(bluePlayerId, "blue", blueRootPosition)
+    ]
+  ]);
+  const combatAuthority = new MetaverseAuthoritativeCombatAuthority({
+    clearDriverVehicleControl() {},
+    clearPlayerTraversalIntent() {},
+    clearPlayerVehicleOccupancy() {},
+    incrementSnapshotSequence() {},
+    killFloorVolumes: Object.freeze([createKillFloorVolume()]),
+    physicsRuntime: {
+      castRay() {
+        return null;
+      }
+    },
+    playerTraversalColliderHandles: new Set(),
+    playersById,
+    readTickIntervalMs: () => 33,
+    resolveRespawnPose(_playerId, teamId) {
+      return {
+        position: teamId === "red" ? redRootPosition : blueRootPosition,
+        yawRadians: 0
+      };
+    },
+    syncAuthoritativePlayerLookToCurrentFacing() {},
+    syncPlayerTraversalAuthorityState() {},
+    syncPlayerTraversalBodyRuntimes() {}
+  });
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_050,
+      origin: redMuzzleOrigin,
+      playerId: redPlayerId,
+      target: blueBodyTarget,
+      weaponId: "metaverse-service-pistol-v2"
+    }),
+    1_200
+  );
+  playersById.get(bluePlayerId).positionY = -6;
+  combatAuthority.advanceCombatRuntimes(0.1, 1_300);
+
+  const redCombatSnapshot = combatAuthority.readPlayerCombatSnapshot(redPlayerId);
+  const blueCombatSnapshot = combatAuthority.readPlayerCombatSnapshot(bluePlayerId);
+  const combatMatchSnapshot = combatAuthority.readCombatMatchSnapshot();
+  const killFeedEvent = combatAuthority
+    .readCombatFeedSnapshots()
+    .findLast((eventSnapshot) => eventSnapshot.type === "kill");
+
+  assert.equal(redCombatSnapshot?.kills, 1);
+  assert.equal(blueCombatSnapshot?.alive, false);
+  assert.equal(blueCombatSnapshot?.deaths, 1);
+  assert.equal(killFeedEvent?.attackerPlayerId, redPlayerId);
+  assert.equal(killFeedEvent?.targetPlayerId, bluePlayerId);
+  assert.equal(killFeedEvent?.weaponId, "metaverse-environment-kill-floor-v1");
+  assert.equal(combatMatchSnapshot.teams[0]?.score, 1);
+  assert.equal(combatMatchSnapshot.teams[1]?.score, 0);
 });

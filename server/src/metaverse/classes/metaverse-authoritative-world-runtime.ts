@@ -656,6 +656,11 @@ export class MetaverseAuthoritativeWorldRuntime
       incrementSnapshotSequence: () => {
         this.#tickState.incrementSnapshotSequence();
       },
+      killFloorVolumes: Object.freeze(
+        bundleInputs.bundle.semanticWorld.gameplayVolumes.filter(
+          (volume) => volume.volumeKind === "kill-floor"
+        )
+      ),
       physicsRuntime: this.#physicsRuntime,
       playerTraversalColliderHandles: this.#playerTraversalColliderHandles,
       playersById: this.#playersById,

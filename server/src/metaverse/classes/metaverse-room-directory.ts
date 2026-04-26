@@ -43,9 +43,9 @@ interface ResolvedRoomLaunchSelection {
   readonly launchVariationId: string;
 }
 
-const defaultFreeRoamBundleId = "staging-ground" as const;
+const defaultFreeRoamBundleId = "private-build" as const;
 const defaultFreeRoamLaunchVariationId = "shell-free-roam" as const;
-const defaultTeamDeathmatchBundleId = "deathmatch" as const;
+const defaultTeamDeathmatchBundleId = "private-build" as const;
 const defaultTeamDeathmatchLaunchVariationId =
   "shell-team-deathmatch" as const;
 const roomSessionBootSequence = Date.now();

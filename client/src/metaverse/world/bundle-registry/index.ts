@@ -1,7 +1,5 @@
 export type { MetaverseWorldBundleRegistryEntry } from "./metaverse-world-bundle-registry";
 export {
-  applyStoredMetaverseWorldBundleOverride,
-  applyStoredMetaverseWorldBundleOverrides,
   clearMetaverseWorldBundlePreviewEntry,
   listMetaverseWorldBundleRegistryEntries,
   resolveDefaultMetaverseWorldBundleId,

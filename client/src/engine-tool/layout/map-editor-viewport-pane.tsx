@@ -50,6 +50,7 @@ interface MapEditorViewportPaneProps {
   readonly environmentPresentation:
     MapEditorProjectSnapshot["environmentPresentation"];
   readonly gameplayVolumeDrafts: readonly MapEditorGameplayVolumeDraftSnapshot[];
+  readonly helperGridSizeMeters: number;
   readonly lightDrafts: readonly MapEditorLightDraftSnapshot[];
   readonly materialDefinitionDrafts:
     readonly MapEditorMaterialDefinitionDraftSnapshot[];
@@ -279,6 +280,7 @@ export function MapEditorViewportPane({
   edgeDrafts,
   environmentPresentation,
   gameplayVolumeDrafts,
+  helperGridSizeMeters,
   lightDrafts,
   materialDefinitionDrafts,
   onApplyTerrainBrushAtPosition,
@@ -378,6 +380,7 @@ export function MapEditorViewportPane({
           edgeDrafts={edgeDrafts}
           environmentPresentation={environmentPresentation}
           gameplayVolumeDrafts={gameplayVolumeDrafts}
+          helperGridSizeMeters={helperGridSizeMeters}
           helperVisibility={viewportHelperVisibility}
           lightDrafts={lightDrafts}
           materialDefinitionDrafts={materialDefinitionDrafts}

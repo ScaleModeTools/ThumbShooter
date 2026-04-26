@@ -98,12 +98,6 @@
       ]
     },
     {
-      "ownerPath": "client/src/engine-tool/project/map-editor-project-storage.ts",
-      "testPaths": [
-        "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"
-      ]
-    },
-    {
       "ownerPath": "client/src/engine-tool/project/map-editor-public-project-storage.ts",
       "testPaths": [
         "tests/runtime/client/engine-tool/map-editor.runtime.test.mjs"

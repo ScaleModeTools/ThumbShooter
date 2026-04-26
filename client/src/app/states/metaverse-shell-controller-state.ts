@@ -31,9 +31,9 @@ export const initialCapabilitySnapshot = Object.freeze({
 }) satisfies WebGpuMetaverseCapabilitySnapshot;
 const defaultMatchMode: MetaverseMatchModeId = "team-deathmatch";
 const guestShellUsername = createUsername("Unknown")!;
-const freeRoamMetaverseBundleId = "staging-ground";
+const freeRoamMetaverseBundleId = "private-build";
 const freeRoamMetaverseLaunchVariationId = "shell-free-roam";
-const teamDeathmatchMetaverseBundleId = "deathmatch";
+const teamDeathmatchMetaverseBundleId = "private-build";
 const teamDeathmatchMetaverseLaunchVariationId = "shell-team-deathmatch";
 
 function resolveActiveMetaverseBundleId(bundleId: string): string {

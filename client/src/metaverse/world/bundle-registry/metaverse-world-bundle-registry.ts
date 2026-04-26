@@ -1,38 +1,43 @@
 import {
   deathmatchMapBundle,
+  privateBuildMapBundle,
   stagingGroundMapBundle,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
-import {
-  loadStoredMetaverseWorldBundleSnapshot,
-  type StoredMetaverseWorldBundleStorageLike
-} from "../map-bundles/stored-metaverse-world-bundle";
-import {
-  createLoadedMetaverseMapBundleSnapshot
-} from "../map-bundles/create-loaded-metaverse-map-bundle-snapshot";
-import {
-  createMetaverseEnvironmentProofConfig
-} from "../proof/create-metaverse-environment-proof-config";
+export interface MetaverseWorldBundleRegistryMapEditorProjectSettings {
+  readonly helperGridSizeMeters: number;
+}
 
 export interface MetaverseWorldBundleRegistryEntry {
   readonly bundle: MetaverseMapBundleSnapshot;
   readonly bundleId: string;
   readonly label: string;
+  readonly mapEditorProjectSettings:
+    MetaverseWorldBundleRegistryMapEditorProjectSettings | null;
   readonly sourceBundleId: string;
 }
 
 const metaverseWorldBundleRegistryEntries = Object.freeze([
   Object.freeze({
+    bundle: privateBuildMapBundle,
+    bundleId: privateBuildMapBundle.mapId,
+    label: privateBuildMapBundle.label,
+    mapEditorProjectSettings: null,
+    sourceBundleId: privateBuildMapBundle.mapId
+  } satisfies MetaverseWorldBundleRegistryEntry),
+  Object.freeze({
     bundle: stagingGroundMapBundle,
     bundleId: stagingGroundMapBundle.mapId,
     label: stagingGroundMapBundle.label,
+    mapEditorProjectSettings: null,
     sourceBundleId: stagingGroundMapBundle.mapId
   } satisfies MetaverseWorldBundleRegistryEntry),
   Object.freeze({
     bundle: deathmatchMapBundle,
     bundleId: deathmatchMapBundle.mapId,
     label: deathmatchMapBundle.label,
+    mapEditorProjectSettings: null,
     sourceBundleId: deathmatchMapBundle.mapId
   } satisfies MetaverseWorldBundleRegistryEntry)
 ]);
@@ -53,6 +58,13 @@ function freezeRegistryEntry(
     bundle: entry.bundle,
     bundleId: entry.bundleId,
     label: entry.label,
+    mapEditorProjectSettings:
+      entry.mapEditorProjectSettings === null
+        ? null
+        : Object.freeze({
+            helperGridSizeMeters:
+              entry.mapEditorProjectSettings.helperGridSizeMeters
+          }),
     sourceBundleId: entry.sourceBundleId
   });
 }
@@ -89,53 +101,6 @@ export function registerMetaverseWorldBundlePreviewEntry(
   entry: MetaverseWorldBundleRegistryEntry
 ): void {
   metaverseWorldBundlePreviewEntriesById.set(entry.bundleId, freezeRegistryEntry(entry));
-}
-
-function supportsRuntimeMetaverseEnvironmentProof(
-  bundle: MetaverseMapBundleSnapshot
-): boolean {
-  try {
-    createMetaverseEnvironmentProofConfig(
-      createLoadedMetaverseMapBundleSnapshot(bundle)
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function applyStoredMetaverseWorldBundleOverride(
-  storage: StoredMetaverseWorldBundleStorageLike | null,
-  bundleId: string
-): boolean {
-  const storedBundle = loadStoredMetaverseWorldBundleSnapshot(storage, bundleId);
-
-  if (
-    storedBundle === null ||
-    !supportsRuntimeMetaverseEnvironmentProof(storedBundle)
-  ) {
-    clearMetaverseWorldBundlePreviewEntry(bundleId);
-    return false;
-  }
-
-  registerMetaverseWorldBundlePreviewEntry(
-    Object.freeze({
-      bundle: storedBundle,
-      bundleId,
-      label: storedBundle.label,
-      sourceBundleId: bundleId
-    })
-  );
-
-  return true;
-}
-
-export function applyStoredMetaverseWorldBundleOverrides(
-  storage: StoredMetaverseWorldBundleStorageLike | null
-): void {
-  for (const entry of metaverseWorldBundleRegistryEntries) {
-    applyStoredMetaverseWorldBundleOverride(storage, entry.bundleId);
-  }
 }
 
 export function clearMetaverseWorldBundlePreviewEntry(bundleId: string): void {

@@ -85,13 +85,13 @@ function resolveStandardMetaverseLaunchSelection(
 } {
   if (matchMode === "team-deathmatch") {
     return Object.freeze({
-      bundleId: "deathmatch",
+      bundleId: "private-build",
       launchVariationId: "shell-team-deathmatch"
     });
   }
 
   return Object.freeze({
-    bundleId: "staging-ground",
+    bundleId: "private-build",
     launchVariationId: "shell-free-roam"
   });
 }

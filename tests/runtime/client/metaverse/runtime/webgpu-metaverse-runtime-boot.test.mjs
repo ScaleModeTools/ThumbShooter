@@ -220,7 +220,7 @@ test("WebGpuMetaverseRuntime starts from an idle snapshot and rejects missing na
   assert.equal(runtime.hudSnapshot.lifecycle, "failed");
 });
 
-test("default metaverse staging-ground spawn resolves to grounded floor support in the shipped environment slice", async () => {
+test("default metaverse private-build spawn resolves to grounded floor support in the shipped environment slice", async () => {
   const [
     { metaverseRuntimeConfig },
     { metaverseEnvironmentProofConfig },

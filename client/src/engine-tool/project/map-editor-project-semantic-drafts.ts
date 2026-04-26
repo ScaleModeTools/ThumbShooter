@@ -115,6 +115,7 @@ export interface MapEditorGameplayVolumeDraftSnapshot {
   readonly volumeKind:
     | "combat-lane"
     | "cover-volume"
+    | "kill-floor"
     | "spawn-room"
     | "team-zone"
     | "vehicle-route";

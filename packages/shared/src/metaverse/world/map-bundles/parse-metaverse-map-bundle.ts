@@ -116,6 +116,7 @@ const semanticStructureKinds = [
 const semanticGameplayVolumeKinds = [
   "combat-lane",
   "cover-volume",
+  "kill-floor",
   "spawn-room",
   "team-zone",
   "vehicle-route"

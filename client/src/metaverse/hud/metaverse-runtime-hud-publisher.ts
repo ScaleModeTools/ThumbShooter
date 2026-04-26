@@ -450,7 +450,10 @@ export class MetaverseRuntimeHudPublisher {
           case "kill":
             return Object.freeze({
               sequence: eventSnapshot.sequence,
-              summary: `${summarizePlayer(eventSnapshot.attackerPlayerId)} eliminated ${summarizePlayer(eventSnapshot.targetPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`,
+              summary:
+                eventSnapshot.attackerPlayerId === eventSnapshot.targetPlayerId
+                  ? `${summarizePlayer(eventSnapshot.targetPlayerId)} fell`
+                  : `${summarizePlayer(eventSnapshot.attackerPlayerId)} eliminated ${summarizePlayer(eventSnapshot.targetPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`,
               type: eventSnapshot.type
             });
           case "spawn":

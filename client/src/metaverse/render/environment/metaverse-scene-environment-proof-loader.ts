@@ -309,6 +309,8 @@ function createSemanticGameplayVolumeMaterial(
     material.colorNode = color(0.22, 0.74, 0.97);
   } else if (volume.teamId === "red") {
     material.colorNode = color(0.98, 0.45, 0.52);
+  } else if (volume.volumeKind === "kill-floor") {
+    material.colorNode = color(0.86, 0.15, 0.15);
   } else if (volume.volumeKind === "vehicle-route") {
     material.colorNode = color(0.64, 0.9, 0.16);
   } else {

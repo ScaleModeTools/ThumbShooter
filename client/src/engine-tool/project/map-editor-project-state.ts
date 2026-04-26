@@ -105,8 +105,12 @@ import {
   resolveMetaverseWorldSurfaceScaleVector
 } from "@webgpu-metaverse/shared/metaverse/world";
 import type {
+  MapEditorProjectSettingsSnapshot,
   MapEditorTerrainBrushMode,
   MapEditorTerrainBrushSizeCells
+} from "@/engine-tool/types/map-editor";
+import {
+  createMapEditorProjectSettingsSnapshot
 } from "@/engine-tool/types/map-editor";
 
 export type {
@@ -194,6 +198,7 @@ export interface MapEditorProjectSnapshot {
   readonly placementDrafts: readonly MapEditorPlacementDraftSnapshot[];
   readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
   readonly playerSpawnSelectionDraft: MapEditorPlayerSpawnSelectionDraftSnapshot;
+  readonly projectSettings: MapEditorProjectSettingsSnapshot;
   readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
   readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
@@ -615,6 +620,10 @@ function createMapEditorGameplayVolumeId(project: MapEditorProjectSnapshot): str
   return `${project.bundleId}:gameplay-volume:${project.gameplayVolumeDrafts.length + 1}`;
 }
 
+function createManagedMapEditorKillFloorVolumeId(bundleId: string): string {
+  return `${bundleId}:gameplay-volume:kill-floor`;
+}
+
 function createMapEditorLightId(project: MapEditorProjectSnapshot): string {
   return `${project.bundleId}:light:${project.lightDrafts.length + 1}`;
 }
@@ -659,6 +668,181 @@ function createMapEditorWaterRegionId(project: MapEditorProjectSnapshot): string
 
 function createMapEditorLaunchVariationId(project: MapEditorProjectSnapshot): string {
   return `${project.bundleId}:variation:${project.launchVariationDrafts.length + 1}`;
+}
+
+function createMapEditorKillFloorSize(
+  projectSettings: MapEditorProjectSettingsSnapshot
+): MetaverseWorldSurfaceVector3Snapshot {
+  return Object.freeze({
+    x: projectSettings.helperGridSizeMeters * 2,
+    y: defaultKillFloorThicknessMeters,
+    z: projectSettings.helperGridSizeMeters * 2
+  });
+}
+
+function resolveMapEditorProjectDefaultKillFloorElevation(
+  project: Pick<
+    MapEditorProjectSnapshot,
+    | "placementDrafts"
+    | "playerSpawnDrafts"
+    | "sceneObjectDrafts"
+    | "structuralDrafts"
+    | "surfaceDrafts"
+    | "terrainPatchDrafts"
+    | "waterRegionDrafts"
+  >
+): number {
+  let minimumElevationMeters = 0;
+
+  for (const surface of project.surfaceDrafts) {
+    minimumElevationMeters = Math.min(minimumElevationMeters, surface.elevation);
+  }
+
+  for (const structure of project.structuralDrafts) {
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      structure.center.y - structure.size.y * 0.5
+    );
+  }
+
+  for (const terrainPatch of project.terrainPatchDrafts) {
+    let minimumHeightSampleMeters = 0;
+
+    for (const heightSample of terrainPatch.heightSamples) {
+      minimumHeightSampleMeters = Math.min(
+        minimumHeightSampleMeters,
+        heightSample
+      );
+    }
+
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      terrainPatch.origin.y + minimumHeightSampleMeters
+    );
+  }
+
+  for (const placement of project.placementDrafts) {
+    minimumElevationMeters = Math.min(minimumElevationMeters, placement.position.y);
+  }
+
+  for (const playerSpawn of project.playerSpawnDrafts) {
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      playerSpawn.position.y
+    );
+  }
+
+  for (const sceneObject of project.sceneObjectDrafts) {
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      sceneObject.position.y
+    );
+  }
+
+  for (const waterRegion of project.waterRegionDrafts) {
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      waterRegion.topElevationMeters
+    );
+  }
+
+  return minimumElevationMeters - defaultKillFloorClearanceMeters;
+}
+
+function createManagedMapEditorKillFloorDraft(
+  project: Pick<
+    MapEditorProjectSnapshot,
+    | "bundleId"
+    | "placementDrafts"
+    | "playerSpawnDrafts"
+    | "projectSettings"
+    | "sceneObjectDrafts"
+    | "structuralDrafts"
+    | "surfaceDrafts"
+    | "terrainPatchDrafts"
+    | "waterRegionDrafts"
+  >
+): MapEditorGameplayVolumeDraftSnapshot {
+  return freezeGameplayVolumeDraft({
+    center: Object.freeze({
+      x: 0,
+      y: resolveMapEditorProjectDefaultKillFloorElevation(project),
+      z: 0
+    }),
+    label: "Kill Floor",
+    priority: -1,
+    rotationYRadians: 0,
+    routePoints: Object.freeze([]),
+    size: createMapEditorKillFloorSize(project.projectSettings),
+    tags: Object.freeze(["environment", "kill-floor"]),
+    teamId: null,
+    volumeId: createManagedMapEditorKillFloorVolumeId(project.bundleId),
+    volumeKind: "kill-floor"
+  });
+}
+
+function readMapEditorKillFloorDraftIndex(
+  project: Pick<MapEditorProjectSnapshot, "gameplayVolumeDrafts">
+): number {
+  return project.gameplayVolumeDrafts.findIndex(
+    (volumeDraft) => volumeDraft.volumeKind === "kill-floor"
+  );
+}
+
+function syncMapEditorProjectKillFloorDraft(
+  project: MapEditorProjectSnapshot,
+  options: {
+    readonly createIfMissing?: boolean;
+    readonly synchronizeFootprintFromHelperGrid?: boolean;
+  } = {}
+): MapEditorProjectSnapshot {
+  const killFloorIndex = readMapEditorKillFloorDraftIndex(project);
+
+  if (killFloorIndex < 0) {
+    if (options.createIfMissing === false) {
+      return project;
+    }
+
+    return Object.freeze({
+      ...project,
+      gameplayVolumeDrafts: Object.freeze([
+        ...project.gameplayVolumeDrafts,
+        createManagedMapEditorKillFloorDraft(project)
+      ])
+    });
+  }
+
+  if (options.synchronizeFootprintFromHelperGrid !== true) {
+    return project;
+  }
+
+  const killFloorDraft = project.gameplayVolumeDrafts[killFloorIndex]!;
+  const nextSize = createMapEditorKillFloorSize(project.projectSettings);
+
+  if (
+    killFloorDraft.size.x === nextSize.x &&
+    killFloorDraft.size.z === nextSize.z
+  ) {
+    return project;
+  }
+
+  return Object.freeze({
+    ...project,
+    gameplayVolumeDrafts: Object.freeze(
+      project.gameplayVolumeDrafts.map((volumeDraft, volumeIndex) =>
+        volumeIndex === killFloorIndex
+          ? freezeGameplayVolumeDraft({
+              ...volumeDraft,
+              size: Object.freeze({
+                ...volumeDraft.size,
+                x: nextSize.x,
+                z: nextSize.z
+              })
+            })
+          : volumeDraft
+      )
+    )
+  });
 }
 
 function readSelectedEntityPosition(
@@ -851,6 +1035,8 @@ const defaultPathSurfaceSize = Object.freeze({
   y: 0.5,
   z: mapEditorBuildGridUnitMeters
 });
+const defaultKillFloorClearanceMeters = 5;
+const defaultKillFloorThicknessMeters = 0.5;
 const defaultWallThicknessMeters = 0.5;
 const defaultWallHeightMeters = 4;
 
@@ -2958,8 +3144,13 @@ function createModuleDraftFromAsset(
   });
 }
 
+export interface MapEditorProjectCreationOptions {
+  readonly projectSettings?: Partial<MapEditorProjectSettingsSnapshot>;
+}
+
 export function createMapEditorProject(
-  loadedBundle: LoadedMetaverseMapBundleSnapshot
+  loadedBundle: LoadedMetaverseMapBundleSnapshot,
+  options: MapEditorProjectCreationOptions = {}
 ): MapEditorProjectSnapshot {
   const semanticDrafts = createSemanticDraftsFromBundle(loadedBundle);
   const launchVariationDrafts = createLaunchVariationDrafts(loadedBundle);
@@ -2967,7 +3158,7 @@ export function createMapEditorProject(
     launchVariationDrafts[0]?.variationId ?? null;
   const selectedEntityRef = resolveInitialSelectedEntityRef(semanticDrafts);
 
-  return Object.freeze({
+  const project = Object.freeze({
     bundleId: loadedBundle.bundle.mapId,
     bundleLabel: loadedBundle.bundle.label,
     cameraProfileId: loadedBundle.cameraProfile?.id ?? null,
@@ -2990,6 +3181,9 @@ export function createMapEditorProject(
     placementDrafts: semanticDrafts.placementDrafts,
     playerSpawnDrafts: createPlayerSpawnDrafts(loadedBundle),
     playerSpawnSelectionDraft: createPlayerSpawnSelectionDraft(loadedBundle),
+    projectSettings: createMapEditorProjectSettingsSnapshot(
+      options.projectSettings
+    ),
     regionDrafts: semanticDrafts.regionDrafts,
     sceneObjectDrafts: createSceneObjectDrafts(loadedBundle),
     selectedEntityRef,
@@ -3001,6 +3195,8 @@ export function createMapEditorProject(
     terrainPatchDrafts: semanticDrafts.terrainPatchDrafts,
     waterRegionDrafts: createWaterRegionDrafts(loadedBundle)
   });
+
+  return syncMapEditorProjectKillFloorDraft(project);
 }
 
 export function updateMapEditorProjectIdentity(
@@ -3024,6 +3220,34 @@ export function updateMapEditorProjectIdentity(
     bundleLabel: nextBundleLabel,
     description: identity.description ?? project.description
   });
+}
+
+export function updateMapEditorProjectSettings(
+  project: MapEditorProjectSnapshot,
+  update: (
+    settings: MapEditorProjectSettingsSnapshot
+  ) => Partial<MapEditorProjectSettingsSnapshot>
+): MapEditorProjectSnapshot {
+  const nextProjectSettings = createMapEditorProjectSettingsSnapshot(
+    update(project.projectSettings)
+  );
+
+  if (
+    project.projectSettings.helperGridSizeMeters ===
+    nextProjectSettings.helperGridSizeMeters
+  ) {
+    return project;
+  }
+
+  return syncMapEditorProjectKillFloorDraft(
+    Object.freeze({
+      ...project,
+      projectSettings: nextProjectSettings
+    }),
+    {
+      synchronizeFootprintFromHelperGrid: true
+    }
+  );
 }
 
 function areEnvironmentPresentationsEqual(
@@ -3602,6 +3826,15 @@ export function removeMapEditorEntity(
       );
     }
     case "gameplay-volume": {
+      const selectedGameplayVolume =
+        project.gameplayVolumeDrafts.find(
+          (volumeDraft) => volumeDraft.volumeId === entityRef.id
+        ) ?? null;
+
+      if (selectedGameplayVolume?.volumeKind === "kill-floor") {
+        return project;
+      }
+
       const nextProject = Object.freeze({
         ...project,
         gameplayVolumeDrafts: Object.freeze(
@@ -5616,28 +5849,35 @@ function normalizeEdgeSurfaceDraftForExport(
 export function createSemanticWorldFromProject(
   project: MapEditorProjectSnapshot
 ) {
+  const normalizedProject = syncMapEditorProjectKillFloorDraft(project);
   const edgeSurfaceBaseElevationBySurfaceId =
-    createEdgeSurfaceBaseElevationLookup(project.edgeDrafts);
+    createEdgeSurfaceBaseElevationLookup(normalizedProject.edgeDrafts);
 
   return Object.freeze({
-    compatibilityAssetIds: project.semanticCompatibilityAssetIds,
+    compatibilityAssetIds: normalizedProject.semanticCompatibilityAssetIds,
     connectors: Object.freeze(
-      project.connectorDrafts.map(createSemanticConnectorSnapshotFromDraft)
+      normalizedProject.connectorDrafts.map(
+        createSemanticConnectorSnapshotFromDraft
+      )
     ),
-    edges: Object.freeze(project.edgeDrafts.map(createSemanticEdgeSnapshotFromDraft)),
+    edges: Object.freeze(
+      normalizedProject.edgeDrafts.map(createSemanticEdgeSnapshotFromDraft)
+    ),
     gameplayVolumes: Object.freeze(
-      project.gameplayVolumeDrafts.map(createSemanticGameplayVolumeSnapshotFromDraft)
+      normalizedProject.gameplayVolumeDrafts.map(
+        createSemanticGameplayVolumeSnapshotFromDraft
+      )
     ),
     lights: Object.freeze(
-      project.lightDrafts.map(createSemanticLightSnapshotFromDraft)
+      normalizedProject.lightDrafts.map(createSemanticLightSnapshotFromDraft)
     ),
     materialDefinitions: Object.freeze(
-      project.materialDefinitionDrafts.map(
+      normalizedProject.materialDefinitionDrafts.map(
         createSemanticMaterialDefinitionSnapshotFromDraft
       )
     ),
     modules: Object.freeze(
-      project.placementDrafts.map((placement) =>
+      normalizedProject.placementDrafts.map((placement) =>
         Object.freeze({
           assetId: placement.assetId,
           collisionEnabled: placement.collisionEnabled,
@@ -5661,10 +5901,10 @@ export function createSemanticWorldFromProject(
       )
     ),
     regions: Object.freeze(
-      project.regionDrafts.map(createSemanticRegionSnapshotFromDraft)
+      normalizedProject.regionDrafts.map(createSemanticRegionSnapshotFromDraft)
     ),
     surfaces: Object.freeze(
-      project.surfaceDrafts.map((surface) =>
+      normalizedProject.surfaceDrafts.map((surface) =>
         createSemanticSurfaceSnapshotFromDraft(
           normalizeEdgeSurfaceDraftForExport(
             surface,
@@ -5674,10 +5914,14 @@ export function createSemanticWorldFromProject(
       )
     ),
     structures: Object.freeze(
-      project.structuralDrafts.map(createSemanticStructureSnapshotFromDraft)
+      normalizedProject.structuralDrafts.map(
+        createSemanticStructureSnapshotFromDraft
+      )
     ),
     terrainPatches: Object.freeze(
-      project.terrainPatchDrafts.map(createSemanticTerrainPatchSnapshotFromDraft)
+      normalizedProject.terrainPatchDrafts.map(
+        createSemanticTerrainPatchSnapshotFromDraft
+      )
     )
   });
 }

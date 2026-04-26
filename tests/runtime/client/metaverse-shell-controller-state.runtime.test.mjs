@@ -88,6 +88,7 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
       bundle: customPreviewBundle,
       bundleId: customPreviewBundle.mapId,
       label: customPreviewBundle.label,
+      mapEditorProjectSettings: null,
       sourceBundleId: "staging-ground"
     })
   );
@@ -108,7 +109,7 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
   assert.equal(state.hasConfirmedProfile, true);
   assert.equal(state.profile?.snapshot.username, "Unknown");
   assert.equal(state.shellStage, "metaverse");
-  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
 
   state = reduceMetaverseShellControllerState(state, {
@@ -311,7 +312,7 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
 
   assert.equal(state.shellStage, "metaverse");
   assert.equal(state.activeExperienceId, null);
-  assert.equal(state.activeMetaverseBundleId, "staging-ground");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-free-roam");
 
   state = reduceMetaverseShellControllerState(state, {
@@ -353,7 +354,7 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   });
 
   assert.equal(state.matchMode, "team-deathmatch");
-  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
 
   state = reduceMetaverseShellControllerState(state, {
@@ -392,5 +393,5 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.matchMode, "team-deathmatch");
   assert.equal(state.shellStage, "main-menu");
   assert.equal(state.activeExperienceId, null);
-  assert.equal(state.activeMetaverseBundleId, "staging-ground");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
 });

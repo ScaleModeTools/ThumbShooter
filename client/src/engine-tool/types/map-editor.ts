@@ -4,6 +4,8 @@ import type {
   MetaverseWorldSurfaceVector3Snapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
+import { mapEditorBuildGridUnitMeters } from "@/engine-tool/build/map-editor-build-placement";
+
 export type MapEditorViewportTransformToolMode =
   | "move"
   | "rotate"
@@ -80,6 +82,40 @@ export const defaultMapEditorMaterialPaletteIds =
     "terrain-sand",
     "terrain-snow"
   ]);
+
+export interface MapEditorProjectSettingsSnapshot {
+  readonly helperGridSizeMeters: number;
+}
+
+export const defaultMapEditorProjectSettings =
+  Object.freeze<MapEditorProjectSettingsSnapshot>({
+    helperGridSizeMeters: 240
+  });
+
+export function normalizeMapEditorProjectHelperGridSizeMeters(
+  helperGridSizeMeters: number
+): number {
+  if (!Number.isFinite(helperGridSizeMeters)) {
+    return defaultMapEditorProjectSettings.helperGridSizeMeters;
+  }
+
+  return Math.max(
+    mapEditorBuildGridUnitMeters,
+    Math.round(helperGridSizeMeters / mapEditorBuildGridUnitMeters) *
+      mapEditorBuildGridUnitMeters
+  );
+}
+
+export function createMapEditorProjectSettingsSnapshot(
+  settings: Partial<MapEditorProjectSettingsSnapshot> = {}
+): MapEditorProjectSettingsSnapshot {
+  return Object.freeze({
+    helperGridSizeMeters: normalizeMapEditorProjectHelperGridSizeMeters(
+      settings.helperGridSizeMeters ??
+        defaultMapEditorProjectSettings.helperGridSizeMeters
+    )
+  });
+}
 
 export interface MapEditorBuilderToolStateSnapshot {
   readonly activeMaterialId: MetaverseMapBundleSemanticMaterialId;

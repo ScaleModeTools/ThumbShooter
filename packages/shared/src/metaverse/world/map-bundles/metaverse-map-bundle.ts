@@ -338,6 +338,7 @@ export interface MetaverseMapBundleSemanticStructureSnapshot {
 export type MetaverseMapBundleSemanticGameplayVolumeKind =
   | "combat-lane"
   | "cover-volume"
+  | "kill-floor"
   | "spawn-room"
   | "team-zone"
   | "vehicle-route";

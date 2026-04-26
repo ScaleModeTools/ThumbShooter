@@ -9,6 +9,16 @@ interface PersistMapEditorPublicProjectBundleDependencies {
   readonly fetch?: typeof globalThis.fetch;
 }
 
+export interface PersistMapEditorPublicProjectSettings {
+  readonly helperGridSizeMeters: number;
+}
+
+export interface PersistMapEditorPublicProjectBundleRequest {
+  readonly mapEditorProjectSettings:
+    PersistMapEditorPublicProjectSettings | null;
+  readonly sourceBundleId: string;
+}
+
 export interface PersistMapEditorPublicProjectBundleResult {
   readonly bundleId: string;
   readonly label: string;
@@ -95,14 +105,15 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 export async function persistMapEditorPublicProjectBundleOnServer(
   bundle: MetaverseMapBundleSnapshot,
-  sourceBundleId: string,
+  request: PersistMapEditorPublicProjectBundleRequest,
   dependencies: PersistMapEditorPublicProjectBundleDependencies = {}
 ): Promise<PersistMapEditorPublicProjectBundleResult> {
   const fetch = resolveFetchDependency(dependencies.fetch);
   const response = await fetch(resolvePublicMapEditorProjectBundleUrl(), {
     body: JSON.stringify({
       bundle,
-      sourceBundleId
+      mapEditorProjectSettings: request.mapEditorProjectSettings,
+      sourceBundleId: request.sourceBundleId
     }),
     headers: {
       "content-type": "application/json"

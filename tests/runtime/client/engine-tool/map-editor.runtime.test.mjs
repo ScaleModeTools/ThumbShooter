@@ -67,6 +67,81 @@ test("metaverse map bundle loader resolves the staging-ground authored slice and
   assert.equal(loadedBundle.environmentPresentation.environment.turbidity, 9.5);
 });
 
+test("map editor blank template bundle loads without authored starter content", async () => {
+  const {
+    createLoadedMapEditorBlankTemplateBundle,
+    mapEditorBlankTemplateBundleId
+  } = await clientLoader.load(
+    "/src/engine-tool/config/map-editor-blank-template-bundle.ts"
+  );
+  const { createMapEditorProject } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+
+  const loadedBundle = createLoadedMapEditorBlankTemplateBundle();
+  const project = createMapEditorProject(loadedBundle);
+
+  assert.equal(loadedBundle.bundle.mapId, mapEditorBlankTemplateBundleId);
+  assert.equal(loadedBundle.bundle.label, "Blank Template");
+  assert.equal(loadedBundle.bundle.environmentAssets.length, 0);
+  assert.equal(loadedBundle.bundle.launchVariations.length, 0);
+  assert.equal(loadedBundle.bundle.playerSpawnNodes.length, 0);
+  assert.equal(loadedBundle.bundle.sceneObjects.length, 0);
+  assert.equal(loadedBundle.bundle.waterRegions.length, 0);
+  assert.equal(project.launchVariationDrafts.length, 0);
+  assert.equal(project.gameplayVolumeDrafts.length, 1);
+  assert.equal(project.gameplayVolumeDrafts[0]?.label, "Kill Floor");
+  assert.equal(project.gameplayVolumeDrafts[0]?.volumeKind, "kill-floor");
+  assert.deepEqual(project.gameplayVolumeDrafts[0]?.center, {
+    x: 0,
+    y: -5,
+    z: 0
+  });
+  assert.deepEqual(project.gameplayVolumeDrafts[0]?.size, {
+    x: 480,
+    y: 0.5,
+    z: 480
+  });
+  assert.equal(project.playerSpawnDrafts.length, 0);
+  assert.equal(project.placementDrafts.length, 0);
+  assert.equal(project.sceneObjectDrafts.length, 0);
+  assert.equal(project.surfaceDrafts.length, 0);
+  assert.equal(project.waterRegionDrafts.length, 0);
+  assert.equal(project.selectedEntityRef, null);
+  assert.equal(project.selectedLaunchVariationId, null);
+});
+
+test("map editor helper grid updates resize the managed kill floor footprint", async () => {
+  const {
+    createLoadedMapEditorBlankTemplateBundle
+  } = await clientLoader.load(
+    "/src/engine-tool/config/map-editor-blank-template-bundle.ts"
+  );
+  const {
+    createMapEditorProject,
+    updateMapEditorProjectSettings
+  } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const project = updateMapEditorProjectSettings(
+    createMapEditorProject(createLoadedMapEditorBlankTemplateBundle()),
+    () => ({
+      helperGridSizeMeters: 320
+    })
+  );
+
+  assert.deepEqual(project.gameplayVolumeDrafts[0]?.size, {
+    x: 640,
+    y: 0.5,
+    z: 640
+  });
+  assert.deepEqual(project.gameplayVolumeDrafts[0]?.center, {
+    x: 0,
+    y: -5,
+    z: 0
+  });
+});
+
 test("metaverse runtime config chooses the authored home-team spawn for the local player lane", async () => {
   const {
     clearMetaverseWorldBundlePreviewEntry,
@@ -125,6 +200,7 @@ test("metaverse runtime config chooses the authored home-team spawn for the loca
     }),
     bundleId: previewBundleId,
     label: "Client Team Spawn Preview",
+    mapEditorProjectSettings: null,
     sourceBundleId: "staging-ground"
   });
 
@@ -199,7 +275,12 @@ test("map editor public project save posts exported bundles to the server public
   });
   const result = await persistMapEditorPublicProjectBundleOnServer(
     bundle,
-    "staging-ground",
+    {
+      mapEditorProjectSettings: Object.freeze({
+        helperGridSizeMeters: 320
+      }),
+      sourceBundleId: "staging-ground"
+    },
     {
       async fetch(url, init = {}) {
         fetchCalls.push({
@@ -235,6 +316,7 @@ test("map editor public project save posts exported bundles to the server public
   const requestBody = JSON.parse(fetchCalls[0].init.body);
 
   assert.equal(requestBody.bundle.mapId, "client-public-project-save-test");
+  assert.equal(requestBody.mapEditorProjectSettings.helperGridSizeMeters, 320);
   assert.equal(requestBody.sourceBundleId, "staging-ground");
 });
 
@@ -271,6 +353,9 @@ test("map editor public project manifest registers file-backed bundles without l
                   {
                     bundleId: "client-public-project-load-test",
                     label: "Client Public Loaded Project",
+                    mapEditorProjectSettings: Object.freeze({
+                      helperGridSizeMeters: 320
+                    }),
                     path: "/map-editor/projects/client-public-project-load-test.json",
                     sourceBundleId: "staging-ground",
                     updatedAt: "2026-04-25T00:00:00.000Z"
@@ -305,9 +390,14 @@ test("map editor public project manifest registers file-backed bundles without l
 
     assert.equal(entries.length, 1);
     assert.equal(entries[0].bundleId, "client-public-project-load-test");
+    assert.equal(entries[0].mapEditorProjectSettings?.helperGridSizeMeters, 320);
     assert.equal(fetchCalls[0].init.cache, "no-store");
     assert.equal(fetchCalls[1].init.cache, "no-store");
     assert.equal(registryEntry?.bundle.mapId, "client-public-project-load-test");
+    assert.equal(
+      registryEntry?.mapEditorProjectSettings?.helperGridSizeMeters,
+      320
+    );
     assert.equal(registryEntry?.sourceBundleId, "staging-ground");
   } finally {
     clearMetaverseWorldBundlePreviewEntry("client-public-project-load-test");
@@ -2065,6 +2155,12 @@ test("map editor procedural build helpers export grid-canonical structures, game
     ),
     true
   );
+  assert.equal(
+    exportedBundle.semanticWorld.gameplayVolumes.some(
+      (volume) => volume.volumeKind === "kill-floor"
+    ),
+    true
+  );
   assert.equal(exportedBundle.semanticWorld.lights.at(-1)?.intensity, 3);
   assert.equal(
     exportedBundle.compiledWorld.chunks.some((chunk) =>
@@ -2072,188 +2168,6 @@ test("map editor procedural build helpers export grid-canonical structures, game
     ),
     true
   );
-});
-
-test("map editor project save/load persists authored launch variations and environment presentation through project storage", async () => {
-  const {
-    createMapEditorProject,
-    selectMapEditorLaunchVariation,
-    updateMapEditorEnvironmentPresentationProfileId
-  } =
-    await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
-  const {
-    loadStoredMapEditorProject,
-    saveMapEditorProject
-  } = await clientLoader.load(
-    "/src/engine-tool/project/map-editor-project-storage.ts"
-  );
-  const { loadMetaverseMapBundle } = await clientLoader.load(
-    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
-  );
-
-  const storageValues = new Map();
-  const storage = {
-    getItem(key) {
-      return storageValues.get(key) ?? null;
-    },
-    removeItem(key) {
-      storageValues.delete(key);
-    },
-    setItem(key, value) {
-      storageValues.set(key, value);
-    }
-  };
-  const loadedBundle = loadMetaverseMapBundle("staging-ground");
-  const project = updateMapEditorEnvironmentPresentationProfileId(
-    selectMapEditorLaunchVariation(
-      createMapEditorProject(loadedBundle),
-      "duck-hunt-preview"
-    ),
-    "shell-golden-hour-environment-presentation"
-  );
-
-  saveMapEditorProject(storage, project);
-
-  const restoredProject = loadStoredMapEditorProject(storage, "staging-ground");
-
-  assert.notEqual(restoredProject, null);
-  assert.equal(restoredProject.bundleId, "staging-ground");
-  assert.equal(restoredProject.selectedLaunchVariationId, "duck-hunt-preview");
-  assert.equal(
-    restoredProject.environmentPresentationProfileId,
-    "shell-golden-hour-environment-presentation"
-  );
-  assert.equal(restoredProject.launchVariationDrafts.length, 3);
-});
-
-test("stored staging-ground bundle overrides can become the default runtime map bundle", async () => {
-  const {
-    createMapEditorProject,
-    updateMapEditorLaunchVariationDraft
-  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
-  const {
-    saveMapEditorProject
-  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-storage.ts");
-  const {
-    applyStoredMetaverseWorldBundleOverrides,
-    clearMetaverseWorldBundlePreviewEntry
-  } = await clientLoader.load("/src/metaverse/world/bundle-registry/index.ts");
-  const { loadMetaverseMapBundle } = await clientLoader.load(
-    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
-  );
-
-  const storageValues = new Map();
-  const storage = {
-    getItem(key) {
-      return storageValues.get(key) ?? null;
-    },
-    removeItem(key) {
-      storageValues.delete(key);
-    },
-    setItem(key, value) {
-      storageValues.set(key, value);
-    }
-  };
-  const project = updateMapEditorLaunchVariationDraft(
-    createMapEditorProject(loadMetaverseMapBundle("staging-ground")),
-    "shell-free-roam",
-    (draft) => ({
-      ...draft,
-      label: "Saved Staging Ground Free Roam"
-    })
-  );
-
-  saveMapEditorProject(storage, project);
-
-  try {
-    assert.notEqual(
-      loadMetaverseMapBundle("staging-ground").bundle.launchVariations.find(
-        (variation) => variation.variationId === "shell-free-roam"
-      )?.label,
-      "Saved Staging Ground Free Roam"
-    );
-
-    applyStoredMetaverseWorldBundleOverrides(storage);
-
-    assert.equal(
-      loadMetaverseMapBundle("staging-ground").bundle.launchVariations.find(
-        (variation) => variation.variationId === "shell-free-roam"
-      )?.label,
-      "Saved Staging Ground Free Roam"
-    );
-  } finally {
-    clearMetaverseWorldBundlePreviewEntry("staging-ground");
-  }
-});
-
-test("stored staging-ground bundle overrides that fail metaverse environment proof are ignored", async () => {
-  const {
-    applyStoredMetaverseWorldBundleOverride,
-    clearMetaverseWorldBundlePreviewEntry
-  } = await clientLoader.load("/src/metaverse/world/bundle-registry/index.ts");
-  const { loadMetaverseMapBundle } = await clientLoader.load(
-    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
-  );
-  const { loadMetaverseEnvironmentProofConfig } = await clientLoader.load(
-    "/src/metaverse/world/proof/load-metaverse-environment-proof-config.ts"
-  );
-  const {
-    readStoredMetaverseWorldBundleStorageKey,
-    storedMetaverseWorldBundleRecordVersion
-  } = await clientLoader.load(
-    "/src/metaverse/world/map-bundles/stored-metaverse-world-bundle.ts"
-  );
-  const storageValues = new Map();
-  const storage = {
-    getItem(key) {
-      return storageValues.get(key) ?? null;
-    },
-    removeItem(key) {
-      storageValues.delete(key);
-    },
-    setItem(key, value) {
-      storageValues.set(key, value);
-    }
-  };
-  const brokenStoredBundle = structuredClone(stagingGroundMapBundle);
-  const floorAsset = brokenStoredBundle.environmentAssets.find(
-    (environmentAsset) =>
-      environmentAsset.assetId === "metaverse-builder-floor-tile-v1"
-  );
-
-  assert.notEqual(floorAsset, undefined);
-
-  brokenStoredBundle.label = "Broken Stored Override";
-  floorAsset.surfaceColliders = Object.freeze([
-    ...floorAsset.surfaceColliders,
-    structuredClone(floorAsset.surfaceColliders[0])
-  ]);
-  delete brokenStoredBundle.semanticWorld;
-  brokenStoredBundle.compiledWorld = Object.freeze({
-    ...brokenStoredBundle.compiledWorld,
-    compatibilityEnvironmentAssets: Object.freeze(
-      brokenStoredBundle.environmentAssets
-    )
-  });
-
-  storage.setItem(
-    readStoredMetaverseWorldBundleStorageKey("staging-ground"),
-    JSON.stringify({
-      bundle: brokenStoredBundle,
-      version: storedMetaverseWorldBundleRecordVersion
-    })
-  );
-
-  try {
-    assert.equal(
-      applyStoredMetaverseWorldBundleOverride(storage, "staging-ground"),
-      false
-    );
-    assert.equal(loadMetaverseMapBundle("staging-ground").bundle.label, stagingGroundMapBundle.label);
-    assert.doesNotThrow(() => loadMetaverseEnvironmentProofConfig("staging-ground"));
-  } finally {
-    clearMetaverseWorldBundlePreviewEntry("staging-ground");
-  }
 });
 
 test("metaverse environment proof loads from the bundle-backed staging-ground map slice", async () => {
@@ -2322,89 +2236,6 @@ test("map editor library hides hidden environment assets and the shipped staging
   );
   assert.equal(
     project.placementDrafts.some(
-      (placement) =>
-        placement.assetId === metaversePlaygroundRangeBarrierEnvironmentAssetId
-    ),
-    false
-  );
-});
-
-test("map editor stored project loading strips legacy staged range barriers from older drafts", async () => {
-  const {
-    loadStoredMapEditorProject
-  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-storage.ts");
-  const { metaversePlaygroundRangeBarrierEnvironmentAssetId } = await clientLoader.load(
-    "/src/assets/config/environment-prop-manifest.ts"
-  );
-
-  const barrierEnvironmentAsset = Object.freeze({
-    assetId: metaversePlaygroundRangeBarrierEnvironmentAssetId,
-    collisionPath: null,
-    collider: null,
-    dynamicBody: null,
-    entries: null,
-    placementMode: "instanced",
-    placements: Object.freeze([
-      Object.freeze({
-        collisionEnabled: true,
-        isVisible: true,
-        materialReferenceId: null,
-        notes: "legacy barrier placement",
-        placementId: "legacy-range-barrier",
-        position: Object.freeze({
-          x: 0,
-          y: 0,
-          z: -14.5
-        }),
-        rotationYRadians: 0,
-        scale: Object.freeze({
-          x: 0.9,
-          y: 0.9,
-          z: 0.9
-        })
-      })
-    ]),
-    seats: null,
-    surfaceColliders: Object.freeze([
-      Object.freeze({
-        center: Object.freeze({
-          x: 0,
-          y: 1.6,
-          z: 0
-        }),
-        size: Object.freeze({
-          x: 8.5,
-          y: 3.2,
-          z: 1.4
-        }),
-        traversalAffordance: "support"
-      })
-    ]),
-    traversalAffordance: "support"
-  });
-  const storage = {
-    getItem() {
-      return JSON.stringify({
-        bundle: Object.freeze({
-          ...stagingGroundMapBundle,
-          environmentAssets: Object.freeze([
-            ...stagingGroundMapBundle.environmentAssets,
-            barrierEnvironmentAsset
-          ])
-        }),
-        selectedLaunchVariationId: null,
-        selectedPlacementId: "legacy-range-barrier",
-        version: 2
-      });
-    },
-    removeItem() {},
-    setItem() {}
-  };
-  const restoredProject = loadStoredMapEditorProject(storage, "staging-ground");
-
-  assert.notEqual(restoredProject, null);
-  assert.equal(
-    restoredProject.placementDrafts.some(
       (placement) =>
         placement.assetId === metaversePlaygroundRangeBarrierEnvironmentAssetId
     ),
@@ -2516,6 +2347,7 @@ test("metaverse environment proof rejects procedural box drift away from exact-m
         ),
         bundleId: scenario.bundleId,
         label: `Exact Match Proof ${scenario.bundleId}`,
+        mapEditorProjectSettings: null,
         sourceBundleId: "staging-ground"
       });
 

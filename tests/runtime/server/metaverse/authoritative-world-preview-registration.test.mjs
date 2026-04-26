@@ -154,6 +154,9 @@ test("MetaverseWorldPreviewHttpAdapter persists public map bundles for authoring
     const handled = await adapter.handleRequest(
       createJsonRequest({
         bundle: previewBundle,
+        mapEditorProjectSettings: Object.freeze({
+          helperGridSizeMeters: 320
+        }),
         sourceBundleId: "staging-ground"
       }),
       response,
@@ -185,6 +188,10 @@ test("MetaverseWorldPreviewHttpAdapter persists public map bundles for authoring
     assert.deepEqual(savedManifest.projects.map((entry) => entry.bundleId), [
       "server-public-map-bundle-test"
     ]);
+    assert.equal(
+      savedManifest.projects[0]?.mapEditorProjectSettings?.helperGridSizeMeters,
+      320
+    );
     assert.equal(
       loadAuthoritativeMetaverseMapBundle("server-public-map-bundle-test").bundle
         .mapId,

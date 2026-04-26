@@ -57,27 +57,46 @@ resolve_localdev_webtransport_cert_public_key_algorithm() {
     awk -F': ' '/Public Key Algorithm:/{ print $2; exit }'
 }
 
-resolve_localdev_webtransport_cert_validity_seconds() {
+resolve_localdev_webtransport_cert_not_before_seconds() {
   local not_before
-  local not_after
-  local not_before_seconds
-  local not_after_seconds
 
   not_before="$(
     openssl x509 -in "$webtransport_cert_file" -noout -startdate 2>/dev/null |
       sed 's/^notBefore=//'
   )"
+
+  if [[ -z "$not_before" ]]; then
+    return 1
+  fi
+
+  date -u -d "$not_before" +%s 2>/dev/null
+}
+
+resolve_localdev_webtransport_cert_not_after_seconds() {
+  local not_after
+
   not_after="$(
     openssl x509 -in "$webtransport_cert_file" -noout -enddate 2>/dev/null |
       sed 's/^notAfter=//'
   )"
 
-  if [[ -z "$not_before" ]] || [[ -z "$not_after" ]]; then
+  if [[ -z "$not_after" ]]; then
     return 1
   fi
 
-  not_before_seconds="$(date -u -d "$not_before" +%s 2>/dev/null || true)"
-  not_after_seconds="$(date -u -d "$not_after" +%s 2>/dev/null || true)"
+  date -u -d "$not_after" +%s 2>/dev/null
+}
+
+resolve_localdev_webtransport_cert_validity_seconds() {
+  local not_before_seconds
+  local not_after_seconds
+
+  not_before_seconds="$(
+    resolve_localdev_webtransport_cert_not_before_seconds || true
+  )"
+  not_after_seconds="$(
+    resolve_localdev_webtransport_cert_not_after_seconds || true
+  )"
 
   if [[ -z "$not_before_seconds" ]] || [[ -z "$not_after_seconds" ]]; then
     return 1
@@ -175,6 +194,9 @@ localdev_webtransport_cert_has_required_server_extensions() {
 
 resolve_localdev_webtransport_certificate_rotation_reason() {
   local public_key_algorithm
+  local current_seconds
+  local not_before_seconds
+  local not_after_seconds
   local validity_seconds
   local max_validity_seconds
 
@@ -200,6 +222,34 @@ resolve_localdev_webtransport_certificate_rotation_reason() {
   if [[ -z "$validity_seconds" ]]; then
     printf '%s\n' \
       "existing certificate validity window could not be inspected"
+    return 0
+  fi
+
+  not_before_seconds="$(
+    resolve_localdev_webtransport_cert_not_before_seconds || true
+  )"
+  not_after_seconds="$(
+    resolve_localdev_webtransport_cert_not_after_seconds || true
+  )"
+  current_seconds="$(date -u +%s 2>/dev/null || true)"
+
+  if [[ -z "$not_before_seconds" ]] ||
+    [[ -z "$not_after_seconds" ]] ||
+    [[ -z "$current_seconds" ]]; then
+    printf '%s\n' \
+      "current time could not be inspected for certificate validity"
+    return 0
+  fi
+
+  if (( current_seconds < not_before_seconds )); then
+    printf '%s\n' \
+      "existing certificate is not valid yet"
+    return 0
+  fi
+
+  if (( current_seconds >= not_after_seconds )); then
+    printf '%s\n' \
+      "existing certificate has expired"
     return 0
   fi
 
@@ -622,6 +672,7 @@ export WEBGPU_METAVERSE_LOCALDEV_CLIENT_ENV_FILE="$client_env_file"
 localdev_webtransport_boot_status=""
 localdev_webtransport_boot_error=""
 webtransport_bind_host="$webtransport_host"
+webtransport_self_check_host="$webtransport_host"
 wsl_networking_mode="$(resolve_localdev_wsl_networking_mode || true)"
 wsl_guest_ipv4=""
 
@@ -631,7 +682,8 @@ if [[ -n "${WSL_DISTRO_NAME:-}" ]] && [[ "$wsl_networking_mode" == "nat" ]]; the
   if [[ -n "$wsl_guest_ipv4" ]]; then
     webtransport_host="$wsl_guest_ipv4"
     webtransport_bind_host="0.0.0.0"
-    echo "Using WSL guest IPv4 $webtransport_host for localdev WebTransport because WSL is in nat networking mode."
+    webtransport_self_check_host="127.0.0.1"
+    echo "Using WSL guest IPv4 $webtransport_host for browser localdev WebTransport because WSL is in nat networking mode; probing the server self-check through $webtransport_self_check_host."
   else
     localdev_webtransport_boot_status="self-check-failed"
     localdev_webtransport_boot_error="WebGPU Metaverse localdev WebTransport could not resolve the WSL guest IPv4 address while WSL is in nat networking mode."
@@ -653,7 +705,7 @@ if ensure_localdev_webtransport_certificate; then
     export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_CLIENT_HOST="$webtransport_host"
     export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_HOST="$webtransport_bind_host"
     export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_PORT="$webtransport_port"
-    export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_SELF_CHECK_HOST="$webtransport_host"
+    export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_SELF_CHECK_HOST="$webtransport_self_check_host"
     export WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_SECRET="$(
       node --input-type=module --eval "import { randomBytes } from 'node:crypto'; console.log(randomBytes(16).toString('hex'));"
     )"

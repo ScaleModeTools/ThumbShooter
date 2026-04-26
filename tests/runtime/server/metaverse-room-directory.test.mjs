@@ -83,6 +83,7 @@ test("MetaverseRoomDirectory reuses free-roam shards until capacity and then spi
     .sort((leftCount, rightCount) => rightCount - leftCount);
 
   assert.equal(firstAssignment.roomId, secondAssignment.roomId);
+  assert.equal(firstAssignment.bundleId, "private-build");
   assert.notEqual(thirdAssignment.roomId, firstAssignment.roomId);
   assert.equal(directorySnapshot.rooms.length, 2);
   assert.deepEqual(connectedPlayerCounts, [2, 1]);
@@ -179,5 +180,6 @@ test("MetaverseRoomDirectory transfers TDM leadership and rotates the room sessi
   );
 
   assert.notEqual(recreatedAssignment.roomSessionId, leaderAssignment.roomSessionId);
+  assert.equal(leaderAssignment.bundleId, "private-build");
   assert.equal(recreatedAssignment.leaderPlayerId, replacementPlayerId);
 });

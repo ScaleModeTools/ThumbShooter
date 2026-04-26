@@ -7,13 +7,45 @@ import {
   Scene
 } from "three/webgpu";
 
-import type { MapEditorViewportHelperVisibilitySnapshot } from "@/engine-tool/types/map-editor";
+import { mapEditorBuildGridUnitMeters } from "@/engine-tool/build/map-editor-build-placement";
+import {
+  normalizeMapEditorProjectHelperGridSizeMeters,
+  type MapEditorViewportHelperVisibilitySnapshot
+} from "@/engine-tool/types/map-editor";
 
 export interface MapEditorViewportHelperHandles {
   axesHelper: AxesHelper;
+  helperGridSizeMeters: number;
   gridHelper: GridHelper;
   polarGridHelper: PolarGridHelper;
   selectionBoundsHelper: BoxHelper | null;
+}
+
+function createGridHelper(
+  helperGridSizeMeters: number
+): GridHelper {
+  return new GridHelper(
+    helperGridSizeMeters,
+    Math.max(1, Math.round(helperGridSizeMeters / mapEditorBuildGridUnitMeters)),
+    "#1d4ed8",
+    "#1f2937"
+  );
+}
+
+function createPolarGridHelper(
+  helperGridSizeMeters: number
+): PolarGridHelper {
+  return new PolarGridHelper(
+    helperGridSizeMeters * 0.5,
+    30,
+    Math.max(
+      1,
+      Math.round(helperGridSizeMeters / (mapEditorBuildGridUnitMeters * 5))
+    ),
+    Math.max(1, Math.round(helperGridSizeMeters / mapEditorBuildGridUnitMeters)),
+    "#0ea5e9",
+    "#475569"
+  );
 }
 
 function disposeHelperMaterial(
@@ -58,19 +90,15 @@ function disposeHelperObject(
 }
 
 export function createMapEditorViewportHelperHandles(
-  scene: Scene
+  scene: Scene,
+  helperGridSizeMeters: number
 ): MapEditorViewportHelperHandles {
-  const gridHelper = new GridHelper(240, 60, "#1d4ed8", "#1f2937");
+  const resolvedHelperGridSizeMeters =
+    normalizeMapEditorProjectHelperGridSizeMeters(helperGridSizeMeters);
+  const gridHelper = createGridHelper(resolvedHelperGridSizeMeters);
   scene.add(gridHelper);
 
-  const polarGridHelper = new PolarGridHelper(
-    120,
-    30,
-    12,
-    60,
-    "#0ea5e9",
-    "#475569"
-  );
+  const polarGridHelper = createPolarGridHelper(resolvedHelperGridSizeMeters);
   scene.add(polarGridHelper);
 
   const axesHelper = new AxesHelper(32);
@@ -78,10 +106,42 @@ export function createMapEditorViewportHelperHandles(
 
   return {
     axesHelper,
+    helperGridSizeMeters: resolvedHelperGridSizeMeters,
     gridHelper,
     polarGridHelper,
     selectionBoundsHelper: null
   };
+}
+
+export function syncMapEditorViewportHelperGridSize(
+  scene: Scene | null,
+  helperHandles: MapEditorViewportHelperHandles,
+  helperGridSizeMeters: number
+): void {
+  if (scene === null) {
+    return;
+  }
+
+  const resolvedHelperGridSizeMeters =
+    normalizeMapEditorProjectHelperGridSizeMeters(helperGridSizeMeters);
+
+  if (helperHandles.helperGridSizeMeters === resolvedHelperGridSizeMeters) {
+    return;
+  }
+
+  scene.remove(helperHandles.gridHelper);
+  scene.remove(helperHandles.polarGridHelper);
+  disposeHelperObject(helperHandles.gridHelper);
+  disposeHelperObject(helperHandles.polarGridHelper);
+
+  helperHandles.gridHelper = createGridHelper(resolvedHelperGridSizeMeters);
+  helperHandles.polarGridHelper = createPolarGridHelper(
+    resolvedHelperGridSizeMeters
+  );
+  helperHandles.helperGridSizeMeters = resolvedHelperGridSizeMeters;
+
+  scene.add(helperHandles.gridHelper);
+  scene.add(helperHandles.polarGridHelper);
 }
 
 export function syncMapEditorViewportHelperVisibility(

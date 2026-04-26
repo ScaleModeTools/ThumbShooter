@@ -479,6 +479,8 @@ function createGameplayVolumeGroup(
           ? "#38bdf8"
           : volume.teamId === "red"
             ? "#fb7185"
+            : volume.volumeKind === "kill-floor"
+              ? "#dc2626"
             : volume.volumeKind === "vehicle-route"
               ? "#a3e635"
               : "#f59e0b",

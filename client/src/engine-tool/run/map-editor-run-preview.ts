@@ -89,6 +89,7 @@ export async function validateAndRegisterMapEditorPreviewBundle(
         bundle: previewBundle,
         bundleId: previewBundle.mapId,
         label: previewBundle.label,
+        mapEditorProjectSettings: null,
         sourceBundleId
       })
     );

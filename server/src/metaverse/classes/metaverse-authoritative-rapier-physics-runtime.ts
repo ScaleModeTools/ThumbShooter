@@ -13,8 +13,28 @@ import type {
 
 const require = createRequire(import.meta.url);
 const RAPIER = require("@dimforge/rapier3d-compat") as RapierApiHandle;
+const rapierDeprecatedInitWarning =
+  "using deprecated parameters for the initialization function; pass a single object instead";
 
-await RAPIER.init();
+async function initializeRapier(): Promise<void> {
+  const originalWarn = console.warn;
+
+  console.warn = (...data: Parameters<typeof console.warn>): void => {
+    if (data.length === 1 && data[0] === rapierDeprecatedInitWarning) {
+      return;
+    }
+
+    originalWarn(...data);
+  };
+
+  try {
+    await RAPIER.init();
+  } finally {
+    console.warn = originalWarn;
+  }
+}
+
+await initializeRapier();
 
 const defaultGravity = Object.freeze({
   x: 0,

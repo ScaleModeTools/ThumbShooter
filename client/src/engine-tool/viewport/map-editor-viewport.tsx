@@ -88,6 +88,7 @@ import {
   createMapEditorViewportHelperHandles,
   disposeMapEditorViewportHelperHandles,
   replaceMapEditorViewportSelectionBoundsHelper,
+  syncMapEditorViewportHelperGridSize,
   syncMapEditorViewportHelperVisibility
 } from "./map-editor-viewport-helpers";
 import { MapEditorViewportKeyboardFlightController } from "./map-editor-viewport-keyboard-flight";
@@ -126,6 +127,7 @@ interface MapEditorViewportProps {
   readonly environmentPresentation:
     MapEditorProjectSnapshot["environmentPresentation"];
   readonly gameplayVolumeDrafts: readonly MapEditorGameplayVolumeDraftSnapshot[];
+  readonly helperGridSizeMeters: number;
   readonly helperVisibility: MapEditorViewportHelperVisibilitySnapshot;
   readonly lightDrafts: readonly MapEditorLightDraftSnapshot[];
   readonly materialDefinitionDrafts:
@@ -2035,6 +2037,7 @@ export function MapEditorViewport({
   edgeDrafts,
   environmentPresentation,
   gameplayVolumeDrafts,
+  helperGridSizeMeters,
   helperVisibility,
   lightDrafts,
   materialDefinitionDrafts,
@@ -2832,7 +2835,10 @@ export function MapEditorViewport({
     scene.add(semanticDraftHandles.rootGroup);
     const previewAssetLibrary = new MapEditorViewportPreviewAssetLibrary();
     previewAssetLibraryRef.current = previewAssetLibrary;
-    const helperHandles = createMapEditorViewportHelperHandles(scene);
+    const helperHandles = createMapEditorViewportHelperHandles(
+      scene,
+      helperGridSizeMeters
+    );
     helperHandlesRef.current = helperHandles;
     environmentRuntimeRef.current = installMapEditorSceneEnvironment(
       camera,
@@ -4533,13 +4539,22 @@ export function MapEditorViewport({
       return;
     }
 
+    syncMapEditorViewportHelperGridSize(
+      sceneRef.current,
+      helperHandles,
+      helperGridSizeMeters
+    );
     syncMapEditorViewportHelperVisibility(helperHandles, helperVisibility);
 
     if (collisionGroup !== null) {
       collisionGroup.visible =
         helperVisibility.collisionBounds && sceneVisibility.authoredModules;
     }
-  }, [helperVisibility, sceneVisibility.authoredModules]);
+  }, [
+    helperGridSizeMeters,
+    helperVisibility,
+    sceneVisibility.authoredModules
+  ]);
 
   useEffect(() => {
     syncSelectionPresentation();
