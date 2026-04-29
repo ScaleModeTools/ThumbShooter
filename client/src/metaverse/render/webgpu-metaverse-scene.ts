@@ -6,6 +6,7 @@ import {
 } from "three/webgpu";
 import type {
   MetaverseCombatProjectileSnapshot,
+  MetaverseRealtimeResourceSpawnSnapshot,
   MetaverseRealtimePlayerWeaponStateSnapshot
 } from "@webgpu-metaverse/shared";
 import {
@@ -49,6 +50,7 @@ import { MetaverseScenePresentationLifecycleState } from "./metaverse-scene-pres
 import { MetaverseScenePresentationState } from "./metaverse-scene-presentation-state";
 import { MetaverseSceneScenicState } from "./metaverse-scene-scenic-state";
 import { MetaverseScenePortalPresentationState } from "./portals/metaverse-scene-portal-presentation-state";
+import { MetaverseSceneResourceSpawnPresentationState } from "./resources/metaverse-scene-resource-spawn-presentation-state";
 import type { MetaverseSemanticAimFrame } from "../aim/metaverse-semantic-aim";
 
 import type {
@@ -141,6 +143,10 @@ export function createMetaverseScene(
   ): MetaverseRenderedWeaponMuzzleFrame | null;
   syncCombatProjectiles(
     combatProjectiles: readonly MetaverseCombatProjectileSnapshot[],
+    nowMs: number
+  ): void;
+  syncResourceSpawns(
+    resourceSpawns: readonly MetaverseRealtimeResourceSpawnSnapshot[],
     nowMs: number
   ): void;
   syncPresentation(
@@ -271,6 +277,12 @@ export function createMetaverseScene(
   const combatFxState = new MetaverseSceneCombatFxState({
     scene
   });
+  const resourceSpawnPresentationState =
+    new MetaverseSceneResourceSpawnPresentationState({
+      createSceneAssetLoader,
+      scene,
+      warn: dependencies.warn ?? ((message) => globalThis.console?.warn(message))
+    });
   const localCharacterPresentationState =
     new MetaverseSceneLocalCharacterPresentationState({
       config,
@@ -349,6 +361,7 @@ export function createMetaverseScene(
     resetPresentation() {
       presentationState.resetPresentation();
       combatFxState.reset();
+      resourceSpawnPresentationState.reset();
     },
     clearLocalCombatDeathAnimation() {
       presentationState.clearLocalCombatDeathAnimation();
@@ -470,6 +483,9 @@ export function createMetaverseScene(
     },
     syncCombatProjectiles(combatProjectiles, nowMs) {
       combatFxState.syncProjectiles(combatProjectiles, nowMs);
+    },
+    syncResourceSpawns(resourceSpawns, nowMs) {
+      resourceSpawnPresentationState.sync(resourceSpawns, nowMs);
     },
     syncPresentation(
       cameraSnapshot,

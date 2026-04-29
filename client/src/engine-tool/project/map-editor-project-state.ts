@@ -74,14 +74,17 @@ import {
 } from "@/engine-tool/project/map-editor-project-semantic-drafts";
 import {
   createPlayerSpawnDrafts,
+  createResourceSpawnDrafts,
   createSceneObjectDrafts,
   createWaterRegionDrafts,
   freezePlayerSpawnDraft,
+  freezeResourceSpawnDraft,
   freezeSceneObjectDraft,
   freezeWaterRegionDraft,
   resolveMapEditorWaterRegionCenter,
   resolveMapEditorWaterRegionTopCenter,
   type MapEditorPlayerSpawnDraftSnapshot,
+  type MapEditorResourceSpawnDraftSnapshot,
   type MapEditorSceneObjectDraftSnapshot,
   type MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -126,6 +129,7 @@ export type {
 } from "@/engine-tool/project/map-editor-project-semantic-drafts";
 export type {
   MapEditorPlayerSpawnDraftSnapshot,
+  MapEditorResourceSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -163,6 +167,7 @@ export type MapEditorEntityKind =
   | "module"
   | "player-spawn"
   | "region"
+  | "resource-spawn"
   | "scene-object"
   | "structure"
   | "surface"
@@ -200,6 +205,7 @@ export interface MapEditorProjectSnapshot {
   readonly playerSpawnSelectionDraft: MapEditorPlayerSpawnSelectionDraftSnapshot;
   readonly projectSettings: MapEditorProjectSettingsSnapshot;
   readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
+  readonly resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[];
   readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
   readonly selectedLaunchVariationId: string | null;
@@ -658,6 +664,10 @@ function createMapEditorPlayerSpawnId(project: MapEditorProjectSnapshot): string
   return `${project.bundleId}:spawn:${project.playerSpawnDrafts.length + 1}`;
 }
 
+function createMapEditorResourceSpawnId(project: MapEditorProjectSnapshot): string {
+  return `${project.bundleId}:resource:${project.resourceSpawnDrafts.length + 1}`;
+}
+
 function createMapEditorSceneObjectId(project: MapEditorProjectSnapshot): string {
   return `${project.bundleId}:scene-object:${project.sceneObjectDrafts.length + 1}`;
 }
@@ -685,6 +695,7 @@ function resolveMapEditorProjectDefaultKillFloorElevation(
     MapEditorProjectSnapshot,
     | "placementDrafts"
     | "playerSpawnDrafts"
+    | "resourceSpawnDrafts"
     | "sceneObjectDrafts"
     | "structuralDrafts"
     | "surfaceDrafts"
@@ -732,6 +743,13 @@ function resolveMapEditorProjectDefaultKillFloorElevation(
     );
   }
 
+  for (const resourceSpawn of project.resourceSpawnDrafts) {
+    minimumElevationMeters = Math.min(
+      minimumElevationMeters,
+      resourceSpawn.position.y
+    );
+  }
+
   for (const sceneObject of project.sceneObjectDrafts) {
     minimumElevationMeters = Math.min(
       minimumElevationMeters,
@@ -756,6 +774,7 @@ function createManagedMapEditorKillFloorDraft(
     | "placementDrafts"
     | "playerSpawnDrafts"
     | "projectSettings"
+    | "resourceSpawnDrafts"
     | "sceneObjectDrafts"
     | "structuralDrafts"
     | "surfaceDrafts"
@@ -909,6 +928,13 @@ function readSelectedEntityPosition(
       return (
         project.playerSpawnDrafts.find(
           (spawnDraft) => spawnDraft.spawnId === selectedEntityRef.id
+        )?.position ?? null
+      );
+    case "resource-spawn":
+      return (
+        project.resourceSpawnDrafts.find(
+          (resourceSpawnDraft) =>
+            resourceSpawnDraft.spawnId === selectedEntityRef.id
         )?.position ?? null
       );
     case "scene-object":
@@ -2364,6 +2390,12 @@ function listEntityRefsForOutlinerGroup(
             kind: "player-spawn" as const
           })
         ),
+        ...project.resourceSpawnDrafts.map((resourceSpawnDraft) =>
+          Object.freeze({
+            id: resourceSpawnDraft.spawnId,
+            kind: "resource-spawn" as const
+          })
+        ),
         ...project.sceneObjectDrafts.map((sceneObjectDraft) =>
           Object.freeze({
             id: sceneObjectDraft.objectId,
@@ -2457,6 +2489,7 @@ function resolveEntityOutlinerGroup(
     case "gameplay-volume":
     case "light":
     case "player-spawn":
+    case "resource-spawn":
     case "scene-object":
       return "gameplay-anchors";
     case "water-region":
@@ -3148,14 +3181,41 @@ export interface MapEditorProjectCreationOptions {
   readonly projectSettings?: Partial<MapEditorProjectSettingsSnapshot>;
 }
 
+function resolveInitialSelectedLaunchVariationId(
+  launchVariationDrafts: readonly MapEditorLaunchVariationDraftSnapshot[],
+  resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[]
+): string | null {
+  const hasTeamDeathmatchResourceSpawns = resourceSpawnDrafts.some(
+    (resourceSpawnDraft) =>
+      resourceSpawnDraft.modeTags.includes("team-deathmatch")
+  );
+
+  if (hasTeamDeathmatchResourceSpawns) {
+    const teamDeathmatchLaunchVariation = launchVariationDrafts.find(
+      (launchVariationDraft) =>
+        launchVariationDraft.matchMode === "team-deathmatch" &&
+        launchVariationDraft.weaponLayoutId !== null
+    );
+
+    if (teamDeathmatchLaunchVariation !== undefined) {
+      return teamDeathmatchLaunchVariation.variationId;
+    }
+  }
+
+  return launchVariationDrafts[0]?.variationId ?? null;
+}
+
 export function createMapEditorProject(
   loadedBundle: LoadedMetaverseMapBundleSnapshot,
   options: MapEditorProjectCreationOptions = {}
 ): MapEditorProjectSnapshot {
   const semanticDrafts = createSemanticDraftsFromBundle(loadedBundle);
   const launchVariationDrafts = createLaunchVariationDrafts(loadedBundle);
-  const selectedLaunchVariationId =
-    launchVariationDrafts[0]?.variationId ?? null;
+  const resourceSpawnDrafts = createResourceSpawnDrafts(loadedBundle);
+  const selectedLaunchVariationId = resolveInitialSelectedLaunchVariationId(
+    launchVariationDrafts,
+    resourceSpawnDrafts
+  );
   const selectedEntityRef = resolveInitialSelectedEntityRef(semanticDrafts);
 
   const project = Object.freeze({
@@ -3185,6 +3245,7 @@ export function createMapEditorProject(
       options.projectSettings
     ),
     regionDrafts: semanticDrafts.regionDrafts,
+    resourceSpawnDrafts,
     sceneObjectDrafts: createSceneObjectDrafts(loadedBundle),
     selectedEntityRef,
     selectedLaunchVariationId,
@@ -3324,6 +3385,10 @@ export function selectMapEditorEntity(
       )) ||
     (entityRef.kind === "player-spawn" &&
       project.playerSpawnDrafts.some((spawn) => spawn.spawnId === entityRef.id)) ||
+    (entityRef.kind === "resource-spawn" &&
+      project.resourceSpawnDrafts.some(
+        (resourceSpawn) => resourceSpawn.spawnId === entityRef.id
+      )) ||
     (entityRef.kind === "scene-object" &&
       project.sceneObjectDrafts.some((object) => object.objectId === entityRef.id)) ||
     (entityRef.kind === "water-region" &&
@@ -3700,6 +3765,21 @@ export function removeMapEditorEntity(
         resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
       );
     }
+    case "resource-spawn": {
+      const nextProject = Object.freeze({
+        ...project,
+        resourceSpawnDrafts: Object.freeze(
+          project.resourceSpawnDrafts.filter(
+            (resourceSpawnDraft) => resourceSpawnDraft.spawnId !== entityRef.id
+          )
+        )
+      });
+
+      return withSelectedEntity(
+        nextProject,
+        resolveNextSelectionAfterRemoval(project, nextProject, entityRef)
+      );
+    }
     case "scene-object": {
       const nextProject = Object.freeze({
         ...project,
@@ -4017,6 +4097,42 @@ export function addMapEditorPlayerSpawnDraft(
     Object.freeze({
       id: nextSpawn.spawnId,
       kind: "player-spawn"
+    })
+  );
+}
+
+export function addMapEditorResourceSpawnDraft(
+  project: MapEditorProjectSnapshot,
+  position = createMapEditorSceneDraftPosition(project, Object.freeze({
+    x: 0,
+    y: 0,
+    z: 4
+  }))
+): MapEditorProjectSnapshot {
+  const nextResourceSpawn = freezeResourceSpawnDraft({
+    ammoGrantRounds: 48,
+    assetId: "metaverse-service-pistol-v2",
+    label: `Weapon Pickup ${project.resourceSpawnDrafts.length + 1}`,
+    modeTags: Object.freeze(["team-deathmatch"]),
+    pickupRadiusMeters: 1.4,
+    position,
+    respawnCooldownMs: 30_000,
+    spawnId: createMapEditorResourceSpawnId(project),
+    weaponId: "metaverse-service-pistol-v2",
+    yawRadians: 0
+  });
+
+  return withSelectedEntity(
+    Object.freeze({
+      ...project,
+      resourceSpawnDrafts: Object.freeze([
+        ...project.resourceSpawnDrafts,
+        nextResourceSpawn
+      ])
+    }),
+    Object.freeze({
+      id: nextResourceSpawn.spawnId,
+      kind: "resource-spawn"
     })
   );
 }
@@ -5656,6 +5772,25 @@ export function updateMapEditorPlayerSpawnDraft(
         spawnDraft.spawnId === spawnId
           ? freezePlayerSpawnDraft(update(spawnDraft))
           : spawnDraft
+      )
+    )
+  });
+}
+
+export function updateMapEditorResourceSpawnDraft(
+  project: MapEditorProjectSnapshot,
+  spawnId: string,
+  update: (
+    draft: MapEditorResourceSpawnDraftSnapshot
+  ) => MapEditorResourceSpawnDraftSnapshot
+): MapEditorProjectSnapshot {
+  return Object.freeze({
+    ...project,
+    resourceSpawnDrafts: Object.freeze(
+      project.resourceSpawnDrafts.map((resourceSpawnDraft) =>
+        resourceSpawnDraft.spawnId === spawnId
+          ? freezeResourceSpawnDraft(update(resourceSpawnDraft))
+          : resourceSpawnDraft
       )
     )
   });

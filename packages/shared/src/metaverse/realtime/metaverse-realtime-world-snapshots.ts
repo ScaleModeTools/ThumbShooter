@@ -327,6 +327,38 @@ export interface MetaverseRealtimeEnvironmentBodySnapshotInput {
   readonly yawRadians: number;
 }
 
+export interface MetaverseRealtimeResourceSpawnSnapshot {
+  readonly ammoGrantRounds: number;
+  readonly assetId: string | null;
+  readonly available: boolean;
+  readonly label: string;
+  readonly modeTags: readonly string[];
+  readonly nextRespawnAtServerTimeMs: Milliseconds | null;
+  readonly pickupRadiusMeters: number;
+  readonly position: MetaverseRealtimeVector3Snapshot;
+  readonly resourceKind: "weapon-pickup";
+  readonly respawnCooldownMs: Milliseconds;
+  readonly spawnId: string;
+  readonly weaponId: string;
+  readonly yawRadians: Radians;
+}
+
+export interface MetaverseRealtimeResourceSpawnSnapshotInput {
+  readonly ammoGrantRounds: number;
+  readonly assetId?: string | null;
+  readonly available: boolean;
+  readonly label: string;
+  readonly modeTags?: readonly string[];
+  readonly nextRespawnAtServerTimeMs?: number | null;
+  readonly pickupRadiusMeters: number;
+  readonly position: MetaverseRealtimeVector3SnapshotInput;
+  readonly resourceKind: "weapon-pickup";
+  readonly respawnCooldownMs: number;
+  readonly spawnId: string;
+  readonly weaponId: string;
+  readonly yawRadians: number;
+}
+
 export interface MetaverseRealtimeWorldSnapshot {
   readonly combatEvents: readonly MetaverseCombatEventSnapshot[];
   readonly combatFeed: readonly MetaverseCombatFeedEventSnapshot[];
@@ -335,6 +367,7 @@ export interface MetaverseRealtimeWorldSnapshot {
   readonly observerPlayer: MetaverseRealtimeObserverPlayerSnapshot | null;
   readonly players: readonly MetaverseRealtimePlayerSnapshot[];
   readonly projectiles: readonly MetaverseCombatProjectileSnapshot[];
+  readonly resourceSpawns: readonly MetaverseRealtimeResourceSpawnSnapshot[];
   readonly snapshotSequence: number;
   readonly tick: MetaverseRealtimeTickSnapshot;
   readonly vehicles: readonly MetaverseRealtimeVehicleSnapshot[];
@@ -349,6 +382,7 @@ export interface MetaverseRealtimeWorldSnapshotInput {
   readonly observerPlayer?: MetaverseRealtimeObserverPlayerSnapshotInput | null;
   readonly players: readonly MetaverseRealtimePlayerSnapshotInput[];
   readonly projectiles?: readonly MetaverseCombatProjectileSnapshotInput[];
+  readonly resourceSpawns?: readonly MetaverseRealtimeResourceSpawnSnapshotInput[];
   readonly snapshotSequence?: number;
   readonly tick: MetaverseRealtimeTickSnapshotInput;
   readonly vehicles: readonly MetaverseRealtimeVehicleSnapshotInput[];
@@ -881,6 +915,82 @@ function freezeEnvironmentBodySnapshot(
   });
 }
 
+function freezeResourceSpawnSnapshot(
+  input: MetaverseRealtimeResourceSpawnSnapshotInput
+): MetaverseRealtimeResourceSpawnSnapshot {
+  if (input.resourceKind !== "weapon-pickup") {
+    throw new Error(
+      `Unsupported metaverse realtime resource spawn kind: ${input.resourceKind}`
+    );
+  }
+
+  const ammoGrantRounds = normalizeFiniteNonNegativeInteger(
+    input.ammoGrantRounds
+  );
+  const pickupRadiusMeters = normalizeFiniteNumber(input.pickupRadiusMeters);
+  const respawnCooldownMs = normalizeFiniteNumber(input.respawnCooldownMs);
+
+  if (ammoGrantRounds <= 0) {
+    throw new Error(
+      "Metaverse realtime resource spawn ammoGrantRounds must be greater than 0."
+    );
+  }
+
+  if (pickupRadiusMeters <= 0) {
+    throw new Error(
+      "Metaverse realtime resource spawn pickupRadiusMeters must be greater than 0."
+    );
+  }
+
+  if (respawnCooldownMs < 0) {
+    throw new Error(
+      "Metaverse realtime resource spawn respawnCooldownMs must be at or above 0."
+    );
+  }
+
+  return Object.freeze({
+    ammoGrantRounds,
+    assetId:
+      input.assetId === null || input.assetId === undefined
+        ? null
+        : normalizeRequiredIdentifier(
+            input.assetId,
+            "Metaverse realtime resource spawn assetId"
+          ),
+    available: input.available,
+    label: normalizeRequiredIdentifier(
+      input.label,
+      "Metaverse realtime resource spawn label"
+    ),
+    modeTags: Object.freeze(
+      (input.modeTags ?? []).map((modeTag) =>
+        normalizeRequiredIdentifier(
+          modeTag,
+          "Metaverse realtime resource spawn modeTag"
+        )
+      )
+    ),
+    nextRespawnAtServerTimeMs:
+      input.nextRespawnAtServerTimeMs === null ||
+      input.nextRespawnAtServerTimeMs === undefined
+        ? null
+        : createMilliseconds(input.nextRespawnAtServerTimeMs),
+    pickupRadiusMeters,
+    position: createMetaversePresenceVector3Snapshot(input.position),
+    resourceKind: "weapon-pickup",
+    respawnCooldownMs: createMilliseconds(respawnCooldownMs),
+    spawnId: normalizeRequiredIdentifier(
+      input.spawnId,
+      "Metaverse realtime resource spawn spawnId"
+    ),
+    weaponId: normalizeRequiredIdentifier(
+      input.weaponId,
+      "Metaverse realtime resource spawn weaponId"
+    ),
+    yawRadians: createRadians(input.yawRadians)
+  });
+}
+
 function assertSeatOccupancyMatchesCanonical(
   playerId: MetaversePlayerId,
   mountedOccupancy: MetaverseRealtimeMountedOccupancySnapshot,
@@ -1039,6 +1149,12 @@ export function createMetaverseRealtimeEnvironmentBodySnapshot(
   return freezeEnvironmentBodySnapshot(input);
 }
 
+export function createMetaverseRealtimeResourceSpawnSnapshot(
+  input: MetaverseRealtimeResourceSpawnSnapshotInput
+): MetaverseRealtimeResourceSpawnSnapshot {
+  return freezeResourceSpawnSnapshot(input);
+}
+
 export function createMetaverseRealtimeWorldSnapshot(
   input: MetaverseRealtimeWorldSnapshotInput
 ): MetaverseRealtimeWorldSnapshot {
@@ -1058,6 +1174,9 @@ export function createMetaverseRealtimeWorldSnapshot(
   );
   const projectiles = (input.projectiles ?? []).map(
     createMetaverseCombatProjectileSnapshot
+  );
+  const resourceSpawns = (input.resourceSpawns ?? []).map(
+    freezeResourceSpawnSnapshot
   );
   const vehicles = input.vehicles.map(freezeVehicleSnapshot);
   const environmentBodySnapshotByEnvironmentAssetId = new Map<
@@ -1137,6 +1256,7 @@ export function createMetaverseRealtimeWorldSnapshot(
     )
   );
   const playerIds = new Set<MetaversePlayerId>();
+  const resourceSpawnIds = new Set<string>();
 
   for (const player of players) {
     if (playerIds.has(player.playerId)) {
@@ -1154,6 +1274,16 @@ export function createMetaverseRealtimeWorldSnapshot(
         `Metaverse realtime vehicle seat occupancy references missing player ${occupantPlayerId}.`
       );
     }
+  }
+
+  for (const resourceSpawn of resourceSpawns) {
+    if (resourceSpawnIds.has(resourceSpawn.spawnId)) {
+      throw new Error(
+        `Metaverse realtime world snapshot includes duplicate resource spawn ${resourceSpawn.spawnId}.`
+      );
+    }
+
+    resourceSpawnIds.add(resourceSpawn.spawnId);
   }
 
   const observerPlayer =
@@ -1175,6 +1305,7 @@ export function createMetaverseRealtimeWorldSnapshot(
     observerPlayer,
     players: Object.freeze(players),
     projectiles: Object.freeze(projectiles),
+    resourceSpawns: Object.freeze(resourceSpawns),
     snapshotSequence: normalizeFiniteNonNegativeInteger(input.snapshotSequence ?? 0),
     tick,
     vehicles: Object.freeze(vehicles)

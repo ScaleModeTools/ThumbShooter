@@ -363,6 +363,24 @@ export function MapEditorSceneRail({
                 </Button>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/70 bg-background/55 px-2 py-1.5">
+                <span className="truncate text-xs font-medium">Weapon Pickup</span>
+                <Button
+                  aria-label="Place weapon pickup"
+                  aria-pressed={activeViewportToolMode === "resource-spawn"}
+                  onClick={() => onActivateViewportToolMode("resource-spawn")}
+                  size="icon-sm"
+                  title="Place weapon pickup"
+                  type="button"
+                  variant={
+                    activeViewportToolMode === "resource-spawn"
+                      ? "default"
+                      : "outline"
+                  }
+                >
+                  <PlusCircleIcon />
+                </Button>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/70 bg-background/55 px-2 py-1.5">
                 <span className="truncate text-xs font-medium">Portal</span>
                 <Button
                   aria-label="Place portal"

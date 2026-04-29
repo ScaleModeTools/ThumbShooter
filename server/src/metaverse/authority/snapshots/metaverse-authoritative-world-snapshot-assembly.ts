@@ -28,6 +28,7 @@ import {
   type MetaverseRealtimeEnvironmentBodySnapshotInput,
   type MetaverseRealtimeMountedOccupancySnapshotInput,
   type MetaverseRealtimeObserverPlayerSnapshotInput,
+  type MetaverseRealtimeResourceSpawnSnapshotInput,
   type MetaverseRealtimeWorldEvent,
   type MetaverseRealtimeWorldSnapshot,
   type MetaverseVehicleId
@@ -156,6 +157,7 @@ export interface MetaverseAuthoritativeWorldSnapshotAssemblyConfig {
     MetaversePlayerCombatSnapshot
   >;
   readonly projectiles: readonly MetaverseCombatProjectileSnapshot[];
+  readonly resourceSpawns: readonly MetaverseRealtimeResourceSpawnSnapshotInput[];
   readonly snapshotSequence: number;
   readonly tickIntervalMs: number;
 }
@@ -428,6 +430,7 @@ export function createMetaverseAuthoritativeWorldSnapshot<
         }),
     players,
     projectiles: config.projectiles,
+    resourceSpawns: config.resourceSpawns,
     snapshotSequence: config.snapshotSequence,
     tick: {
       currentTick: config.currentTick,

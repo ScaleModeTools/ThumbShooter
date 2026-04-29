@@ -243,6 +243,10 @@ interface MetaverseRuntimeFrameSceneRuntime {
     projectiles: MetaverseRealtimeWorldSnapshot["projectiles"],
     nowMs: number
   ): void;
+  syncResourceSpawns?(
+    resourceSpawns: MetaverseRealtimeWorldSnapshot["resourceSpawns"],
+    nowMs: number
+  ): void;
   syncPresentation(
     cameraSnapshot: MetaverseCameraSnapshot,
     focusedPortal: FocusedExperiencePortalSnapshot | null,
@@ -711,6 +715,10 @@ export class MetaverseRuntimeFrameLoop {
     });
     this.#sceneRuntime.syncCombatProjectiles?.(
       authoritativeWorldSnapshot?.projectiles ?? [],
+      nowMs
+    );
+    this.#sceneRuntime.syncResourceSpawns?.(
+      authoritativeWorldSnapshot?.resourceSpawns ?? [],
       nowMs
     );
 

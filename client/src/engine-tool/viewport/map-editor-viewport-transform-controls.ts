@@ -172,6 +172,7 @@ export class MapEditorViewportTransformController {
       case "path":
       case "player-spawn":
       case "portal":
+      case "resource-spawn":
       case "select":
       case "terrain":
       case "vehicle-route":

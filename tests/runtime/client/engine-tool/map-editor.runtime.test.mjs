@@ -1952,6 +1952,178 @@ test("map editor export preserves authored spawn teams and team-proximity select
   assert.equal(exportedBundle.playerSpawnSelection.homeTeamBiasMeters, 14);
 });
 
+test("map editor imports, edits, deletes, selects, and exports weapon resource spawns", async () => {
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const {
+    addMapEditorResourceSpawnDraft,
+    createMapEditorProject,
+    removeMapEditorEntity,
+    selectMapEditorEntity,
+    updateMapEditorResourceSpawnDraft
+  } = await clientLoader.load("/src/engine-tool/project/map-editor-project-state.ts");
+  const { exportMapEditorProjectToMetaverseMapBundle } = await clientLoader.load(
+    "/src/engine-tool/run/export-map-editor-project-to-metaverse-map-bundle.ts"
+  );
+  const initialProject = createMapEditorProject(
+    loadMetaverseMapBundle("staging-ground")
+  );
+  const addedProject = addMapEditorResourceSpawnDraft(
+    initialProject,
+    Object.freeze({
+      x: 1,
+      y: 0.6,
+      z: 3
+    })
+  );
+  const resourceSpawnId = addedProject.resourceSpawnDrafts[0]?.spawnId;
+
+  assert.notEqual(resourceSpawnId, undefined);
+  assert.equal(addedProject.selectedEntityRef?.kind, "resource-spawn");
+  assert.equal(addedProject.selectedEntityRef?.id, resourceSpawnId);
+
+  const updatedProject = updateMapEditorResourceSpawnDraft(
+    addedProject,
+    resourceSpawnId,
+    (resourceSpawnDraft) => ({
+      ...resourceSpawnDraft,
+      ammoGrantRounds: 6,
+      assetId: "metaverse-rocket-launcher-v1",
+      label: "Rocket test pickup",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.8,
+      position: Object.freeze({
+        x: 4,
+        y: 0.6,
+        z: -2
+      }),
+      respawnCooldownMs: 45_000,
+      weaponId: "metaverse-rocket-launcher-v1",
+      yawRadians: 0.75
+    })
+  );
+  const selectedProject = selectMapEditorEntity(
+    updatedProject,
+    Object.freeze({
+      id: resourceSpawnId,
+      kind: "resource-spawn"
+    })
+  );
+  const exportedBundle =
+    exportMapEditorProjectToMetaverseMapBundle(selectedProject);
+  const exportedPickup = exportedBundle.resourceSpawns[0];
+
+  assert.equal(selectedProject.selectedEntityRef?.kind, "resource-spawn");
+  assert.equal(exportedBundle.resourceSpawns.length, 1);
+  assert.equal(exportedPickup?.resourceKind, "weapon-pickup");
+  assert.equal(exportedPickup?.spawnId, resourceSpawnId);
+  assert.equal(exportedPickup?.label, "Rocket test pickup");
+  assert.equal(exportedPickup?.weaponId, "metaverse-rocket-launcher-v1");
+  assert.equal(exportedPickup?.assetId, "metaverse-rocket-launcher-v1");
+  assert.equal(exportedPickup?.ammoGrantRounds, 6);
+  assert.equal(exportedPickup?.respawnCooldownMs, 45_000);
+  assert.equal(exportedPickup?.pickupRadiusMeters, 1.8);
+  assert.deepEqual(exportedPickup?.modeTags, ["team-deathmatch"]);
+  assert.deepEqual(exportedPickup?.position, {
+    x: 4,
+    y: 0.6,
+    z: -2
+  });
+
+  const removedProject = removeMapEditorEntity(selectedProject);
+
+  assert.equal(removedProject.resourceSpawnDrafts.length, 0);
+});
+
+test("private-build TDM loads and previews the pistol and rocket resource layout", async () => {
+  const { createMapEditorProject } = await clientLoader.load(
+    "/src/engine-tool/project/map-editor-project-state.ts"
+  );
+  const { validateAndRegisterMapEditorPreviewBundle } = await clientLoader.load(
+    "/src/engine-tool/run/map-editor-run-preview.ts"
+  );
+  const { loadMetaverseMapBundle } = await clientLoader.load(
+    "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"
+  );
+  const loadedBundle = loadMetaverseMapBundle("private-build");
+  const project = createMapEditorProject(loadedBundle);
+  const teamDeathmatchVariation =
+    loadedBundle.bundle.launchVariations.find(
+      (variation) => variation.matchMode === "team-deathmatch"
+    ) ?? null;
+
+  assert.equal(
+    teamDeathmatchVariation?.weaponLayoutId,
+    "metaverse-tdm-pistol-rocket-layout"
+  );
+  assert.equal(project.selectedLaunchVariationId, "shell-team-deathmatch");
+  assert.equal(loadedBundle.bundle.resourceSpawns.length, 4);
+  assert.deepEqual(
+    loadedBundle.bundle.resourceSpawns.map((resourceSpawn) => [
+      resourceSpawn.spawnId,
+      resourceSpawn.weaponId,
+      resourceSpawn.ammoGrantRounds,
+      resourceSpawn.respawnCooldownMs,
+      resourceSpawn.modeTags
+    ]),
+    [
+      [
+        "private-build:resource:pistol-north",
+        "metaverse-service-pistol-v2",
+        48,
+        30_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:pistol-south",
+        "metaverse-service-pistol-v2",
+        48,
+        30_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:rocket-west",
+        "metaverse-rocket-launcher-v1",
+        6,
+        45_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:rocket-east",
+        "metaverse-rocket-launcher-v1",
+        6,
+        45_000,
+        ["team-deathmatch"]
+      ]
+    ]
+  );
+
+  const previewResult = await validateAndRegisterMapEditorPreviewBundle(project, {
+    async fetch() {
+      return {
+        async json() {
+          return {
+            status: "registered"
+          };
+        },
+        ok: true
+      };
+    }
+  });
+  const previewBundle = loadMetaverseMapBundle(
+    previewResult.launchSelection?.bundleId ?? ""
+  );
+
+  assert.equal(previewResult.validation.valid, true);
+  assert.equal(previewResult.launchSelection?.matchMode, "team-deathmatch");
+  assert.equal(
+    previewResult.launchSelection?.weaponLayoutId,
+    "metaverse-tdm-pistol-rocket-layout"
+  );
+  assert.equal(previewBundle.bundle.resourceSpawns.length, 4);
+});
+
 test("map editor procedural build helpers export grid-canonical structures, gameplay volumes, and lights", async () => {
   const { loadMetaverseMapBundle } = await clientLoader.load(
     "/src/metaverse/world/map-bundles/load-metaverse-map-bundle.ts"

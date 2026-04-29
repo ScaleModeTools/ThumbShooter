@@ -64,6 +64,7 @@ import {
   type MetaverseAuthoritativePlayerTraversalIntentRuntimeState
 } from "../authority/traversal/metaverse-authoritative-player-traversal-authority.js";
 import { MetaverseAuthoritativeCombatAuthority } from "../authority/combat/metaverse-authoritative-combat-authority.js";
+import { MetaverseAuthoritativeResourceSpawnAuthority } from "../authority/resources/metaverse-authoritative-resource-spawn-authority.js";
 import { MetaverseAuthoritativeUnmountedPlayerSimulation } from "../authority/traversal/metaverse-authoritative-unmounted-player-simulation.js";
 import { MetaverseAuthoritativeWorldSurfaceState } from "../authority/traversal/metaverse-authoritative-world-surface-state.js";
 import { MetaverseAuthoritativeWorldTickState } from "../authority/world/metaverse-authoritative-world-tick-state.js";
@@ -365,6 +366,8 @@ export class MetaverseAuthoritativeWorldRuntime
     MetaverseAuthoritativePlayerWeaponStateAuthority<MetaversePlayerWorldRuntimeState>;
   readonly #combatAuthority:
     MetaverseAuthoritativeCombatAuthority<MetaversePlayerWorldRuntimeState>;
+  readonly #resourceSpawnAuthority:
+    MetaverseAuthoritativeResourceSpawnAuthority<MetaversePlayerWorldRuntimeState>;
   readonly #unmountedPlayerSimulation:
     MetaverseAuthoritativeUnmountedPlayerSimulation<
       MetaversePlayerWorldRuntimeState,
@@ -780,6 +783,20 @@ export class MetaverseAuthoritativeWorldRuntime
           groundedOverride
         )
     });
+    this.#resourceSpawnAuthority = new MetaverseAuthoritativeResourceSpawnAuthority({
+      grantWeaponResourcePickup: ({ nowMs, playerRuntime, resourceSpawn }) =>
+        this.#combatAuthority.grantWeaponResourcePickup(
+          playerRuntime,
+          resourceSpawn,
+          nowMs
+        ),
+      incrementSnapshotSequence: () => {
+        this.#tickState.incrementSnapshotSequence();
+      },
+      matchMode: launchVariation?.matchMode ?? null,
+      playersById: this.#playersById,
+      resourceSpawns: bundleInputs.bundle.resourceSpawns
+    });
     this.#unmountedPlayerSimulation =
       new MetaverseAuthoritativeUnmountedPlayerSimulation({
         createWaterborneTraversalColliderPredicate: (
@@ -853,6 +870,11 @@ export class MetaverseAuthoritativeWorldRuntime
           tickIntervalSeconds,
           nowMs
         ),
+      advanceResourceSpawns: (tickIntervalSeconds, nowMs) =>
+        this.#resourceSpawnAuthority.advanceResourceSpawns(
+          tickIntervalSeconds,
+          nowMs
+        ),
       physicsRuntime: this.#physicsRuntime,
       readTickIntervalMs: () => Number(this.#config.tickIntervalMs),
       syncMountedPlayerWorldStateFromVehicles: (nowMs) =>
@@ -883,6 +905,8 @@ export class MetaverseAuthoritativeWorldRuntime
       readPlayerCombatSnapshot: (playerId) =>
         this.#combatAuthority.readPlayerCombatSnapshot(playerId),
       readProjectileSnapshots: () => this.#combatAuthority.readProjectileSnapshots(),
+      readResourceSpawnSnapshots: () =>
+        this.#resourceSpawnAuthority.readResourceSpawnSnapshots(),
       readCurrentTick: () => this.#tickState.currentTick,
       readLastAdvancedAtMs: () => this.#tickState.lastAdvancedAtMs,
       readSnapshotSequence: () => this.#tickState.snapshotSequence,

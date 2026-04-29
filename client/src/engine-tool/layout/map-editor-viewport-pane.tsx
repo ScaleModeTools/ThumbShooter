@@ -9,6 +9,7 @@ import {
 import { StableInlineText } from "@/components/text-stability";
 import type {
   MapEditorPlayerSpawnDraftSnapshot,
+  MapEditorResourceSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -96,6 +97,11 @@ interface MapEditorViewportPaneProps {
     }
   ) => void;
   readonly onCreatePlayerSpawnAtPosition: (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => void;
+  readonly onCreateResourceSpawnAtPosition: (position: {
     readonly x: number;
     readonly y: number;
     readonly z: number;
@@ -212,6 +218,7 @@ interface MapEditorViewportPaneProps {
   readonly placementDrafts: readonly MapEditorPlacementDraftSnapshot[];
   readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
   readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
+  readonly resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[];
   readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
   readonly sceneVisibility: MapEditorSceneVisibilitySnapshot;
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
@@ -240,6 +247,7 @@ const viewportToolModeLabels = [
   "Water",
   "Module",
   "Player Spawn",
+  "Weapon Pickup",
   "Portal",
   "Move",
   "Rotate",
@@ -250,6 +258,10 @@ const viewportToolModeLabels = [
 function formatToolMode(viewportToolMode: MapEditorViewportToolMode): string {
   if (viewportToolMode === "player-spawn") {
     return "Player Spawn";
+  }
+
+  if (viewportToolMode === "resource-spawn") {
+    return "Weapon Pickup";
   }
 
   if (viewportToolMode === "vehicle-route") {
@@ -289,6 +301,7 @@ export function MapEditorViewportPane({
   onCreateFloorRegion,
   onCreateModuleAtPosition,
   onCreatePlayerSpawnAtPosition,
+  onCreateResourceSpawnAtPosition,
   onCreatePortalAtPosition,
   onCommitWallSegment,
   onCreateCombatLane,
@@ -307,6 +320,7 @@ export function MapEditorViewportPane({
   placementDrafts,
   playerSpawnDrafts,
   regionDrafts,
+  resourceSpawnDrafts,
   sceneObjectDrafts,
   sceneVisibility,
   selectedEntityRef,
@@ -397,6 +411,7 @@ export function MapEditorViewportPane({
           onCreateLightAtPosition={onCreateLightAtPosition}
           onCreateModuleAtPosition={onCreateModuleAtPosition}
           onCreatePlayerSpawnAtPosition={onCreatePlayerSpawnAtPosition}
+          onCreateResourceSpawnAtPosition={onCreateResourceSpawnAtPosition}
           onCreatePortalAtPosition={onCreatePortalAtPosition}
           onCreateTeamZone={onCreateTeamZone}
           onCreateVehicleRoute={onCreateVehicleRoute}
@@ -408,6 +423,7 @@ export function MapEditorViewportPane({
           placementDrafts={placementDrafts}
           playerSpawnDrafts={playerSpawnDrafts}
           regionDrafts={regionDrafts}
+          resourceSpawnDrafts={resourceSpawnDrafts}
           sceneObjectDrafts={sceneObjectDrafts}
           sceneVisibility={sceneVisibility}
           selectedEntityRef={selectedEntityRef}
@@ -443,6 +459,8 @@ export function MapEditorViewportPane({
             ? `Drag empty ground to draw terrain, or click existing terrain to ${builderToolState.terrainBrushMode} with a ${builderToolState.terrainBrushSizeCells}x${builderToolState.terrainBrushSizeCells} brush.`
           : viewportToolMode === "vertex"
             ? "Click a terrain sample, then drag the vertical transform handle to reshape that vertex."
+            : viewportToolMode === "resource-spawn"
+              ? "Click the scene to place a weapon ammo pickup on the clicked support."
             : viewportToolMode === "wall"
               ? `Click once to anchor a ${builderToolState.wallPresetId} on the clicked support, move to preview, then click again to commit and keep chaining.`
               : viewportToolMode === "path"

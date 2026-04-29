@@ -2,6 +2,7 @@ import {
   compileMetaverseMapBundleSemanticWorld,
   type MetaverseMapBundleLaunchVariationSnapshot,
   type MetaverseMapBundleCompiledWorldSnapshot,
+  type MetaverseMapBundleResourceSpawnSnapshot,
   type MetaverseMapBundleSceneObjectSnapshot,
   type MetaverseMapBundleSnapshot,
   type MetaverseMapBundleSpawnNodeSnapshot,
@@ -16,7 +17,6 @@ import {
   resolveMapEditorWaterRegionCenter,
   resolveMapEditorWaterRegionSize
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
-import { loadMetaverseMapBundle } from "@/metaverse/world/map-bundles";
 
 function toReadonlyRgbTuple(
   hexColor: string
@@ -99,6 +99,32 @@ function resolveSceneObjects(
   );
 }
 
+function resolveResourceSpawns(
+  project: MapEditorProjectSnapshot
+): readonly MetaverseMapBundleResourceSpawnSnapshot[] {
+  return Object.freeze(
+    project.resourceSpawnDrafts.map((resourceSpawnDraft) =>
+      Object.freeze({
+        ammoGrantRounds: resourceSpawnDraft.ammoGrantRounds,
+        assetId: resourceSpawnDraft.assetId,
+        label: resourceSpawnDraft.label,
+        modeTags: Object.freeze([...resourceSpawnDraft.modeTags]),
+        pickupRadiusMeters: resourceSpawnDraft.pickupRadiusMeters,
+        position: Object.freeze({
+          x: resourceSpawnDraft.position.x,
+          y: resourceSpawnDraft.position.y,
+          z: resourceSpawnDraft.position.z
+        }),
+        resourceKind: "weapon-pickup" as const,
+        respawnCooldownMs: resourceSpawnDraft.respawnCooldownMs,
+        spawnId: resourceSpawnDraft.spawnId,
+        weaponId: resourceSpawnDraft.weaponId,
+        yawRadians: resourceSpawnDraft.yawRadians
+      } satisfies MetaverseMapBundleResourceSpawnSnapshot)
+    )
+  );
+}
+
 function resolveLaunchVariations(
   project: MapEditorProjectSnapshot
 ): readonly MetaverseMapBundleLaunchVariationSnapshot[] {
@@ -121,7 +147,6 @@ function resolveLaunchVariations(
 export function exportMapEditorProjectToMetaverseMapBundle(
   project: MapEditorProjectSnapshot
 ): MetaverseMapBundleSnapshot {
-  const loadedBundle = loadMetaverseMapBundle(project.bundleId);
   const semanticWorld = createSemanticWorldFromProject(project);
   const compiledWorld = compileMetaverseMapBundleSemanticWorld(semanticWorld);
 
@@ -147,7 +172,7 @@ export function exportMapEditorProjectToMetaverseMapBundle(
         project.environmentPresentationProfileId,
       hudProfileId: project.hudProfileId
     }),
-    resourceSpawns: loadedBundle.bundle.resourceSpawns,
+    resourceSpawns: resolveResourceSpawns(project),
     sceneObjects: resolveSceneObjects(project),
     semanticWorld,
     waterRegions: Object.freeze(

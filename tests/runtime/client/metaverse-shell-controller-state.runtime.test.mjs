@@ -109,7 +109,7 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
   assert.equal(state.hasConfirmedProfile, true);
   assert.equal(state.profile?.snapshot.username, "Unknown");
   assert.equal(state.shellStage, "metaverse");
-  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
 
   state = reduceMetaverseShellControllerState(state, {
@@ -178,6 +178,36 @@ test("deathmatch bundle removes the Duck Hunt portal and keeps the shell TDM lau
   assert.equal(
     deathmatchBundle.launchVariations[0]?.variationId,
     "shell-team-deathmatch"
+  );
+});
+
+test("metaverse launch playlists default team deathmatch to private-build", async () => {
+  const {
+    defaultMetaverseMapLaunchPlaylistSnapshot,
+    normalizeMetaverseMapLaunchPlaylistSnapshot,
+    resolveMetaverseMapLaunchSelection
+  } = await clientLoader.load("/src/metaverse/world/playlists/index.ts");
+
+  assert.deepEqual(
+    defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds,
+    ["private-build"]
+  );
+  assert.deepEqual(
+    normalizeMetaverseMapLaunchPlaylistSnapshot({
+      metaverseDefaultBundleId: null,
+      teamDeathmatchBundleIds: ["deathmatch"]
+    }).teamDeathmatchBundleIds,
+    ["private-build"]
+  );
+  assert.deepEqual(
+    resolveMetaverseMapLaunchSelection(
+      defaultMetaverseMapLaunchPlaylistSnapshot,
+      "team-deathmatch"
+    ),
+    {
+      bundleId: "private-build",
+      launchVariationId: "shell-team-deathmatch"
+    }
   );
 });
 
@@ -366,7 +396,7 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   });
 
   assert.equal(state.matchMode, "team-deathmatch");
-  assert.equal(state.activeMetaverseBundleId, "deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "private-build");
   assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
 
   state = reduceMetaverseShellControllerState(state, {

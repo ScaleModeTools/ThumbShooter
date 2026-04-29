@@ -42,6 +42,7 @@ import {
 import { readMapEditorBuildPrimitiveCatalogEntry } from "@/engine-tool/build/map-editor-build-primitives";
 import type {
   MapEditorPlayerSpawnDraftSnapshot,
+  MapEditorResourceSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -178,6 +179,11 @@ interface MapEditorViewportProps {
     readonly y: number;
     readonly z: number;
   }) => void;
+  readonly onCreateResourceSpawnAtPosition: (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => void;
   readonly onCreatePortalAtPosition: (position: {
     readonly x: number;
     readonly y: number;
@@ -290,6 +296,7 @@ interface MapEditorViewportProps {
   readonly placementDrafts: readonly MapEditorPlacementDraftSnapshot[];
   readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
   readonly regionDrafts: readonly MapEditorRegionDraftSnapshot[];
+  readonly resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[];
   readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
   readonly sceneVisibility: MapEditorSceneVisibilitySnapshot;
   readonly selectedEntityRef: MapEditorSelectedEntityRef | null;
@@ -1409,6 +1416,7 @@ function resolvePlacementExtents(
   placementDrafts: readonly MapEditorPlacementDraftSnapshot[],
   sceneDrafts: {
     readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
+    readonly resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[];
     readonly connectorDrafts: readonly MapEditorConnectorDraftSnapshot[];
     readonly edgeDrafts: readonly MapEditorEdgeDraftSnapshot[];
     readonly gameplayVolumeDrafts: readonly MapEditorGameplayVolumeDraftSnapshot[];
@@ -1424,6 +1432,7 @@ function resolvePlacementExtents(
   if (
     placementDrafts.length === 0 &&
     sceneDrafts.playerSpawnDrafts.length === 0 &&
+    sceneDrafts.resourceSpawnDrafts.length === 0 &&
     sceneDrafts.connectorDrafts.length === 0 &&
     sceneDrafts.edgeDrafts.length === 0 &&
     sceneDrafts.gameplayVolumeDrafts.length === 0 &&
@@ -1457,6 +1466,13 @@ function resolvePlacementExtents(
     maxX = Math.max(maxX, spawnDraft.position.x);
     minZ = Math.min(minZ, spawnDraft.position.z);
     maxZ = Math.max(maxZ, spawnDraft.position.z);
+  }
+
+  for (const resourceSpawnDraft of sceneDrafts.resourceSpawnDrafts) {
+    minX = Math.min(minX, resourceSpawnDraft.position.x);
+    maxX = Math.max(maxX, resourceSpawnDraft.position.x);
+    minZ = Math.min(minZ, resourceSpawnDraft.position.z);
+    maxZ = Math.max(maxZ, resourceSpawnDraft.position.z);
   }
 
   for (const sceneObjectDraft of sceneDrafts.sceneObjectDrafts) {
@@ -1590,6 +1606,7 @@ function createPlacementStructureSignature(
 function createSceneDraftSignature(
   sceneDrafts: {
     readonly playerSpawnDrafts: readonly MapEditorPlayerSpawnDraftSnapshot[];
+    readonly resourceSpawnDrafts: readonly MapEditorResourceSpawnDraftSnapshot[];
     readonly sceneObjectDrafts: readonly MapEditorSceneObjectDraftSnapshot[];
     readonly waterRegionDrafts: readonly MapEditorWaterRegionDraftSnapshot[];
   }
@@ -1603,6 +1620,22 @@ function createSceneDraftSignature(
         spawnDraft.position.y,
         spawnDraft.position.z,
         spawnDraft.yawRadians
+      ].join(":")
+    ),
+    ...sceneDrafts.resourceSpawnDrafts.map((resourceSpawnDraft) =>
+      [
+        "resource-spawn",
+        resourceSpawnDraft.spawnId,
+        resourceSpawnDraft.weaponId,
+        resourceSpawnDraft.assetId ?? "",
+        resourceSpawnDraft.ammoGrantRounds,
+        resourceSpawnDraft.respawnCooldownMs,
+        resourceSpawnDraft.pickupRadiusMeters,
+        resourceSpawnDraft.position.x,
+        resourceSpawnDraft.position.y,
+        resourceSpawnDraft.position.z,
+        resourceSpawnDraft.yawRadians,
+        resourceSpawnDraft.modeTags.join(",")
       ].join(":")
     ),
     ...sceneDrafts.sceneObjectDrafts.map((sceneObjectDraft) =>
@@ -1767,6 +1800,7 @@ function readSelectedEntityFromObject(
       lightId?: unknown;
       placementId?: unknown;
       playerSpawnId?: unknown;
+      resourceSpawnId?: unknown;
       regionId?: unknown;
       sceneObjectId?: unknown;
       structureId?: unknown;
@@ -1789,6 +1823,7 @@ function readSelectedEntityFromObject(
     const candidateLightId = currentObject.userData?.lightId;
     const candidatePlacementId = currentObject.userData?.placementId;
     const candidatePlayerSpawnId = currentObject.userData?.playerSpawnId;
+    const candidateResourceSpawnId = currentObject.userData?.resourceSpawnId;
     const candidateSceneObjectId = currentObject.userData?.sceneObjectId;
     const candidateWaterRegionId = currentObject.userData?.waterRegionId;
 
@@ -1859,6 +1894,13 @@ function readSelectedEntityFromObject(
       return Object.freeze({
         id: candidatePlayerSpawnId,
         kind: "player-spawn"
+      });
+    }
+
+    if (typeof candidateResourceSpawnId === "string") {
+      return Object.freeze({
+        id: candidateResourceSpawnId,
+        kind: "resource-spawn"
       });
     }
 
@@ -1984,6 +2026,10 @@ function syncMapEditorViewportSceneVisibility(
       sceneVisibility.gameplayMarkers
     );
     syncGroupMapVisibility(
+      sceneDraftHandles.resourceSpawnGroupsById,
+      sceneVisibility.gameplayMarkers
+    );
+    syncGroupMapVisibility(
       sceneDraftHandles.sceneObjectGroupsById,
       sceneVisibility.gameplayMarkers
     );
@@ -2047,6 +2093,7 @@ export function MapEditorViewport({
   onCreateFloorPolygonRegion,
   onCreateModuleAtPosition,
   onCreatePlayerSpawnAtPosition,
+  onCreateResourceSpawnAtPosition,
   onCreatePortalAtPosition,
   onCreateTerrainPatchAtPositions,
   onCommitWallSegment,
@@ -2065,6 +2112,7 @@ export function MapEditorViewport({
   placementDrafts,
   playerSpawnDrafts,
   regionDrafts,
+  resourceSpawnDrafts,
   sceneObjectDrafts,
   sceneVisibility,
   selectedEntityRef,
@@ -2204,10 +2252,11 @@ export function MapEditorViewport({
     () =>
       createSceneDraftSignature({
         playerSpawnDrafts,
+        resourceSpawnDrafts,
         sceneObjectDrafts,
         waterRegionDrafts
       }),
-    [playerSpawnDrafts, sceneObjectDrafts, waterRegionDrafts]
+    [playerSpawnDrafts, resourceSpawnDrafts, sceneObjectDrafts, waterRegionDrafts]
   );
 
   const handleEntitySelection = useEffectEvent(
@@ -2355,6 +2404,15 @@ export function MapEditorViewport({
       onCreateLightAtPosition(position);
     }
   );
+  const handleCreateResourceSpawn = useEffectEvent(
+    (position: {
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }) => {
+      onCreateResourceSpawnAtPosition(position);
+    }
+  );
   const handleCreateTeamZone = useEffectEvent(
     (
       startPosition: {
@@ -2498,6 +2556,11 @@ export function MapEditorViewport({
           selectedPresentationAnchor =
             sceneDraftHandles?.playerSpawnGroupsById.get(selectedEntityRef.id) ?? null;
           break;
+        case "resource-spawn":
+          selectedPresentationAnchor =
+            sceneDraftHandles?.resourceSpawnGroupsById.get(selectedEntityRef.id) ??
+            null;
+          break;
         case "scene-object":
           selectedPresentationAnchor =
             sceneDraftHandles?.sceneObjectGroupsById.get(selectedEntityRef.id) ?? null;
@@ -2573,6 +2636,14 @@ export function MapEditorViewport({
             viewportToolMode === "scale" || sceneDraftHandles === null
               ? null
               : sceneDraftHandles.playerSpawnGroupsById.get(
+                  selectedTransformTarget.id
+                ) ?? null;
+          break;
+        case "resource-spawn":
+          selectedTransformAnchor =
+            viewportToolMode === "scale" || sceneDraftHandles === null
+              ? null
+              : sceneDraftHandles.resourceSpawnGroupsById.get(
                   selectedTransformTarget.id
                 ) ?? null;
           break;
@@ -3282,6 +3353,14 @@ export function MapEditorViewport({
             1.4
           );
           return;
+        case "resource-spawn":
+          addSceneElementPreview(
+            builderPreviewGroup,
+            nextGroundPosition,
+            "#fb923c",
+            1.1
+          );
+          return;
         case "portal":
           addSceneElementPreview(
             builderPreviewGroup,
@@ -3854,6 +3933,9 @@ export function MapEditorViewport({
           case "player-spawn":
             onCreatePlayerSpawnAtPosition(nextScenePosition);
             return;
+          case "resource-spawn":
+            handleCreateResourceSpawn(nextScenePosition);
+            return;
           case "portal":
             onCreatePortalAtPosition(nextScenePosition);
             return;
@@ -4365,11 +4447,18 @@ export function MapEditorViewport({
 
     syncMapEditorViewportSceneDrafts(sceneDraftHandles, {
       playerSpawnDrafts,
+      resourceSpawnDrafts,
       sceneObjectDrafts,
       waterRegionDrafts
     });
     syncSelectionPresentation();
-  }, [playerSpawnDrafts, sceneDraftSignature, sceneObjectDrafts, waterRegionDrafts]);
+  }, [
+    playerSpawnDrafts,
+    resourceSpawnDrafts,
+    sceneDraftSignature,
+    sceneObjectDrafts,
+    waterRegionDrafts
+  ]);
 
   useEffect(() => {
     const semanticDraftHandles = semanticDraftHandlesRef.current;
@@ -4592,6 +4681,7 @@ export function MapEditorViewport({
       lightDrafts,
       playerSpawnDrafts,
       regionDrafts,
+      resourceSpawnDrafts,
       sceneObjectDrafts,
       structuralDrafts,
       surfaceDrafts,
@@ -4617,6 +4707,7 @@ export function MapEditorViewport({
     placementDrafts,
     playerSpawnDrafts,
     regionDrafts,
+    resourceSpawnDrafts,
     sceneObjectDrafts,
     structuralDrafts,
     surfaceDrafts,
@@ -4643,6 +4734,8 @@ export function MapEditorViewport({
             ? "Light tool: click to place the authored light preset above the clicked support."
           : viewportToolMode === "player-spawn"
             ? "Spawn tool: click the scene to place a player spawn marker on the clicked support."
+          : viewportToolMode === "resource-spawn"
+            ? "Weapon tool: click the scene to place a weapon ammo pickup on the clicked support."
           : viewportToolMode === "portal"
             ? "Portal tool: click the scene to place a portal on the clicked support."
           : viewportToolMode === "terrain"

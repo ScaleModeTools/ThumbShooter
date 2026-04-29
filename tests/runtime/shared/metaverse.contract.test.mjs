@@ -412,6 +412,86 @@ test("shared metaverse world bundles carry validated gameplay profile ids", () =
   );
 });
 
+test("shared metaverse world bundles validate weapon resource spawns", () => {
+  const weaponPickup = Object.freeze({
+    ammoGrantRounds: 48,
+    assetId: "metaverse-service-pistol-v2",
+    label: "Pistol pickup",
+    modeTags: Object.freeze(["team-deathmatch"]),
+    pickupRadiusMeters: 1.4,
+    position: Object.freeze({
+      x: -8.2,
+      y: 0.6,
+      z: -22.2
+    }),
+    resourceKind: "weapon-pickup",
+    respawnCooldownMs: 30_000,
+    spawnId: "test:pistol-pickup",
+    weaponId: "metaverse-service-pistol-v2",
+    yawRadians: 0.2
+  });
+  const parsedBundle = parseMetaverseMapBundleSnapshot({
+    ...stagingGroundMapBundle,
+    resourceSpawns: [weaponPickup]
+  });
+
+  assert.equal(parsedBundle.resourceSpawns.length, 1);
+  assert.deepEqual(parsedBundle.resourceSpawns[0], weaponPickup);
+  assert.throws(
+    () =>
+      parseMetaverseMapBundleSnapshot({
+        ...stagingGroundMapBundle,
+        resourceSpawns: [
+          {
+            ...weaponPickup,
+            ammoGrantRounds: 0
+          }
+        ]
+      }),
+    /resourceSpawns\[0\]\.ammoGrantRounds/
+  );
+  assert.throws(
+    () =>
+      parseMetaverseMapBundleSnapshot({
+        ...stagingGroundMapBundle,
+        resourceSpawns: [
+          {
+            ...weaponPickup,
+            pickupRadiusMeters: -1
+          }
+        ]
+      }),
+    /resourceSpawns\[0\]\.pickupRadiusMeters/
+  );
+  assert.throws(
+    () =>
+      parseMetaverseMapBundleSnapshot({
+        ...stagingGroundMapBundle,
+        resourceSpawns: [
+          {
+            ...weaponPickup,
+            respawnCooldownMs: -1
+          }
+        ]
+      }),
+    /resourceSpawns\[0\]\.respawnCooldownMs/
+  );
+  assert.throws(
+    () =>
+      parseMetaverseMapBundleSnapshot({
+        ...stagingGroundMapBundle,
+        resourceSpawns: [
+          weaponPickup,
+          {
+            ...weaponPickup,
+            label: "Duplicate pistol pickup"
+          }
+        ]
+      }),
+    /resource spawn ids must be unique/
+  );
+});
+
 test("shared metaverse world bundles preserve authored environment presentation snapshots", () => {
   const parsedBundle = parseMetaverseMapBundleSnapshot({
     ...stagingGroundMapBundle,
@@ -773,6 +853,27 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
       playerId
     },
     players: playerInputs,
+    resourceSpawns: [
+      {
+        ammoGrantRounds: 48,
+        assetId: " metaverse-service-pistol-v2 ",
+        available: true,
+        label: " Pistol pickup ",
+        modeTags: [" team-deathmatch "],
+        nextRespawnAtServerTimeMs: null,
+        pickupRadiusMeters: 1.4,
+        position: {
+          x: -8.2,
+          y: 0.6,
+          z: -22.2
+        },
+        resourceKind: "weapon-pickup",
+        respawnCooldownMs: 30_000,
+        spawnId: " resource:pistol ",
+        weaponId: " metaverse-service-pistol-v2 ",
+        yawRadians: 0.2
+      }
+    ],
     snapshotSequence: 9.6,
     tick: {
       currentTick: 42.9,
@@ -815,6 +916,18 @@ test("metaverse realtime world contracts freeze snapshots and derive seated occu
   assert.equal(worldSnapshot.tick.serverTimeMs, 7_650.75);
   assert.equal(worldSnapshot.tick.simulationTimeMs, 7_500.25);
   assert.equal(worldSnapshot.players.length, 1);
+  assert.equal(worldSnapshot.resourceSpawns.length, 1);
+  assert.equal(worldSnapshot.resourceSpawns[0]?.spawnId, "resource:pistol");
+  assert.equal(
+    worldSnapshot.resourceSpawns[0]?.weaponId,
+    "metaverse-service-pistol-v2"
+  );
+  assert.equal(worldSnapshot.resourceSpawns[0]?.assetId, "metaverse-service-pistol-v2");
+  assert.equal(worldSnapshot.resourceSpawns[0]?.available, true);
+  assert.equal(worldSnapshot.resourceSpawns[0]?.nextRespawnAtServerTimeMs, null);
+  assert.deepEqual(worldSnapshot.resourceSpawns[0]?.modeTags, [
+    "team-deathmatch"
+  ]);
   assert.equal(worldSnapshot.players[0]?.characterId, "mesh2motion-humanoid-v1");
   assert.equal(worldSnapshot.players[0]?.angularVelocityRadiansPerSecond, 1.25);
   assert.equal(

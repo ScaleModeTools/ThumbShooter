@@ -49,6 +49,7 @@ import {
   type MetaverseRealtimePlayerWeaponStateSnapshot
 } from "@webgpu-metaverse/shared/metaverse/realtime";
 import type {
+  MetaverseMapBundleResourceSpawnSnapshot,
   MetaverseMapBundleSemanticGameplayVolumeSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
@@ -1620,6 +1621,70 @@ export class MetaverseAuthoritativeCombatAuthority<
         )
       )
     );
+  }
+
+  grantWeaponResourcePickup(
+    playerRuntime: PlayerRuntime,
+    resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot,
+    nowMs: number
+  ): boolean {
+    if (resourceSpawn.resourceKind !== "weapon-pickup") {
+      return false;
+    }
+
+    const weaponStateSnapshot = playerRuntime.weaponState;
+    const equippedWeaponSlot =
+      weaponStateSnapshot?.slots.find(
+        (slot) => slot.equipped && slot.weaponId === resourceSpawn.weaponId
+      ) ?? null;
+
+    if (equippedWeaponSlot === null) {
+      return false;
+    }
+
+    const weaponProfile = tryReadMetaverseCombatWeaponProfile(
+      resourceSpawn.weaponId
+    );
+
+    if (weaponProfile === null) {
+      return false;
+    }
+
+    const combatState = this.#ensurePlayerCombatState(playerRuntime);
+
+    if (!combatState.alive) {
+      return false;
+    }
+
+    const weaponState = this.#ensureWeaponRuntimeState(
+      combatState,
+      resourceSpawn.weaponId
+    );
+    const reserveMissing =
+      weaponProfile.magazine.reserveCapacity - weaponState.ammoInReserve;
+
+    if (reserveMissing <= 0) {
+      return false;
+    }
+
+    const grantedRounds = Math.min(
+      reserveMissing,
+      Math.max(0, Math.trunc(resourceSpawn.ammoGrantRounds))
+    );
+
+    if (grantedRounds <= 0) {
+      return false;
+    }
+
+    weaponState.ammoInReserve += grantedRounds;
+
+    if (weaponState.ammoInMagazine <= 0 && weaponState.reloadRemainingMs <= 0) {
+      this.#startReloadIfNeeded(weaponState, weaponProfile);
+    }
+
+    this.syncCombatState(nowMs);
+
+    return true;
   }
 
   #advancePlayerWeaponReloads(

@@ -5,6 +5,10 @@ interface MetaverseAuthoritativeWorldTickStateDependencies {
     tickIntervalSeconds: number,
     nowMs: number
   ) => void;
+  readonly advanceResourceSpawns: (
+    tickIntervalSeconds: number,
+    nowMs: number
+  ) => void;
   readonly physicsRuntime: MetaverseAuthoritativeRapierPhysicsRuntime;
   readonly readTickIntervalMs: () => number;
   readonly syncMountedPlayerWorldStateFromVehicles: (nowMs: number) => void;
@@ -76,6 +80,10 @@ export class MetaverseAuthoritativeWorldTickState {
         this.#lastAdvancedAtMs
       );
       this.#dependencies.advanceCombatRuntimes(
+        tickIntervalSeconds,
+        this.#lastAdvancedAtMs
+      );
+      this.#dependencies.advanceResourceSpawns(
         tickIntervalSeconds,
         this.#lastAdvancedAtMs
       );

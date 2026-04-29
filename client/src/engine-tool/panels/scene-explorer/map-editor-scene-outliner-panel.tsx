@@ -9,6 +9,7 @@ import {
 import {
   BoxIcon,
   ChevronDownIcon,
+  CrosshairIcon,
   EyeIcon,
   EyeOffIcon,
   FlagIcon,
@@ -562,6 +563,7 @@ export function MapEditorSceneOutlinerPanel({
       Object.freeze({
         count:
           project.playerSpawnDrafts.length +
+          project.resourceSpawnDrafts.length +
           project.sceneObjectDrafts.length +
           project.gameplayVolumeDrafts.length,
         layerId: "gameplayMarkers" as const,
@@ -573,6 +575,16 @@ export function MapEditorSceneOutlinerPanel({
               icon: FlagIcon,
               id: `spawn:${spawn.spawnId}`,
               title: spawn.label,
+              visible: sceneVisibility.gameplayMarkers
+            })
+          ),
+          ...project.resourceSpawnDrafts.map((resourceSpawn) =>
+            Object.freeze({
+              description: `${resourceSpawn.weaponId} · ${resourceSpawn.ammoGrantRounds} rounds`,
+              entityRef: createEntityRef("resource-spawn", resourceSpawn.spawnId),
+              icon: CrosshairIcon,
+              id: `resource-spawn:${resourceSpawn.spawnId}`,
+              title: resourceSpawn.label,
               visible: sceneVisibility.gameplayMarkers
             })
           ),
@@ -672,6 +684,7 @@ export function MapEditorSceneOutlinerPanel({
     project.placementDrafts,
     project.playerSpawnDrafts,
     project.regionDrafts,
+    project.resourceSpawnDrafts,
     project.sceneObjectDrafts,
     project.structuralDrafts,
     project.surfaceDrafts,

@@ -714,8 +714,43 @@ function readResourceSpawn(
   fieldName: string
 ): MetaverseMapBundleResourceSpawnSnapshot {
   const resourceSpawn = readRecord(value, fieldName);
+  const resourceKind = readString(
+    resourceSpawn.resourceKind,
+    `${fieldName}.resourceKind`
+  );
+
+  if (resourceKind !== "weapon-pickup") {
+    throw new Error(
+      `Unsupported resource spawn kind for ${fieldName}: ${resourceKind}`
+    );
+  }
+
+  const ammoGrantRounds = Math.trunc(
+    readNumber(resourceSpawn.ammoGrantRounds, `${fieldName}.ammoGrantRounds`)
+  );
+  const pickupRadiusMeters = readNumber(
+    resourceSpawn.pickupRadiusMeters,
+    `${fieldName}.pickupRadiusMeters`
+  );
+  const respawnCooldownMs = readNumber(
+    resourceSpawn.respawnCooldownMs,
+    `${fieldName}.respawnCooldownMs`
+  );
+
+  if (ammoGrantRounds <= 0) {
+    throw new Error(`${fieldName}.ammoGrantRounds must be greater than 0.`);
+  }
+
+  if (pickupRadiusMeters <= 0) {
+    throw new Error(`${fieldName}.pickupRadiusMeters must be greater than 0.`);
+  }
+
+  if (respawnCooldownMs < 0) {
+    throw new Error(`${fieldName}.respawnCooldownMs must be at or above 0.`);
+  }
 
   return Object.freeze({
+    ammoGrantRounds,
     assetId: readNullableString(resourceSpawn.assetId, `${fieldName}.assetId`),
     label: readString(resourceSpawn.label, `${fieldName}.label`),
     modeTags: Object.freeze(
@@ -724,19 +759,12 @@ function readResourceSpawn(
           readString(modeTag, `${fieldName}.modeTags[${modeTagIndex}]`)
       )
     ),
+    pickupRadiusMeters,
     position: readVector3(resourceSpawn.position, `${fieldName}.position`),
-    resourceKind: readString(
-      resourceSpawn.resourceKind,
-      `${fieldName}.resourceKind`
-    ),
-    respawnCooldownMs:
-      resourceSpawn.respawnCooldownMs === null
-        ? null
-        : readNumber(
-            resourceSpawn.respawnCooldownMs,
-            `${fieldName}.respawnCooldownMs`
-          ),
+    resourceKind,
+    respawnCooldownMs,
     spawnId: readString(resourceSpawn.spawnId, `${fieldName}.spawnId`),
+    weaponId: readString(resourceSpawn.weaponId, `${fieldName}.weaponId`),
     yawRadians: readNumber(resourceSpawn.yawRadians, `${fieldName}.yawRadians`)
   });
 }
@@ -2397,6 +2425,26 @@ export function parseMetaverseMapBundleSnapshot(
     compiledWorld.compatibilityEnvironmentAssets.length > 0
       ? compiledWorld.compatibilityEnvironmentAssets
       : environmentAssets;
+  const resourceSpawns = Object.freeze(
+    readArray(bundle.resourceSpawns, "bundle.resourceSpawns").map(
+      (resourceSpawn, resourceSpawnIndex) =>
+        readResourceSpawn(
+          resourceSpawn,
+          `bundle.resourceSpawns[${resourceSpawnIndex}]`
+        )
+    )
+  );
+  const resourceSpawnIds = new Set<string>();
+
+  for (const resourceSpawn of resourceSpawns) {
+    if (resourceSpawnIds.has(resourceSpawn.spawnId)) {
+      throw new Error(
+        `Metaverse map bundle resource spawn ids must be unique: ${resourceSpawn.spawnId}`
+      );
+    }
+
+    resourceSpawnIds.add(resourceSpawn.spawnId);
+  }
 
   return Object.freeze({
     compiledWorld,
@@ -2442,15 +2490,7 @@ export function parseMetaverseMapBundleSnapshot(
       bundle.presentationProfileIds,
       "bundle.presentationProfileIds"
     ),
-    resourceSpawns: Object.freeze(
-      readArray(bundle.resourceSpawns, "bundle.resourceSpawns").map(
-        (resourceSpawn, resourceSpawnIndex) =>
-          readResourceSpawn(
-            resourceSpawn,
-            `bundle.resourceSpawns[${resourceSpawnIndex}]`
-          )
-      )
-    ),
+    resourceSpawns,
     sceneObjects: Object.freeze(
       readArray(bundle.sceneObjects, "bundle.sceneObjects").map(
         (sceneObject, sceneObjectIndex) =>

@@ -63,6 +63,7 @@ import type {
 } from "@/engine-tool/project/map-editor-project-player-spawn-selection";
 import type {
   MapEditorPlayerSpawnDraftSnapshot,
+  MapEditorResourceSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -395,6 +396,47 @@ const quickTeamOptions = Object.freeze([
   readonly label: string;
 }[]);
 
+const weaponPickupOptions = Object.freeze([
+  Object.freeze({
+    ammoGrantRounds: 48,
+    assetId: "metaverse-service-pistol-v2",
+    label: "Service Pistol",
+    respawnCooldownMs: 30_000,
+    weaponId: "metaverse-service-pistol-v2"
+  }),
+  Object.freeze({
+    ammoGrantRounds: 6,
+    assetId: "metaverse-rocket-launcher-v1",
+    label: "Rocket Launcher",
+    respawnCooldownMs: 45_000,
+    weaponId: "metaverse-rocket-launcher-v1"
+  })
+] satisfies readonly {
+  readonly ammoGrantRounds: number;
+  readonly assetId: string;
+  readonly label: string;
+  readonly respawnCooldownMs: number;
+  readonly weaponId: string;
+}[]);
+
+function readWeaponPickupOption(weaponId: string) {
+  return (
+    weaponPickupOptions.find((option) => option.weaponId === weaponId) ??
+    weaponPickupOptions[0]!
+  );
+}
+
+function parseModeTagsInput(value: string): readonly string[] {
+  return Object.freeze(
+    value
+      .split(",")
+      .map((modeTag) => modeTag.trim())
+      .filter((modeTag, index, modeTags) =>
+        modeTag.length > 0 && modeTags.indexOf(modeTag) === index
+      )
+  );
+}
+
 function formatToolSettingsTitle(
   viewportToolMode: MapEditorViewportToolMode
 ): string {
@@ -411,6 +453,8 @@ function formatToolSettingsTitle(
       return "Paint Settings";
     case "path":
       return "Path Settings";
+    case "resource-spawn":
+      return "Weapon Pickup Settings";
     case "terrain":
       return "Terrain Settings";
     case "vehicle-route":
@@ -445,6 +489,7 @@ function shouldShowMapEditorActiveToolSettings(
     viewportToolMode === "wall" ||
     viewportToolMode === "path" ||
     viewportToolMode === "light" ||
+    viewportToolMode === "resource-spawn" ||
     viewportToolMode === "water" ||
     viewportToolMode === "zone"
   );
@@ -2160,6 +2205,12 @@ interface MapEditorSelectionPaneProps {
       draft: MapEditorPlayerSpawnSelectionDraftSnapshot
     ) => MapEditorPlayerSpawnSelectionDraftSnapshot
   ) => void;
+  readonly onUpdateResourceSpawn: (
+    spawnId: string,
+    update: (
+      draft: MapEditorResourceSpawnDraftSnapshot
+    ) => MapEditorResourceSpawnDraftSnapshot
+  ) => void;
   readonly onUpdateGameplayVolume: (
     volumeId: string,
     update: (
@@ -2228,6 +2279,7 @@ export function MapEditorSelectionPane({
   onUpdatePlayerSpawn,
   onUpdatePlayerSpawnSelection,
   onUpdateRegion,
+  onUpdateResourceSpawn,
   onUpdateSceneObject,
   onUpdateSelectedPlacement,
   onUpdateSurface,
@@ -2245,6 +2297,13 @@ export function MapEditorSelectionPane({
     selectedEntityRef?.kind === "player-spawn"
       ? (project.playerSpawnDrafts.find(
           (spawnDraft) => spawnDraft.spawnId === selectedEntityRef.id
+        ) ?? null)
+      : null;
+  const selectedResourceSpawn =
+    selectedEntityRef?.kind === "resource-spawn"
+      ? (project.resourceSpawnDrafts.find(
+          (resourceSpawnDraft) =>
+            resourceSpawnDraft.spawnId === selectedEntityRef.id
         ) ?? null)
       : null;
   const selectedSceneObject =
@@ -3341,6 +3400,179 @@ export function MapEditorSelectionPane({
                       value={project.playerSpawnSelectionDraft.homeTeamBiasMeters}
                     />
                   </div>
+                </div>
+              </SelectionCard>
+            </Section>
+          ) : null}
+
+          {selectedResourceSpawn !== null ? (
+            <Section
+              onOpenChange={onSectionOpenChange}
+              open={readSectionOpen("selection-pane:resource-spawn", true)}
+              sectionId="selection-pane:resource-spawn"
+              title="Weapon Pickup"
+            >
+              <SelectionCard title="Weapon Pickup">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="selection-resource-spawn-label">Label</Label>
+                  <Input
+                    id="selection-resource-spawn-label"
+                    onChange={(event) =>
+                      onUpdateResourceSpawn(
+                        selectedResourceSpawn.spawnId,
+                        (draft) => ({
+                          ...draft,
+                          label: event.target.value
+                        })
+                      )
+                    }
+                    value={selectedResourceSpawn.label}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="selection-resource-spawn-weapon">Weapon</Label>
+                  <Select
+                    onValueChange={(nextWeaponId) => {
+                      const option = readWeaponPickupOption(nextWeaponId);
+
+                      onUpdateResourceSpawn(
+                        selectedResourceSpawn.spawnId,
+                        (draft) => ({
+                          ...draft,
+                          ammoGrantRounds: option.ammoGrantRounds,
+                          assetId: option.assetId,
+                          respawnCooldownMs: option.respawnCooldownMs,
+                          weaponId: option.weaponId
+                        })
+                      );
+                    }}
+                    value={selectedResourceSpawn.weaponId}
+                  >
+                    <SelectTrigger id="selection-resource-spawn-weapon">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {weaponPickupOptions.map((option) => (
+                          <SelectItem key={option.weaponId} value={option.weaponId}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Vector3Fields
+                  labelPrefix="Pickup"
+                  onChange={(axis, nextValue) =>
+                    onUpdateResourceSpawn(
+                      selectedResourceSpawn.spawnId,
+                      (draft) => ({
+                        ...draft,
+                        position: {
+                          ...draft.position,
+                          [axis]: nextValue
+                        }
+                      })
+                    )
+                  }
+                  value={selectedResourceSpawn.position}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-resource-spawn-ammo">Ammo</Label>
+                    <MapEditorEditableNumberInput
+                      decimals={0}
+                      id="selection-resource-spawn-ammo"
+                      onValueChange={(nextValue) =>
+                        onUpdateResourceSpawn(
+                          selectedResourceSpawn.spawnId,
+                          (draft) => ({
+                            ...draft,
+                            ammoGrantRounds: Math.max(1, Math.round(nextValue))
+                          })
+                        )
+                      }
+                      value={selectedResourceSpawn.ammoGrantRounds}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-resource-spawn-respawn">
+                      Respawn Seconds
+                    </Label>
+                    <MapEditorEditableNumberInput
+                      decimals={1}
+                      id="selection-resource-spawn-respawn"
+                      onValueChange={(nextValue) =>
+                        onUpdateResourceSpawn(
+                          selectedResourceSpawn.spawnId,
+                          (draft) => ({
+                            ...draft,
+                            respawnCooldownMs: Math.max(
+                              0,
+                              Math.round(nextValue * 1000)
+                            )
+                          })
+                        )
+                      }
+                      value={selectedResourceSpawn.respawnCooldownMs / 1000}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-resource-spawn-radius">
+                      Pickup Radius
+                    </Label>
+                    <MapEditorEditableNumberInput
+                      decimals={2}
+                      id="selection-resource-spawn-radius"
+                      onValueChange={(nextValue) =>
+                        onUpdateResourceSpawn(
+                          selectedResourceSpawn.spawnId,
+                          (draft) => ({
+                            ...draft,
+                            pickupRadiusMeters: Math.max(0.1, nextValue)
+                          })
+                        )
+                      }
+                      value={selectedResourceSpawn.pickupRadiusMeters}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-resource-spawn-yaw">Yaw</Label>
+                    <MapEditorEditableNumberInput
+                      id="selection-resource-spawn-yaw"
+                      onValueChange={(nextValue) =>
+                        onUpdateResourceSpawn(
+                          selectedResourceSpawn.spawnId,
+                          (draft) => ({
+                            ...draft,
+                            yawRadians: nextValue
+                          })
+                        )
+                      }
+                      value={selectedResourceSpawn.yawRadians}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="selection-resource-spawn-mode-tags">
+                    Mode Tags
+                  </Label>
+                  <Input
+                    id="selection-resource-spawn-mode-tags"
+                    onChange={(event) =>
+                      onUpdateResourceSpawn(
+                        selectedResourceSpawn.spawnId,
+                        (draft) => ({
+                          ...draft,
+                          modeTags: parseModeTagsInput(event.target.value)
+                        })
+                      )
+                    }
+                    value={selectedResourceSpawn.modeTags.join(", ")}
+                  />
                 </div>
               </SelectionCard>
             </Section>

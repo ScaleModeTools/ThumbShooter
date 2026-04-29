@@ -63,8 +63,14 @@ export function validateMapEditorProject(
         ) ?? null;
   const hasTeamDeathmatchLaunch =
     selectedLaunchVariation?.matchMode === "team-deathmatch";
-  const hasProceduralArenaAuthoring =
-    project.structuralDrafts.length > 0 || project.gameplayVolumeDrafts.length > 0;
+  const hasTeamDeathmatchArenaAuthoring =
+    project.structuralDrafts.length > 0 ||
+    project.gameplayVolumeDrafts.some(
+      (volumeDraft) =>
+        volumeDraft.volumeKind === "team-zone" ||
+        volumeDraft.volumeKind === "combat-lane" ||
+        volumeDraft.volumeKind === "cover-volume"
+    );
 
   if (project.playerSpawnDrafts.length === 0) {
     errors.push("The map needs at least one authored player spawn.");
@@ -244,7 +250,7 @@ export function validateMapEditorProject(
     }
   }
 
-  if (hasTeamDeathmatchLaunch && hasProceduralArenaAuthoring) {
+  if (hasTeamDeathmatchLaunch && hasTeamDeathmatchArenaAuthoring) {
     if (!hasTeamSpawn(project, "blue")) {
       errors.push("Team deathmatch maps need at least one blue player spawn.");
     }

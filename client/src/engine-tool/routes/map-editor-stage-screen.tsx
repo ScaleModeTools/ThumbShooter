@@ -120,6 +120,7 @@ import {
   addMapEditorPlacementFromAsset,
   addMapEditorPlacementAtPositionFromAsset,
   addMapEditorRegionDraft,
+  addMapEditorResourceSpawnDraft,
   addMapEditorSceneObjectDraft,
   addMapEditorSurfaceDraft,
   addMapEditorTeamZoneDraft,
@@ -157,6 +158,7 @@ import {
   updateMapEditorPlayerSpawnDraft,
   updateMapEditorPlayerSpawnSelectionDraft,
   updateMapEditorRegionDraft,
+  updateMapEditorResourceSpawnDraft,
   updateMapEditorSceneObjectDraft,
   updateMapEditorPlacement,
   updateMapEditorStructuralDraft,
@@ -190,6 +192,7 @@ import type {
 } from "@/engine-tool/project/map-editor-project-player-spawn-selection";
 import type {
   MapEditorPlayerSpawnDraftSnapshot,
+  MapEditorResourceSpawnDraftSnapshot,
   MapEditorSceneObjectDraftSnapshot,
   MapEditorWaterRegionDraftSnapshot
 } from "@/engine-tool/project/map-editor-project-scene-drafts";
@@ -626,6 +629,7 @@ const headerViewportToolGroups: readonly HeaderViewportToolGroup[] = Object.free
     label: "Scene",
     tools: [
       { Icon: FlagIcon, label: "Spawn", value: "player-spawn" },
+      { Icon: CrosshairIcon, label: "Weapon", value: "resource-spawn" },
       { Icon: DoorOpenIcon, label: "Portal", value: "portal" },
       { Icon: BoxIcon, label: "Module", value: "module" },
       { Icon: LightbulbIcon, label: "Light", value: "light" }
@@ -825,6 +829,10 @@ function formatSelectedEntityLabel(
   if (selectedEntityRef === null) {
     if (fallbackToolMode === "player-spawn") {
       return "Player Spawn";
+    }
+
+    if (fallbackToolMode === "resource-spawn") {
+      return "Weapon Pickup";
     }
 
     if (fallbackToolMode === "vehicle-route") {
@@ -1434,6 +1442,23 @@ export function MapEditorStageScreen({
     );
   };
 
+  const handleCreateResourceSpawnAtPosition = (position: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  }) => {
+    const snappedPosition = resolveMapEditorBuildFootprintCenterPosition(
+      position,
+      position.y,
+      1,
+      1
+    );
+
+    handleProjectAuthoringChange((currentProject) =>
+      addMapEditorResourceSpawnDraft(currentProject, snappedPosition)
+    );
+  };
+
   const handleAddSurface = () => {
     handleProjectAuthoringChange((currentProject) =>
       addMapEditorSurfaceDraft(currentProject)
@@ -1832,6 +1857,18 @@ export function MapEditorStageScreen({
               )
             };
           });
+        case "resource-spawn":
+          return updateMapEditorResourceSpawnDraft(
+            currentProject,
+            target.id,
+            (resourceSpawn) => ({
+              ...resourceSpawn,
+              position: createTransformPosition(update.position, "cell"),
+              yawRadians: normalizeEditorCardinalYawRadians(
+                update.rotationYRadians
+              )
+            })
+          );
         case "placement":
         case "player-spawn":
           return currentProject;
@@ -2269,6 +2306,17 @@ export function MapEditorStageScreen({
   ) => {
     handleProjectAuthoringChange((currentProject) =>
       updateMapEditorPlayerSpawnDraft(currentProject, spawnId, update)
+    );
+  };
+
+  const handleUpdateResourceSpawn = (
+    spawnId: string,
+    update: (
+      draft: MapEditorResourceSpawnDraftSnapshot
+    ) => MapEditorResourceSpawnDraftSnapshot
+  ) => {
+    handleProjectAuthoringChange((currentProject) =>
+      updateMapEditorResourceSpawnDraft(currentProject, spawnId, update)
     );
   };
 
@@ -2711,6 +2759,9 @@ export function MapEditorStageScreen({
               onCreateModuleAtPosition={handleCreateModuleAtPosition}
               onCreatePlayerSpawnAtPosition={handleCreatePlayerSpawnAtPosition}
               onCreatePortalAtPosition={handleCreatePortalAtPosition}
+              onCreateResourceSpawnAtPosition={
+                handleCreateResourceSpawnAtPosition
+              }
               onCreateTeamZone={handleCreateTeamZone}
               onCreateVehicleRoute={handleCreateVehicleRoute}
               onCreateWaterRegionAtPosition={handleCreateWaterRegionAtPosition}
@@ -2720,6 +2771,7 @@ export function MapEditorStageScreen({
               placementDrafts={project.placementDrafts}
               playerSpawnDrafts={project.playerSpawnDrafts}
               regionDrafts={project.regionDrafts}
+              resourceSpawnDrafts={project.resourceSpawnDrafts}
               sceneObjectDrafts={project.sceneObjectDrafts}
               sceneVisibility={sceneVisibility}
               selectedEntityRef={project.selectedEntityRef}
@@ -2806,6 +2858,7 @@ export function MapEditorStageScreen({
                       onUpdatePlayerSpawn={handleUpdatePlayerSpawn}
                       onUpdatePlayerSpawnSelection={handleUpdatePlayerSpawnSelection}
                       onUpdateRegion={handleUpdateRegion}
+                      onUpdateResourceSpawn={handleUpdateResourceSpawn}
                       onUpdateSceneObject={handleUpdateSceneObject}
                       onUpdateSelectedPlacement={handleUpdateSelectedPlacement}
                       onUpdateStructure={handleUpdateStructure}

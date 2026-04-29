@@ -69,13 +69,16 @@ export interface MetaverseMapBundleSpawnNodeSnapshot {
 }
 
 export interface MetaverseMapBundleResourceSpawnSnapshot {
+  readonly ammoGrantRounds: number;
   readonly assetId: string | null;
   readonly label: string;
   readonly modeTags: readonly string[];
+  readonly pickupRadiusMeters: number;
   readonly position: MetaverseWorldSurfaceVector3Snapshot;
-  readonly resourceKind: string;
-  readonly respawnCooldownMs: number | null;
+  readonly resourceKind: "weapon-pickup";
+  readonly respawnCooldownMs: number;
   readonly spawnId: string;
+  readonly weaponId: string;
   readonly yawRadians: number;
 }
 

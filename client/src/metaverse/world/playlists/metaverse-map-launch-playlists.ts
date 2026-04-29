@@ -23,7 +23,8 @@ export interface MetaverseMapLaunchSelectionSnapshot {
 const metaverseMapLaunchPlaylistStorageKey =
   "webgpu-metaverse.map-launch-playlists.v1" as const;
 const defaultFreeRoamLaunchVariationId = "shell-free-roam" as const;
-const defaultTeamDeathmatchBundleId = "deathmatch" as const;
+const legacyTeamDeathmatchBundleId = "deathmatch" as const;
+const defaultTeamDeathmatchBundleId = "private-build" as const;
 const defaultTeamDeathmatchLaunchVariationId =
   "shell-team-deathmatch" as const;
 
@@ -65,6 +66,19 @@ function normalizeBundleIds(value: unknown): readonly string[] {
   return Object.freeze(bundleIds);
 }
 
+function normalizeTeamDeathmatchBundleIds(value: unknown): readonly string[] {
+  const bundleIds = normalizeBundleIds(value);
+
+  if (
+    bundleIds.length === 0 ||
+    (bundleIds.length === 1 && bundleIds[0] === legacyTeamDeathmatchBundleId)
+  ) {
+    return defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds;
+  }
+
+  return bundleIds;
+}
+
 export function normalizeMetaverseMapLaunchPlaylistSnapshot(
   value: unknown
 ): MetaverseMapLaunchPlaylistSnapshot {
@@ -76,7 +90,9 @@ export function normalizeMetaverseMapLaunchPlaylistSnapshot(
     metaverseDefaultBundleId:
       normalizeBundleId(value.metaverseDefaultBundleId) ??
       defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId,
-    teamDeathmatchBundleIds: normalizeBundleIds(value.teamDeathmatchBundleIds)
+    teamDeathmatchBundleIds: normalizeTeamDeathmatchBundleIds(
+      value.teamDeathmatchBundleIds
+    )
   });
 }
 

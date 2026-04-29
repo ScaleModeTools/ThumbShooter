@@ -1737,7 +1737,7 @@
       "matchMode": "team-deathmatch",
       "variationId": "shell-team-deathmatch",
       "vehicleLayoutId": null,
-      "weaponLayoutId": "duck-hunt-default-pistol-layout"
+      "weaponLayoutId": "metaverse-tdm-pistol-rocket-layout"
     },
     {
       "description": "Launch the current Duck Hunt preview slice from this authored map variation.",
@@ -1818,7 +1818,84 @@
     "environmentPresentationProfileId": "shell-default-environment-presentation",
     "hudProfileId": "shell-default-hud"
   },
-  "resourceSpawns": [],
+  "resourceSpawns": [
+    {
+      "ammoGrantRounds": 48,
+      "assetId": "metaverse-service-pistol-v2",
+      "label": "Pistol north",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -8.2,
+        "y": 0.6,
+        "z": -22.2
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 30000,
+      "spawnId": "private-build:resource:pistol-north",
+      "weaponId": "metaverse-service-pistol-v2",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "ammoGrantRounds": 48,
+      "assetId": "metaverse-service-pistol-v2",
+      "label": "Pistol south",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -8.2,
+        "y": 0.6,
+        "z": -7.4
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 30000,
+      "spawnId": "private-build:resource:pistol-south",
+      "weaponId": "metaverse-service-pistol-v2",
+      "yawRadians": 0.18849555921538758
+    },
+    {
+      "ammoGrantRounds": 6,
+      "assetId": "metaverse-rocket-launcher-v1",
+      "label": "Rocket west",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -14.2,
+        "y": 0.6,
+        "z": -14.8
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 45000,
+      "spawnId": "private-build:resource:rocket-west",
+      "weaponId": "metaverse-rocket-launcher-v1",
+      "yawRadians": 1.5707963267948966
+    },
+    {
+      "ammoGrantRounds": 6,
+      "assetId": "metaverse-rocket-launcher-v1",
+      "label": "Rocket east",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -2.2,
+        "y": 0.6,
+        "z": -14.8
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 45000,
+      "spawnId": "private-build:resource:rocket-east",
+      "weaponId": "metaverse-rocket-launcher-v1",
+      "yawRadians": -1.5707963267948966
+    }
+  ],
   "sceneObjects": [
     {
       "assetId": null,

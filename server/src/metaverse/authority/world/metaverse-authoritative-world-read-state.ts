@@ -13,6 +13,7 @@ import type {
   MetaversePlayerCombatSnapshot
 } from "@webgpu-metaverse/shared/metaverse";
 import type {
+  MetaverseRealtimeResourceSpawnSnapshotInput,
   MetaverseRealtimeWorldSnapshot,
   MetaverseVehicleId
 } from "@webgpu-metaverse/shared/metaverse/realtime";
@@ -73,6 +74,8 @@ interface MetaverseAuthoritativeWorldReadStateDependencies<
   ) => MetaversePlayerCombatSnapshot | null;
   readonly readProjectileSnapshots:
     () => readonly MetaverseCombatProjectileSnapshot[];
+  readonly readResourceSpawnSnapshots:
+    () => readonly MetaverseRealtimeResourceSpawnSnapshotInput[];
   readonly readCurrentTick: () => number;
   readonly readLastAdvancedAtMs: () => number | null;
   readonly readSnapshotSequence: () => number;
@@ -202,6 +205,7 @@ export class MetaverseAuthoritativeWorldReadState<
       playerCombatSnapshotsByPlayerId,
       players: this.#dependencies.playersById.values(),
       projectiles: this.#dependencies.readProjectileSnapshots(),
+      resourceSpawns: this.#dependencies.readResourceSpawnSnapshots(),
       snapshotSequence: this.#dependencies.readSnapshotSequence(),
       tickIntervalMs: this.#dependencies.readTickIntervalMs(),
       traversalIntentsByPlayerId: this.#dependencies.traversalIntentsByPlayerId,

@@ -23,6 +23,19 @@ export interface MapEditorPlayerSpawnDraftSnapshot {
   readonly yawRadians: number;
 }
 
+export interface MapEditorResourceSpawnDraftSnapshot {
+  readonly ammoGrantRounds: number;
+  readonly assetId: string | null;
+  readonly label: string;
+  readonly modeTags: readonly string[];
+  readonly pickupRadiusMeters: number;
+  readonly position: MapEditorVector3DraftSnapshot;
+  readonly respawnCooldownMs: number;
+  readonly spawnId: string;
+  readonly weaponId: string;
+  readonly yawRadians: number;
+}
+
 export interface MapEditorSceneObjectLaunchTargetDraftSnapshot {
   readonly beamColorHex: string;
   readonly experienceId: ExperienceId;
@@ -85,6 +98,19 @@ export function freezePlayerSpawnDraft(
   return Object.freeze({
     ...draft,
     position: freezeVector3Draft(draft.position)
+  });
+}
+
+export function freezeResourceSpawnDraft(
+  draft: MapEditorResourceSpawnDraftSnapshot
+): MapEditorResourceSpawnDraftSnapshot {
+  return Object.freeze({
+    ...draft,
+    ammoGrantRounds: Math.max(1, Math.trunc(draft.ammoGrantRounds)),
+    modeTags: Object.freeze([...draft.modeTags]),
+    pickupRadiusMeters: Math.max(0.1, draft.pickupRadiusMeters),
+    position: freezeVector3Draft(draft.position),
+    respawnCooldownMs: Math.max(0, Math.trunc(draft.respawnCooldownMs))
   });
 }
 
@@ -160,6 +186,27 @@ export function createPlayerSpawnDrafts(
         spawnId: spawnNode.spawnId,
         teamId: spawnNode.teamId,
         yawRadians: spawnNode.yawRadians
+      })
+    )
+  );
+}
+
+export function createResourceSpawnDrafts(
+  loadedBundle: LoadedMetaverseMapBundleSnapshot
+): readonly MapEditorResourceSpawnDraftSnapshot[] {
+  return Object.freeze(
+    loadedBundle.bundle.resourceSpawns.map((resourceSpawn) =>
+      freezeResourceSpawnDraft({
+        ammoGrantRounds: resourceSpawn.ammoGrantRounds,
+        assetId: resourceSpawn.assetId,
+        label: resourceSpawn.label,
+        modeTags: resourceSpawn.modeTags,
+        pickupRadiusMeters: resourceSpawn.pickupRadiusMeters,
+        position: resourceSpawn.position,
+        respawnCooldownMs: resourceSpawn.respawnCooldownMs,
+        spawnId: resourceSpawn.spawnId,
+        weaponId: resourceSpawn.weaponId,
+        yawRadians: resourceSpawn.yawRadians
       })
     )
   );

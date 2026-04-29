@@ -642,6 +642,12 @@
       ]
     },
     {
+      "ownerPath": "server/src/metaverse/authority/resources/metaverse-authoritative-resource-spawn-authority.ts",
+      "testPaths": [
+        "tests/runtime/server/metaverse/authoritative-resource-spawn-authority.test.mjs"
+      ]
+    },
+    {
       "ownerPath": "server/src/metaverse/authority/players/metaverse-authoritative-player-pose-authority.ts",
       "testPaths": [
         "tests/runtime/server/metaverse/authoritative-world-player-pose-authority.test.mjs"

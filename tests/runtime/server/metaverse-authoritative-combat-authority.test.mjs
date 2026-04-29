@@ -233,6 +233,110 @@ function createKillFloorVolume({
   });
 }
 
+function createCombatAuthorityForPlayers(playersById) {
+  const authorityPlayersById = new Map(playersById);
+
+  if (authorityPlayersById.size < 2) {
+    const sparringPlayerId = createMetaversePlayerId("combat-resource-sparring");
+
+    assert.notEqual(sparringPlayerId, null);
+    authorityPlayersById.set(
+      sparringPlayerId,
+      createPlayerRuntimeState(
+        sparringPlayerId,
+        "blue",
+        Object.freeze({
+          x: 32,
+          y: 0,
+          z: 32
+        })
+      )
+    );
+  }
+
+  return new MetaverseAuthoritativeCombatAuthority({
+    clearDriverVehicleControl() {},
+    clearPlayerTraversalIntent() {},
+    clearPlayerVehicleOccupancy() {},
+    incrementSnapshotSequence() {},
+    physicsRuntime: {
+      castRay() {
+        return null;
+      }
+    },
+    playerTraversalColliderHandles: new Set(),
+    playersById: authorityPlayersById,
+    readTickIntervalMs: () => 33,
+    resolveRespawnPose() {
+      return {
+        position: Object.freeze({
+          x: 0,
+          y: 0,
+          z: 0
+        }),
+        yawRadians: 0
+      };
+    },
+    syncAuthoritativePlayerLookToCurrentFacing() {},
+    syncPlayerTraversalAuthorityState() {},
+    syncPlayerTraversalBodyRuntimes() {}
+  });
+}
+
+function createWeaponPickupResourceSpawn(overrides = {}) {
+  return Object.freeze({
+    ammoGrantRounds: 48,
+    assetId: "metaverse-service-pistol-v2",
+    label: "Pistol pickup",
+    modeTags: Object.freeze(["team-deathmatch"]),
+    pickupRadiusMeters: 1.4,
+    position: Object.freeze({
+      x: 0,
+      y: 0.6,
+      z: 0
+    }),
+    resourceKind: "weapon-pickup",
+    respawnCooldownMs: 30_000,
+    spawnId: "resource:pistol",
+    weaponId: "metaverse-service-pistol-v2",
+    yawRadians: 0,
+    ...overrides
+  });
+}
+
+function firePistolRound({
+  actionSequence,
+  combatAuthority,
+  nowMs,
+  playerId
+}) {
+  const origin = resolveWeaponTipOrigin(
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    0,
+    "metaverse-service-pistol-v2"
+  );
+
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence,
+      issuedAtAuthoritativeTimeMs: nowMs,
+      origin,
+      playerId,
+      target: Object.freeze({
+        x: 12,
+        y: origin.y,
+        z: origin.z
+      }),
+      weaponId: "metaverse-service-pistol-v2"
+    }),
+    nowMs
+  );
+}
+
 test("MetaverseAuthoritativeCombatAuthority resolves floor-root body/head hits and respawns players after 3 seconds", () => {
   const redPlayerId = createMetaversePlayerId("combat-red-1");
   const bluePlayerId = createMetaversePlayerId("combat-blue-1");
@@ -1687,6 +1791,161 @@ test("MetaverseAuthoritativeCombatAuthority tracks fire cooldown per equipped we
     combatAuthority.readProjectileSnapshots()[0]?.weaponId,
     "metaverse-rocket-launcher-v1"
   );
+});
+
+test("MetaverseAuthoritativeCombatAuthority tops up resource pickup ammo without exceeding weapon reserve cap", () => {
+  const playerId = createMetaversePlayerId("combat-resource-pickup-ammo");
+
+  assert.notEqual(playerId, null);
+
+  const playerRuntime = createPlayerRuntimeState(
+    playerId,
+    "red",
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    0,
+    createDualWeaponState(playerId, "primary")
+  );
+  const combatAuthority = createCombatAuthorityForPlayers(
+    new Map([[playerId, playerRuntime]])
+  );
+  const pickup = createWeaponPickupResourceSpawn({
+    ammoGrantRounds: 8
+  });
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+
+  assert.equal(
+    combatAuthority.grantWeaponResourcePickup(playerRuntime, pickup, 1_100),
+    false
+  );
+
+  let nowMs = 1_200;
+
+  for (let shotIndex = 0; shotIndex < 12; shotIndex += 1) {
+    firePistolRound({
+      actionSequence: shotIndex + 1,
+      combatAuthority,
+      nowMs,
+      playerId
+    });
+    nowMs += 200;
+  }
+
+  combatAuthority.advanceCombatRuntimes(2, nowMs + 2_000);
+
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInMagazine,
+    12
+  );
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInReserve,
+    36
+  );
+  assert.equal(
+    combatAuthority.grantWeaponResourcePickup(playerRuntime, pickup, nowMs + 2_100),
+    true
+  );
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInReserve,
+    44
+  );
+  assert.equal(
+    combatAuthority.grantWeaponResourcePickup(
+      playerRuntime,
+      createWeaponPickupResourceSpawn({
+        ammoGrantRounds: 100
+      }),
+      nowMs + 2_200
+    ),
+    true
+  );
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInReserve,
+    48
+  );
+  assert.equal(
+    combatAuthority.grantWeaponResourcePickup(playerRuntime, pickup, nowMs + 2_300),
+    false
+  );
+});
+
+test("MetaverseAuthoritativeCombatAuthority starts reload when pickup grants ammo to an empty active weapon", () => {
+  const playerId = createMetaversePlayerId("combat-resource-pickup-reload");
+
+  assert.notEqual(playerId, null);
+
+  const playerRuntime = createPlayerRuntimeState(
+    playerId,
+    "red",
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    0,
+    createDualWeaponState(playerId, "primary")
+  );
+  const combatAuthority = createCombatAuthorityForPlayers(
+    new Map([[playerId, playerRuntime]])
+  );
+  let nowMs = 1_200;
+  let actionSequence = 1;
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+
+  for (let magazineIndex = 0; magazineIndex < 5; magazineIndex += 1) {
+    for (let shotIndex = 0; shotIndex < 12; shotIndex += 1) {
+      firePistolRound({
+        actionSequence,
+        combatAuthority,
+        nowMs,
+        playerId
+      });
+      actionSequence += 1;
+      nowMs += 200;
+    }
+
+    combatAuthority.advanceCombatRuntimes(2, nowMs + 2_000);
+    nowMs += 2_200;
+  }
+
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInMagazine,
+    0
+  );
+  assert.equal(
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon
+      ?.ammoInReserve,
+    0
+  );
+  assert.equal(
+    combatAuthority.grantWeaponResourcePickup(
+      playerRuntime,
+      createWeaponPickupResourceSpawn({
+        ammoGrantRounds: 12
+      }),
+      nowMs
+    ),
+    true
+  );
+
+  const activeWeapon =
+    combatAuthority.readPlayerCombatSnapshot(playerId)?.activeWeapon;
+
+  assert.equal(activeWeapon?.ammoInMagazine, 0);
+  assert.equal(activeWeapon?.ammoInReserve, 12);
+  assert.ok((activeWeapon?.reloadRemainingMs ?? 0) > 0);
 });
 
 test("MetaverseAuthoritativeCombatAuthority resolves rocket direct player impacts from authoritative projectiles", () => {
