@@ -102,6 +102,88 @@ test("MetaverseWorldPlayerTraversalIntentSync resends traversal intent until aut
   assert.equal(scheduler.pendingTasks.length, 0);
 });
 
+test("MetaverseWorldPlayerTraversalIntentSync flushes neutral release input while an older traversal send is unresolved", async () => {
+  const { MetaverseWorldPlayerTraversalIntentSync } = await clientLoader.load(
+    "/src/network/classes/metaverse-world-player-traversal-intent-sync.ts"
+  );
+  const playerId = createMetaversePlayerId("intent-sync-traversal-release-1");
+
+  assert.notEqual(playerId, null);
+
+  const scheduler = createManualTimerScheduler();
+  const sentTraversalCommands = [];
+  const pendingResolvers = [];
+  const traversalSync = new MetaverseWorldPlayerTraversalIntentSync({
+    acceptWorldEvent() {},
+    applyWorldAccessError(error) {
+      throw error;
+    },
+    clearTimeout: scheduler.clearTimeout,
+    readLatestLocalPlayerSnapshot: () =>
+      readLocalPlayerSnapshot(
+        createWorldEvent({
+          currentTick: 10,
+          lastProcessedTraversalSequence: 0,
+          playerId,
+          serverTimeMs: 10_000,
+          snapshotSequence: 1
+        })
+      ),
+    readPlayerId: () => playerId,
+    readStatusSnapshot: () => createConnectedStatusSnapshot(playerId),
+    resolveCommandDelayMs: () => 50,
+    async sendPlayerTraversalIntentCommand(command) {
+      sentTraversalCommands.push(command);
+      return new Promise((resolve) => {
+        pendingResolvers.push(resolve);
+      });
+    },
+    setTimeout: scheduler.setTimeout
+  });
+
+  traversalSync.syncPlayerTraversalIntent({
+    intent: createTraversalIntentInput({
+      boost: false,
+      jump: false,
+      locomotionMode: "grounded",
+      moveAxis: 1,
+      strafeAxis: 0,
+      yawAxis: 0
+    }),
+    playerId
+  });
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentTraversalCommands.length, 1);
+  assert.equal(sentTraversalCommands[0]?.intent.sequence, 1);
+
+  traversalSync.syncPlayerTraversalIntent({
+    intent: createTraversalIntentInput({
+      boost: false,
+      jump: false,
+      locomotionMode: "grounded",
+      moveAxis: 0,
+      strafeAxis: 0,
+      yawAxis: 0
+    }),
+    playerId
+  });
+
+  assert.equal(scheduler.pendingTasks.at(-1)?.delay, 0);
+  scheduler.runNext(0);
+  await flushAsyncWork();
+
+  assert.equal(sentTraversalCommands.length, 2);
+  assert.equal(sentTraversalCommands[1]?.intent.sequence, 2);
+  assert.equal(sentTraversalCommands[1]?.intent.bodyControl.moveAxis, 0);
+  assert.equal(sentTraversalCommands[1]?.intent.bodyControl.strafeAxis, 0);
+
+  pendingResolvers.shift()?.(null);
+  pendingResolvers.shift()?.(null);
+  await flushAsyncWork();
+});
+
 test("MetaverseWorldPlayerTraversalIntentSync rebases queued traversal sequences above authoritative reconnect state", async () => {
   const { MetaverseWorldPlayerTraversalIntentSync } = await clientLoader.load(
     "/src/network/classes/metaverse-world-player-traversal-intent-sync.ts"

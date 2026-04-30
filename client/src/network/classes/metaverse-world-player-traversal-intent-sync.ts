@@ -174,7 +174,7 @@ export class MetaverseWorldPlayerTraversalIntentSync {
     [];
   #playerTraversalIntentSyncDirty = false;
   #playerTraversalInputSyncHandle: TimeoutHandle | null = null;
-  #playerTraversalInputSyncInFlight = false;
+  #playerTraversalInputSyncInFlightCount = 0;
 
   constructor(
     dependencies: MetaverseWorldPlayerTraversalIntentSyncDependencies
@@ -287,7 +287,8 @@ export class MetaverseWorldPlayerTraversalIntentSync {
       this.#lastPlayerTraversalIntent === null ||
       (!this.#playerTraversalIntentSyncDirty &&
         !this.#shouldResendLatestPlayerTraversalIntentCommand()) ||
-      this.#playerTraversalInputSyncInFlight ||
+      (this.#playerTraversalInputSyncInFlightCount > 0 &&
+        !this.#playerTraversalIntentSyncDirty) ||
       this.#playerTraversalInputSyncHandle !== null
     ) {
       return;
@@ -364,7 +365,7 @@ export class MetaverseWorldPlayerTraversalIntentSync {
     this.#lastPlayerTraversalIntentCommand = pendingCommand;
     this.#lastIssuedPlayerTraversalIntent = pendingCommand.intent;
     this.#playerTraversalIntentSyncDirty = false;
-    this.#playerTraversalInputSyncInFlight = true;
+    this.#playerTraversalInputSyncInFlightCount += 1;
 
     try {
       const worldEvent =
@@ -379,7 +380,10 @@ export class MetaverseWorldPlayerTraversalIntentSync {
         "Metaverse world traversal intent sync failed."
       );
     } finally {
-      this.#playerTraversalInputSyncInFlight = false;
+      this.#playerTraversalInputSyncInFlightCount = Math.max(
+        0,
+        this.#playerTraversalInputSyncInFlightCount - 1
+      );
 
       if (this.#readStatusSnapshot().connected) {
         this.#syncPlayerTraversalInputSchedule();
