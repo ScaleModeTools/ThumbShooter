@@ -6,6 +6,7 @@ import test, { after, before } from "node:test";
 import { createClientModuleLoader } from "../../load-client-module.mjs";
 import {
   createHumanoidV2CharacterScene,
+  createTestBattleRifleHoldProfile,
   createTestRocketLauncherHoldProfile,
   createTestServicePistolHoldProfile
 } from "../../metaverse-runtime-proof-slice-fixtures.mjs";
@@ -682,6 +683,9 @@ test("held-object solver profiles drive grip assignment and finger pose policy",
   const pistolProfile = resolveMetaverseHeldObjectSolverProfile(
     createTestServicePistolHoldProfile()
   );
+  const battleRifleProfile = resolveMetaverseHeldObjectSolverProfile(
+    createTestBattleRifleHoldProfile()
+  );
   const rocketProfile = resolveMetaverseHeldObjectSolverProfile(
     createTestRocketLauncherHoldProfile()
   );
@@ -705,6 +709,25 @@ test("held-object solver profiles drive grip assignment and finger pose policy",
   assert.equal(pistolProfile.upperLimbOwnership, "hard_ik");
   assert.equal(pistolProfile.sampledInfluence.handPrimary, 0);
   assert.equal(pistolProfile.sampledInfluence.fingers, 0);
+  assert.equal(battleRifleProfile.poseProfileId, "long_gun.two_hand_shoulder");
+  assert.equal(battleRifleProfile.primaryHand, "right");
+  assert.equal(battleRifleProfile.offhandPolicy, "required_support_grip");
+  assert.equal(battleRifleProfile.fingerPose.primary, "long_gun_trigger_grip");
+  assert.equal(battleRifleProfile.fingerPose.secondary, "foregrip_support");
+  assert.equal(
+    battleRifleProfile.contactBindings.primary.contactFrameId,
+    "primary_trigger_grip"
+  );
+  assert.equal(
+    battleRifleProfile.contactBindings.secondary?.contactFrameId,
+    "support_handle_grip"
+  );
+  assert.equal(battleRifleProfile.contactBindings.secondary?.strength, "hard");
+  assert.equal(battleRifleProfile.adsCalibration.adsAnchorPositionalWeight, 0.4);
+  assert.equal(battleRifleProfile.adsCalibration.maxAdsGripTargetDeltaMeters, 0.14);
+  assert.equal(battleRifleProfile.upperLimbOwnership, "hard_ik");
+  assert.equal(battleRifleProfile.sampledInfluence.handSecondary, 0);
+  assert.equal(battleRifleProfile.sampledInfluence.fingers, 0);
   assert.equal(rocketProfile.poseProfileId, "shoulder_heavy.two_hand_shouldered");
   assert.equal(rocketProfile.primaryHand, "right");
   assert.equal(rocketProfile.offhandPolicy, "required_support_grip");
@@ -745,6 +768,22 @@ test("held-object solver profiles drive grip assignment and finger pose policy",
       heldMount: {
         socketName: "grip_r_socket"
       },
+      holdProfile: createTestBattleRifleHoldProfile(),
+      offHandGripMount: {},
+      offHandTargetKind: "secondary-grip"
+    }),
+    {
+      primaryCharacterSocketRole: "grip_r_socket",
+      primaryHand: "right",
+      secondaryCharacterSocketRole: "support_l_socket",
+      secondaryHand: "left"
+    }
+  );
+  assert.deepEqual(
+    resolveActiveGripAssignment({
+      heldMount: {
+        socketName: "grip_r_socket"
+      },
       holdProfile: createTestRocketLauncherHoldProfile(),
       offHandGripMount: {},
       offHandTargetKind: "secondary-grip"
@@ -765,6 +804,44 @@ test("held-object solver profiles drive grip assignment and finger pose policy",
       ),
     /expects offhand policy optional_support_palm/
   );
+});
+
+test("shipped metaverse attachment hold profiles have configured held-object solver profiles", async () => {
+  const [
+    { metaverseAttachmentProofConfigs },
+    { resolveMetaverseHeldObjectSolverProfile }
+  ] = await Promise.all([
+    clientLoader.load("/src/metaverse/world/proof/index.ts"),
+    clientLoader.load(
+      "/src/metaverse/render/characters/metaverse-held-object-solver-profile.ts"
+    )
+  ]);
+
+  assert.deepEqual(
+    metaverseAttachmentProofConfigs.map(
+      (attachmentProofConfig) => attachmentProofConfig.attachmentId
+    ),
+    [
+      "metaverse-service-pistol-v2",
+      "metaverse-battle-rifle-v1",
+      "metaverse-rocket-launcher-v1"
+    ]
+  );
+
+  for (const attachmentProofConfig of metaverseAttachmentProofConfigs) {
+    const solverProfile = resolveMetaverseHeldObjectSolverProfile(
+      attachmentProofConfig.holdProfile
+    );
+
+    assert.equal(
+      solverProfile.poseProfileId,
+      attachmentProofConfig.holdProfile.poseProfileId
+    );
+    assert.equal(
+      solverProfile.offhandPolicy,
+      attachmentProofConfig.holdProfile.offhandPolicy
+    );
+  }
 });
 
 test("held weapon presentation stays inactive without an active weapon state", async () => {

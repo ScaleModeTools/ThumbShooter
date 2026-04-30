@@ -368,6 +368,15 @@ export class MetaverseRemoteWorldRuntime {
     return this.#commandTransport.switchActiveWeaponSlot(input);
   }
 
+  interactWeaponResource(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+  }): {
+    readonly actionSequence: number;
+  } | null {
+    return this.#commandTransport.interactWeaponResource(input);
+  }
+
   readFreshAuthoritativeWorldSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
   ): MetaverseRealtimeWorldSnapshot | null {

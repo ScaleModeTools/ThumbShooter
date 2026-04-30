@@ -191,6 +191,26 @@ function doWeaponStateSnapshotsMatch(
   );
 }
 
+function doWeaponPresentationSlotsMatch(
+  left: readonly ResolvedMetaverseWeaponPresentationSlot[],
+  right: readonly ResolvedMetaverseWeaponPresentationSlot[]
+): boolean {
+  return (
+    left === right ||
+    (left.length === right.length &&
+      left.every((leftSlot, slotIndex) => {
+        const rightSlot = right[slotIndex] ?? null;
+
+        return (
+          rightSlot !== null &&
+          leftSlot.slotId === rightSlot.slotId &&
+          leftSlot.weapon.weaponId === rightSlot.weapon.weaponId &&
+          leftSlot.weaponInstanceId === rightSlot.weaponInstanceId
+        );
+      }))
+  );
+}
+
 function resolveMetaverseWeaponPresentation(
   attachmentProofConfig: MetaverseAttachmentProofConfig | null | undefined
 ): ResolvedMetaverseWeaponPresentation | null {
@@ -339,7 +359,7 @@ function resolveWeaponPresentationSlots(input: {
 
 export class MetaverseWeaponPresentationRuntime {
   readonly #baseFieldOfViewDegrees: number;
-  readonly #weaponSlots: readonly ResolvedMetaverseWeaponPresentationSlot[];
+  readonly #resolvedWeaponsById: ReadonlyMap<string, ResolvedMetaverseWeaponPresentation>;
   readonly #uiUpdateListeners = new Set<() => void>();
 
   #activeSlotId: MetaverseWeaponSlotId | null = null;
@@ -353,6 +373,7 @@ export class MetaverseWeaponPresentationRuntime {
   #hudSnapshot: MetaverseWeaponHudSnapshot = hiddenWeaponHudSnapshot;
   #pendingSlotSwitchIntent: MetaverseWeaponSlotSwitchIntentSnapshot | null = null;
   #secondaryActionHeld = false;
+  #weaponSlots: readonly ResolvedMetaverseWeaponPresentationSlot[] = Object.freeze([]);
   #weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null = null;
 
   constructor(
@@ -373,6 +394,12 @@ export class MetaverseWeaponPresentationRuntime {
         ): weaponPresentation is ResolvedMetaverseWeaponPresentation =>
           weaponPresentation !== null
       );
+    this.#resolvedWeaponsById = new Map(
+      resolvedWeapons.map((weaponPresentation) => [
+        weaponPresentation.weaponId,
+        weaponPresentation
+      ])
+    );
     const resolvedLoadout = resolveWeaponPresentationSlots({
       equippedWeaponId: dependencies.equippedWeaponId,
       resolvedWeapons,
@@ -425,6 +452,69 @@ export class MetaverseWeaponPresentationRuntime {
     this.#pendingSlotSwitchIntent = null;
 
     return switchIntent;
+  }
+
+  syncAuthoritativeWeaponState(
+    weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null
+  ): void {
+    if (weaponState === null) {
+      return;
+    }
+
+    const nextSlots = Object.freeze(
+      weaponState.slots.flatMap((slot) => {
+        if (!slot.equipped) {
+          return [];
+        }
+
+        const resolvedWeapon =
+          this.#resolvedWeaponsById.get(slot.weaponId) ??
+          this.#resolvedWeaponsById.get(slot.attachmentId) ??
+          null;
+
+        return resolvedWeapon === null
+          ? []
+          : [
+              Object.freeze({
+                slotId: slot.slotId,
+                weapon: resolvedWeapon,
+                weaponInstanceId: slot.weaponInstanceId
+              })
+            ];
+      })
+    );
+
+    if (nextSlots.length === 0) {
+      return;
+    }
+
+    const nextActiveSlotId =
+      nextSlots.find((slot) => slot.slotId === weaponState.activeSlotId)
+        ?.slotId ??
+      nextSlots.find((slot) => slot.weapon.weaponId === weaponState.weaponId)
+        ?.slotId ??
+      nextSlots[0]?.slotId ??
+      null;
+
+    if (
+      this.#activeSlotId === nextActiveSlotId &&
+      doWeaponPresentationSlotsMatch(this.#weaponSlots, nextSlots)
+    ) {
+      return;
+    }
+
+    const previousWeaponId = this.#activeWeapon?.weaponId ?? null;
+
+    this.#weaponSlots = nextSlots;
+    this.#activeSlotId = nextActiveSlotId;
+    this.#pendingSlotSwitchIntent = null;
+
+    if (previousWeaponId !== this.#activeWeapon?.weaponId) {
+      this.#adsLatched = false;
+      this.#adsBlend = 0;
+      this.#aimMode = "hip-fire";
+      this.#cameraFieldOfViewDegrees = this.#baseFieldOfViewDegrees;
+    }
   }
 
   subscribeUiUpdates(listener: () => void): () => void {

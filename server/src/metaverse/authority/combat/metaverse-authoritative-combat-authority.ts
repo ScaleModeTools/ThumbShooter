@@ -9,6 +9,7 @@ import {
   createMetaversePlayerCombatHurtVolumes,
   createMetaversePlayerCombatSnapshot,
   createMetaverseUnmountedTraversalStateSnapshot,
+  createMetaverseWeaponInstanceId,
   readMetaverseCombatWeaponProfile,
   resolveMetaverseCombatClosestHurtVolumePoint,
   resolveMetaverseCombatHitForSegment,
@@ -31,8 +32,10 @@ import {
   type MetaverseCombatShotResolutionTelemetrySnapshot,
   type MetaverseCombatShotResolutionTelemetrySnapshotInput,
   type MetaverseFireWeaponPlayerActionSnapshot,
+  type MetaverseInteractWeaponResourcePlayerActionSnapshot,
   type MetaverseIssuePlayerActionCommand,
   type MetaversePlayerActionFireWeaponRejectionReasonId,
+  type MetaversePlayerActionInteractWeaponResourceRejectionReasonId,
   type MetaversePlayerActionSwitchWeaponSlotRejectionReasonId,
   type MetaversePlayerActionReceiptSnapshot,
   type MetaversePlayerCombatHurtVolumeConfig,
@@ -225,6 +228,7 @@ const combatRewindWindowMs = 200;
 const combatHurtVolumeHistoryWindowMs = 200;
 const combatRayOriginMaxDistanceFromFiringReferenceMeters = 3;
 const combatSplashLineOfSightOriginBiasMeters = 0.08;
+const combatDroppedWeaponPickupRadiusMeters = 1.4;
 const killFloorCombatWeaponId = "metaverse-environment-kill-floor-v1" as const;
 const projectileRetentionAfterResolutionMs = 250;
 const spawnProtectionDurationMs = 1_000;
@@ -299,6 +303,40 @@ function createOffsetVector(
     origin.x + direction.x * distanceMeters,
     origin.y + direction.y * distanceMeters,
     origin.z + direction.z * distanceMeters
+  );
+}
+
+function resolveWeaponTriggerShotCount(
+  weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>
+): number {
+  return weaponProfile.fireMode === "burst"
+    ? Math.max(1, weaponProfile.burst?.roundsPerBurst ?? 3)
+    : 1;
+}
+
+function resolveWeaponBurstRoundIntervalMs(
+  weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>
+): number {
+  return weaponProfile.fireMode === "burst"
+    ? Math.max(0, Number(weaponProfile.burst?.roundIntervalMs ?? 90))
+    : 0;
+}
+
+function resolveWeaponTriggerCooldownMs(
+  weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>
+): number {
+  if (weaponProfile.roundsPerMinute <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (weaponProfile.fireMode !== "burst") {
+    return 60_000 / weaponProfile.roundsPerMinute;
+  }
+
+  return Math.max(
+    60_000 / weaponProfile.roundsPerMinute,
+    resolveWeaponBurstRoundIntervalMs(weaponProfile) *
+      resolveWeaponTriggerShotCount(weaponProfile)
   );
 }
 
@@ -442,6 +480,14 @@ export class MetaverseAuthoritativeCombatAuthority<
           playerRuntime
         );
         break;
+      case "interact-weapon-resource":
+        this.acceptInteractWeaponResourceAction({
+          action: command.action,
+          nowMs: normalizedNowMs,
+          playerRuntime,
+          resourceSpawn: null
+        });
+        break;
       case "jump":
         break;
       case "switch-active-weapon-slot":
@@ -460,6 +506,275 @@ export class MetaverseAuthoritativeCombatAuthority<
         );
       }
     }
+  }
+
+  acceptInteractWeaponResourceAction(input: {
+    readonly action: MetaverseInteractWeaponResourcePlayerActionSnapshot;
+    readonly nowMs: number;
+    readonly playerRuntime: PlayerRuntime;
+    readonly resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot | null;
+  }): {
+    readonly accepted: boolean;
+    readonly consumeResourceSpawn?: boolean;
+    readonly droppedResourceSpawn?: MetaverseMapBundleResourceSpawnSnapshot | null;
+  } {
+    const combatState = this.#ensurePlayerCombatState(input.playerRuntime);
+    const duplicateReceipt = this.#readProcessedPlayerActionReceipt(
+      combatState,
+      input.action.actionSequence
+    );
+
+    if (duplicateReceipt !== null) {
+      return { accepted: false };
+    }
+
+    const oldestRetainedReceiptSequence =
+      combatState.playerActionReceiptSequenceOrder[0] ?? null;
+
+    if (
+      oldestRetainedReceiptSequence !== null &&
+      input.action.actionSequence < oldestRetainedReceiptSequence &&
+      input.action.actionSequence <=
+        combatState.highestProcessedPlayerActionSequence
+    ) {
+      return { accepted: false };
+    }
+
+    if (this.#matchState.phase !== "active") {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "match-inactive",
+        weaponState: input.playerRuntime.weaponState
+      });
+      return { accepted: false };
+    }
+
+    if (!combatState.alive || input.playerRuntime.mountedOccupancy !== null) {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: combatState.alive ? "mounted" : "player-dead",
+        weaponState: input.playerRuntime.weaponState
+      });
+      return { accepted: false };
+    }
+
+    const weaponState = input.playerRuntime.weaponState;
+    const activeSlot =
+      weaponState === null
+        ? null
+        : weaponState.slots.find(
+            (slot) => slot.slotId === weaponState.activeSlotId && slot.equipped
+          ) ?? null;
+
+    if (weaponState === null || activeSlot === null) {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "no-active-weapon",
+        weaponState
+      });
+      return { accepted: false };
+    }
+
+    if (
+      input.action.requestedActiveSlotId !== null &&
+      input.action.requestedActiveSlotId !== activeSlot.slotId
+    ) {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "stale-weapon-state",
+        weaponState
+      });
+      return { accepted: false };
+    }
+
+    if (
+      input.action.intendedWeaponInstanceId !== null &&
+      input.action.intendedWeaponInstanceId !== activeSlot.weaponInstanceId
+    ) {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "stale-weapon-state",
+        weaponState
+      });
+      return { accepted: false };
+    }
+
+    if (input.resourceSpawn === null) {
+      const equippedSlots = weaponState.slots.filter((slot) => slot.equipped);
+
+      if (equippedSlots.length <= 1) {
+        this.#publishInteractWeaponResourceActionReceipt(combatState, {
+          action: input.action,
+          nowMs: input.nowMs,
+          reason: "last-weapon",
+          weaponState
+        });
+        return { accepted: false };
+      }
+
+      const nextActiveSlot =
+        equippedSlots.find((slot) => slot.slotId !== activeSlot.slotId) ?? null;
+
+      if (nextActiveSlot === null) {
+        this.#publishInteractWeaponResourceActionReceipt(combatState, {
+          action: input.action,
+          nowMs: input.nowMs,
+          reason: "no-active-weapon",
+          weaponState
+        });
+        return { accepted: false };
+      }
+
+      const nextWeaponState = createMetaverseRealtimePlayerWeaponStateSnapshot({
+        activeSlotId: nextActiveSlot.slotId,
+        aimMode: "hip-fire",
+        slots: weaponState.slots.map((slot) =>
+          slot.slotId === activeSlot.slotId
+            ? {
+                ...slot,
+                equipped: false
+              }
+            : slot
+        ),
+        weaponId: nextActiveSlot.weaponId
+      });
+      const droppedResourceSpawn = this.#createDroppedWeaponResourceSpawn(
+        input.playerRuntime,
+        input.action,
+        activeSlot,
+        combatState
+      );
+
+      input.playerRuntime.weaponState = nextWeaponState;
+      combatState.activeWeaponId = nextActiveSlot.weaponId;
+      this.#ensureWeaponRuntimeState(combatState, nextActiveSlot.weaponId);
+      this.#dependencies.incrementSnapshotSequence();
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        droppedWeaponId: activeSlot.weaponId,
+        nowMs: input.nowMs,
+        weaponState: nextWeaponState
+      });
+
+      return {
+        accepted: true,
+        droppedResourceSpawn
+      };
+    }
+
+    if (input.resourceSpawn.resourceKind !== "weapon-pickup") {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "no-resource",
+        weaponState
+      });
+      return { accepted: false };
+    }
+
+    const pickedUpWeaponProfile = tryReadMetaverseCombatWeaponProfile(
+      input.resourceSpawn.weaponId
+    );
+
+    if (pickedUpWeaponProfile === null) {
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        reason: "unknown-weapon",
+        weaponState
+      });
+      return { accepted: false };
+    }
+
+    const alreadyEquippedSlot =
+      weaponState.slots.find(
+        (slot) => slot.equipped && slot.weaponId === input.resourceSpawn?.weaponId
+      ) ?? null;
+
+    if (alreadyEquippedSlot !== null) {
+      if (
+        !this.grantWeaponResourcePickup(
+          input.playerRuntime,
+          input.resourceSpawn,
+          input.nowMs
+        )
+      ) {
+        this.#publishInteractWeaponResourceActionReceipt(combatState, {
+          action: input.action,
+          nowMs: input.nowMs,
+          reason: "ammo-full",
+          weaponState
+        });
+        return { accepted: false };
+      }
+
+      this.#publishInteractWeaponResourceActionReceipt(combatState, {
+        action: input.action,
+        nowMs: input.nowMs,
+        pickedUpWeaponId: input.resourceSpawn.weaponId,
+        weaponState
+      });
+
+      return {
+        accepted: true,
+        consumeResourceSpawn: true
+      };
+    }
+
+    const unequippedSlot =
+      weaponState.slots.find((slot) => !slot.equipped) ?? null;
+    const targetSlot = unequippedSlot ?? activeSlot;
+    const nextWeaponSlot = {
+      attachmentId: input.resourceSpawn.assetId ?? input.resourceSpawn.weaponId,
+      equipped: true,
+      slotId: targetSlot.slotId,
+      weaponId: input.resourceSpawn.weaponId,
+      weaponInstanceId: createMetaverseWeaponInstanceId(
+        input.playerRuntime.playerId,
+        targetSlot.slotId,
+        input.resourceSpawn.weaponId
+      )
+    };
+    const droppedResourceSpawn =
+      unequippedSlot === null
+        ? this.#createDroppedWeaponResourceSpawn(
+            input.playerRuntime,
+            input.action,
+            activeSlot,
+            combatState
+          )
+        : null;
+    const nextWeaponState = createMetaverseRealtimePlayerWeaponStateSnapshot({
+      activeSlotId: targetSlot.slotId,
+      aimMode: "hip-fire",
+      slots: weaponState.slots.map((slot) =>
+        slot.slotId === targetSlot.slotId ? nextWeaponSlot : slot
+      ),
+      weaponId: input.resourceSpawn.weaponId
+    });
+
+    input.playerRuntime.weaponState = nextWeaponState;
+    combatState.activeWeaponId = input.resourceSpawn.weaponId;
+    this.#ensureWeaponRuntimeState(combatState, input.resourceSpawn.weaponId);
+    this.#dependencies.incrementSnapshotSequence();
+    this.#publishInteractWeaponResourceActionReceipt(combatState, {
+      action: input.action,
+      droppedWeaponId: droppedResourceSpawn?.weaponId ?? null,
+      nowMs: input.nowMs,
+      pickedUpWeaponId: input.resourceSpawn.weaponId,
+      weaponState: nextWeaponState
+    });
+
+    return {
+      accepted: true,
+      consumeResourceSpawn: true,
+      droppedResourceSpawn
+    };
   }
 
   #acceptSwitchActiveWeaponSlotAction(
@@ -651,10 +966,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
-    const millisecondsPerShot =
-      weaponProfile.roundsPerMinute <= 0
-        ? Number.POSITIVE_INFINITY
-        : 60_000 / weaponProfile.roundsPerMinute;
+    const millisecondsPerShot = resolveWeaponTriggerCooldownMs(weaponProfile);
 
     if (nowMs - weaponState.lastFireAtMs + 0.0001 < millisecondsPerShot) {
       this.#publishFireWeaponActionReceipt(combatState, {
@@ -703,9 +1015,15 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
-    weaponState.ammoInMagazine -= 1;
+    const triggerShotCount = Math.min(
+      resolveWeaponTriggerShotCount(weaponProfile),
+      weaponState.ammoInMagazine
+    );
+    const triggerShotIntervalMs = resolveWeaponBurstRoundIntervalMs(weaponProfile);
+
+    weaponState.ammoInMagazine -= triggerShotCount;
     weaponState.lastFireAtMs = nowMs;
-    weaponState.shotsFired += 1;
+    weaponState.shotsFired += triggerShotCount;
     combatState.activeWeaponId = weaponId;
 
     const issuedAtTimeMs = this.#resolveIssuedAtAuthoritativeTimeMs(
@@ -717,21 +1035,6 @@ export class MetaverseAuthoritativeCombatAuthority<
       semanticAimForward: fireRay.direction,
       weaponProfile
     });
-    const combatEventBase = this.#createCombatEventBase({
-      actionSequence: action.actionSequence,
-      playerRuntime,
-      weaponId,
-      weaponProfile
-    });
-
-    this.#storeCombatEvent({
-      ...combatEventBase,
-      cameraRayForwardWorld: fireRay.direction,
-      cameraRayOriginWorld: fireRay.origin,
-      eventKind: "fire-accepted",
-      semanticMuzzleWorld
-    });
-
     if (weaponProfile.deliveryModel === "hitscan") {
       this.#publishFireWeaponActionReceipt(combatState, {
         actionSequence: action.actionSequence,
@@ -739,19 +1042,57 @@ export class MetaverseAuthoritativeCombatAuthority<
         sourceProjectileId: null,
         weaponId
       });
-      this.#resolveHitscanFireAction({
-        actionSequence: action.actionSequence,
-        attackerPlayerId: playerId,
-        direction: fireRay.direction,
-        firingReferenceOrigin,
-        combatState,
-        issuedAtTimeMs,
-        nowMs,
-        origin: fireRay.origin,
-        semanticMuzzleWorld,
-        weaponId
-      });
+
+      for (let shotIndex = 0; shotIndex < triggerShotCount; shotIndex += 1) {
+        const combatEventBase = this.#createCombatEventBase({
+          actionSequence: action.actionSequence,
+          playerRuntime,
+          shotIndex,
+          weaponId,
+          weaponProfile
+        });
+        const shotIssuedAtTimeMs = Math.min(
+          nowMs,
+          issuedAtTimeMs + shotIndex * triggerShotIntervalMs
+        );
+
+        this.#storeCombatEvent({
+          ...combatEventBase,
+          cameraRayForwardWorld: fireRay.direction,
+          cameraRayOriginWorld: fireRay.origin,
+          eventKind: "fire-accepted",
+          semanticMuzzleWorld
+        });
+        this.#resolveHitscanFireAction({
+          actionSequence: action.actionSequence,
+          attackerPlayerId: playerId,
+          direction: fireRay.direction,
+          firingReferenceOrigin,
+          combatState,
+          issuedAtTimeMs: shotIssuedAtTimeMs,
+          nowMs,
+          origin: fireRay.origin,
+          semanticMuzzleWorld,
+          shotId: combatEventBase.shotId,
+          weaponId
+        });
+      }
     } else {
+      const combatEventBase = this.#createCombatEventBase({
+        actionSequence: action.actionSequence,
+        playerRuntime,
+        weaponId,
+        weaponProfile
+      });
+
+      this.#storeCombatEvent({
+        ...combatEventBase,
+        cameraRayForwardWorld: fireRay.direction,
+        cameraRayOriginWorld: fireRay.origin,
+        eventKind: "fire-accepted",
+        semanticMuzzleWorld
+      });
+
       const projectileLaunch = this.#resolveProjectileLaunch({
         attackerPlayerId: playerId,
         bodyYawReferenceOrigin: firingReferenceOrigin,
@@ -1084,10 +1425,11 @@ export class MetaverseAuthoritativeCombatAuthority<
       | "activeSlotId"
       | "playerId"
       | "presentationDeliveryModel"
-      | "shotId"
       | "weaponId"
       | "weaponInstanceId"
-    >;
+    > & {
+      readonly shotId: string;
+    };
     readonly issuedAtTimeMs: number;
     readonly launchTelemetry: MetaverseCombatProjectileLaunchTelemetrySnapshotInput;
     readonly nowMs: number;
@@ -1095,7 +1437,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     readonly weaponId: string;
     readonly weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>;
   }): void {
-    const projectileId = `${input.attackerPlayerId}:${input.actionSequence}`;
+    const projectileId = input.eventBase.shotId;
     const projectileRuntime: MutableMetaverseCombatProjectileRuntimeState = {
       direction: input.direction,
       expiresAtTimeMs:
@@ -1160,6 +1502,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     readonly nowMs: number;
     readonly origin: PhysicsVector3Snapshot;
     readonly semanticMuzzleWorld: PhysicsVector3Snapshot;
+    readonly shotId: string;
     readonly weaponId: string;
   }): void {
     const weaponProfile = readMetaverseCombatWeaponProfile(input.weaponId);
@@ -1272,6 +1615,7 @@ export class MetaverseAuthoritativeCombatAuthority<
         hitPointWorld: worldHit.point,
         regionId: null,
         semanticMuzzleWorld: input.semanticMuzzleWorld,
+        shotId: input.shotId,
         targetPlayerId: null,
         telemetry: {
           ...telemetryBase,
@@ -1289,6 +1633,7 @@ export class MetaverseAuthoritativeCombatAuthority<
         hitPointWorld: null,
         regionId: null,
         semanticMuzzleWorld: input.semanticMuzzleWorld,
+        shotId: input.shotId,
         targetPlayerId: null,
         telemetry: {
           ...telemetryBase,
@@ -1310,6 +1655,7 @@ export class MetaverseAuthoritativeCombatAuthority<
         hitPointWorld: lineOfSightBlocker.point,
         regionId: null,
         semanticMuzzleWorld: input.semanticMuzzleWorld,
+        shotId: input.shotId,
         targetPlayerId: null,
         telemetry: {
           ...telemetryBase,
@@ -1330,6 +1676,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       hitPointWorld: closestPlayerHit.point,
       regionId: closestPlayerHit.regionId,
       semanticMuzzleWorld: input.semanticMuzzleWorld,
+      shotId: input.shotId,
       targetPlayerId: closestPlayerHit.targetPlayerId,
       telemetry: {
         ...telemetryBase,
@@ -1547,7 +1894,10 @@ export class MetaverseAuthoritativeCombatAuthority<
       maxHealth: combatState.maxHealth,
       respawnRemainingMs: combatState.respawnRemainingMs,
       spawnProtectionRemainingMs: combatState.spawnProtectionRemainingMs,
-      weaponInventory: this.#createWeaponInventorySnapshotInput(combatState),
+      weaponInventory: this.#createWeaponInventorySnapshotInput(
+        combatState,
+        this.#dependencies.playersById.get(playerId)?.weaponState ?? null
+      ),
       weaponStats: [...combatState.weaponsById.values()].map((weaponState) => ({
         shotsFired: weaponState.shotsFired,
         shotsHit: weaponState.shotsHit,
@@ -2369,15 +2719,30 @@ export class MetaverseAuthoritativeCombatAuthority<
   }
 
   #createWeaponInventorySnapshotInput(
-    combatState: MutableMetaverseCombatPlayerRuntimeState
+    combatState: MutableMetaverseCombatPlayerRuntimeState,
+    weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null
   ): readonly MetaverseCombatPlayerWeaponSnapshotInput[] {
+    const equippedWeaponIds =
+      weaponState === null
+        ? null
+        : new Set(
+            weaponState.slots
+              .filter((slot) => slot.equipped)
+              .map((slot) => slot.weaponId)
+          );
+
     return Object.freeze(
-      [...combatState.weaponsById.values()].map((weaponState) => ({
-        ammoInMagazine: weaponState.ammoInMagazine,
-        ammoInReserve: weaponState.ammoInReserve,
-        reloadRemainingMs: weaponState.reloadRemainingMs,
-        weaponId: weaponState.weaponId
-      }))
+      [...combatState.weaponsById.values()]
+        .filter(
+          (weaponRuntime) =>
+            equippedWeaponIds === null || equippedWeaponIds.has(weaponRuntime.weaponId)
+        )
+        .map((weaponRuntime) => ({
+          ammoInMagazine: weaponRuntime.ammoInMagazine,
+          ammoInReserve: weaponRuntime.ammoInReserve,
+          reloadRemainingMs: weaponRuntime.reloadRemainingMs,
+          weaponId: weaponRuntime.weaponId
+        }))
     );
   }
 
@@ -2645,10 +3010,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       projectileId: projectileRuntime.projectileId,
       semanticMuzzleWorld:
         projectileRuntime.launchTelemetry?.weaponTipOriginWorld ?? null,
-      shotId: this.#createCombatShotId(
-        projectileRuntime.ownerPlayerId,
-        projectileRuntime.sourceActionSequence
-      ),
+      shotId: projectileRuntime.projectileId,
       weaponId: projectileRuntime.weaponId,
       weaponInstanceId: activeWeaponSlot?.weaponInstanceId ?? null
     });
@@ -2763,14 +3125,18 @@ export class MetaverseAuthoritativeCombatAuthority<
 
   #createCombatShotId(
     playerId: MetaversePlayerId,
-    actionSequence: number
+    actionSequence: number,
+    shotIndex = 0
   ): string {
-    return `${playerId}:${actionSequence}`;
+    const baseShotId = `${playerId}:${actionSequence}`;
+
+    return shotIndex <= 0 ? baseShotId : `${baseShotId}:${shotIndex + 1}`;
   }
 
   #createCombatEventBase(input: {
     readonly actionSequence: number;
     readonly playerRuntime: PlayerRuntime;
+    readonly shotIndex?: number;
     readonly weaponId: string;
     readonly weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>;
   }): Pick<
@@ -2779,10 +3145,11 @@ export class MetaverseAuthoritativeCombatAuthority<
     | "activeSlotId"
     | "playerId"
     | "presentationDeliveryModel"
-    | "shotId"
     | "weaponId"
     | "weaponInstanceId"
-  > {
+  > & {
+    readonly shotId: string;
+  } {
     const activeWeaponSlot = this.#resolveActiveWeaponSlot(input.playerRuntime);
 
     return {
@@ -2792,7 +3159,8 @@ export class MetaverseAuthoritativeCombatAuthority<
       presentationDeliveryModel: input.weaponProfile.presentationDeliveryModel,
       shotId: this.#createCombatShotId(
         input.playerRuntime.playerId,
-        input.actionSequence
+        input.actionSequence,
+        input.shotIndex
       ),
       weaponId: input.weaponId,
       weaponInstanceId: activeWeaponSlot?.weaponInstanceId ?? null
@@ -2900,6 +3268,95 @@ export class MetaverseAuthoritativeCombatAuthority<
     );
   }
 
+  #createDroppedWeaponResourceSpawn(
+    playerRuntime: PlayerRuntime,
+    action: MetaverseInteractWeaponResourcePlayerActionSnapshot,
+    weaponSlot: MetaverseRealtimePlayerWeaponStateSnapshot["slots"][number],
+    combatState: MutableMetaverseCombatPlayerRuntimeState
+  ): MetaverseMapBundleResourceSpawnSnapshot {
+    const weaponProfile =
+      tryReadMetaverseCombatWeaponProfile(weaponSlot.weaponId) ??
+      readMetaverseCombatWeaponProfile(defaultCombatWeaponId);
+    const weaponRuntime =
+      combatState.weaponsById.get(weaponSlot.weaponId) ?? null;
+    const yawRadians = Number.isFinite(playerRuntime.yawRadians)
+      ? playerRuntime.yawRadians
+      : 0;
+
+    return Object.freeze({
+      ammoGrantRounds:
+        weaponRuntime === null
+          ? weaponProfile.magazine.reserveCapacity
+          : Math.max(
+              0,
+              Math.trunc(
+                weaponRuntime.ammoInMagazine + weaponRuntime.ammoInReserve
+              )
+            ),
+      assetId: weaponSlot.attachmentId,
+      label: `Dropped ${weaponSlot.weaponId}`,
+      modeTags: Object.freeze([]),
+      pickupRadiusMeters: combatDroppedWeaponPickupRadiusMeters,
+      position: Object.freeze({
+        x: playerRuntime.positionX + Math.sin(yawRadians) * 0.9,
+        y: playerRuntime.positionY + 0.55,
+        z: playerRuntime.positionZ - Math.cos(yawRadians) * 0.9
+      }),
+      resourceKind: "weapon-pickup",
+      respawnCooldownMs: 0,
+      spawnId:
+        `dropped:${playerRuntime.playerId}:${action.actionSequence}:` +
+        `${weaponSlot.slotId}:${weaponSlot.weaponId}`,
+      weaponId: weaponSlot.weaponId,
+      yawRadians
+    });
+  }
+
+  #publishInteractWeaponResourceActionReceipt(
+    combatState: MutableMetaverseCombatPlayerRuntimeState,
+    input: {
+      readonly action: MetaverseInteractWeaponResourcePlayerActionSnapshot;
+      readonly droppedWeaponId?: string | null | undefined;
+      readonly nowMs: number;
+      readonly pickedUpWeaponId?: string | null | undefined;
+      readonly reason?:
+        | MetaversePlayerActionInteractWeaponResourceRejectionReasonId
+        | undefined;
+      readonly weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null;
+    }
+  ): void {
+    const activeSlotId = input.weaponState?.activeSlotId ?? null;
+    const activeSlot =
+      activeSlotId === null
+        ? null
+        : input.weaponState?.slots.find((slot) => slot.slotId === activeSlotId) ??
+          null;
+
+    this.#storePlayerActionReceipt(
+      combatState,
+      createMetaversePlayerActionReceiptSnapshot({
+        actionSequence: input.action.actionSequence,
+        activeSlotId,
+        droppedWeaponId: input.droppedWeaponId ?? null,
+        intendedWeaponInstanceId: input.action.intendedWeaponInstanceId,
+        kind: "interact-weapon-resource",
+        pickedUpWeaponId: input.pickedUpWeaponId ?? null,
+        processedAtTimeMs: input.nowMs,
+        ...(input.reason === undefined
+          ? {
+              status: "accepted"
+            }
+          : {
+              rejectionReason: input.reason,
+              status: "rejected"
+            }),
+        requestedActiveSlotId: input.action.requestedActiveSlotId,
+        weaponId: activeSlot?.weaponId ?? input.weaponState?.weaponId ?? null,
+        weaponInstanceId: activeSlot?.weaponInstanceId ?? null
+      })
+    );
+  }
+
   #storePlayerActionReceipt(
     combatState: MutableMetaverseCombatPlayerRuntimeState,
     receiptSnapshot: MetaversePlayerActionReceiptSnapshot
@@ -2951,6 +3408,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     readonly hitPointWorld: PhysicsVector3Snapshot | null;
     readonly regionId: MetaverseCombatHurtRegionId | null;
     readonly semanticMuzzleWorld: PhysicsVector3Snapshot;
+    readonly shotId: string;
     readonly targetPlayerId: MetaversePlayerId | null;
     readonly telemetry: MetaverseCombatShotResolutionTelemetrySnapshotInput;
   }): void {
@@ -3001,10 +3459,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       playerId: input.combatState.playerId,
       presentationDeliveryModel: weaponProfile.presentationDeliveryModel,
       semanticMuzzleWorld: input.semanticMuzzleWorld,
-      shotId: this.#createCombatShotId(
-        input.combatState.playerId,
-        input.telemetry.actionSequence ?? 0
-      ),
+      shotId: input.shotId,
       weaponId,
       weaponInstanceId: activeWeaponSlot?.weaponInstanceId ?? null
     });

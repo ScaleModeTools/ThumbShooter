@@ -305,4 +305,47 @@ export class MetaverseRemoteWorldCommandTransport {
       requestedActiveSlotId: input.requestedActiveSlotId
     });
   }
+
+  interactWeaponResource(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+  }): {
+    readonly actionSequence: number;
+  } | null {
+    const worldClient = this.#readWorldClient();
+
+    if (
+      worldClient === null ||
+      this.#localPlayerIdentity === null ||
+      worldClient.issuePlayerAction === undefined
+    ) {
+      return null;
+    }
+
+    const intendedWeaponInstanceId = input.intendedWeaponInstanceId ?? null;
+    const requestedActiveSlotId = input.requestedActiveSlotId ?? null;
+    const actionSequence = worldClient.issuePlayerAction({
+      action: {
+        ...(intendedWeaponInstanceId === null
+          ? {}
+          : {
+              intendedWeaponInstanceId
+            }),
+        issuedAtAuthoritativeTimeMs: this.#readEstimatedServerTimeMs(
+          this.#readWallClockMs()
+        ),
+        kind: "interact-weapon-resource",
+        requestedActiveSlotId
+      },
+      playerId: this.#localPlayerIdentity.playerId
+    });
+
+    if (actionSequence === null || actionSequence === undefined) {
+      return null;
+    }
+
+    return Object.freeze({
+      actionSequence
+    });
+  }
 }

@@ -5,6 +5,7 @@ import {
 } from "@/assets/config/metaverse-combat-animation-source";
 import {
   attachmentModelManifest,
+  metaverseBattleRifleAttachmentAssetId,
   metaverseRocketLauncherAttachmentAssetId,
   metaverseServicePistolAttachmentAssetId,
 } from "@/assets/config/attachment-model-manifest";
@@ -407,6 +408,10 @@ export const metaverseAttachmentProofConfig =
 
 export const metaverseAttachmentProofConfigs = Object.freeze([
   metaverseAttachmentProofConfig,
+  resolveMetaverseAttachmentProofConfig(
+    metaverseCharacterProofConfig,
+    metaverseBattleRifleAttachmentAssetId,
+  ),
   resolveMetaverseAttachmentProofConfig(
     metaverseCharacterProofConfig,
     metaverseRocketLauncherAttachmentAssetId,

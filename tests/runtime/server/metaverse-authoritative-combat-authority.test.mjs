@@ -176,6 +176,27 @@ function createSwitchActiveWeaponSlotCommand({
   });
 }
 
+function createInteractWeaponResourceCommand({
+  actionSequence,
+  intendedWeaponInstanceId,
+  issuedAtAuthoritativeTimeMs,
+  playerId,
+  requestedActiveSlotId
+}) {
+  return createMetaverseIssuePlayerActionCommand({
+    action: {
+      actionSequence,
+      ...(intendedWeaponInstanceId === undefined
+        ? {}
+        : { intendedWeaponInstanceId }),
+      issuedAtAuthoritativeTimeMs,
+      kind: "interact-weapon-resource",
+      requestedActiveSlotId
+    },
+    playerId
+  });
+}
+
 function createDualWeaponState(playerId, activeSlotId = "primary") {
   const primaryWeaponInstanceId = `${playerId}:primary:metaverse-service-pistol-v2`;
   const secondaryWeaponInstanceId = `${playerId}:secondary:metaverse-rocket-launcher-v1`;
@@ -203,6 +224,36 @@ function createDualWeaponState(playerId, activeSlotId = "primary") {
       activeSlotId === "secondary"
         ? "metaverse-rocket-launcher-v1"
         : "metaverse-service-pistol-v2"
+  });
+}
+
+function createBattleRifleWeaponState(playerId, activeSlotId = "primary") {
+  const primaryWeaponInstanceId = `${playerId}:primary:metaverse-battle-rifle-v1`;
+  const secondaryWeaponInstanceId = `${playerId}:secondary:metaverse-rocket-launcher-v1`;
+
+  return createMetaverseRealtimePlayerWeaponStateSnapshot({
+    activeSlotId,
+    aimMode: "hip-fire",
+    slots: [
+      {
+        attachmentId: "metaverse-battle-rifle-v1",
+        equipped: true,
+        slotId: "primary",
+        weaponId: "metaverse-battle-rifle-v1",
+        weaponInstanceId: primaryWeaponInstanceId
+      },
+      {
+        attachmentId: "metaverse-rocket-launcher-v1",
+        equipped: true,
+        slotId: "secondary",
+        weaponId: "metaverse-rocket-launcher-v1",
+        weaponInstanceId: secondaryWeaponInstanceId
+      }
+    ],
+    weaponId:
+      activeSlotId === "secondary"
+        ? "metaverse-rocket-launcher-v1"
+        : "metaverse-battle-rifle-v1"
   });
 }
 
@@ -1791,6 +1842,191 @@ test("MetaverseAuthoritativeCombatAuthority tracks fire cooldown per equipped we
     combatAuthority.readProjectileSnapshots()[0]?.weaponId,
     "metaverse-rocket-launcher-v1"
   );
+});
+
+test("MetaverseAuthoritativeCombatAuthority publishes one hitscan event per battle rifle burst round", () => {
+  const redPlayerId = createMetaversePlayerId("combat-burst-red-1");
+  const bluePlayerId = createMetaversePlayerId("combat-burst-blue-1");
+
+  assert.notEqual(redPlayerId, null);
+  assert.notEqual(bluePlayerId, null);
+
+  const redRootPosition = Object.freeze({ x: 0, y: 0, z: 0 });
+  const blueRootPosition = Object.freeze({ x: 0, y: 0, z: -18 });
+  const redWeaponState = createBattleRifleWeaponState(redPlayerId, "primary");
+  const redPlayerRuntime = createPlayerRuntimeState(
+    redPlayerId,
+    "red",
+    redRootPosition,
+    0,
+    redWeaponState
+  );
+  const combatAuthority = createCombatAuthorityForPlayers(
+    new Map([
+      [redPlayerId, redPlayerRuntime],
+      [
+        bluePlayerId,
+        createPlayerRuntimeState(bluePlayerId, "blue", blueRootPosition)
+      ]
+    ])
+  );
+  const origin = resolveWeaponTipOrigin(
+    redRootPosition,
+    0,
+    "metaverse-battle-rifle-v1"
+  );
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_200,
+      origin,
+      playerId: redPlayerId,
+      target: Object.freeze({
+        x: 12,
+        y: origin.y,
+        z: origin.z
+      }),
+      weaponId: "metaverse-battle-rifle-v1"
+    }),
+    1_200
+  );
+
+  const combatSnapshot = combatAuthority.readPlayerCombatSnapshot(redPlayerId);
+  const battleStats = combatSnapshot?.weaponStats.find(
+    (weaponStats) => weaponStats.weaponId === "metaverse-battle-rifle-v1"
+  ) ?? null;
+  const events = combatAuthority.readCombatEventSnapshots();
+
+  assert.equal(combatSnapshot?.activeWeapon?.weaponId, "metaverse-battle-rifle-v1");
+  assert.equal(combatSnapshot?.activeWeapon?.ammoInMagazine, 33);
+  assert.equal(battleStats?.shotsFired, 3);
+  assert.deepEqual(
+    events.map((eventSnapshot) => eventSnapshot.eventKind),
+    [
+      "fire-accepted",
+      "hitscan-resolved",
+      "fire-accepted",
+      "hitscan-resolved",
+      "fire-accepted",
+      "hitscan-resolved"
+    ]
+  );
+  assert.deepEqual(
+    events.map((eventSnapshot) => eventSnapshot.shotId),
+    [
+      `${redPlayerId}:1`,
+      `${redPlayerId}:1`,
+      `${redPlayerId}:1:2`,
+      `${redPlayerId}:1:2`,
+      `${redPlayerId}:1:3`,
+      `${redPlayerId}:1:3`
+    ]
+  );
+});
+
+test("MetaverseAuthoritativeCombatAuthority swaps picked weapons and drops the active slot", () => {
+  const playerId = createMetaversePlayerId("combat-resource-pickup-battle-rifle");
+
+  assert.notEqual(playerId, null);
+
+  const playerRuntime = createPlayerRuntimeState(
+    playerId,
+    "red",
+    Object.freeze({
+      x: 0,
+      y: 0,
+      z: 0
+    }),
+    0,
+    createDualWeaponState(playerId, "primary")
+  );
+  const combatAuthority = createCombatAuthorityForPlayers(
+    new Map([[playerId, playerRuntime]])
+  );
+  const battleRiflePickup = createWeaponPickupResourceSpawn({
+    ammoGrantRounds: 108,
+    assetId: "metaverse-battle-rifle-v1",
+    label: "Battle rifle pickup",
+    spawnId: "resource:battle-rifle",
+    weaponId: "metaverse-battle-rifle-v1"
+  });
+
+  combatAuthority.syncCombatState(0);
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+
+  const pickupResult = combatAuthority.acceptInteractWeaponResourceAction({
+    action: createInteractWeaponResourceCommand({
+      actionSequence: 1,
+      intendedWeaponInstanceId:
+        `${playerId}:primary:metaverse-service-pistol-v2`,
+      issuedAtAuthoritativeTimeMs: 1_200,
+      playerId,
+      requestedActiveSlotId: "primary"
+    }).action,
+    nowMs: 1_200,
+    playerRuntime,
+    resourceSpawn: battleRiflePickup
+  });
+
+  assert.equal(pickupResult.accepted, true);
+  assert.equal(pickupResult.consumeResourceSpawn, true);
+  assert.equal(pickupResult.droppedResourceSpawn?.weaponId, "metaverse-service-pistol-v2");
+  assert.equal(playerRuntime.weaponState?.activeSlotId, "primary");
+  assert.equal(playerRuntime.weaponState?.weaponId, "metaverse-battle-rifle-v1");
+  assert.equal(
+    playerRuntime.weaponState?.slots.find((slot) => slot.slotId === "primary")
+      ?.weaponInstanceId,
+    `${playerId}:primary:metaverse-battle-rifle-v1`
+  );
+  assert.deepEqual(
+    combatAuthority
+      .readPlayerCombatSnapshot(playerId)
+      ?.weaponInventory.map((weaponSnapshot) => weaponSnapshot.weaponId)
+      .sort(),
+    ["metaverse-battle-rifle-v1", "metaverse-rocket-launcher-v1"]
+  );
+
+  const dropResult = combatAuthority.acceptInteractWeaponResourceAction({
+    action: createInteractWeaponResourceCommand({
+      actionSequence: 2,
+      intendedWeaponInstanceId:
+        `${playerId}:primary:metaverse-battle-rifle-v1`,
+      issuedAtAuthoritativeTimeMs: 1_300,
+      playerId,
+      requestedActiveSlotId: "primary"
+    }).action,
+    nowMs: 1_300,
+    playerRuntime,
+    resourceSpawn: null
+  });
+  const receipts =
+    combatAuthority.readPlayerCombatActionObserverSnapshot(playerId)
+      ?.recentPlayerActionReceipts ?? [];
+
+  assert.equal(dropResult.accepted, true);
+  assert.equal(dropResult.droppedResourceSpawn?.weaponId, "metaverse-battle-rifle-v1");
+  assert.equal(playerRuntime.weaponState?.activeSlotId, "secondary");
+  assert.equal(playerRuntime.weaponState?.weaponId, "metaverse-rocket-launcher-v1");
+  assert.equal(
+    playerRuntime.weaponState?.slots.find((slot) => slot.slotId === "primary")
+      ?.equipped,
+    false
+  );
+  assert.deepEqual(
+    combatAuthority
+      .readPlayerCombatSnapshot(playerId)
+      ?.weaponInventory.map((weaponSnapshot) => weaponSnapshot.weaponId),
+    ["metaverse-rocket-launcher-v1"]
+  );
+  assert.equal(receipts[0]?.kind, "interact-weapon-resource");
+  assert.equal(receipts[0]?.pickedUpWeaponId, "metaverse-battle-rifle-v1");
+  assert.equal(receipts[0]?.droppedWeaponId, "metaverse-service-pistol-v2");
+  assert.equal(receipts[1]?.kind, "interact-weapon-resource");
+  assert.equal(receipts[1]?.pickedUpWeaponId, null);
+  assert.equal(receipts[1]?.droppedWeaponId, "metaverse-battle-rifle-v1");
 });
 
 test("MetaverseAuthoritativeCombatAuthority tops up resource pickup ammo without exceeding weapon reserve cap", () => {

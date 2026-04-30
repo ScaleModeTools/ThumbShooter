@@ -98,6 +98,7 @@ function createMarkerGroup(
 ): Group {
   const markerGroup = new Group();
   const isRocket = resourceSpawn.weaponId.includes("rocket");
+  const isBattleRifle = resourceSpawn.weaponId.includes("battle-rifle");
   const pad = createOwnedMesh(
     new CylinderGeometry(
       resourceSpawn.pickupRadiusMeters,
@@ -106,8 +107,8 @@ function createMarkerGroup(
       32
     ),
     new MeshStandardMaterial({
-      color: isRocket ? "#fb923c" : "#38bdf8",
-      emissive: isRocket ? "#7c2d12" : "#075985",
+      color: isRocket ? "#fb923c" : isBattleRifle ? "#a3e635" : "#38bdf8",
+      emissive: isRocket ? "#7c2d12" : isBattleRifle ? "#365314" : "#075985",
       opacity: 0.26,
       roughness: 0.65,
       transparent: true
@@ -117,7 +118,7 @@ function createMarkerGroup(
     new ConeGeometry(0.22, 0.64, 16),
     new MeshStandardMaterial({
       color: "#e0f2fe",
-      emissive: isRocket ? "#ea580c" : "#0284c7",
+      emissive: isRocket ? "#ea580c" : isBattleRifle ? "#65a30d" : "#0284c7",
       emissiveIntensity: 0.18,
       roughness: 0.36
     })
@@ -125,10 +126,10 @@ function createMarkerGroup(
   const fallbackWeapon = createOwnedMesh(
     isRocket
       ? new CylinderGeometry(0.16, 0.16, 1.1, 16)
-      : new BoxGeometry(0.9, 0.26, 0.38),
+      : new BoxGeometry(isBattleRifle ? 1.15 : 0.9, 0.26, 0.38),
     new MeshStandardMaterial({
-      color: isRocket ? "#fdba74" : "#bfdbfe",
-      emissive: isRocket ? "#9a3412" : "#1e3a8a",
+      color: isRocket ? "#fdba74" : isBattleRifle ? "#d9f99d" : "#bfdbfe",
+      emissive: isRocket ? "#9a3412" : isBattleRifle ? "#3f6212" : "#1e3a8a",
       roughness: 0.42
     })
   );

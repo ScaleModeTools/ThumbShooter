@@ -723,14 +723,34 @@ export class MetaverseAuthoritativeWorldRuntime
           }
 
           if (playerRuntime.weaponState !== null) {
-            return createPlayerWeaponStateFromLayout(
-              weaponLayout,
-              playerRuntime.playerId,
-              playerRuntime.weaponState.activeSlotId,
-              command.weaponState?.aimMode ??
+            const requestedActiveSlotId =
+              command.weaponState?.activeSlotId ??
+              playerRuntime.weaponState.activeSlotId;
+            const activeSlot =
+              playerRuntime.weaponState.slots.find(
+                (slot) => slot.equipped && slot.slotId === requestedActiveSlotId
+              ) ??
+              playerRuntime.weaponState.slots.find(
+                (slot) =>
+                  slot.equipped &&
+                  slot.slotId === playerRuntime.weaponState?.activeSlotId
+              ) ??
+              playerRuntime.weaponState.slots.find((slot) => slot.equipped) ??
+              null;
+
+            if (activeSlot === null) {
+              return null;
+            }
+
+            return createMetaverseRealtimePlayerWeaponStateSnapshot({
+              activeSlotId: activeSlot.slotId,
+              aimMode:
+                command.weaponState?.aimMode ??
                 playerRuntime.weaponState.aimMode ??
-                "hip-fire"
-            );
+                "hip-fire",
+              slots: playerRuntime.weaponState.slots,
+              weaponId: activeSlot.weaponId
+            });
           }
 
           const requestedActiveSlotId =
@@ -790,6 +810,13 @@ export class MetaverseAuthoritativeWorldRuntime
           resourceSpawn,
           nowMs
         ),
+      interactWeaponResource: ({ action, nowMs, playerRuntime, resourceSpawn }) =>
+        this.#combatAuthority.acceptInteractWeaponResourceAction({
+          action,
+          nowMs,
+          playerRuntime,
+          resourceSpawn
+        }),
       incrementSnapshotSequence: () => {
         this.#tickState.incrementSnapshotSequence();
       },
@@ -923,6 +950,7 @@ export class MetaverseAuthoritativeWorldRuntime
       playerPoseAuthority: this.#playerPoseAuthority,
       playerTraversalAuthority: this.#playerTraversalAuthority,
       playerWeaponStateAuthority: this.#playerWeaponStateAuthority,
+      resourceAuthority: this.#resourceSpawnAuthority,
       readPresenceRosterEvent: (nowMs) => this.readPresenceRosterEvent(nowMs),
       readWorldEvent: (nowMs) => this.readWorldEvent(nowMs),
       vehicleDriveAuthority: this.#vehicleDriveAuthority

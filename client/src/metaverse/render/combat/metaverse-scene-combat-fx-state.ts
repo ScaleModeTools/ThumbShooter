@@ -62,10 +62,27 @@ interface TransientTracerFxVisual {
   readonly start: Vector3;
 }
 
+interface TransientRocketLaunchFxVisual {
+  readonly body: Mesh;
+  readonly direction: Vector3;
+  readonly distanceMeters: number;
+  readonly expiresAtMs: number;
+  readonly group: Group;
+  readonly kind: "rocket-launch";
+  readonly projectileId: string | null;
+  readonly startedAtMs: number;
+  readonly start: Vector3;
+  readonly trail: Mesh;
+}
+
 const rocketWeaponId = "metaverse-rocket-launcher-v1";
 const metaverseCombatFxVisualKeyTtlMs = 5_000;
 const rocketProjectileSnapshotSelfHealBridgeWindowMs = 180;
 const rocketProjectileVisualBirthDurationMs = 80;
+const rocketLaunchTransientDurationMs = 120;
+const rocketLaunchTransientMaxDistanceMeters = 5.8;
+const rocketLaunchTransientMinDistanceMeters = 1.1;
+const rocketLaunchTransientTrailMeters = 1.05;
 const pistolTracerMetersPerSecond = 280;
 const pistolTracerMaxDurationMs = 145;
 const pistolTracerMinDurationMs = 72;
@@ -169,7 +186,11 @@ export class MetaverseSceneCombatFxState {
   readonly #projectileImpactVisualIds = new Set<string>();
   readonly #rocketLaunchVisualIds = new Set<string>();
   readonly #scene: Scene;
-  readonly #transientFx: (TransientFxVisual | TransientTracerFxVisual)[] = [];
+  readonly #transientFx: (
+    | TransientFxVisual
+    | TransientTracerFxVisual
+    | TransientRocketLaunchFxVisual
+  )[] = [];
 
   constructor(input: { readonly scene: Scene }) {
     this.#scene = input.scene;
@@ -305,6 +326,23 @@ export class MetaverseSceneCombatFxState {
         }
       }
 
+      if (
+        event.projectileId === null ||
+        event.projectileId === undefined ||
+        this.#activeProjectilesById.get(event.projectileId) === undefined
+      ) {
+        const launchDirection = readFiniteVector(event.directionWorld);
+        const launchEnd = readFiniteVector(event.endWorld);
+
+        this.#spawnRocketLaunchProjectile(
+          origin,
+          launchDirection,
+          launchEnd,
+          event.startedAtMs,
+          event.projectileId ?? null
+        );
+      }
+
       this.#spawnMuzzleFlash(origin, event.startedAtMs, 0.22, [1, 0.42, 0.08]);
       return;
     }
@@ -393,9 +431,9 @@ export class MetaverseSceneCombatFxState {
     let projectileVisual =
       this.#activeProjectilesById.get(projectile.projectileId) ?? null;
 
-    if (projectileVisual === null) {
-      projectileVisual = createRocketProjectileVisual();
-      this.#activeProjectilesById.set(projectile.projectileId, projectileVisual);
+      if (projectileVisual === null) {
+        projectileVisual = createRocketProjectileVisual();
+        this.#activeProjectilesById.set(projectile.projectileId, projectileVisual);
       const createdFrom = this.#rocketLaunchVisualIds.has(projectile.projectileId)
         ? "launch-event"
         : "snapshot-self-heal";
@@ -414,6 +452,7 @@ export class MetaverseSceneCombatFxState {
         );
       }
       this.#scene.add(projectileVisual.group);
+      this.#removeRocketLaunchProjectile(projectile.projectileId);
     }
 
     const position = new Vector3(
@@ -589,6 +628,88 @@ export class MetaverseSceneCombatFxState {
     });
   }
 
+  #spawnRocketLaunchProjectile(
+    start: Vector3,
+    directionInput: Vector3 | null,
+    endInput: Vector3 | null,
+    nowMs: number,
+    projectileId: string | null
+  ): void {
+    const direction =
+      directionInput === null || directionInput.lengthSq() <= 0.000001
+        ? endInput === null
+          ? null
+          : endInput.clone().sub(start)
+        : directionInput.clone();
+
+    if (direction === null || direction.lengthSq() <= 0.000001) {
+      return;
+    }
+
+    direction.normalize();
+    const endpointDistance =
+      endInput === null
+        ? null
+        : Math.max(0, endInput.clone().sub(start).dot(direction));
+    const distanceMeters = Math.max(
+      rocketLaunchTransientMinDistanceMeters,
+      Math.min(
+        rocketLaunchTransientMaxDistanceMeters,
+        endpointDistance ?? rocketLaunchTransientMaxDistanceMeters
+      )
+    );
+    const group = new Group();
+    const body = new Mesh(
+      new SphereGeometry(0.07, 12, 8),
+      createBasicMaterial([1, 0.78, 0.28], { depthTest: false })
+    );
+    const trail = new Mesh(
+      new CylinderGeometry(0.035, 0.006, 1, 10),
+      createBasicMaterial([1, 0.34, 0.08], { depthTest: false })
+    );
+
+    if (projectileId !== null) {
+      this.#removeRocketLaunchProjectile(projectileId);
+    }
+
+    group.name = "metaverse_combat_fx/rocket_launch_projectile";
+    body.name = "metaverse_combat_fx/rocket_launch_projectile/body";
+    trail.name = "metaverse_combat_fx/rocket_launch_projectile/trail";
+    group.add(trail, body);
+    this.#scene.add(group);
+
+    const rocketLaunchVisual = {
+      body,
+      direction,
+      distanceMeters,
+      expiresAtMs: nowMs + rocketLaunchTransientDurationMs,
+      group,
+      kind: "rocket-launch",
+      projectileId,
+      startedAtMs: nowMs,
+      start: start.clone(),
+      trail
+    } satisfies TransientRocketLaunchFxVisual;
+
+    this.#syncRocketLaunchFx(rocketLaunchVisual, nowMs);
+    this.#transientFx.push(rocketLaunchVisual);
+  }
+
+  #removeRocketLaunchProjectile(projectileId: string): void {
+    for (let index = this.#transientFx.length - 1; index >= 0; index -= 1) {
+      const transientVisual = this.#transientFx[index];
+
+      if (
+        transientVisual !== undefined &&
+        transientVisual.kind === "rocket-launch" &&
+        transientVisual.projectileId === projectileId
+      ) {
+        this.#scene.remove(transientVisual.group);
+        this.#transientFx.splice(index, 1);
+      }
+    }
+  }
+
   #spawnTracer(start: Vector3, end: Vector3, nowMs: number): void {
     const group = new Group();
     const direction = end.clone().sub(start);
@@ -643,6 +764,37 @@ export class MetaverseSceneCombatFxState {
     this.#transientFx.push(tracerVisual);
   }
 
+  #syncRocketLaunchFx(
+    transientVisual: TransientRocketLaunchFxVisual,
+    nowMs: number
+  ): void {
+    const durationMs = Math.max(
+      1,
+      transientVisual.expiresAtMs - transientVisual.startedAtMs
+    );
+    const ageAlpha = Math.max(
+      0,
+      Math.min(1, (nowMs - transientVisual.startedAtMs) / durationMs)
+    );
+    const headDistance = Math.min(
+      transientVisual.distanceMeters,
+      Math.max(0.16, transientVisual.distanceMeters * ageAlpha)
+    );
+    const tailDistance = Math.max(
+      0,
+      headDistance - rocketLaunchTransientTrailMeters
+    );
+
+    transientVisual.body.position
+      .copy(transientVisual.start)
+      .addScaledVector(transientVisual.direction, headDistance);
+    tempStart
+      .copy(transientVisual.start)
+      .addScaledVector(transientVisual.direction, tailDistance);
+    tempEnd.copy(transientVisual.body.position);
+    setCylinderBetween(transientVisual.trail, tempStart, tempEnd, 1);
+  }
+
   #syncTracerFx(
     transientVisual: TransientTracerFxVisual,
     nowMs: number
@@ -693,6 +845,11 @@ export class MetaverseSceneCombatFxState {
 
       if (transientVisual.kind === "tracer") {
         this.#syncTracerFx(transientVisual, nowMs);
+        continue;
+      }
+
+      if (transientVisual.kind === "rocket-launch") {
+        this.#syncRocketLaunchFx(transientVisual, nowMs);
         continue;
       }
 

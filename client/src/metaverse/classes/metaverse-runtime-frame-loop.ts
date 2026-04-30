@@ -48,6 +48,7 @@ const neutralMetaverseFlightInputSnapshot = Object.freeze({
   primaryActionPressedCount: 0,
   secondaryAction: false,
   strafeAxis: 0,
+  weaponInteractPressedCount: 0,
   weaponSwitchPressedCount: 0,
   yawAxis: 0
 });
@@ -190,6 +191,12 @@ interface MetaverseRuntimeFrameRemoteWorldRuntime {
     readonly issuedAtAuthoritativeTimeMs: number;
     readonly weaponId: string;
   } | null;
+  interactWeaponResource(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+  }): {
+    readonly actionSequence: number;
+  } | null;
   switchActiveWeaponSlot(input: {
     readonly intendedWeaponId?: string | null;
     readonly intendedWeaponInstanceId?: string | null;
@@ -301,6 +308,9 @@ interface MetaverseRuntimeFrameWeaponPresentationRuntime {
   readonly cameraFieldOfViewDegrees: number;
   readonly firePressedThisFrame: boolean;
   readonly weaponState: MetaverseRealtimePlayerSnapshot["weaponState"] | null;
+  syncAuthoritativeWeaponState?(
+    weaponState: MetaverseRealtimePlayerSnapshot["weaponState"] | null
+  ): void;
   consumeSlotSwitchIntent?(): {
     readonly intendedWeaponId: string;
     readonly intendedWeaponInstanceId: string;
@@ -538,10 +548,26 @@ export class MetaverseRuntimeFrameLoop {
     const remoteCharacterPresentations =
       this.#remoteWorldRuntime.remoteCharacterPresentations;
 
+    const authoritativeWorldSnapshot =
+      this.#remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot?.(
+        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
+      ) ?? null;
+    const authoritativeObserverPlayerId =
+      authoritativeWorldSnapshot?.observerPlayer?.playerId ?? null;
+    const authoritativeObserverPlayer =
+      authoritativeObserverPlayerId === null
+        ? null
+        : authoritativeWorldSnapshot?.players.find(
+            (player) => player.playerId === authoritativeObserverPlayerId
+          ) ?? null;
+
     const cameraSnapshot = this.#traversalRuntime.cameraSnapshot;
     const mountedEnvironment = this.#traversalRuntime.mountedEnvironmentSnapshot;
     const weaponPresentationRuntime = this.#weaponPresentationRuntime;
 
+    weaponPresentationRuntime?.syncAuthoritativeWeaponState?.(
+      authoritativeObserverPlayer?.weaponState ?? null
+    );
     weaponPresentationRuntime?.advance({
       deltaSeconds,
       flightInput: movementInput,
@@ -591,6 +617,23 @@ export class MetaverseRuntimeFrameLoop {
           localWeaponSlotSwitchIntent.intendedWeaponInstanceId,
         requestedActiveSlotId:
           localWeaponSlotSwitchIntent.requestedActiveSlotId
+      });
+    }
+    if (
+      movementInput.weaponInteractPressedCount > 0 &&
+      mountedEnvironment === null
+    ) {
+      const localActiveWeaponSlot =
+        localWeaponState === null || localWeaponState.activeSlotId === null
+          ? null
+          : localWeaponState.slots.find(
+              (slot) => slot.slotId === localWeaponState.activeSlotId
+            ) ?? null;
+
+      this.#remoteWorldRuntime.interactWeaponResource({
+        intendedWeaponInstanceId:
+          localActiveWeaponSlot?.weaponInstanceId ?? null,
+        requestedActiveSlotId: localWeaponState?.activeSlotId ?? null
       });
     }
     let pendingLocalShotFeedback:
@@ -652,11 +695,6 @@ export class MetaverseRuntimeFrameLoop {
       presentationSnapshot?.cameraSnapshot ?? cameraSnapshot;
     const presentationFocusedPortal =
       presentationSnapshot?.focusedPortal ?? liveFocusedPortal;
-
-    const authoritativeWorldSnapshot =
-      this.#remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot?.(
-        metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
-      ) ?? null;
 
     this.#combatFeedbackRuntime?.syncAuthoritativeWorld(
       authoritativeWorldSnapshot,

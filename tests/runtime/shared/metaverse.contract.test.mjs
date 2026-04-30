@@ -197,6 +197,29 @@ test("metaverse rocket combat profile resolves projectile and splash values", ()
   assert.equal(rocketProfile.areaDamage?.affectsTeammates, false);
 });
 
+test("metaverse battle rifle combat profile resolves burst hitscan values", () => {
+  const battleRifleProfile = readMetaverseCombatWeaponProfile(
+    "metaverse-battle-rifle-v1"
+  );
+
+  assert.equal(battleRifleProfile.deliveryModel, "hitscan");
+  assert.equal(battleRifleProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(battleRifleProfile.fireMode, "burst");
+  assert.equal(battleRifleProfile.burst?.roundsPerBurst, 3);
+  assert.equal(battleRifleProfile.burst?.roundIntervalMs, 90);
+  assert.equal(battleRifleProfile.roundsPerMinute, 720);
+  assert.equal(battleRifleProfile.magazine.magazineCapacity, 36);
+  assert.equal(battleRifleProfile.magazine.reserveCapacity, 108);
+  assert.equal(battleRifleProfile.damage.body, 15);
+  assert.equal(battleRifleProfile.damage.head, 24);
+  assert.equal(battleRifleProfile.areaDamage, null);
+  assert.deepEqual(battleRifleProfile.firingOriginOffset, {
+    forwardMeters: 0.82,
+    rightMeters: 0.14,
+    upMeters: 1.43
+  });
+});
+
 test("metaverse semantic weapon-tip origin follows aim yaw for side and forward offsets", () => {
   const rocketProfile = readMetaverseCombatWeaponProfile(
     "metaverse-rocket-launcher-v1"

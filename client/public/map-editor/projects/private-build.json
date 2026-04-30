@@ -1858,6 +1858,44 @@
       "yawRadians": 0.18849555921538758
     },
     {
+      "ammoGrantRounds": 108,
+      "assetId": "metaverse-battle-rifle-v1",
+      "label": "Battle rifle northeast",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -2.2,
+        "y": 0.6,
+        "z": -22.2
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 35000,
+      "spawnId": "private-build:resource:battle-rifle-northeast",
+      "weaponId": "metaverse-battle-rifle-v1",
+      "yawRadians": -0.7853981633974483
+    },
+    {
+      "ammoGrantRounds": 108,
+      "assetId": "metaverse-battle-rifle-v1",
+      "label": "Battle rifle southwest",
+      "modeTags": [
+        "team-deathmatch"
+      ],
+      "pickupRadiusMeters": 1.4,
+      "position": {
+        "x": -14.2,
+        "y": 0.6,
+        "z": -7.4
+      },
+      "resourceKind": "weapon-pickup",
+      "respawnCooldownMs": 35000,
+      "spawnId": "private-build:resource:battle-rifle-southwest",
+      "weaponId": "metaverse-battle-rifle-v1",
+      "yawRadians": 2.356194490192345
+    },
+    {
       "ammoGrantRounds": 6,
       "assetId": "metaverse-rocket-launcher-v1",
       "label": "Rocket west",

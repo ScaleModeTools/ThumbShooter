@@ -52,6 +52,40 @@ export const privateBuildMapBundle = Object.freeze({
       yawRadians: 0.18849555921538758
     }),
     Object.freeze({
+      ammoGrantRounds: 108,
+      assetId: "metaverse-battle-rifle-v1",
+      label: "Battle rifle northeast",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -2.2,
+        y: 0.6,
+        z: -22.2
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:battle-rifle-northeast",
+      weaponId: "metaverse-battle-rifle-v1",
+      yawRadians: -0.7853981633974483
+    }),
+    Object.freeze({
+      ammoGrantRounds: 108,
+      assetId: "metaverse-battle-rifle-v1",
+      label: "Battle rifle southwest",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -14.2,
+        y: 0.6,
+        z: -7.4
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:battle-rifle-southwest",
+      weaponId: "metaverse-battle-rifle-v1",
+      yawRadians: 2.356194490192345
+    }),
+    Object.freeze({
       ammoGrantRounds: 6,
       assetId: "metaverse-rocket-launcher-v1",
       label: "Rocket west",

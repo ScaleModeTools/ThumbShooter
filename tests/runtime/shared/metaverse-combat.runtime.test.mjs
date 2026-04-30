@@ -83,6 +83,45 @@ test("shared metaverse combat normalizes switch weapon slot actions and receipts
   assert.equal(rejectedReceipt.activeSlotId, null);
 });
 
+test("shared metaverse combat normalizes weapon resource interact actions and receipts", () => {
+  const actionSnapshot = createMetaversePlayerActionSnapshot({
+    actionSequence: 14,
+    intendedWeaponInstanceId: "player-1:primary:metaverse-service-pistol-v2",
+    issuedAtAuthoritativeTimeMs: 4_700,
+    kind: "interact-weapon-resource",
+    requestedActiveSlotId: "primary"
+  });
+  const acceptedReceipt = createMetaversePlayerActionReceiptSnapshot({
+    actionSequence: 14,
+    activeSlotId: "primary",
+    droppedWeaponId: "metaverse-service-pistol-v2",
+    intendedWeaponInstanceId: "player-1:primary:metaverse-service-pistol-v2",
+    kind: "interact-weapon-resource",
+    pickedUpWeaponId: "metaverse-battle-rifle-v1",
+    processedAtTimeMs: 4_720,
+    requestedActiveSlotId: "primary",
+    status: "accepted",
+    weaponId: "metaverse-battle-rifle-v1",
+    weaponInstanceId: "player-1:primary:metaverse-battle-rifle-v1"
+  });
+  const rejectedReceipt = createMetaversePlayerActionReceiptSnapshot({
+    actionSequence: 15,
+    kind: "interact-weapon-resource",
+    processedAtTimeMs: 4_760,
+    rejectionReason: "last-weapon",
+    status: "rejected"
+  });
+
+  assert.equal(actionSnapshot.kind, "interact-weapon-resource");
+  assert.equal(actionSnapshot.requestedActiveSlotId, "primary");
+  assert.equal(acceptedReceipt.status, "accepted");
+  assert.equal(acceptedReceipt.rejectionReason, null);
+  assert.equal(acceptedReceipt.pickedUpWeaponId, "metaverse-battle-rifle-v1");
+  assert.equal(acceptedReceipt.droppedWeaponId, "metaverse-service-pistol-v2");
+  assert.equal(rejectedReceipt.status, "rejected");
+  assert.equal(rejectedReceipt.rejectionReason, "last-weapon");
+});
+
 test("shared metaverse combat snapshots preserve negative suicide kills and team scores", () => {
   const playerCombatSnapshot = createMetaversePlayerCombatSnapshot({
     kills: -1.9,
@@ -123,11 +162,18 @@ test("shared metaverse weapon profiles expose projectile presentation contracts"
   const pistolProfile = readMetaverseCombatWeaponProfile(
     "metaverse-service-pistol-v2"
   );
+  const battleRifleProfile = readMetaverseCombatWeaponProfile(
+    "metaverse-battle-rifle-v1"
+  );
   const rocketProfile = readMetaverseCombatWeaponProfile(
     "metaverse-rocket-launcher-v1"
   );
 
   assert.equal(pistolProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(battleRifleProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(battleRifleProfile.fireMode, "burst");
+  assert.equal(battleRifleProfile.burst?.roundsPerBurst, 3);
+  assert.equal(battleRifleProfile.burst?.roundIntervalMs, 90);
   assert.equal(
     rocketProfile.presentationDeliveryModel,
     "authoritative-projectile"
@@ -171,6 +217,22 @@ test("shared metaverse weapon profiles expose projectile presentation contracts"
     rightMeters: 0.18,
     upMeters: 1.342
   });
+  assert.deepEqual(
+    battleRifleProfile.projectilePresentation.authoredMuzzleFromGrip,
+    {
+      forwardMeters: 0.74,
+      rightMeters: 0,
+      upMeters: 0.07
+    }
+  );
+  assert.deepEqual(
+    battleRifleProfile.projectilePresentation.primaryGripAnchorOffset,
+    {
+      forwardMeters: 0.08,
+      rightMeters: 0.14,
+      upMeters: 1.36
+    }
+  );
   assert.deepEqual(rocketProfile.projectilePresentation.objectLocalMuzzleFrame, {
     forwardMeters: 1.01,
     rightMeters: 0,

@@ -2036,7 +2036,7 @@ test("map editor imports, edits, deletes, selects, and exports weapon resource s
   assert.equal(removedProject.resourceSpawnDrafts.length, 0);
 });
 
-test("private-build TDM loads and previews the pistol and rocket resource layout", async () => {
+test("private-build TDM loads and previews the weapon resource layout", async () => {
   const { createMapEditorProject } = await clientLoader.load(
     "/src/engine-tool/project/map-editor-project-state.ts"
   );
@@ -2058,7 +2058,7 @@ test("private-build TDM loads and previews the pistol and rocket resource layout
     "metaverse-tdm-pistol-rocket-layout"
   );
   assert.equal(project.selectedLaunchVariationId, "shell-team-deathmatch");
-  assert.equal(loadedBundle.bundle.resourceSpawns.length, 4);
+  assert.equal(loadedBundle.bundle.resourceSpawns.length, 6);
   assert.deepEqual(
     loadedBundle.bundle.resourceSpawns.map((resourceSpawn) => [
       resourceSpawn.spawnId,
@@ -2080,6 +2080,20 @@ test("private-build TDM loads and previews the pistol and rocket resource layout
         "metaverse-service-pistol-v2",
         48,
         30_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:battle-rifle-northeast",
+        "metaverse-battle-rifle-v1",
+        108,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:battle-rifle-southwest",
+        "metaverse-battle-rifle-v1",
+        108,
+        35_000,
         ["team-deathmatch"]
       ],
       [
@@ -2121,7 +2135,7 @@ test("private-build TDM loads and previews the pistol and rocket resource layout
     previewResult.launchSelection?.weaponLayoutId,
     "metaverse-tdm-pistol-rocket-layout"
   );
-  assert.equal(previewBundle.bundle.resourceSpawns.length, 4);
+  assert.equal(previewBundle.bundle.resourceSpawns.length, 6);
 });
 
 test("map editor procedural build helpers export grid-canonical structures, gameplay volumes, and lights", async () => {

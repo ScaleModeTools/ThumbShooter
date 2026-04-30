@@ -15,6 +15,8 @@ export const metaverseHeldObjectFingerPoseIds = [
   "relaxed_open",
   "pistol_grip_trigger_index",
   "support_palm_optional",
+  "long_gun_trigger_grip",
+  "foregrip_support",
   "heavy_trigger_grip",
   "support_handle_grip"
 ] as const;
@@ -160,6 +162,55 @@ const metaverseHeldObjectSolverProfiles = Object.freeze([
     }),
     offhandPolicy: "optional_support_palm",
     poseProfileId: "sidearm.one_hand_optional_support",
+    primaryHand: "right",
+    sampledInfluence: hardIkSampledInfluence,
+    upperLimbOwnership: "hard_ik"
+  }),
+  Object.freeze({
+    adsCalibration: Object.freeze({
+      adsAnchorPositionalWeight: 0.4,
+      maxAdsGripTargetDeltaMeters: 0.14,
+      supportPalmFadeEndPitchRadians: null,
+      supportPalmFadeStartPitchRadians: null
+    }),
+    aimWeights: Object.freeze({
+      headPitch: 0,
+      neckPitch: 0,
+      pelvisYaw: 0,
+      primaryArm: 1,
+      primaryClavicle: 0.66,
+      secondaryArm: 0.92,
+      secondaryClavicle: 0.62,
+      spine01Pitch: 0,
+      spine02Pitch: 0.12,
+      spine03Pitch: 0.26,
+      wristCorrection: 0.9
+    }),
+    contactBindings: Object.freeze({
+      primary: Object.freeze({
+        contactFrameId: "primary_trigger_grip",
+        strength: "hard",
+        weaponSocketRole: "grip.primary"
+      }),
+      secondary: Object.freeze({
+        contactFrameId: "support_handle_grip",
+        strength: "hard",
+        weaponSocketRole: "grip.secondary"
+      })
+    }),
+    fingerPose: Object.freeze({
+      primary: "long_gun_trigger_grip",
+      secondary: "foregrip_support"
+    }),
+    limits: Object.freeze({
+      maxHeadPitchDeg: 0,
+      maxPitchDeg: 62,
+      maxSpineYawDeg: 9,
+      maxWristCorrectionDeg: 48,
+      minPitchDeg: -52
+    }),
+    offhandPolicy: "required_support_grip",
+    poseProfileId: "long_gun.two_hand_shoulder",
     primaryHand: "right",
     sampledInfluence: hardIkSampledInfluence,
     upperLimbOwnership: "hard_ik"

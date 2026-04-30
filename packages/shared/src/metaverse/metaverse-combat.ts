@@ -69,6 +69,7 @@ export const metaverseCombatFeedEventTypeIds = [
 
 export const metaversePlayerActionKindIds = [
   "fire-weapon",
+  "interact-weapon-resource",
   "jump",
   "switch-active-weapon-slot"
 ] as const;
@@ -96,6 +97,18 @@ export const metaversePlayerActionFireWeaponRejectionReasonIds = [
 export const metaversePlayerActionSwitchWeaponSlotRejectionReasonIds = [
   "unknown-slot",
   "unequipped-slot",
+  "stale-weapon-state"
+] as const;
+
+export const metaversePlayerActionInteractWeaponResourceRejectionReasonIds = [
+  "match-inactive",
+  "player-dead",
+  "mounted",
+  "no-active-weapon",
+  "last-weapon",
+  "no-resource",
+  "ammo-full",
+  "unknown-weapon",
   "stale-weapon-state"
 ] as const;
 
@@ -182,6 +195,8 @@ export type MetaversePlayerActionFireWeaponRejectionReasonId =
   (typeof metaversePlayerActionFireWeaponRejectionReasonIds)[number];
 export type MetaversePlayerActionSwitchWeaponSlotRejectionReasonId =
   (typeof metaversePlayerActionSwitchWeaponSlotRejectionReasonIds)[number];
+export type MetaversePlayerActionInteractWeaponResourceRejectionReasonId =
+  (typeof metaversePlayerActionInteractWeaponResourceRejectionReasonIds)[number];
 export type MetaverseCombatHitZoneId =
   (typeof metaverseCombatHitZoneIds)[number];
 export type MetaverseCombatHurtRegionId =
@@ -204,14 +219,16 @@ export type MetaverseCombatActionReceiptStatusId =
   MetaversePlayerActionReceiptStatusId;
 export type MetaverseCombatActionRejectionReasonId =
   | MetaversePlayerActionFireWeaponRejectionReasonId
-  | MetaversePlayerActionSwitchWeaponSlotRejectionReasonId;
+  | MetaversePlayerActionSwitchWeaponSlotRejectionReasonId
+  | MetaversePlayerActionInteractWeaponResourceRejectionReasonId;
 
 export const metaverseCombatActionKindIds = metaversePlayerActionKindIds;
 export const metaverseCombatActionReceiptStatusIds =
   metaversePlayerActionReceiptStatusIds;
 export const metaverseCombatActionRejectionReasonIds = [
   ...metaversePlayerActionFireWeaponRejectionReasonIds,
-  ...metaversePlayerActionSwitchWeaponSlotRejectionReasonIds
+  ...metaversePlayerActionSwitchWeaponSlotRejectionReasonIds,
+  ...metaversePlayerActionInteractWeaponResourceRejectionReasonIds
 ] as const;
 
 export interface MetaverseCombatWeaponAccuracySnapshot {
@@ -401,9 +418,20 @@ export interface MetaverseCombatWeaponRecoilPresentationSnapshotInput {
   readonly pitchDegrees?: number;
 }
 
+export interface MetaverseCombatWeaponBurstSnapshot {
+  readonly roundIntervalMs: Milliseconds;
+  readonly roundsPerBurst: number;
+}
+
+export interface MetaverseCombatWeaponBurstSnapshotInput {
+  readonly roundIntervalMs?: number;
+  readonly roundsPerBurst?: number;
+}
+
 export interface MetaverseCombatWeaponProfileSnapshot {
   readonly accuracy: MetaverseCombatWeaponAccuracySnapshot;
   readonly areaDamage: MetaverseCombatWeaponAreaDamageSnapshot | null;
+  readonly burst: MetaverseCombatWeaponBurstSnapshot | null;
   readonly damage: MetaverseCombatWeaponDamageSnapshot;
   readonly deliveryModel: MetaverseCombatWeaponDeliveryModelId;
   readonly fireMode: MetaverseCombatWeaponFireModeId;
@@ -419,6 +447,7 @@ export interface MetaverseCombatWeaponProfileSnapshot {
 
 export interface MetaverseCombatWeaponProfileSnapshotInput {
   readonly areaDamage?: MetaverseCombatWeaponAreaDamageSnapshotInput | null;
+  readonly burst?: MetaverseCombatWeaponBurstSnapshotInput | null;
   readonly damage: MetaverseCombatWeaponDamageSnapshotInput;
   readonly deliveryModel?: MetaverseCombatWeaponDeliveryModelId;
   readonly fireMode: MetaverseCombatWeaponFireModeId;
@@ -599,8 +628,24 @@ export interface MetaverseSwitchActiveWeaponSlotPlayerActionSnapshotInput {
   readonly requestedActiveSlotId: MetaverseWeaponSlotId;
 }
 
+export interface MetaverseInteractWeaponResourcePlayerActionSnapshot {
+  readonly actionSequence: number;
+  readonly intendedWeaponInstanceId: string | null;
+  readonly issuedAtAuthoritativeTimeMs: Milliseconds;
+  readonly kind: "interact-weapon-resource";
+  readonly requestedActiveSlotId: MetaverseWeaponSlotId | null;
+}
+
+export interface MetaverseInteractWeaponResourcePlayerActionSnapshotInput {
+  readonly actionSequence?: number;
+  readonly intendedWeaponInstanceId?: string | null;
+  readonly issuedAtAuthoritativeTimeMs?: number;
+  readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+}
+
 export type MetaversePlayerActionSnapshot =
   | MetaverseFireWeaponPlayerActionSnapshot
+  | MetaverseInteractWeaponResourcePlayerActionSnapshot
   | MetaverseJumpPlayerActionSnapshot
   | MetaverseSwitchActiveWeaponSlotPlayerActionSnapshot;
 
@@ -611,6 +656,9 @@ export type MetaversePlayerActionSnapshotInput =
   | ({
       readonly kind: "jump";
     } & MetaverseJumpPlayerActionSnapshotInput)
+  | ({
+      readonly kind: "interact-weapon-resource";
+    } & MetaverseInteractWeaponResourcePlayerActionSnapshotInput)
   | ({
       readonly kind: "switch-active-weapon-slot";
     } & MetaverseSwitchActiveWeaponSlotPlayerActionSnapshotInput);
@@ -661,8 +709,25 @@ export interface MetaverseSwitchActiveWeaponSlotPlayerActionReceiptSnapshot
   readonly weaponInstanceId: string | null;
 }
 
+export interface MetaverseInteractWeaponResourcePlayerActionReceiptSnapshot
+  extends MetaversePlayerActionReceiptCommon {
+  readonly activeSlotId: MetaverseWeaponSlotId | null;
+  readonly droppedWeaponId: string | null;
+  readonly intendedWeaponInstanceId: string | null;
+  readonly kind: "interact-weapon-resource";
+  readonly pickedUpWeaponId: string | null;
+  readonly rejectionReason:
+    | MetaversePlayerActionInteractWeaponResourceRejectionReasonId
+    | null;
+  readonly requestedActiveSlotId: MetaverseWeaponSlotId | null;
+  readonly status: MetaversePlayerActionReceiptStatusId;
+  readonly weaponId: string | null;
+  readonly weaponInstanceId: string | null;
+}
+
 export type MetaversePlayerActionReceiptSnapshot =
   | MetaverseFireWeaponPlayerActionReceiptSnapshot
+  | MetaverseInteractWeaponResourcePlayerActionReceiptSnapshot
   | MetaverseJumpPlayerActionReceiptSnapshot
   | MetaverseSwitchActiveWeaponSlotPlayerActionReceiptSnapshot;
 
@@ -686,6 +751,22 @@ export type MetaversePlayerActionReceiptSnapshotInput =
       readonly kind: "jump";
       readonly processedAtTimeMs?: number;
       readonly resolutionState?: MetaverseTraversalActionResolutionStateId;
+    })
+  | ({
+      readonly actionSequence?: number;
+      readonly activeSlotId?: MetaverseWeaponSlotId | null;
+      readonly droppedWeaponId?: string | null;
+      readonly intendedWeaponInstanceId?: string | null;
+      readonly kind: "interact-weapon-resource";
+      readonly pickedUpWeaponId?: string | null;
+      readonly processedAtTimeMs?: number;
+      readonly rejectionReason?:
+        | MetaversePlayerActionInteractWeaponResourceRejectionReasonId
+        | null;
+      readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+      readonly status?: MetaversePlayerActionReceiptStatusId;
+      readonly weaponId?: string | null;
+      readonly weaponInstanceId?: string | null;
     })
   | ({
       readonly actionSequence?: number;
@@ -1278,6 +1359,20 @@ function normalizePlayerActionSwitchWeaponSlotRejectionReason(
     value as MetaversePlayerActionSwitchWeaponSlotRejectionReasonId
   )
     ? (value as MetaversePlayerActionSwitchWeaponSlotRejectionReasonId)
+    : null;
+}
+
+function normalizePlayerActionInteractWeaponResourceRejectionReason(
+  value: string | null | undefined
+): MetaversePlayerActionInteractWeaponResourceRejectionReasonId | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return metaversePlayerActionInteractWeaponResourceRejectionReasonIds.includes(
+    value as MetaversePlayerActionInteractWeaponResourceRejectionReasonId
+  )
+    ? (value as MetaversePlayerActionInteractWeaponResourceRejectionReasonId)
     : null;
 }
 
@@ -2042,6 +2137,25 @@ function createMetaverseCombatWeaponAreaDamageSnapshot(
   });
 }
 
+function createMetaverseCombatWeaponBurstSnapshot(
+  input: MetaverseCombatWeaponBurstSnapshotInput | null | undefined,
+  fireMode: MetaverseCombatWeaponFireModeId
+): MetaverseCombatWeaponBurstSnapshot | null {
+  if (fireMode !== "burst") {
+    return null;
+  }
+
+  return Object.freeze({
+    roundIntervalMs: createMilliseconds(
+      normalizeFiniteNonNegativeNumber(input?.roundIntervalMs, 90)
+    ),
+    roundsPerBurst: Math.max(
+      2,
+      normalizeFiniteNonNegativeInteger(input?.roundsPerBurst, 3)
+    )
+  });
+}
+
 function createMetaverseCombatWeaponFiringOriginOffsetSnapshot(
   input: MetaverseCombatWeaponFiringOriginOffsetSnapshotInput | undefined
 ): MetaverseCombatWeaponFiringOriginOffsetSnapshot {
@@ -2268,6 +2382,7 @@ export function createMetaverseCombatWeaponProfileSnapshot(
   input: MetaverseCombatWeaponProfileSnapshotInput
 ): MetaverseCombatWeaponProfileSnapshot {
   const deliveryModel = normalizeWeaponDeliveryModel(input.deliveryModel);
+  const fireMode = normalizeWeaponFireMode(input.fireMode);
   const firingOriginOffset = createMetaverseCombatWeaponFiringOriginOffsetSnapshot(
     input.firingOriginOffset
   );
@@ -2301,12 +2416,13 @@ export function createMetaverseCombatWeaponProfileSnapshot(
       )
     }),
     areaDamage: createMetaverseCombatWeaponAreaDamageSnapshot(input.areaDamage),
+    burst: createMetaverseCombatWeaponBurstSnapshot(input.burst, fireMode),
     damage: Object.freeze({
       body: normalizeFiniteNonNegativeNumber(input.damage.body, 0),
       head: normalizeFiniteNonNegativeNumber(input.damage.head, 0)
     }),
     deliveryModel,
-    fireMode: normalizeWeaponFireMode(input.fireMode),
+    fireMode,
     firingOriginOffset,
     firingOriginHeightMeters: normalizeFiniteNonNegativeNumber(
       input.firingOriginHeightMeters,
@@ -2475,6 +2591,50 @@ export function createMetaversePlayerActionReceiptSnapshot(
       processedAtTimeMs,
       resolutionState: normalizeTraversalActionResolutionState(
         input.resolutionState
+      )
+    });
+  }
+
+  if (input.kind === "interact-weapon-resource") {
+    const status = normalizePlayerActionReceiptStatus(input.status);
+    const rejectionReason =
+      status === "rejected"
+        ? normalizePlayerActionInteractWeaponResourceRejectionReason(
+            input.rejectionReason
+          )
+        : null;
+
+    return Object.freeze({
+      actionSequence,
+      activeSlotId: isMetaverseWeaponSlotId(input.activeSlotId)
+        ? input.activeSlotId
+        : null,
+      droppedWeaponId: normalizeOptionalIdentifier(
+        input.droppedWeaponId,
+        "Metaverse interact weapon resource droppedWeaponId"
+      ),
+      intendedWeaponInstanceId: normalizeOptionalIdentifier(
+        input.intendedWeaponInstanceId,
+        "Metaverse interact weapon resource intendedWeaponInstanceId"
+      ),
+      kind: "interact-weapon-resource",
+      pickedUpWeaponId: normalizeOptionalIdentifier(
+        input.pickedUpWeaponId,
+        "Metaverse interact weapon resource pickedUpWeaponId"
+      ),
+      processedAtTimeMs,
+      rejectionReason,
+      requestedActiveSlotId: isMetaverseWeaponSlotId(input.requestedActiveSlotId)
+        ? input.requestedActiveSlotId
+        : null,
+      status,
+      weaponId: normalizeOptionalIdentifier(
+        input.weaponId,
+        "Metaverse interact weapon resource weaponId"
+      ),
+      weaponInstanceId: normalizeOptionalIdentifier(
+        input.weaponInstanceId,
+        "Metaverse interact weapon resource weaponInstanceId"
       )
     });
   }
@@ -2948,6 +3108,25 @@ export function createMetaverseSwitchActiveWeaponSlotPlayerActionSnapshot(
   });
 }
 
+export function createMetaverseInteractWeaponResourcePlayerActionSnapshot(
+  input: MetaverseInteractWeaponResourcePlayerActionSnapshotInput = {}
+): MetaverseInteractWeaponResourcePlayerActionSnapshot {
+  return Object.freeze({
+    actionSequence: normalizeFiniteNonNegativeInteger(input.actionSequence),
+    intendedWeaponInstanceId: normalizeOptionalIdentifier(
+      input.intendedWeaponInstanceId,
+      "Metaverse interact weapon resource intendedWeaponInstanceId"
+    ),
+    issuedAtAuthoritativeTimeMs: createMilliseconds(
+      normalizeFiniteNonNegativeNumber(input.issuedAtAuthoritativeTimeMs)
+    ),
+    kind: "interact-weapon-resource",
+    requestedActiveSlotId: isMetaverseWeaponSlotId(input.requestedActiveSlotId)
+      ? input.requestedActiveSlotId
+      : null
+  });
+}
+
 export function createMetaversePlayerActionSnapshot(
   input: MetaversePlayerActionSnapshotInput
 ): MetaversePlayerActionSnapshot {
@@ -2956,6 +3135,8 @@ export function createMetaversePlayerActionSnapshot(
       return createMetaverseJumpPlayerActionSnapshot(input);
     case "fire-weapon":
       return createMetaverseFireWeaponPlayerActionSnapshot(input);
+    case "interact-weapon-resource":
+      return createMetaverseInteractWeaponResourcePlayerActionSnapshot(input);
     case "switch-active-weapon-slot":
       return createMetaverseSwitchActiveWeaponSlotPlayerActionSnapshot(input);
     default: {
@@ -3362,6 +3543,71 @@ export const metaverseCombatWeaponProfiles = Object.freeze([
     },
     roundsPerMinute: 420,
     weaponId: "metaverse-service-pistol-v2"
+  }),
+  createMetaverseCombatWeaponProfileSnapshot({
+    accuracy: {
+      adsAffectsAccuracy: false,
+      bloomDegrees: 0,
+      gravityUnitsPerSecondSquared: 0,
+      projectileLifetimeMs: 2_000,
+      projectileVelocityMetersPerSecond: 900,
+      spreadDegrees: 0
+    },
+    burst: {
+      roundIntervalMs: 90,
+      roundsPerBurst: 3
+    },
+    damage: {
+      body: 15,
+      head: 24
+    },
+    deliveryModel: "hitscan",
+    fireMode: "burst",
+    firingOriginOffset: {
+      forwardMeters: 0.82,
+      rightMeters: 0.14,
+      upMeters: 1.43
+    },
+    firingOriginHeightMeters: 1.62,
+    magazine: {
+      magazineCapacity: 36,
+      reloadDurationMs: 2_100,
+      reserveCapacity: 108
+    },
+    presentationDeliveryModel: "hitscan-tracer",
+    projectilePresentation: {
+      objectLocalPrimaryGripFrame: {
+        forwardMeters: 0.08,
+        rightMeters: 0,
+        upMeters: -0.02
+      },
+      objectLocalMuzzleFrame: {
+        forwardMeters: 0.82,
+        rightMeters: 0,
+        upMeters: 0.05
+      },
+      primaryGripAnchorOffset: {
+        forwardMeters: 0.08,
+        rightMeters: 0.14,
+        upMeters: 1.36
+      },
+      authoredMuzzleFromGrip: {
+        forwardMeters: 0.74,
+        rightMeters: 0,
+        upMeters: 0.07
+      },
+      semanticLaunchOriginOffset: {
+        forwardMeters: 0.82,
+        rightMeters: 0.14,
+        upMeters: 1.43
+      }
+    },
+    recoilPresentation: {
+      pitchDegrees: 1.25,
+      yawDegrees: 0.6
+    },
+    roundsPerMinute: 720,
+    weaponId: "metaverse-battle-rifle-v1"
   }),
   createMetaverseCombatWeaponProfileSnapshot({
     accuracy: {

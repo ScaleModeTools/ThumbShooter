@@ -275,6 +275,7 @@ function createFireAcceptedEvent({
 
 function createProjectileSpawnedEvent({
   actionSequence,
+  aimTargetWorld = null,
   eventSequence,
   launchDirectionWorld = Object.freeze({ x: 0, y: 0, z: -1 }),
   playerId,
@@ -284,6 +285,7 @@ function createProjectileSpawnedEvent({
 }) {
   return Object.freeze({
     actionSequence,
+    aimTargetWorld,
     cameraRayForwardWorld: launchDirectionWorld,
     cameraRayOriginWorld: Object.freeze({ x: 0, y: 1.62, z: 0 }),
     eventKind: "projectile-spawned",
@@ -780,6 +782,7 @@ test("MetaverseCombatFeedbackRuntime consumes pending local rocket spawn events 
   });
   const renderedMuzzle = Object.freeze({ x: 0.22, y: 1.48, z: -0.12 });
   const drainTimeMuzzle = Object.freeze({ x: 1.1, y: 1.9, z: -0.45 });
+  const launchAimTarget = Object.freeze({ x: 0.22, y: 0.05, z: -0.75 });
   const firstProjectileSnapshotWorld = Object.freeze({
     x: 0.22,
     y: 1.48,
@@ -799,6 +802,7 @@ test("MetaverseCombatFeedbackRuntime consumes pending local rocket spawn events 
       combatEvents: [
         createProjectileSpawnedEvent({
           actionSequence: 6,
+          aimTargetWorld: launchAimTarget,
           eventSequence: 1,
           playerId: localPlayerId,
           projectileId
@@ -847,6 +851,7 @@ test("MetaverseCombatFeedbackRuntime consumes pending local rocket spawn events 
   assert.equal(launchEvents.length, 1);
   assert.equal(launchEvents[0]?.projectileId, projectileId);
   assert.deepEqual(launchEvents[0]?.originWorld, renderedMuzzle);
+  assert.deepEqual(launchEvents[0]?.endWorld, launchAimTarget);
   assert.equal(runtime.projectilePresentationDebugSnapshots.length, 1);
   assert.deepEqual(
     runtime.projectilePresentationDebugSnapshots[0]?.postSyncFireActionMuzzleWorld,

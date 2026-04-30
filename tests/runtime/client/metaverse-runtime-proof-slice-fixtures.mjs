@@ -227,6 +227,50 @@ export function createTestServicePistolHoldProfile(overrides = {}) {
   });
 }
 
+export function createTestBattleRifleHoldProfile(overrides = {}) {
+  return Object.freeze({
+    adsPolicy: "optic_anchor",
+    adsReferenceRole: "camera.ads_anchor",
+    allowedHands: ["right"],
+    family: "long_gun",
+    fingerPoseHints: {
+      primary: "long_gun_trigger_grip",
+      secondary: "foregrip_support"
+    },
+    offhandPolicy: "required_support_grip",
+    poseProfileId: "long_gun.two_hand_shoulder",
+    primaryHandDefault: "right",
+    recommendedNeutralPose: "long_gun_low_ready",
+    sockets: [
+      {
+        nodeName: "metaverse_battle_rifle_grip_hand_r_socket",
+        role: "grip.primary"
+      },
+      {
+        nodeName: "metaverse_battle_rifle_forward_marker",
+        role: "basis.forward"
+      },
+      {
+        nodeName: "metaverse_battle_rifle_up_marker",
+        role: "basis.up"
+      },
+      {
+        nodeName: "metaverse_battle_rifle_trigger_marker",
+        role: "trigger.index"
+      },
+      {
+        nodeName: "metaverse_battle_rifle_support_grip_marker",
+        role: "grip.secondary"
+      },
+      {
+        nodeName: "metaverse_battle_rifle_ads_camera_anchor",
+        role: "camera.ads_anchor"
+      }
+    ],
+    ...overrides
+  });
+}
+
 export function createTestRocketLauncherHoldProfile(overrides = {}) {
   return Object.freeze({
     adsPolicy: "shouldered_heavy",

@@ -81,6 +81,7 @@ interface MetaverseQueuedCombatVisualIntent {
   readonly kind: MetaverseQueuedCombatVisualKind;
   readonly playerId: MetaversePlayerId;
   readonly projectileId: string | null;
+  readonly shotId: string | null;
   readonly hitscanHitKind: MetaverseProjectilePresentationDebugHitscanHitKind | null;
   readonly rayOriginWorld: {
     readonly x: number;
@@ -246,17 +247,29 @@ function createCombatVisualKey(input: {
   readonly eventKind: string;
   readonly playerId: string;
   readonly projectileId?: string | null;
+  readonly shotId?: string | null;
   readonly shotCount?: number | null;
   readonly source: string;
   readonly weaponId: string;
 }): string {
+  const defaultShotId =
+    input.actionSequence === null || input.actionSequence === undefined
+      ? null
+      : `${input.playerId}:${input.actionSequence}`;
+  const shotKey =
+    input.shotId !== null &&
+    input.shotId !== undefined &&
+    input.shotId !== defaultShotId
+      ? input.shotId
+      : input.actionSequence ?? input.shotCount ?? "none";
+
   return [
     input.source,
     input.eventKind,
     input.playerId,
     input.weaponId,
     input.projectileId ?? "none",
-    input.actionSequence ?? input.shotCount ?? "none"
+    shotKey
   ].join(":");
 }
 
@@ -1002,6 +1015,7 @@ export class MetaverseCombatFeedbackRuntime {
             actionSequence: visualIntent.actionSequence,
             eventKind: "pistol-world-impact",
             playerId: visualIntent.playerId,
+            shotId: visualIntent.shotId,
             source: visualIntent.source,
             weaponId: visualIntent.weaponId
           });
@@ -1594,6 +1608,7 @@ export class MetaverseCombatFeedbackRuntime {
       actionSequence: eventSnapshot.actionSequence,
       eventKind: "muzzle",
       playerId: eventSnapshot.playerId,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-fire-event",
       weaponId: eventSnapshot.weaponId
     });
@@ -1614,6 +1629,7 @@ export class MetaverseCombatFeedbackRuntime {
       semanticOriginWorld,
       sequence: eventSnapshot.eventSequence,
       serverOriginWorld: semanticOriginWorld,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-fire-event",
       visualKey,
       weaponId: eventSnapshot.weaponId,
@@ -1663,6 +1679,7 @@ export class MetaverseCombatFeedbackRuntime {
       actionSequence: eventSnapshot.actionSequence,
       eventKind: "pistol-tracer",
       playerId: eventSnapshot.playerId,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-shot-resolution",
       weaponId: eventSnapshot.weaponId
     });
@@ -1683,6 +1700,7 @@ export class MetaverseCombatFeedbackRuntime {
       semanticOriginWorld: semanticTracerOrigin,
       sequence: eventSnapshot.eventSequence,
       serverOriginWorld: semanticTracerOrigin,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-shot-resolution",
       visualKey,
       weaponId: eventSnapshot.weaponId,
@@ -1725,6 +1743,7 @@ export class MetaverseCombatFeedbackRuntime {
       eventKind: "rocket-muzzle",
       playerId: eventSnapshot.playerId,
       projectileId: eventSnapshot.projectileId,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-projectile",
       weaponId: eventSnapshot.weaponId
     });
@@ -1733,7 +1752,7 @@ export class MetaverseCombatFeedbackRuntime {
       actionSequence: eventSnapshot.actionSequence,
       activeSlotId: eventSnapshot.activeSlotId ?? null,
       directionWorld: launchDirection,
-      endWorld: null,
+      endWorld: readFiniteVector3(eventSnapshot.aimTargetWorld),
       eventCameraRayForwardWorld: readFiniteVector3(
         eventSnapshot.cameraRayForwardWorld
       ),
@@ -1750,6 +1769,7 @@ export class MetaverseCombatFeedbackRuntime {
       semanticOriginWorld: serverLaunchOrigin,
       sequence: eventSnapshot.eventSequence,
       serverOriginWorld: serverLaunchOrigin,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-projectile",
       visualKey,
       weaponId: eventSnapshot.weaponId,
@@ -1790,6 +1810,7 @@ export class MetaverseCombatFeedbackRuntime {
       eventKind: "projectile-impact",
       playerId: eventSnapshot.playerId,
       projectileId: eventSnapshot.projectileId,
+      shotId: eventSnapshot.shotId,
       source: "authoritative-projectile-resolution",
       weaponId: eventSnapshot.weaponId
     });

@@ -195,4 +195,18 @@ test("MetaverseRemoteWorldCommandTransport derives switch weapon instance ids fr
   );
   assert.equal(issuedActions[0]?.action.kind, "switch-active-weapon-slot");
   assert.equal(issuedActions[0]?.action.requestedActiveSlotId, "secondary");
+
+  const interactIssue = commandTransport.interactWeaponResource({
+    intendedWeaponInstanceId:
+      `${localPlayerId}:secondary:metaverse-rocket-launcher-v1`,
+    requestedActiveSlotId: "secondary"
+  });
+
+  assert.equal(interactIssue?.actionSequence, 12);
+  assert.equal(issuedActions[1]?.action.kind, "interact-weapon-resource");
+  assert.equal(
+    issuedActions[1]?.action.intendedWeaponInstanceId,
+    `${localPlayerId}:secondary:metaverse-rocket-launcher-v1`
+  );
+  assert.equal(issuedActions[1]?.action.requestedActiveSlotId, "secondary");
 });

@@ -52,6 +52,13 @@ interface MetaverseAuthoritativeCombatCommandHandler {
   ): void;
 }
 
+interface MetaverseAuthoritativeResourceCommandHandler {
+  acceptInteractWeaponResourceAction(
+    command: MetaverseIssuePlayerActionCommand,
+    nowMs: number
+  ): void;
+}
+
 interface MetaverseAuthoritativeMountedOccupancyCommandHandler {
   acceptSyncMountedOccupancyCommand(
     command: MetaverseSyncMountedOccupancyCommand,
@@ -78,6 +85,7 @@ interface MetaverseAuthoritativeWorldCommandIntakeDependencies {
     MetaverseAuthoritativePlayerTraversalCommandHandler;
   readonly playerWeaponStateAuthority:
     MetaverseAuthoritativePlayerWeaponStateCommandHandler;
+  readonly resourceAuthority: MetaverseAuthoritativeResourceCommandHandler;
   readonly readPresenceRosterEvent:
     (nowMs: number) => MetaversePresenceRosterEvent;
   readonly readWorldEvent: (nowMs: number) => MetaverseRealtimeWorldEvent;
@@ -146,10 +154,17 @@ export class MetaverseAuthoritativeWorldCommandIntake {
 
     switch (command.type) {
       case "issue-player-action":
-        this.#dependencies.combatAuthority.acceptIssuePlayerActionCommand(
-          command,
-          normalizedNowMs
-        );
+        if (command.action.kind === "interact-weapon-resource") {
+          this.#dependencies.resourceAuthority.acceptInteractWeaponResourceAction(
+            command,
+            normalizedNowMs
+          );
+        } else {
+          this.#dependencies.combatAuthority.acceptIssuePlayerActionCommand(
+            command,
+            normalizedNowMs
+          );
+        }
         break;
       case "sync-driver-vehicle-control":
         this.#dependencies.vehicleDriveAuthority.acceptSyncDriverVehicleControlCommand(

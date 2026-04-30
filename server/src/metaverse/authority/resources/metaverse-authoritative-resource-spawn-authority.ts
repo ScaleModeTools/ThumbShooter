@@ -1,4 +1,5 @@
 import type { MetaverseMatchModeId } from "@webgpu-metaverse/shared";
+import type { MetaverseIssuePlayerActionCommand } from "@webgpu-metaverse/shared/metaverse";
 import type { MetaversePlayerId } from "@webgpu-metaverse/shared/metaverse/presence";
 import type { MetaverseRealtimeResourceSpawnSnapshotInput } from "@webgpu-metaverse/shared/metaverse/realtime";
 import type { MetaverseMapBundleResourceSpawnSnapshot } from "@webgpu-metaverse/shared/metaverse/world";
@@ -12,8 +13,10 @@ interface MetaverseAuthoritativeResourceSpawnPlayerRuntimeState {
 
 interface MutableMetaverseResourceSpawnRuntimeState {
   available: boolean;
+  readonly authoredResourceSpawn: MetaverseMapBundleResourceSpawnSnapshot | null;
   nextRespawnAtServerTimeMs: number | null;
-  readonly resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot;
+  resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot;
+  readonly source: "authored" | "dropped";
 }
 
 interface MetaverseAuthoritativeResourceSpawnAuthorityDependencies<
@@ -28,6 +31,19 @@ interface MetaverseAuthoritativeResourceSpawnAuthorityDependencies<
     readonly playerRuntime: PlayerRuntime;
     readonly resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot;
   }) => boolean;
+  readonly interactWeaponResource?: (input: {
+    readonly action: Extract<
+      MetaverseIssuePlayerActionCommand["action"],
+      { readonly kind: "interact-weapon-resource" }
+    >;
+    readonly nowMs: number;
+    readonly playerRuntime: PlayerRuntime;
+    readonly resourceSpawn: MetaverseMapBundleResourceSpawnSnapshot | null;
+  }) => {
+    readonly accepted: boolean;
+    readonly consumeResourceSpawn?: boolean;
+    readonly droppedResourceSpawn?: MetaverseMapBundleResourceSpawnSnapshot | null;
+  };
 }
 
 function normalizeNowMs(nowMs: number): number {
@@ -80,9 +96,11 @@ export class MetaverseAuthoritativeResourceSpawnAuthority<
       }
 
       this.#resourceSpawnStatesById.set(resourceSpawn.spawnId, {
+        authoredResourceSpawn: resourceSpawn,
         available: true,
         nextRespawnAtServerTimeMs: null,
-        resourceSpawn
+        resourceSpawn,
+        source: "authored"
       });
     }
   }
@@ -93,10 +111,12 @@ export class MetaverseAuthoritativeResourceSpawnAuthority<
 
     for (const state of this.#resourceSpawnStatesById.values()) {
       if (
+        state.source === "authored" &&
         !state.available &&
         state.nextRespawnAtServerTimeMs !== null &&
         state.nextRespawnAtServerTimeMs <= normalizedNowMs
       ) {
+        state.resourceSpawn = state.authoredResourceSpawn ?? state.resourceSpawn;
         state.available = true;
         state.nextRespawnAtServerTimeMs = null;
         changed = true;
@@ -128,9 +148,7 @@ export class MetaverseAuthoritativeResourceSpawnAuthority<
           continue;
         }
 
-        state.available = false;
-        state.nextRespawnAtServerTimeMs =
-          normalizedNowMs + state.resourceSpawn.respawnCooldownMs;
+        this.#consumeResourceSpawnState(state, normalizedNowMs);
         changed = true;
         break;
       }
@@ -139,6 +157,103 @@ export class MetaverseAuthoritativeResourceSpawnAuthority<
     if (changed) {
       this.#dependencies.incrementSnapshotSequence();
     }
+  }
+
+  acceptInteractWeaponResourceAction(
+    command: MetaverseIssuePlayerActionCommand,
+    nowMs: number
+  ): void {
+    if (command.action.kind !== "interact-weapon-resource") {
+      return;
+    }
+
+    const interactWeaponResource = this.#dependencies.interactWeaponResource;
+
+    if (interactWeaponResource === undefined) {
+      return;
+    }
+
+    const normalizedNowMs = normalizeNowMs(nowMs);
+    const playerRuntime = this.#dependencies.playersById.get(command.playerId);
+
+    if (playerRuntime === undefined) {
+      throw new Error(`Unknown metaverse player: ${command.playerId}`);
+    }
+
+    const pickupState = this.#readNearestAvailableResourceSpawnState(
+      playerRuntime
+    );
+    const result = interactWeaponResource({
+      action: command.action,
+      nowMs: normalizedNowMs,
+      playerRuntime,
+      resourceSpawn: pickupState?.resourceSpawn ?? null
+    });
+    let changed = false;
+
+    if (result.accepted && result.consumeResourceSpawn === true && pickupState !== null) {
+      this.#consumeResourceSpawnState(pickupState, normalizedNowMs);
+      changed = true;
+    }
+
+    if (result.accepted && result.droppedResourceSpawn !== null && result.droppedResourceSpawn !== undefined) {
+      this.#resourceSpawnStatesById.set(result.droppedResourceSpawn.spawnId, {
+        authoredResourceSpawn: null,
+        available: true,
+        nextRespawnAtServerTimeMs: null,
+        resourceSpawn: result.droppedResourceSpawn,
+        source: "dropped"
+      });
+      changed = true;
+    }
+
+    if (changed) {
+      this.#dependencies.incrementSnapshotSequence();
+    }
+  }
+
+  #consumeResourceSpawnState(
+    state: MutableMetaverseResourceSpawnRuntimeState,
+    nowMs: number
+  ): void {
+    if (state.source === "dropped") {
+      this.#resourceSpawnStatesById.delete(state.resourceSpawn.spawnId);
+      return;
+    }
+
+    state.available = false;
+    state.nextRespawnAtServerTimeMs =
+      nowMs + state.resourceSpawn.respawnCooldownMs;
+  }
+
+  #readNearestAvailableResourceSpawnState(
+    playerRuntime: MetaverseAuthoritativeResourceSpawnPlayerRuntimeState
+  ): MutableMetaverseResourceSpawnRuntimeState | null {
+    let nearestState: MutableMetaverseResourceSpawnRuntimeState | null = null;
+    let nearestDistanceMeters = Number.POSITIVE_INFINITY;
+
+    for (const state of this.#resourceSpawnStatesById.values()) {
+      if (!state.available) {
+        continue;
+      }
+
+      const distanceMeters = createDistanceBetweenPlayerAndResource(
+        playerRuntime,
+        state.resourceSpawn
+      );
+
+      if (
+        distanceMeters > state.resourceSpawn.pickupRadiusMeters ||
+        distanceMeters >= nearestDistanceMeters
+      ) {
+        continue;
+      }
+
+      nearestState = state;
+      nearestDistanceMeters = distanceMeters;
+    }
+
+    return nearestState;
   }
 
   readResourceSpawnSnapshots(): readonly MetaverseRealtimeResourceSpawnSnapshotInput[] {

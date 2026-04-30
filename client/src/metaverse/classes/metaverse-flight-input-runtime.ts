@@ -7,6 +7,8 @@ interface KeyboardFlightInputState {
   moveForward: boolean;
   strafeLeft: boolean;
   strafeRight: boolean;
+  weaponInteract: boolean;
+  weaponInteractPressedCount: number;
   weaponSwitch: boolean;
   weaponSwitchPressedCount: number;
 }
@@ -22,13 +24,14 @@ interface MouseFlightInputState {
 interface GamepadTriggerInputSnapshot {
   readonly primaryAction: boolean;
   readonly secondaryAction: boolean;
+  readonly weaponInteract: boolean;
   readonly weaponSwitch: boolean;
 }
 
 type MouseFlightButtonInputKey = "primaryAction" | "secondaryAction";
 type KeyboardFlightButtonInputKey = Exclude<
   keyof KeyboardFlightInputState,
-  "weaponSwitchPressedCount"
+  "weaponInteractPressedCount" | "weaponSwitchPressedCount"
 >;
 
 interface MetaverseFlightInputRuntimeDependencies {
@@ -58,6 +61,8 @@ function createKeyboardFlightInputState(): KeyboardFlightInputState {
     moveForward: false,
     strafeLeft: false,
     strafeRight: false,
+    weaponInteract: false,
+    weaponInteractPressedCount: 0,
     weaponSwitch: false,
     weaponSwitchPressedCount: 0
   };
@@ -120,6 +125,7 @@ export class MetaverseFlightInputRuntime {
   #canvas: HTMLCanvasElement | null = null;
   #inputCleanup: (() => void) | null = null;
   #lastGamepadPrimaryAction = false;
+  #lastGamepadWeaponInteract = false;
   #lastGamepadWeaponSwitch = false;
   #lastSnapshotAtMs: number | null = null;
 
@@ -141,6 +147,7 @@ export class MetaverseFlightInputRuntime {
       Space: "jump",
       ShiftLeft: "boost",
       ShiftRight: "boost",
+      KeyE: "weaponInteract",
       Digit1: "weaponSwitch"
     };
     const mouseButtonBindings: Record<number, MouseFlightButtonInputKey> = {
@@ -186,6 +193,13 @@ export class MetaverseFlightInputRuntime {
 
       if (inputKey === "weaponSwitch" && !this.#keyboardInput.weaponSwitch) {
         this.#keyboardInput.weaponSwitchPressedCount += 1;
+      }
+
+      if (
+        inputKey === "weaponInteract" &&
+        !this.#keyboardInput.weaponInteract
+      ) {
+        this.#keyboardInput.weaponInteractPressedCount += 1;
       }
 
       this.#keyboardInput[inputKey] = true;
@@ -252,6 +266,7 @@ export class MetaverseFlightInputRuntime {
     Object.assign(this.#keyboardInput, createKeyboardFlightInputState());
     Object.assign(this.#mouseInput, createMouseFlightInputState());
     this.#lastGamepadPrimaryAction = false;
+    this.#lastGamepadWeaponInteract = false;
     this.#lastGamepadWeaponSwitch = false;
     this.#lastSnapshotAtMs = null;
   }
@@ -279,9 +294,16 @@ export class MetaverseFlightInputRuntime {
     const weaponSwitchPressedCount =
       this.#keyboardInput.weaponSwitchPressedCount +
       (gamepadTriggerInput.weaponSwitch && !this.#lastGamepadWeaponSwitch ? 1 : 0);
+    const weaponInteractPressedCount =
+      this.#keyboardInput.weaponInteractPressedCount +
+      (gamepadTriggerInput.weaponInteract && !this.#lastGamepadWeaponInteract
+        ? 1
+        : 0);
     this.#mouseInput.primaryActionPressedCount = 0;
+    this.#keyboardInput.weaponInteractPressedCount = 0;
     this.#keyboardInput.weaponSwitchPressedCount = 0;
     this.#lastGamepadPrimaryAction = gamepadTriggerInput.primaryAction;
+    this.#lastGamepadWeaponInteract = gamepadTriggerInput.weaponInteract;
     this.#lastGamepadWeaponSwitch = gamepadTriggerInput.weaponSwitch;
 
     return Object.freeze({
@@ -299,6 +321,7 @@ export class MetaverseFlightInputRuntime {
       strafeAxis:
         (this.#keyboardInput.strafeRight ? 1 : 0) -
         (this.#keyboardInput.strafeLeft ? 1 : 0),
+      weaponInteractPressedCount,
       weaponSwitchPressedCount,
       yawAxis
     });
@@ -311,6 +334,7 @@ export class MetaverseFlightInputRuntime {
       return {
         primaryAction: false,
         secondaryAction: false,
+        weaponInteract: false,
         weaponSwitch: false
       };
     }
@@ -318,6 +342,7 @@ export class MetaverseFlightInputRuntime {
     const gamepads = getGamepads.call(globalThis.navigator);
     let primaryAction = false;
     let secondaryAction = false;
+    let weaponInteract = false;
     let weaponSwitch = false;
 
     for (let gamepadIndex = 0; gamepadIndex < gamepads.length; gamepadIndex += 1) {
@@ -329,9 +354,10 @@ export class MetaverseFlightInputRuntime {
 
       primaryAction ||= isGamepadButtonPressed(gamepad.buttons[7]);
       secondaryAction ||= isGamepadButtonPressed(gamepad.buttons[6]);
+      weaponInteract ||= isGamepadButtonPressed(gamepad.buttons[2]);
       weaponSwitch ||= isGamepadButtonPressed(gamepad.buttons[3]);
 
-      if (primaryAction && secondaryAction && weaponSwitch) {
+      if (primaryAction && secondaryAction && weaponInteract && weaponSwitch) {
         break;
       }
     }
@@ -339,6 +365,7 @@ export class MetaverseFlightInputRuntime {
     return {
       primaryAction,
       secondaryAction,
+      weaponInteract,
       weaponSwitch
     };
   }

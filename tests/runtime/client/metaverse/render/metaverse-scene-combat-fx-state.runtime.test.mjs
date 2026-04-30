@@ -408,6 +408,69 @@ test("MetaverseSceneCombatFxState updates one rocket visual and emits event-owne
   );
 });
 
+test("MetaverseSceneCombatFxState keeps a close rocket launch visible without active snapshots", async () => {
+  const [{ Scene }, { MetaverseSceneCombatFxState }] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load(
+      "/src/metaverse/render/combat/metaverse-scene-combat-fx-state.ts"
+    )
+  ]);
+  const scene = new Scene();
+  const combatFxState = new MetaverseSceneCombatFxState({
+    scene
+  });
+
+  combatFxState.triggerCombatPresentationEvent(
+    Object.freeze({
+      actionSequence: 18,
+      directionWorld: Object.freeze({ x: 0, y: -0.94, z: -0.34 }),
+      endWorld: Object.freeze({ x: 0, y: 0.05, z: -0.55 }),
+      kind: "shot",
+      originWorld: Object.freeze({ x: 0, y: 1.3, z: -0.08 }),
+      playerId: "rocket-owner",
+      projectileId: "rocket-owner:close-feet",
+      sequence: 18,
+      shotFx: "rocket-muzzle",
+      source: "authoritative-projectile",
+      startedAtMs: 100,
+      visualKey: "authoritative-projectile:rocket-muzzle:rocket-owner:close-feet",
+      weaponId: "metaverse-rocket-launcher-v1"
+    })
+  );
+  combatFxState.syncProjectiles([], 110);
+
+  assert.equal(
+    countSceneChildrenByName(scene, "metaverse_combat_fx/rocket_projectile"),
+    0
+  );
+  assert.equal(
+    countSceneChildrenByName(scene, "metaverse_combat_fx/rocket_launch_projectile"),
+    1
+  );
+
+  const rocketBody = findObjectByName(
+    scene,
+    "metaverse_combat_fx/rocket_launch_projectile/body"
+  );
+  const rocketTrail = findObjectByName(
+    scene,
+    "metaverse_combat_fx/rocket_launch_projectile/trail"
+  );
+
+  assert.notEqual(rocketBody, null);
+  assert.notEqual(rocketTrail, null);
+  assert.equal(rocketBody.visible, true);
+  assert.equal(rocketTrail.visible, true);
+  assert.equal(rocketBody.material.depthTest, false);
+  assert.equal(rocketTrail.material.depthTest, false);
+
+  combatFxState.syncProjectiles([], 240);
+  assert.equal(
+    countSceneChildrenByName(scene, "metaverse_combat_fx/rocket_launch_projectile"),
+    0
+  );
+});
+
 test("MetaverseSceneCombatFxState removes expired rockets without explosion slots", async () => {
   const [{ Scene }, { MetaverseSceneCombatFxState }] = await Promise.all([
     import("three/webgpu"),

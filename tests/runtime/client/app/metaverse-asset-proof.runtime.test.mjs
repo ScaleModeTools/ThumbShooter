@@ -49,7 +49,11 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
   assert.equal(metaverseAttachmentProofConfigs[0], metaverseAttachmentProofConfig);
   assert.deepEqual(
     metaverseAttachmentProofConfigs.map((attachmentProofConfig) => attachmentProofConfig.attachmentId),
-    ["metaverse-service-pistol-v2", "metaverse-rocket-launcher-v1"]
+    [
+      "metaverse-service-pistol-v2",
+      "metaverse-battle-rifle-v1",
+      "metaverse-rocket-launcher-v1"
+    ]
   );
   assert.equal(metaverseAttachmentProofConfig.holdProfile.family, "sidearm");
   assert.equal(
@@ -83,6 +87,31 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
   assert.deepEqual(
     metaverseAttachmentProofConfig.modules.map((module) => module.socketRole),
     ["sight.front", "sight.rear", "projectile.muzzle"],
+  );
+  const battleRifleProofConfig = metaverseAttachmentProofConfigs.find(
+    (attachmentProofConfig) =>
+      attachmentProofConfig.attachmentId === "metaverse-battle-rifle-v1"
+  );
+
+  assert.ok(battleRifleProofConfig);
+  assert.equal(battleRifleProofConfig.holdProfile.family, "long_gun");
+  assert.equal(
+    battleRifleProofConfig.holdProfile.poseProfileId,
+    "long_gun.two_hand_shoulder"
+  );
+  assert.equal(
+    battleRifleProofConfig.holdProfile.offhandPolicy,
+    "required_support_grip"
+  );
+  assert.ok(
+    battleRifleProofConfig.holdProfile.sockets.some(
+      (socket) => socket.role === "grip.secondary",
+    ),
+  );
+  assert.ok(
+    battleRifleProofConfig.holdProfile.sockets.some(
+      (socket) => socket.role === "projectile.muzzle",
+    ),
   );
   const rocketLauncherProofConfig = metaverseAttachmentProofConfigs.find(
     (attachmentProofConfig) =>

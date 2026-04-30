@@ -131,6 +131,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       primaryActionPressedCount: 1,
       secondaryAction: false,
       strafeAxis: 1,
+      weaponInteractPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 1
     });
@@ -144,6 +145,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 1,
+      weaponInteractPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -164,6 +166,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 1,
+      weaponInteractPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -192,6 +195,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 0,
+      weaponInteractPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -217,6 +221,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       primaryActionPressedCount: 0,
       secondaryAction: false,
       strafeAxis: 0,
+      weaponInteractPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -308,7 +313,7 @@ test("MetaverseFlightInputRuntime keeps pointer-lock mouse look travel frame-rat
   }
 });
 
-test("MetaverseFlightInputRuntime maps gamepad triggers onto primary and secondary actions without changing movement axes", async () => {
+test("MetaverseFlightInputRuntime maps gamepad combat buttons without changing movement axes", async () => {
   const { MetaverseFlightInputRuntime } = await clientLoader.load(
     "/src/metaverse/classes/metaverse-flight-input-runtime.ts"
   );
@@ -324,7 +329,7 @@ test("MetaverseFlightInputRuntime maps gamepad triggers onto primary and seconda
             buttons: [
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
-              { pressed: false, value: 0 },
+              { pressed: true, value: 1 },
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
@@ -348,6 +353,7 @@ test("MetaverseFlightInputRuntime maps gamepad triggers onto primary and seconda
       primaryActionPressedCount: 1,
       secondaryAction: true,
       strafeAxis: 0,
+      weaponInteractPressedCount: 1,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });

@@ -2152,6 +2152,80 @@ function applyHeldObjectFingerPose(
         0.04
       );
       return;
+    case "long_gun_trigger_grip":
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.thumb,
+        0.26,
+        0.2,
+        0.12
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.index,
+        0.1,
+        0.06,
+        0.03
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.middle,
+        0.54,
+        0.42,
+        0.3
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.ring,
+        0.56,
+        0.44,
+        0.32
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.pinky,
+        0.58,
+        0.46,
+        0.34
+      );
+      return;
+    case "foregrip_support":
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.thumb,
+        0.22,
+        0.18,
+        0.1
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.index,
+        0.42,
+        0.34,
+        0.24
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.middle,
+        0.46,
+        0.38,
+        0.26
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.ring,
+        0.46,
+        0.38,
+        0.26
+      );
+      applyFingerChainCurlPose(
+        heldWeaponPoseRuntime,
+        fingerChains.pinky,
+        0.42,
+        0.34,
+        0.24
+      );
+      return;
     case "heavy_trigger_grip":
       applyFingerChainCurlPose(
         heldWeaponPoseRuntime,

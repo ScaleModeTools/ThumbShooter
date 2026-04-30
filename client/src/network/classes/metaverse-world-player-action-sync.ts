@@ -276,26 +276,27 @@ export class MetaverseWorldPlayerActionSync {
   }
 
   #readOutstandingWindow(): readonly PendingPlayerAction[] {
-    const firstSwitchActionIndex = this.#pendingPlayerActions.findIndex(
+    const firstInventoryActionIndex = this.#pendingPlayerActions.findIndex(
       (pendingAction) =>
-        pendingAction.command.action.kind === "switch-active-weapon-slot"
+        pendingAction.command.action.kind === "switch-active-weapon-slot" ||
+        pendingAction.command.action.kind === "interact-weapon-resource"
     );
 
-    if (firstSwitchActionIndex < 0) {
+    if (firstInventoryActionIndex < 0) {
       return this.#pendingPlayerActions.slice(
         0,
         metaversePlayerActionOutstandingWindowMaxEntries
       );
     }
 
-    if (firstSwitchActionIndex === 0) {
+    if (firstInventoryActionIndex === 0) {
       return this.#pendingPlayerActions.slice(0, 1);
     }
 
     return this.#pendingPlayerActions.slice(
       0,
       Math.min(
-        firstSwitchActionIndex,
+        firstInventoryActionIndex,
         metaversePlayerActionOutstandingWindowMaxEntries
       )
     );
