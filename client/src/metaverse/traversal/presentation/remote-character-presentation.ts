@@ -96,6 +96,12 @@ function lerp(start: number, end: number, alpha: number): number {
   return start + (end - start) * alpha;
 }
 
+function isRemotePlayerCombatAlive(
+  playerSnapshot: Pick<MetaverseRealtimePlayerSnapshot, "combat">
+): boolean {
+  return playerSnapshot.combat?.alive ?? true;
+}
+
 function wrapRadians(rawValue: number): number {
   let normalizedValue = rawValue;
 
@@ -138,6 +144,22 @@ function sampleRemotePlayerRootPositionInto(
       readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(
         remoteCharacterRootNextPlayer
       );
+    const baseAlive = isRemotePlayerCombatAlive(remoteCharacterRootBasePlayer);
+    const nextAlive = isRemotePlayerCombatAlive(remoteCharacterRootNextPlayer);
+
+    if (baseAlive !== nextAlive) {
+      const sampledActiveBodySnapshot =
+        remoteCharacterRootAlpha < 0.5
+          ? baseActiveBodySnapshot
+          : nextActiveBodySnapshot;
+
+      return writeMutableVector3(
+        target,
+        sampledActiveBodySnapshot.position.x,
+        sampledActiveBodySnapshot.position.y,
+        sampledActiveBodySnapshot.position.z
+      );
+    }
 
     return writeMutableVector3(
       target,

@@ -637,6 +637,54 @@ function parseWorldCommand(
             },
             playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
           });
+        case "reload-weapon": {
+          const requestedActiveSlotId =
+            action.requestedActiveSlotId === undefined ||
+            action.requestedActiveSlotId === null
+              ? null
+              : readStringField(
+                  action.requestedActiveSlotId,
+                  "action.requestedActiveSlotId"
+                );
+
+          if (
+            requestedActiveSlotId !== null &&
+            !metaverseWeaponSlotIds.includes(
+              requestedActiveSlotId as MetaverseWeaponSlotId
+            )
+          ) {
+            throw new Error(
+              `Unsupported action.requestedActiveSlotId: ${requestedActiveSlotId}`
+            );
+          }
+
+          return createMetaverseIssuePlayerActionCommand({
+            action: {
+              actionSequence: readNumberField(
+                action.actionSequence,
+                "action.actionSequence"
+              ),
+              ...(action.intendedWeaponInstanceId === undefined ||
+              action.intendedWeaponInstanceId === null
+                ? {}
+                : {
+                    intendedWeaponInstanceId: readStringField(
+                      action.intendedWeaponInstanceId,
+                      "action.intendedWeaponInstanceId"
+                    )
+                  }),
+              issuedAtAuthoritativeTimeMs: readNumberField(
+                action.issuedAtAuthoritativeTimeMs,
+                "action.issuedAtAuthoritativeTimeMs"
+              ),
+              kind: "reload-weapon",
+              requestedActiveSlotId:
+                requestedActiveSlotId as MetaverseWeaponSlotId | null,
+              weaponId: readStringField(action.weaponId, "action.weaponId")
+            },
+            playerId: resolvePlayerId(readStringField(body.playerId, "playerId"))
+          });
+        }
         case "interact-weapon-resource": {
           const requestedActiveSlotId =
             action.requestedActiveSlotId === undefined ||

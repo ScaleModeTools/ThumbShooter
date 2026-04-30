@@ -34,11 +34,13 @@ import {
   type MetaverseMatchModeId,
   type MetaversePlayerActionFireWeaponRejectionReasonId,
   type MetaversePlayerActionInteractWeaponResourceRejectionReasonId,
+  type MetaversePlayerActionReloadWeaponRejectionReasonId,
   type MetaversePlayerActionSwitchWeaponSlotRejectionReasonId,
   type MetaversePlayerActionReceiptSnapshot,
   type MetaversePlayerCombatHurtVolumeConfig,
   type MetaversePlayerCombatHurtVolumesSnapshot,
   type MetaversePlayerCombatSnapshot,
+  type MetaverseReloadWeaponPlayerActionSnapshot,
   type MetaverseSwitchActiveWeaponSlotPlayerActionSnapshot
 } from "@webgpu-metaverse/shared";
 import type {
@@ -512,7 +514,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       completedAtTimeMs: null,
       friendlyFireEnabled: false,
       phase: "waiting-for-players",
-      respawnDelayMs: 3_000,
+      respawnDelayMs: 5_000,
       scoreLimit: 50,
       startedAtTimeMs: null,
       teamScoresByTeamId: new Map([
@@ -557,6 +559,14 @@ export class MetaverseAuthoritativeCombatAuthority<
         });
         break;
       case "jump":
+        break;
+      case "reload-weapon":
+        this.#acceptReloadWeaponAction(
+          command.playerId,
+          command.action,
+          normalizedNowMs,
+          playerRuntime
+        );
         break;
       case "switch-active-weapon-slot":
         this.#acceptSwitchActiveWeaponSlotAction(
@@ -934,6 +944,168 @@ export class MetaverseAuthoritativeCombatAuthority<
       action,
       nowMs,
       weaponState: nextWeaponState
+    });
+  }
+
+  #acceptReloadWeaponAction(
+    _playerId: MetaversePlayerId,
+    action: MetaverseReloadWeaponPlayerActionSnapshot,
+    nowMs: number,
+    playerRuntime: PlayerRuntime
+  ): void {
+    const combatState = this.#ensurePlayerCombatState(playerRuntime);
+    const duplicateReceipt = this.#readProcessedPlayerActionReceipt(
+      combatState,
+      action.actionSequence
+    );
+
+    if (duplicateReceipt !== null) {
+      return;
+    }
+
+    const oldestRetainedReceiptSequence =
+      combatState.playerActionReceiptSequenceOrder[0] ?? null;
+
+    if (
+      oldestRetainedReceiptSequence !== null &&
+      action.actionSequence < oldestRetainedReceiptSequence &&
+      action.actionSequence <= combatState.highestProcessedPlayerActionSequence
+    ) {
+      return;
+    }
+
+    if (this.#matchState.phase !== "active") {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "match-inactive",
+        weaponState: playerRuntime.weaponState
+      });
+      return;
+    }
+
+    if (!combatState.alive || playerRuntime.mountedOccupancy !== null) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: combatState.alive ? "mounted" : "player-dead",
+        weaponState: playerRuntime.weaponState
+      });
+      return;
+    }
+
+    const weaponStateSnapshot = playerRuntime.weaponState;
+    const activeSlot =
+      weaponStateSnapshot === null || weaponStateSnapshot.activeSlotId === null
+        ? null
+        : weaponStateSnapshot.slots.find(
+            (slot) =>
+              slot.slotId === weaponStateSnapshot.activeSlotId && slot.equipped
+          ) ?? null;
+
+    if (weaponStateSnapshot === null || activeSlot === null) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "no-active-weapon",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    if (
+      action.requestedActiveSlotId !== null &&
+      action.requestedActiveSlotId !== activeSlot.slotId
+    ) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "stale-weapon-state",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    if (
+      action.intendedWeaponInstanceId !== null &&
+      action.intendedWeaponInstanceId !== activeSlot.weaponInstanceId
+    ) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "stale-weapon-state",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    const requestedWeaponKnown = this.#isWeaponEquipped(
+      playerRuntime,
+      action.weaponId
+    );
+
+    if (action.weaponId !== activeSlot.weaponId) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: requestedWeaponKnown ? "inactive-weapon" : "unknown-weapon",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    const weaponProfile = tryReadMetaverseCombatWeaponProfile(action.weaponId);
+
+    if (weaponProfile === null) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: requestedWeaponKnown ? "no-combat-profile" : "unknown-weapon",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    const weaponState = this.#ensureWeaponRuntimeState(
+      combatState,
+      action.weaponId
+    );
+
+    if (weaponState.reloadRemainingMs > 0) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "reloading",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    if (weaponState.ammoInReserve <= 0) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "out-of-ammo",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    if (weaponState.ammoInMagazine >= weaponProfile.magazine.magazineCapacity) {
+      this.#publishReloadWeaponActionReceipt(combatState, {
+        action,
+        nowMs,
+        reason: "magazine-full",
+        weaponState: weaponStateSnapshot
+      });
+      return;
+    }
+
+    this.#startReloadIfNeeded(weaponState, weaponProfile);
+    this.#publishReloadWeaponActionReceipt(combatState, {
+      action,
+      nowMs,
+      weaponState: weaponStateSnapshot
     });
   }
 
@@ -3253,6 +3425,47 @@ export class MetaverseAuthoritativeCombatAuthority<
         activeSlotId,
         intendedWeaponInstanceId: input.action.intendedWeaponInstanceId,
         kind: "switch-active-weapon-slot",
+        processedAtTimeMs: input.nowMs,
+        ...(input.reason === undefined
+          ? {
+              status: "accepted"
+            }
+          : {
+              rejectionReason: input.reason,
+              status: "rejected"
+            }),
+        requestedActiveSlotId: input.action.requestedActiveSlotId,
+        weaponId: activeSlot?.weaponId ?? input.weaponState?.weaponId ?? null,
+        weaponInstanceId: activeSlot?.weaponInstanceId ?? null
+      })
+    );
+  }
+
+  #publishReloadWeaponActionReceipt(
+    combatState: MutableMetaverseCombatPlayerRuntimeState,
+    input: {
+      readonly action: MetaverseReloadWeaponPlayerActionSnapshot;
+      readonly nowMs: number;
+      readonly reason?:
+        | MetaversePlayerActionReloadWeaponRejectionReasonId
+        | undefined;
+      readonly weaponState: MetaverseRealtimePlayerWeaponStateSnapshot | null;
+    }
+  ): void {
+    const activeSlotId = input.weaponState?.activeSlotId ?? null;
+    const activeSlot =
+      activeSlotId === null
+        ? null
+        : input.weaponState?.slots.find((slot) => slot.slotId === activeSlotId) ??
+          null;
+
+    this.#storePlayerActionReceipt(
+      combatState,
+      createMetaversePlayerActionReceiptSnapshot({
+        actionSequence: input.action.actionSequence,
+        activeSlotId,
+        intendedWeaponInstanceId: input.action.intendedWeaponInstanceId,
+        kind: "reload-weapon",
         processedAtTimeMs: input.nowMs,
         ...(input.reason === undefined
           ? {

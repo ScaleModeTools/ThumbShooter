@@ -113,6 +113,23 @@ function createGroundedBodySnapshot({
   });
 }
 
+function syncResolvedGroundedBodySnapshot({
+  grounded,
+  groundedBodySnapshot
+}) {
+  return createGroundedBodySnapshot({
+    grounded,
+    jumpReady: grounded || groundedBodySnapshot.jumpBody.jumpReady,
+    jumpSnapSuppressionActive:
+      groundedBodySnapshot.jumpBody.jumpSnapSuppressionActive,
+    position: groundedBodySnapshot.position,
+    verticalSpeedUnitsPerSecond: grounded
+      ? 0
+      : groundedBodySnapshot.jumpBody.verticalSpeedUnitsPerSecond,
+    yawRadians: groundedBodySnapshot.yawRadians
+  });
+}
+
 const groundedBodyConfig = Object.freeze({
   controllerOffsetMeters: 0.02,
   maxTurnSpeedRadiansPerSecond: 1.9,
@@ -376,6 +393,7 @@ test("shared unmounted traversal body-step helper sequences grounded prep body a
     advanceSwimBodySnapshot: () => {
       throw new Error("grounded test should not advance the swim body");
     },
+    syncResolvedGroundedBodySnapshot,
     bodyControl: Object.freeze({
       boost: false,
       moveAxis: 1,
@@ -412,6 +430,69 @@ test("shared unmounted traversal body-step helper sequences grounded prep body a
   assert.equal(groundedAdvanceInput.autostepHeightMeters, null);
 });
 
+test("shared unmounted traversal body-step helper publishes resolved grounded truth instead of raw contact", () => {
+  let syncInput = null;
+  const bodyStep = advanceMetaverseUnmountedTraversalBodyStep({
+    advanceGroundedBodySnapshot: () =>
+      createGroundedBodySnapshot({
+        grounded: false,
+        jumpReady: false,
+        position: Object.freeze({
+          x: 0,
+          y: 0.6,
+          z: 0
+        }),
+        verticalSpeedUnitsPerSecond: -0.02,
+        yawRadians: 0.12
+      }),
+    advanceSwimBodySnapshot: () => {
+      throw new Error("grounded test should not advance the swim body");
+    },
+    syncResolvedGroundedBodySnapshot: (input) => {
+      syncInput = input;
+
+      return syncResolvedGroundedBodySnapshot(input);
+    },
+    bodyControl: Object.freeze({
+      boost: false,
+      moveAxis: 0,
+      strafeAxis: 0,
+      turnAxis: 0
+    }),
+    deltaSeconds: 1 / 30,
+    groundedBodyConfig,
+    groundedBodySnapshot: createGroundedBodySnapshot({
+      grounded: true,
+      jumpReady: true,
+      position: Object.freeze({
+        x: 0,
+        y: 0.6,
+        z: 0
+      }),
+      verticalSpeedUnitsPerSecond: 0,
+      yawRadians: 0
+    }),
+    preferredLookYawRadians: null,
+    surfaceColliderSnapshots: Object.freeze([createSupportCollider(0.6)]),
+    surfacePolicyConfig,
+    swimBodySnapshot: null,
+    traversalState: createMetaverseUnmountedTraversalStateSnapshot({
+      locomotionMode: "grounded"
+    }),
+    waterRegionSnapshots: Object.freeze([])
+  });
+
+  assert.equal(bodyStep.locomotionOutcome.locomotionMode, "grounded");
+  assert.equal(bodyStep.locomotionOutcome.grounded, true);
+  assert.equal(syncInput.grounded, true);
+  assert.equal(syncInput.groundedBodySnapshot.grounded, false);
+  assert.equal(bodyStep.groundedBodySnapshot?.grounded, true);
+  assert.equal(
+    bodyStep.groundedBodySnapshot?.jumpBody.verticalSpeedUnitsPerSecond,
+    0
+  );
+});
+
 test("shared unmounted traversal body-step helper sequences swim prep body advance and outcome resolution on one path", () => {
   let swimAdvanceInput = null;
   const bodyStep = advanceMetaverseUnmountedTraversalBodyStep({
@@ -429,6 +510,9 @@ test("shared unmounted traversal body-step helper sequences swim prep body advan
         }),
         yawRadians: 0.24
       });
+    },
+    syncResolvedGroundedBodySnapshot: () => {
+      throw new Error("swim test should not sync the grounded body");
     },
     bodyControl: Object.freeze({
       boost: true,

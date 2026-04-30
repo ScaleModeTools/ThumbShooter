@@ -50,20 +50,43 @@ function createGroundedBody(position) {
   });
 }
 
+function createCombatWeaponSnapshot({
+  ammoInMagazine = 10,
+  ammoInReserve = 40,
+  reloadRemainingMs = 0,
+  weaponId: combatWeaponId = weaponId
+} = {}) {
+  return Object.freeze({
+    ammoInMagazine,
+    ammoInReserve,
+    reloadRemainingMs,
+    weaponId: combatWeaponId
+  });
+}
+
 function createCombatSnapshot({
   alive = true,
   combatWeaponId = weaponId,
-  shotsFired = 0
+  reloadRemainingMs = 0,
+  respawnRemainingMs = 0,
+  shotsFired = 0,
+  weaponInventory = []
 } = {}) {
+  const activeWeapon = createCombatWeaponSnapshot({
+    reloadRemainingMs,
+    weaponId: combatWeaponId
+  });
+
   return Object.freeze({
-    activeWeapon: Object.freeze({
-      ammoInMagazine: 10,
-      ammoInReserve: 40,
-      reloadRemainingMs: 0,
-      weaponId: combatWeaponId
-    }),
+    activeWeapon,
     alive,
     health: alive ? 100 : 0,
+    respawnRemainingMs,
+    weaponInventory: Object.freeze(
+      weaponInventory.map((weaponSnapshot) =>
+        createCombatWeaponSnapshot(weaponSnapshot)
+      )
+    ),
     weaponStats: Object.freeze([
       Object.freeze({
         shotsFired,
@@ -78,8 +101,11 @@ function createPlayerInput({
   alive = true,
   playerId,
   position,
+  reloadRemainingMs = 0,
+  respawnRemainingMs = 0,
   shotsFired = 0,
   stateSequence = 1,
+  weaponInventory = [],
   weaponId: combatWeaponId = weaponId,
   username
 }) {
@@ -88,6 +114,9 @@ function createPlayerInput({
     combat: createCombatSnapshot({
       alive,
       combatWeaponId,
+      reloadRemainingMs,
+      respawnRemainingMs,
+      weaponInventory,
       shotsFired
     }),
     groundedBody: createGroundedBody(position),
@@ -102,17 +131,23 @@ function createWorldSnapshot({
   combatFeed = [],
   localAlive = true,
   localPlayerId,
+  localReloadRemainingMs = 0,
+  localRespawnRemainingMs = 0,
   localStateSequence = 1,
   localUsername,
   observerPlayer = null,
   projectiles = [],
   remoteAlive = true,
   remotePlayerId,
+  remoteReloadRemainingMs = 0,
+  remoteRespawnRemainingMs = 0,
   remoteShotsFired = 0,
   remoteStateSequence = 1,
   remoteWeaponId = weaponId,
   localShotsFired = 0,
+  localWeaponInventory = [],
   localWeaponId = weaponId,
+  remoteWeaponInventory = [],
   remoteUsername,
   snapshotSequence
 }) {
@@ -129,8 +164,11 @@ function createWorldSnapshot({
           y: 0.9,
           z: 0
         },
+        reloadRemainingMs: localReloadRemainingMs,
+        respawnRemainingMs: localRespawnRemainingMs,
         shotsFired: localShotsFired,
         stateSequence: localStateSequence,
+        weaponInventory: localWeaponInventory,
         weaponId: localWeaponId,
         username: localUsername
       }),
@@ -142,8 +180,11 @@ function createWorldSnapshot({
           y: 0.9,
           z: -4
         },
+        reloadRemainingMs: remoteReloadRemainingMs,
+        respawnRemainingMs: remoteRespawnRemainingMs,
         shotsFired: remoteShotsFired,
         stateSequence: remoteStateSequence,
+        weaponInventory: remoteWeaponInventory,
         weaponId: remoteWeaponId,
         username: remoteUsername
       })
@@ -590,6 +631,305 @@ test("MetaverseCombatFeedbackRuntime emits rocket launch and explosion cues from
     traversalAffordance: "support"
   });
   assert.equal(presentationEvents[1]?.targetPlayerId, remotePlayerId);
+});
+
+test("MetaverseCombatFeedbackRuntime emits spatial reload cues for local and remote held weapons", async () => {
+  const { MetaverseCombatFeedbackRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-combat-feedback-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("combat-feedback-reload-local");
+  const remotePlayerId = createMetaversePlayerId("combat-feedback-reload-remote");
+  const localUsername = createUsername("Reload Feedback Local");
+  const remoteUsername = createUsername("Reload Feedback Remote");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const audioCalls = [];
+  const runtime = new MetaverseCombatFeedbackRuntime({
+    playAudioCue(cueId, options) {
+      audioCalls.push({
+        cueId,
+        options
+      });
+    },
+    readLocalPlayerId: () => localPlayerId,
+    triggerPresentationEvent() {}
+  });
+  const cameraSnapshot = createCameraSnapshot();
+  const remoteSecondaryWeaponId = "metaverse-rocket-launcher-v1";
+
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 1
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      localWeaponInventory: [
+        {
+          reloadRemainingMs: 640,
+          weaponId
+        }
+      ],
+      remotePlayerId,
+      remoteUsername,
+      remoteWeaponInventory: [
+        {
+          reloadRemainingMs: 0,
+          weaponId
+        },
+        {
+          reloadRemainingMs: 1_280,
+          weaponId: remoteSecondaryWeaponId
+        }
+      ],
+      snapshotSequence: 2
+    }),
+    cameraSnapshot
+  );
+
+  assert.deepEqual(
+    audioCalls.map((audioCall) => audioCall.cueId),
+    ["metaverse-weapon-reload", "metaverse-weapon-reload"]
+  );
+  assert.deepEqual(audioCalls[0].options.spatial.position, {
+    x: 0,
+    y: 2.08,
+    z: 0
+  });
+  assert.deepEqual(audioCalls[1].options.spatial.position, {
+    x: 6,
+    y: 2.08,
+    z: -4
+  });
+  assert.equal(audioCalls[1].options.spatial.listener.position.x, 1);
+  assert.equal(audioCalls[1].options.spatial.maxDistanceMeters, 22);
+  assert.equal(audioCalls[1].options.spatial.refDistanceMeters, 1.15);
+  assert.equal(audioCalls[1].options.spatial.rolloffFactor, 1.25);
+
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      localWeaponInventory: [
+        {
+          reloadRemainingMs: 320,
+          weaponId
+        }
+      ],
+      remotePlayerId,
+      remoteUsername,
+      remoteWeaponInventory: [
+        {
+          reloadRemainingMs: 840,
+          weaponId: remoteSecondaryWeaponId
+        }
+      ],
+      snapshotSequence: 3
+    }),
+    cameraSnapshot
+  );
+  assert.equal(audioCalls.length, 2);
+
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 4
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      remoteWeaponInventory: [
+        {
+          reloadRemainingMs: 500,
+          weaponId: remoteSecondaryWeaponId
+        }
+      ],
+      snapshotSequence: 5
+    }),
+    cameraSnapshot
+  );
+
+  assert.equal(audioCalls.length, 3);
+  assert.equal(audioCalls[2].cueId, "metaverse-weapon-reload");
+});
+
+test("MetaverseCombatFeedbackRuntime emits local respawn countdown cues on the 3 2 1 0 cadence", async () => {
+  const { MetaverseCombatFeedbackRuntime } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-combat-feedback-runtime.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("respawn-countdown-local");
+  const remotePlayerId = createMetaversePlayerId("respawn-countdown-remote");
+  const localUsername = createUsername("Respawn Countdown Local");
+  const remoteUsername = createUsername("Respawn Countdown Remote");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const audioCalls = [];
+  const runtime = new MetaverseCombatFeedbackRuntime({
+    playAudioCue(cueId, options) {
+      audioCalls.push({
+        cueId,
+        options
+      });
+    },
+    readLocalPlayerId: () => localPlayerId,
+    triggerPresentationEvent() {}
+  });
+  const cameraSnapshot = createCameraSnapshot();
+
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 1
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 5_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 2
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 4_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 3
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 3_650,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 4
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 3_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 5
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 2_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 6
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 1_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 7
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 500,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 8
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localPlayerId,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 9
+    }),
+    cameraSnapshot
+  );
+  runtime.syncAuthoritativeWorld(
+    createWorldSnapshot({
+      localAlive: false,
+      localPlayerId,
+      localRespawnRemainingMs: 4_000,
+      localUsername,
+      remotePlayerId,
+      remoteUsername,
+      snapshotSequence: 10
+    }),
+    cameraSnapshot
+  );
+
+  assert.deepEqual(
+    audioCalls.map((audioCall) => audioCall.cueId),
+    [
+      "metaverse-respawn-countdown",
+      "metaverse-respawn-countdown",
+      "metaverse-respawn-countdown",
+      "metaverse-respawn-countdown-ready",
+      "metaverse-respawn-countdown"
+    ]
+  );
+  assert.equal(
+    audioCalls.every((audioCall) => audioCall.options === undefined),
+    true
+  );
 });
 
 test("MetaverseCombatFeedbackRuntime keeps unmapped weapon presentation silent", async () => {

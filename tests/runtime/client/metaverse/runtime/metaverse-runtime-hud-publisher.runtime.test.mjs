@@ -5,6 +5,7 @@ import {
   createMetaverseRealtimeWorldSnapshot,
   createMetaversePlayerId,
   createMetaverseRealtimePlayerSnapshot,
+  createMetaverseRealtimePlayerWeaponStateSnapshot,
   createUsername
 } from "@webgpu-metaverse/shared";
 
@@ -132,6 +133,133 @@ test("MetaverseRuntimeHudPublisher resolves mounted HUD access copy from one mou
   assert.equal(
     publisher.hudSnapshot.mountedInteractionHud.seatTargets.length,
     1
+  );
+});
+
+test("MetaverseRuntimeHudPublisher suppresses pickup prompts for already held weapons", async () => {
+  const { MetaverseRuntimeHudPublisher } = await clientLoader.load(
+    "/src/metaverse/hud/metaverse-runtime-hud-publisher.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("hud-held-resource-local");
+  const localUsername = createUsername("Hud Held Resource Local");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(localUsername, null);
+
+  const dependencies = createFakeHudPublisherDependencies(() => 0);
+  dependencies.presenceRuntime.isJoined = true;
+  dependencies.remoteWorldRuntime.isConnected = true;
+
+  const localPlayerSnapshot = Object.freeze({
+    ...createMetaverseRealtimePlayerSnapshot({
+      characterId: "mesh2motion-humanoid-v1",
+      groundedBody: {
+        linearVelocity: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        position: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        yawRadians: 0
+      },
+      playerId: localPlayerId,
+      teamId: "blue",
+      username: localUsername,
+      weaponState: createMetaverseRealtimePlayerWeaponStateSnapshot({
+        activeSlotId: "primary",
+        aimMode: "hip-fire",
+        slots: [
+          {
+            attachmentId: "metaverse-service-pistol-v2",
+            equipped: true,
+            slotId: "primary",
+            weaponId: "metaverse-service-pistol-v2",
+            weaponInstanceId:
+              `${localPlayerId}:primary:metaverse-service-pistol-v2`
+          },
+          {
+            attachmentId: "metaverse-rocket-launcher-v1",
+            equipped: true,
+            slotId: "secondary",
+            weaponId: "metaverse-rocket-launcher-v1",
+            weaponInstanceId:
+              `${localPlayerId}:secondary:metaverse-rocket-launcher-v1`
+          }
+        ],
+        weaponId: "metaverse-service-pistol-v2"
+      })
+    }),
+    lastProcessedLookSequence: 0,
+    lastProcessedTraversalSequence: 0,
+    lastProcessedWeaponSequence: 0
+  });
+  const worldSnapshot = createMetaverseRealtimeWorldSnapshot({
+    players: [localPlayerSnapshot],
+    resourceSpawns: [
+      {
+        pickupRadiusMeters: 2,
+        position: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        spawnId: "resource:rocket",
+        weaponId: "metaverse-rocket-launcher-v1",
+        yawRadians: 0
+      }
+    ],
+    tick: {
+      currentTick: 1,
+      emittedAtServerTimeMs: 1_000,
+      tickIntervalMs: 50
+    },
+    vehicles: []
+  });
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot =
+    () => localPlayerSnapshot;
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot =
+    () => worldSnapshot;
+
+  const publisher = new MetaverseRuntimeHudPublisher(dependencies);
+
+  publisher.publishSnapshot(createPublishInput(), true, 1_000);
+
+  assert.equal(publisher.hudSnapshot.interaction.weaponResource, null);
+
+  const battleRifleWorldSnapshot = createMetaverseRealtimeWorldSnapshot({
+    players: [localPlayerSnapshot],
+    resourceSpawns: [
+      {
+        pickupRadiusMeters: 2,
+        position: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        spawnId: "resource:battle-rifle",
+        weaponId: "metaverse-battle-rifle-v1",
+        yawRadians: 0
+      }
+    ],
+    tick: {
+      currentTick: 2,
+      emittedAtServerTimeMs: 1_050,
+      tickIntervalMs: 50
+    },
+    vehicles: []
+  });
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot =
+    () => battleRifleWorldSnapshot;
+
+  publisher.publishSnapshot(createPublishInput(), true, 1_050);
+
+  assert.equal(
+    publisher.hudSnapshot.interaction.weaponResource?.weaponId,
+    "metaverse-battle-rifle-v1"
   );
 });
 

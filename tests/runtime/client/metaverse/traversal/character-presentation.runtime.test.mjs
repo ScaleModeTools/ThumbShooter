@@ -62,9 +62,9 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       )
   ]);
 
-  assert.equal(metaverseRuntimeConfig.groundedBody.baseSpeedUnitsPerSecond, 6);
-  assert.equal(metaverseRuntimeConfig.groundedBody.jumpImpulseUnitsPerSecond, 6.8);
-  assert.equal(metaverseRuntimeConfig.groundedBody.boostMultiplier, 1.25);
+  assert.equal(metaverseRuntimeConfig.groundedBody.baseSpeedUnitsPerSecond, 5.4);
+  assert.equal(metaverseRuntimeConfig.groundedBody.jumpImpulseUnitsPerSecond, 7.4);
+  assert.equal(metaverseRuntimeConfig.groundedBody.boostMultiplier, 1.2);
   assert.equal(
     resolveCharacterAnimationPlaybackRateMultiplier({
       animationVocabulary: "walk",
@@ -73,7 +73,7 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       locomotionMode: "grounded",
       moveAxis: 1
     }),
-    1.5
+    1.35
   );
   assert.equal(
     resolveCharacterAnimationPlaybackRateMultiplier({
@@ -83,7 +83,7 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       locomotionMode: "grounded",
       moveAxis: 1
     }),
-    1.875
+    1.62
   );
   assert.equal(
     resolveCharacterAnimationPlaybackRateMultiplier({
@@ -93,7 +93,7 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       locomotionMode: "grounded",
       moveAxis: -1
     }),
-    -1.5
+    -1.35
   );
   assert.equal(
     resolveCharacterAnimationPlaybackRateMultiplier({
@@ -103,7 +103,7 @@ test("default grounded traversal tuning keeps walk and boost presentation aligne
       locomotionMode: "grounded",
       moveAxis: -1
     }),
-    -1.875
+    -1.62
   );
 });
 

@@ -8,15 +8,48 @@ import {
 export const metaverseCombatAudioCueIds = [
   "metaverse-pistol-shot",
   "metaverse-rocket-launch",
+  "metaverse-weapon-reload",
   "metaverse-rocket-explosion",
   "metaverse-world-impact",
   "metaverse-armor-hit",
+  "metaverse-respawn-countdown",
+  "metaverse-respawn-countdown-ready",
   "metaverse-footstep-left",
   "metaverse-footstep-right"
 ] as const;
 
 export type MetaverseCombatAudioCueId =
   (typeof metaverseCombatAudioCueIds)[number];
+
+const metaverseRespawnCountdownFrequencyHz = 660;
+const metaverseRespawnCountdownReadyFrequencyHz =
+  metaverseRespawnCountdownFrequencyHz * 2 ** (7 / 12);
+
+function scheduleRespawnCountdownBeep(
+  context: AudioContext,
+  destination: AudioNode,
+  startTime: number,
+  frequencyHz: number
+): void {
+  schedulePulse(
+    context,
+    destination,
+    startTime,
+    frequencyHz,
+    0.09,
+    "sine",
+    0.072
+  );
+  schedulePulse(
+    context,
+    destination,
+    startTime + 0.006,
+    frequencyHz * 2,
+    0.055,
+    "triangle",
+    0.024
+  );
+}
 
 export const metaverseCombatAudioContentCatalog = {
   backgroundTracks: {},
@@ -130,6 +163,76 @@ export const metaverseCombatAudioContentCatalog = {
           0.11,
           900,
           "bandpass"
+        );
+      }
+    },
+    "metaverse-weapon-reload": {
+      label: "Metaverse weapon reload",
+      play({ context, options, sfxBus }) {
+        const browserContext = context as AudioContext;
+        const destination = createAudioCueDestination({
+          context,
+          ...(options === undefined ? {} : { options }),
+          sfxBus
+        });
+        const now = browserContext.currentTime + 0.006;
+
+        scheduleNoiseBurst(
+          browserContext,
+          destination,
+          now,
+          0.028,
+          0.052,
+          1900,
+          "highpass"
+        );
+        schedulePulse(
+          browserContext,
+          destination,
+          now + 0.012,
+          320,
+          0.052,
+          "triangle",
+          0.034,
+          210
+        );
+        scheduleNoiseBurst(
+          browserContext,
+          destination,
+          now + 0.082,
+          0.044,
+          0.07,
+          820,
+          "bandpass"
+        );
+        schedulePulse(
+          browserContext,
+          destination,
+          now + 0.096,
+          220,
+          0.08,
+          "triangle",
+          0.052,
+          130
+        );
+        scheduleNoiseBurst(
+          browserContext,
+          destination,
+          now + 0.18,
+          0.032,
+          0.058,
+          2600,
+          "highpass"
+        );
+        schedulePulse(
+          browserContext,
+          destination,
+          now + 0.188,
+          540,
+          0.048,
+          "square",
+          0.024,
+          360
         );
       }
     },
@@ -255,6 +358,44 @@ export const metaverseCombatAudioContentCatalog = {
           "sine",
           0.012,
           1060
+        );
+      }
+    },
+    "metaverse-respawn-countdown": {
+      label: "Metaverse respawn countdown",
+      play({ context, options, sfxBus }) {
+        const browserContext = context as AudioContext;
+        const destination = createAudioCueDestination({
+          context,
+          ...(options === undefined ? {} : { options }),
+          sfxBus
+        });
+        const now = browserContext.currentTime + 0.004;
+
+        scheduleRespawnCountdownBeep(
+          browserContext,
+          destination,
+          now,
+          metaverseRespawnCountdownFrequencyHz
+        );
+      }
+    },
+    "metaverse-respawn-countdown-ready": {
+      label: "Metaverse respawn countdown ready",
+      play({ context, options, sfxBus }) {
+        const browserContext = context as AudioContext;
+        const destination = createAudioCueDestination({
+          context,
+          ...(options === undefined ? {} : { options }),
+          sfxBus
+        });
+        const now = browserContext.currentTime + 0.004;
+
+        scheduleRespawnCountdownBeep(
+          browserContext,
+          destination,
+          now,
+          metaverseRespawnCountdownReadyFrequencyHz
         );
       }
     },

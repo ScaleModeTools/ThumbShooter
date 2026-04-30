@@ -47,6 +47,12 @@ function lerp(from: number, to: number, alpha: number): number {
   return from + (to - from) * alpha;
 }
 
+function isRemotePlayerCombatAlive(
+  playerSnapshot: Pick<MetaverseRealtimePlayerSnapshot, "combat">
+): boolean {
+  return playerSnapshot.combat?.alive ?? true;
+}
+
 function createRemotePlayerBodyBlockerPosition(
   basePlayer: MetaverseRealtimePlayerSnapshot,
   nextPlayer: MetaverseRealtimePlayerSnapshot | null,
@@ -65,6 +71,19 @@ function createRemotePlayerBodyBlockerPosition(
 
   const nextActiveBodySnapshot =
     readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(nextPlayer);
+  const baseAlive = isRemotePlayerCombatAlive(basePlayer);
+  const nextAlive = isRemotePlayerCombatAlive(nextPlayer);
+
+  if (baseAlive !== nextAlive) {
+    const sampledActiveBodySnapshot =
+      alpha < 0.5 ? baseActiveBodySnapshot : nextActiveBodySnapshot;
+
+    return Object.freeze({
+      x: sampledActiveBodySnapshot.position.x,
+      y: sampledActiveBodySnapshot.position.y,
+      z: sampledActiveBodySnapshot.position.z
+    });
+  }
 
   return Object.freeze({
     x: lerp(
@@ -83,6 +102,51 @@ function createRemotePlayerBodyBlockerPosition(
       alpha
     )
   });
+}
+
+function isMetaverseRemotePlayerCombatAlive(
+  playerSnapshot: Pick<MetaverseRealtimePlayerSnapshot, "combat">
+): boolean {
+  return playerSnapshot.combat?.alive ?? true;
+}
+
+function selectMetaverseRemoteWorldSampledPlayer(
+  basePlayer: MetaverseRealtimePlayerSnapshot,
+  nextPlayer: MetaverseRealtimePlayerSnapshot | null,
+  alpha: number
+): MetaverseRealtimePlayerSnapshot {
+  return nextPlayer !== null && alpha >= 0.5 ? nextPlayer : basePlayer;
+}
+
+function resolveCombatConsistentRemoteCharacterRootSamples(input: {
+  readonly remoteCharacterRootAlpha: number;
+  readonly remoteCharacterRootBasePlayer: MetaverseRealtimePlayerSnapshot;
+  readonly remoteCharacterRootNextPlayer: MetaverseRealtimePlayerSnapshot | null;
+  readonly sampledDiscretePlayer: MetaverseRealtimePlayerSnapshot;
+}): {
+  readonly remoteCharacterRootBasePlayer: MetaverseRealtimePlayerSnapshot;
+  readonly remoteCharacterRootNextPlayer: MetaverseRealtimePlayerSnapshot | null;
+} {
+  const sampledRootPlayer = selectMetaverseRemoteWorldSampledPlayer(
+    input.remoteCharacterRootBasePlayer,
+    input.remoteCharacterRootNextPlayer,
+    input.remoteCharacterRootAlpha
+  );
+
+  if (
+    isMetaverseRemotePlayerCombatAlive(sampledRootPlayer) ===
+    isMetaverseRemotePlayerCombatAlive(input.sampledDiscretePlayer)
+  ) {
+    return {
+      remoteCharacterRootBasePlayer: input.remoteCharacterRootBasePlayer,
+      remoteCharacterRootNextPlayer: input.remoteCharacterRootNextPlayer
+    };
+  }
+
+  return {
+    remoteCharacterRootBasePlayer: input.sampledDiscretePlayer,
+    remoteCharacterRootNextPlayer: null
+  };
 }
 
 export class MetaverseRemoteWorldPresentationState {
@@ -210,18 +274,34 @@ export class MetaverseRemoteWorldPresentationState {
 
       const nextPlayer =
         this.#nextPlayerSnapshotsByPlayerId.get(basePlayer.playerId) ?? null;
-      const sampledDiscretePlayer =
-        nextPlayer !== null && alpha >= 0.5 ? nextPlayer : basePlayer;
-      const sampledPlayerAlive = sampledDiscretePlayer.combat?.alive ?? true;
+      const sampledDiscretePlayer = selectMetaverseRemoteWorldSampledPlayer(
+        basePlayer,
+        nextPlayer,
+        alpha
+      );
+      const sampledPlayerAlive =
+        isMetaverseRemotePlayerCombatAlive(sampledDiscretePlayer);
 
-      const remoteCharacterRootBasePlayer =
+      let remoteCharacterRootBasePlayer =
         remoteCharacterRootBaseSnapshot.players.find(
           (playerSnapshot) => playerSnapshot.playerId === basePlayer.playerId
         ) ?? basePlayer;
-      const remoteCharacterRootNextPlayer =
+      let remoteCharacterRootNextPlayer =
         this.#remoteCharacterRootNextPlayerSnapshotsByPlayerId.get(
           basePlayer.playerId
         ) ?? null;
+      const combatConsistentRemoteCharacterRootSamples =
+        resolveCombatConsistentRemoteCharacterRootSamples({
+          remoteCharacterRootAlpha,
+          remoteCharacterRootBasePlayer,
+          remoteCharacterRootNextPlayer,
+          sampledDiscretePlayer
+        });
+
+      remoteCharacterRootBasePlayer =
+        combatConsistentRemoteCharacterRootSamples.remoteCharacterRootBasePlayer;
+      remoteCharacterRootNextPlayer =
+        combatConsistentRemoteCharacterRootSamples.remoteCharacterRootNextPlayer;
       let remoteCharacterPresentation =
         this.#remoteCharacterPresentationsByPlayerId.get(basePlayer.playerId);
 

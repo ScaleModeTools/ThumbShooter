@@ -50,6 +50,7 @@ const neutralMetaverseFlightInputSnapshot = Object.freeze({
   secondaryAction: false,
   strafeAxis: 0,
   weaponInteractPressedCount: 0,
+  weaponReloadPressedCount: 0,
   weaponSwitchPressedCount: 0,
   yawAxis: 0
 });
@@ -86,6 +87,17 @@ function resolveMovementInputWithLookAxes(
   });
 }
 
+function isWeaponEquippedByPlayer(
+  localPlayerSnapshot: MetaverseRealtimePlayerSnapshot,
+  weaponId: string
+): boolean {
+  return (
+    localPlayerSnapshot.weaponState?.slots.some(
+      (slot) => slot.equipped && slot.weaponId === weaponId
+    ) ?? false
+  );
+}
+
 function hasNearbyWeaponResource(input: {
   readonly localPosition: {
     readonly x: number;
@@ -111,6 +123,10 @@ function hasNearbyWeaponResource(input: {
       .position;
 
   return worldSnapshot.resourceSpawns.some((resourceSpawn) => {
+    if (isWeaponEquippedByPlayer(localPlayerSnapshot, resourceSpawn.weaponId)) {
+      return false;
+    }
+
     const distanceMeters = Math.hypot(
       localPosition.x - resourceSpawn.position.x,
       localPosition.y - resourceSpawn.position.y,
@@ -262,6 +278,14 @@ interface MetaverseRuntimeFrameRemoteWorldRuntime {
     readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
   }): {
     readonly actionSequence: number;
+  } | null;
+  reloadWeapon(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+    readonly weaponId: string;
+  }): {
+    readonly actionSequence: number;
+    readonly weaponId: string;
   } | null;
   switchActiveWeaponSlot(input: {
     readonly intendedWeaponId?: string | null;
@@ -743,6 +767,26 @@ export class MetaverseRuntimeFrameLoop {
           localWeaponSlotSwitchIntent.requestedActiveSlotId
       });
     }
+    const localActiveWeaponSlot =
+      localWeaponState === null || localWeaponState.activeSlotId === null
+        ? null
+        : localWeaponState.slots.find(
+            (slot) => slot.slotId === localWeaponState.activeSlotId
+          ) ?? null;
+
+    if (
+      movementInput.weaponReloadPressedCount > 0 &&
+      mountedEnvironment === null &&
+      localWeaponState !== null &&
+      localActiveWeaponSlot !== null
+    ) {
+      this.#remoteWorldRuntime.reloadWeapon({
+        intendedWeaponInstanceId: localActiveWeaponSlot.weaponInstanceId,
+        requestedActiveSlotId: localActiveWeaponSlot.slotId,
+        weaponId: localActiveWeaponSlot.weaponId
+      });
+    }
+
     if (
       movementInput.weaponInteractPressedCount > 0 &&
       mountedEnvironment === null &&
@@ -753,13 +797,6 @@ export class MetaverseRuntimeFrameLoop {
         worldSnapshot: authoritativeWorldSnapshot
       })
     ) {
-      const localActiveWeaponSlot =
-        localWeaponState === null || localWeaponState.activeSlotId === null
-          ? null
-          : localWeaponState.slots.find(
-              (slot) => slot.slotId === localWeaponState.activeSlotId
-            ) ?? null;
-
       this.#remoteWorldRuntime.interactWeaponResource({
         intendedWeaponInstanceId:
           localActiveWeaponSlot?.weaponInstanceId ?? null,

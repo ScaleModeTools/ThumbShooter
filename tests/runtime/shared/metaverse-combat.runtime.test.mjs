@@ -34,10 +34,10 @@ function assertAlmostEqual(actual, expected, label) {
   );
 }
 
-test("shared metaverse combat match defaults to a 3 second respawn delay", () => {
+test("shared metaverse combat match defaults to a 5 second respawn delay", () => {
   const combatMatchSnapshot = createMetaverseCombatMatchSnapshot();
 
-  assert.equal(combatMatchSnapshot.respawnDelayMs, 3_000);
+  assert.equal(combatMatchSnapshot.respawnDelayMs, 5_000);
 });
 
 test("shared metaverse combat normalizes switch weapon slot actions and receipts", () => {
@@ -81,6 +81,49 @@ test("shared metaverse combat normalizes switch weapon slot actions and receipts
   assert.equal(rejectedReceipt.status, "rejected");
   assert.equal(rejectedReceipt.rejectionReason, "stale-weapon-state");
   assert.equal(rejectedReceipt.activeSlotId, null);
+});
+
+test("shared metaverse combat normalizes reload weapon actions and receipts", () => {
+  const actionSnapshot = createMetaversePlayerActionSnapshot({
+    actionSequence: 16,
+    intendedWeaponInstanceId: "player-1:secondary:metaverse-rocket-launcher-v1",
+    issuedAtAuthoritativeTimeMs: 4_800,
+    kind: "reload-weapon",
+    requestedActiveSlotId: "secondary",
+    weaponId: "metaverse-rocket-launcher-v1"
+  });
+  const acceptedReceipt = createMetaversePlayerActionReceiptSnapshot({
+    actionSequence: 16,
+    activeSlotId: "secondary",
+    intendedWeaponInstanceId: "player-1:secondary:metaverse-rocket-launcher-v1",
+    kind: "reload-weapon",
+    processedAtTimeMs: 4_820,
+    requestedActiveSlotId: "secondary",
+    status: "accepted",
+    weaponId: "metaverse-rocket-launcher-v1",
+    weaponInstanceId: "player-1:secondary:metaverse-rocket-launcher-v1"
+  });
+  const rejectedReceipt = createMetaversePlayerActionReceiptSnapshot({
+    actionSequence: 17,
+    kind: "reload-weapon",
+    processedAtTimeMs: 4_860,
+    rejectionReason: "magazine-full",
+    status: "rejected"
+  });
+
+  assert.equal(actionSnapshot.kind, "reload-weapon");
+  assert.equal(actionSnapshot.requestedActiveSlotId, "secondary");
+  assert.equal(actionSnapshot.weaponId, "metaverse-rocket-launcher-v1");
+  assert.equal(
+    actionSnapshot.intendedWeaponInstanceId,
+    "player-1:secondary:metaverse-rocket-launcher-v1"
+  );
+  assert.equal(acceptedReceipt.status, "accepted");
+  assert.equal(acceptedReceipt.rejectionReason, null);
+  assert.equal(acceptedReceipt.activeSlotId, "secondary");
+  assert.equal(acceptedReceipt.weaponId, "metaverse-rocket-launcher-v1");
+  assert.equal(rejectedReceipt.status, "rejected");
+  assert.equal(rejectedReceipt.rejectionReason, "magazine-full");
 });
 
 test("shared metaverse combat normalizes weapon resource interact actions and receipts", () => {

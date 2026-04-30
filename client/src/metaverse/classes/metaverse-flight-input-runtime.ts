@@ -7,6 +7,8 @@ interface KeyboardFlightInputState {
   moveForward: boolean;
   strafeLeft: boolean;
   strafeRight: boolean;
+  weaponReload: boolean;
+  weaponReloadPressedCount: number;
   weaponInteract: boolean;
   weaponInteractPressedCount: number;
   weaponSwitch: boolean;
@@ -31,7 +33,9 @@ interface GamepadTriggerInputSnapshot {
 type MouseFlightButtonInputKey = "primaryAction" | "secondaryAction";
 type KeyboardFlightButtonInputKey = Exclude<
   keyof KeyboardFlightInputState,
-  "weaponInteractPressedCount" | "weaponSwitchPressedCount"
+  | "weaponInteractPressedCount"
+  | "weaponReloadPressedCount"
+  | "weaponSwitchPressedCount"
 >;
 
 interface MetaverseFlightInputRuntimeDependencies {
@@ -39,6 +43,7 @@ interface MetaverseFlightInputRuntimeDependencies {
 }
 
 const defaultMouseLookSampleDurationSeconds = 1 / 60;
+const gamepadWeaponInteractHoldDurationMs = 350;
 const metaverseMouseLookPixelsPerAxisUnitSecond = 2400;
 
 function toFiniteNumber(value: number, fallback = 0): number {
@@ -61,6 +66,8 @@ function createKeyboardFlightInputState(): KeyboardFlightInputState {
     moveForward: false,
     strafeLeft: false,
     strafeRight: false,
+    weaponReload: false,
+    weaponReloadPressedCount: 0,
     weaponInteract: false,
     weaponInteractPressedCount: 0,
     weaponSwitch: false,
@@ -124,6 +131,8 @@ export class MetaverseFlightInputRuntime {
 
   #canvas: HTMLCanvasElement | null = null;
   #inputCleanup: (() => void) | null = null;
+  #gamepadWeaponInteractHoldConsumed = false;
+  #gamepadWeaponInteractPressedAtMs: number | null = null;
   #lastGamepadPrimaryAction = false;
   #lastGamepadWeaponInteract = false;
   #lastGamepadWeaponSwitch = false;
@@ -148,6 +157,7 @@ export class MetaverseFlightInputRuntime {
       ShiftLeft: "boost",
       ShiftRight: "boost",
       KeyE: "weaponInteract",
+      KeyR: "weaponReload",
       Digit1: "weaponSwitch"
     };
     const mouseButtonBindings: Record<number, MouseFlightButtonInputKey> = {
@@ -200,6 +210,10 @@ export class MetaverseFlightInputRuntime {
         !this.#keyboardInput.weaponInteract
       ) {
         this.#keyboardInput.weaponInteractPressedCount += 1;
+      }
+
+      if (inputKey === "weaponReload" && !this.#keyboardInput.weaponReload) {
+        this.#keyboardInput.weaponReloadPressedCount += 1;
       }
 
       this.#keyboardInput[inputKey] = true;
@@ -265,6 +279,8 @@ export class MetaverseFlightInputRuntime {
   reset(): void {
     Object.assign(this.#keyboardInput, createKeyboardFlightInputState());
     Object.assign(this.#mouseInput, createMouseFlightInputState());
+    this.#gamepadWeaponInteractHoldConsumed = false;
+    this.#gamepadWeaponInteractPressedAtMs = null;
     this.#lastGamepadPrimaryAction = false;
     this.#lastGamepadWeaponInteract = false;
     this.#lastGamepadWeaponSwitch = false;
@@ -272,7 +288,9 @@ export class MetaverseFlightInputRuntime {
   }
 
   readSnapshot(): MetaverseFlightInputSnapshot {
-    const sampleDurationSeconds = this.#resolveLookSampleDurationSeconds();
+    const nowMs = this.#readWallClockMs();
+    const normalizedNowMs = Number.isFinite(nowMs) ? nowMs : 0;
+    const sampleDurationSeconds = this.#resolveLookSampleDurationSeconds(nowMs);
     const pitchAxis = clamp(
       -this.#mouseInput.lookDeltaY /
         (metaverseMouseLookPixelsPerAxisUnitSecond * sampleDurationSeconds),
@@ -288,6 +306,39 @@ export class MetaverseFlightInputRuntime {
     this.#mouseInput.lookDeltaX = 0;
     this.#mouseInput.lookDeltaY = 0;
     const gamepadTriggerInput = this.#readGamepadTriggerInput();
+    let gamepadWeaponInteractPressedCount = 0;
+    let gamepadWeaponReloadPressedCount = 0;
+
+    if (gamepadTriggerInput.weaponInteract) {
+      if (!this.#lastGamepadWeaponInteract) {
+        this.#gamepadWeaponInteractPressedAtMs = normalizedNowMs;
+        this.#gamepadWeaponInteractHoldConsumed = false;
+      }
+
+      const heldDurationMs =
+        this.#gamepadWeaponInteractPressedAtMs === null
+          ? 0
+          : Math.max(
+              0,
+              normalizedNowMs - this.#gamepadWeaponInteractPressedAtMs
+            );
+
+      if (
+        !this.#gamepadWeaponInteractHoldConsumed &&
+        heldDurationMs >= gamepadWeaponInteractHoldDurationMs
+      ) {
+        gamepadWeaponInteractPressedCount = 1;
+        this.#gamepadWeaponInteractHoldConsumed = true;
+      }
+    } else if (this.#lastGamepadWeaponInteract) {
+      if (!this.#gamepadWeaponInteractHoldConsumed) {
+        gamepadWeaponReloadPressedCount = 1;
+      }
+
+      this.#gamepadWeaponInteractPressedAtMs = null;
+      this.#gamepadWeaponInteractHoldConsumed = false;
+    }
+
     const primaryActionPressedCount =
       this.#mouseInput.primaryActionPressedCount +
       (gamepadTriggerInput.primaryAction && !this.#lastGamepadPrimaryAction ? 1 : 0);
@@ -296,11 +347,13 @@ export class MetaverseFlightInputRuntime {
       (gamepadTriggerInput.weaponSwitch && !this.#lastGamepadWeaponSwitch ? 1 : 0);
     const weaponInteractPressedCount =
       this.#keyboardInput.weaponInteractPressedCount +
-      (gamepadTriggerInput.weaponInteract && !this.#lastGamepadWeaponInteract
-        ? 1
-        : 0);
+      gamepadWeaponInteractPressedCount;
+    const weaponReloadPressedCount =
+      this.#keyboardInput.weaponReloadPressedCount +
+      gamepadWeaponReloadPressedCount;
     this.#mouseInput.primaryActionPressedCount = 0;
     this.#keyboardInput.weaponInteractPressedCount = 0;
+    this.#keyboardInput.weaponReloadPressedCount = 0;
     this.#keyboardInput.weaponSwitchPressedCount = 0;
     this.#lastGamepadPrimaryAction = gamepadTriggerInput.primaryAction;
     this.#lastGamepadWeaponInteract = gamepadTriggerInput.weaponInteract;
@@ -322,6 +375,7 @@ export class MetaverseFlightInputRuntime {
         (this.#keyboardInput.strafeRight ? 1 : 0) -
         (this.#keyboardInput.strafeLeft ? 1 : 0),
       weaponInteractPressedCount,
+      weaponReloadPressedCount,
       weaponSwitchPressedCount,
       yawAxis
     });
@@ -380,9 +434,7 @@ export class MetaverseFlightInputRuntime {
     }
   }
 
-  #resolveLookSampleDurationSeconds(): number {
-    const nowMs = this.#readWallClockMs();
-
+  #resolveLookSampleDurationSeconds(nowMs: number): number {
     if (!Number.isFinite(nowMs)) {
       this.#lastSnapshotAtMs = null;
       return defaultMouseLookSampleDurationSeconds;

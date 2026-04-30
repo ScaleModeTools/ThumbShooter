@@ -60,6 +60,7 @@ export const metaversePlayerActionKindIds = [
   "fire-weapon",
   "interact-weapon-resource",
   "jump",
+  "reload-weapon",
   "switch-active-weapon-slot"
 ] as const;
 
@@ -86,6 +87,20 @@ export const metaversePlayerActionFireWeaponRejectionReasonIds = [
 export const metaversePlayerActionSwitchWeaponSlotRejectionReasonIds = [
   "unknown-slot",
   "unequipped-slot",
+  "stale-weapon-state"
+] as const;
+
+export const metaversePlayerActionReloadWeaponRejectionReasonIds = [
+  "match-inactive",
+  "player-dead",
+  "mounted",
+  "no-active-weapon",
+  "reloading",
+  "magazine-full",
+  "out-of-ammo",
+  "inactive-weapon",
+  "no-combat-profile",
+  "unknown-weapon",
   "stale-weapon-state"
 ] as const;
 
@@ -174,6 +189,8 @@ export type MetaversePlayerActionFireWeaponRejectionReasonId =
   (typeof metaversePlayerActionFireWeaponRejectionReasonIds)[number];
 export type MetaversePlayerActionSwitchWeaponSlotRejectionReasonId =
   (typeof metaversePlayerActionSwitchWeaponSlotRejectionReasonIds)[number];
+export type MetaversePlayerActionReloadWeaponRejectionReasonId =
+  (typeof metaversePlayerActionReloadWeaponRejectionReasonIds)[number];
 export type MetaversePlayerActionInteractWeaponResourceRejectionReasonId =
   (typeof metaversePlayerActionInteractWeaponResourceRejectionReasonIds)[number];
 export type MetaverseCombatHitZoneId =
@@ -196,6 +213,7 @@ export type MetaverseCombatActionReceiptStatusId =
   MetaversePlayerActionReceiptStatusId;
 export type MetaverseCombatActionRejectionReasonId =
   | MetaversePlayerActionFireWeaponRejectionReasonId
+  | MetaversePlayerActionReloadWeaponRejectionReasonId
   | MetaversePlayerActionSwitchWeaponSlotRejectionReasonId
   | MetaversePlayerActionInteractWeaponResourceRejectionReasonId;
 
@@ -204,6 +222,7 @@ export const metaverseCombatActionReceiptStatusIds =
   metaversePlayerActionReceiptStatusIds;
 export const metaverseCombatActionRejectionReasonIds = [
   ...metaversePlayerActionFireWeaponRejectionReasonIds,
+  ...metaversePlayerActionReloadWeaponRejectionReasonIds,
   ...metaversePlayerActionSwitchWeaponSlotRejectionReasonIds,
   ...metaversePlayerActionInteractWeaponResourceRejectionReasonIds
 ] as const;
@@ -607,6 +626,23 @@ export interface MetaverseSwitchActiveWeaponSlotPlayerActionSnapshotInput {
   readonly requestedActiveSlotId: MetaverseWeaponSlotId;
 }
 
+export interface MetaverseReloadWeaponPlayerActionSnapshot {
+  readonly actionSequence: number;
+  readonly intendedWeaponInstanceId: string | null;
+  readonly issuedAtAuthoritativeTimeMs: Milliseconds;
+  readonly kind: "reload-weapon";
+  readonly requestedActiveSlotId: MetaverseWeaponSlotId | null;
+  readonly weaponId: string;
+}
+
+export interface MetaverseReloadWeaponPlayerActionSnapshotInput {
+  readonly actionSequence?: number;
+  readonly intendedWeaponInstanceId?: string | null;
+  readonly issuedAtAuthoritativeTimeMs?: number;
+  readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+  readonly weaponId: string;
+}
+
 export interface MetaverseInteractWeaponResourcePlayerActionSnapshot {
   readonly actionSequence: number;
   readonly intendedWeaponInstanceId: string | null;
@@ -626,6 +662,7 @@ export type MetaversePlayerActionSnapshot =
   | MetaverseFireWeaponPlayerActionSnapshot
   | MetaverseInteractWeaponResourcePlayerActionSnapshot
   | MetaverseJumpPlayerActionSnapshot
+  | MetaverseReloadWeaponPlayerActionSnapshot
   | MetaverseSwitchActiveWeaponSlotPlayerActionSnapshot;
 
 export type MetaversePlayerActionSnapshotInput =
@@ -635,6 +672,9 @@ export type MetaversePlayerActionSnapshotInput =
   | ({
       readonly kind: "jump";
     } & MetaverseJumpPlayerActionSnapshotInput)
+  | ({
+      readonly kind: "reload-weapon";
+    } & MetaverseReloadWeaponPlayerActionSnapshotInput)
   | ({
       readonly kind: "interact-weapon-resource";
     } & MetaverseInteractWeaponResourcePlayerActionSnapshotInput)
@@ -674,6 +714,20 @@ export interface MetaverseJumpPlayerActionReceiptSnapshot
   readonly resolutionState: MetaverseTraversalActionResolutionStateId;
 }
 
+export interface MetaverseReloadWeaponPlayerActionReceiptSnapshot
+  extends MetaversePlayerActionReceiptCommon {
+  readonly activeSlotId: MetaverseWeaponSlotId | null;
+  readonly intendedWeaponInstanceId: string | null;
+  readonly kind: "reload-weapon";
+  readonly rejectionReason:
+    | MetaversePlayerActionReloadWeaponRejectionReasonId
+    | null;
+  readonly requestedActiveSlotId: MetaverseWeaponSlotId | null;
+  readonly status: MetaversePlayerActionReceiptStatusId;
+  readonly weaponId: string | null;
+  readonly weaponInstanceId: string | null;
+}
+
 export interface MetaverseSwitchActiveWeaponSlotPlayerActionReceiptSnapshot
   extends MetaversePlayerActionReceiptCommon {
   readonly activeSlotId: MetaverseWeaponSlotId | null;
@@ -708,6 +762,7 @@ export type MetaversePlayerActionReceiptSnapshot =
   | MetaverseFireWeaponPlayerActionReceiptSnapshot
   | MetaverseInteractWeaponResourcePlayerActionReceiptSnapshot
   | MetaverseJumpPlayerActionReceiptSnapshot
+  | MetaverseReloadWeaponPlayerActionReceiptSnapshot
   | MetaverseSwitchActiveWeaponSlotPlayerActionReceiptSnapshot;
 
 export type MetaverseCombatActionReceiptSnapshot =
@@ -730,6 +785,20 @@ export type MetaversePlayerActionReceiptSnapshotInput =
       readonly kind: "jump";
       readonly processedAtTimeMs?: number;
       readonly resolutionState?: MetaverseTraversalActionResolutionStateId;
+    })
+  | ({
+      readonly actionSequence?: number;
+      readonly activeSlotId?: MetaverseWeaponSlotId | null;
+      readonly intendedWeaponInstanceId?: string | null;
+      readonly kind: "reload-weapon";
+      readonly processedAtTimeMs?: number;
+      readonly rejectionReason?:
+        | MetaversePlayerActionReloadWeaponRejectionReasonId
+        | null;
+      readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+      readonly status?: MetaversePlayerActionReceiptStatusId;
+      readonly weaponId?: string | null;
+      readonly weaponInstanceId?: string | null;
     })
   | ({
       readonly actionSequence?: number;
@@ -1219,6 +1288,20 @@ function normalizePlayerActionSwitchWeaponSlotRejectionReason(
     value as MetaversePlayerActionSwitchWeaponSlotRejectionReasonId
   )
     ? (value as MetaversePlayerActionSwitchWeaponSlotRejectionReasonId)
+    : null;
+}
+
+function normalizePlayerActionReloadWeaponRejectionReason(
+  value: string | null | undefined
+): MetaversePlayerActionReloadWeaponRejectionReasonId | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return metaversePlayerActionReloadWeaponRejectionReasonIds.includes(
+    value as MetaversePlayerActionReloadWeaponRejectionReasonId
+  )
+    ? (value as MetaversePlayerActionReloadWeaponRejectionReasonId)
     : null;
 }
 
@@ -2332,7 +2415,7 @@ export function createMetaverseCombatMatchSnapshot(
     mode: input.mode ?? "team-deathmatch",
     phase: normalizeMatchPhase(input.phase),
     respawnDelayMs: createMilliseconds(
-      normalizeFiniteNonNegativeNumber(input.respawnDelayMs, 3_000)
+      normalizeFiniteNonNegativeNumber(input.respawnDelayMs, 5_000)
     ),
     scoreLimit: normalizeFiniteNonNegativeInteger(input.scoreLimit, 50),
     teams: Object.freeze(
@@ -2407,6 +2490,42 @@ export function createMetaversePlayerActionReceiptSnapshot(
       weaponInstanceId: normalizeOptionalIdentifier(
         input.weaponInstanceId,
         "Metaverse interact weapon resource weaponInstanceId"
+      )
+    });
+  }
+
+  if (input.kind === "reload-weapon") {
+    const status = normalizePlayerActionReceiptStatus(input.status);
+    const rejectionReason =
+      status === "rejected"
+        ? normalizePlayerActionReloadWeaponRejectionReason(
+            input.rejectionReason
+          )
+        : null;
+
+    return Object.freeze({
+      actionSequence,
+      activeSlotId: isMetaverseWeaponSlotId(input.activeSlotId)
+        ? input.activeSlotId
+        : null,
+      intendedWeaponInstanceId: normalizeOptionalIdentifier(
+        input.intendedWeaponInstanceId,
+        "Metaverse reload weapon intendedWeaponInstanceId"
+      ),
+      kind: "reload-weapon",
+      processedAtTimeMs,
+      rejectionReason,
+      requestedActiveSlotId: isMetaverseWeaponSlotId(input.requestedActiveSlotId)
+        ? input.requestedActiveSlotId
+        : null,
+      status,
+      weaponId: normalizeOptionalIdentifier(
+        input.weaponId,
+        "Metaverse reload weapon weaponId"
+      ),
+      weaponInstanceId: normalizeOptionalIdentifier(
+        input.weaponInstanceId,
+        "Metaverse reload weapon weaponInstanceId"
       )
     });
   }
@@ -2766,6 +2885,26 @@ export function createMetaverseSwitchActiveWeaponSlotPlayerActionSnapshot(
   });
 }
 
+export function createMetaverseReloadWeaponPlayerActionSnapshot(
+  input: MetaverseReloadWeaponPlayerActionSnapshotInput
+): MetaverseReloadWeaponPlayerActionSnapshot {
+  return Object.freeze({
+    actionSequence: normalizeFiniteNonNegativeInteger(input.actionSequence),
+    intendedWeaponInstanceId: normalizeOptionalIdentifier(
+      input.intendedWeaponInstanceId,
+      "Metaverse reload weapon intendedWeaponInstanceId"
+    ),
+    issuedAtAuthoritativeTimeMs: createMilliseconds(
+      normalizeFiniteNonNegativeNumber(input.issuedAtAuthoritativeTimeMs)
+    ),
+    kind: "reload-weapon",
+    requestedActiveSlotId: isMetaverseWeaponSlotId(input.requestedActiveSlotId)
+      ? input.requestedActiveSlotId
+      : null,
+    weaponId: normalizeIdentifier(input.weaponId, "Metaverse combat weaponId")
+  });
+}
+
 export function createMetaverseInteractWeaponResourcePlayerActionSnapshot(
   input: MetaverseInteractWeaponResourcePlayerActionSnapshotInput = {}
 ): MetaverseInteractWeaponResourcePlayerActionSnapshot {
@@ -2793,6 +2932,8 @@ export function createMetaversePlayerActionSnapshot(
       return createMetaverseJumpPlayerActionSnapshot(input);
     case "fire-weapon":
       return createMetaverseFireWeaponPlayerActionSnapshot(input);
+    case "reload-weapon":
+      return createMetaverseReloadWeaponPlayerActionSnapshot(input);
     case "interact-weapon-resource":
       return createMetaverseInteractWeaponResourcePlayerActionSnapshot(input);
     case "switch-active-weapon-slot":

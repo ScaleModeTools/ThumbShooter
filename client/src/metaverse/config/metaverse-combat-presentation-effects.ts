@@ -19,6 +19,7 @@ interface MetaverseCombatWeaponPresentationEffects {
       MetaverseCombatProjectileImpactPresentationEffect
     >
   >;
+  readonly reloadAudioCueId: MetaverseCombatAudioCueId;
   readonly shotAudioCueId: MetaverseCombatAudioCueId;
   readonly shotFxByDeliveryModel: Partial<
     Record<
@@ -31,6 +32,7 @@ interface MetaverseCombatWeaponPresentationEffects {
 function createHitscanWeaponPresentationEffects(): MetaverseCombatWeaponPresentationEffects {
   return Object.freeze({
     hitscanWorldImpactFx: "pistol-world-impact",
+    reloadAudioCueId: "metaverse-weapon-reload",
     shotAudioCueId: "metaverse-pistol-shot",
     shotFxByDeliveryModel: Object.freeze({
       "hitscan-tracer": "pistol-tracer"
@@ -55,6 +57,7 @@ const metaverseCombatWeaponPresentationEffectsByWeaponId = new Map<
           impactFx: "rocket-explosion"
         })
       }),
+      reloadAudioCueId: "metaverse-weapon-reload",
       shotAudioCueId: "metaverse-rocket-launch",
       shotFxByDeliveryModel: Object.freeze({
         "authoritative-projectile": "rocket-muzzle"
@@ -70,6 +73,7 @@ const metaverseCombatWeaponPresentationEffectsByWeaponId = new Map<
           impactFx: "world-impact"
         })
       }),
+      reloadAudioCueId: "metaverse-weapon-reload",
       shotAudioCueId: "metaverse-pistol-shot",
       shotFxByDeliveryModel: Object.freeze({
         "hitscan-tracer": "pistol-tracer"
@@ -96,6 +100,15 @@ export function readMetaverseCombatShotAudioCueId(
 ): MetaverseCombatAudioCueId | null {
   return (
     readMetaverseCombatWeaponPresentationEffects(weaponId)?.shotAudioCueId ?? null
+  );
+}
+
+export function readMetaverseCombatReloadAudioCueId(
+  weaponId: string
+): MetaverseCombatAudioCueId | null {
+  return (
+    readMetaverseCombatWeaponPresentationEffects(weaponId)?.reloadAudioCueId ??
+    null
   );
 }
 

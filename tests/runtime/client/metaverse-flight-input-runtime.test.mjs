@@ -132,6 +132,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       secondaryAction: false,
       strafeAxis: 1,
       weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 1
     });
@@ -146,6 +147,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       secondaryAction: false,
       strafeAxis: 1,
       weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -167,6 +169,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       secondaryAction: false,
       strafeAxis: 1,
       weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -177,6 +180,16 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
     });
 
     assert.equal(flightInputRuntime.readSnapshot().moveAxis, 0);
+
+    fakeWindow.dispatch("keydown", {
+      code: "KeyR"
+    });
+
+    assert.equal(flightInputRuntime.readSnapshot().weaponReloadPressedCount, 1);
+
+    fakeWindow.dispatch("keyup", {
+      code: "KeyR"
+    });
 
     fakeWindow.dispatch("keydown", {
       code: "KeyW"
@@ -196,6 +209,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       secondaryAction: false,
       strafeAxis: 0,
       weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -222,6 +236,7 @@ test("MetaverseFlightInputRuntime owns browser flight input listeners and transi
       secondaryAction: false,
       strafeAxis: 0,
       weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
@@ -318,7 +333,11 @@ test("MetaverseFlightInputRuntime maps gamepad combat buttons without changing m
     "/src/metaverse/classes/metaverse-flight-input-runtime.ts"
   );
   const originalNavigator = globalThis.navigator;
-  const flightInputRuntime = new MetaverseFlightInputRuntime();
+  let nowMs = 0;
+  let weaponButtonPressed = true;
+  const flightInputRuntime = new MetaverseFlightInputRuntime({
+    readWallClockMs: () => nowMs
+  });
 
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
@@ -329,7 +348,7 @@ test("MetaverseFlightInputRuntime maps gamepad combat buttons without changing m
             buttons: [
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
-              { pressed: true, value: 1 },
+              { pressed: weaponButtonPressed, value: weaponButtonPressed ? 1 : 0 },
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
               { pressed: false, value: 0 },
@@ -353,10 +372,55 @@ test("MetaverseFlightInputRuntime maps gamepad combat buttons without changing m
       primaryActionPressedCount: 1,
       secondaryAction: true,
       strafeAxis: 0,
-      weaponInteractPressedCount: 1,
+      weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
       weaponSwitchPressedCount: 0,
       yawAxis: 0
     });
+
+    nowMs = 400;
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 0,
+      pitchAxis: 0,
+      primaryAction: true,
+      primaryActionPressedCount: 0,
+      secondaryAction: true,
+      strafeAxis: 0,
+      weaponInteractPressedCount: 1,
+      weaponReloadPressedCount: 0,
+      weaponSwitchPressedCount: 0,
+      yawAxis: 0
+    });
+
+    weaponButtonPressed = false;
+    nowMs = 450;
+    assert.deepEqual(normalizeSnapshotSignedZeros(flightInputRuntime.readSnapshot()), {
+      boost: false,
+      jump: false,
+      moveAxis: 0,
+      pitchAxis: 0,
+      primaryAction: true,
+      primaryActionPressedCount: 0,
+      secondaryAction: true,
+      strafeAxis: 0,
+      weaponInteractPressedCount: 0,
+      weaponReloadPressedCount: 0,
+      weaponSwitchPressedCount: 0,
+      yawAxis: 0
+    });
+
+    weaponButtonPressed = true;
+    nowMs = 500;
+    flightInputRuntime.readSnapshot();
+    weaponButtonPressed = false;
+    nowMs = 580;
+
+    assert.equal(
+      flightInputRuntime.readSnapshot().weaponReloadPressedCount,
+      1
+    );
   } finally {
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,

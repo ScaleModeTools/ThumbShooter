@@ -297,6 +297,15 @@ export class MetaverseFixedStepTraversalSimulation {
           "advanceMetaverseUnmountedTraversalBodyStep returned a swim step while grounded"
         );
       },
+      syncResolvedGroundedBodySnapshot: ({
+        grounded,
+        groundedBodySnapshot
+      }) =>
+        this.#syncGroundedBodySupportState(
+          groundedBodyRuntime,
+          groundedBodySnapshot,
+          grounded
+        ),
       bodyControl: Object.freeze({
         boost: movementInput.boost,
         moveAxis: movementInput.moveAxis,
@@ -333,25 +342,15 @@ export class MetaverseFixedStepTraversalSimulation {
       );
     }
 
-    const resolvedBodySnapshot =
-      locomotionOutcome.locomotionMode === "grounded" &&
-      bodySnapshot.grounded !== locomotionOutcome.grounded
-        ? this.#syncGroundedBodySupportState(
-            groundedBodyRuntime,
-            bodySnapshot,
-            locomotionOutcome.grounded
-          )
-        : bodySnapshot;
-
     return Object.freeze({
       automaticSurfaceSnapshot: locomotionOutcome.automaticSurfaceSnapshot,
       autostepHeightMeters: groundedTraversalStep.autostepHeightMeters,
       cameraSnapshot: createTraversalGroundedCameraPresentationSnapshot(
-        resolvedBodySnapshot,
+        bodySnapshot,
         traversalCameraPitchRadians,
         this.#config,
         preferredLookYawRadians,
-        resolveGroundedPresentationPosition(resolvedBodySnapshot)
+        resolveGroundedPresentationPosition(bodySnapshot)
       ),
       locomotionMode: locomotionOutcome.locomotionMode,
       nextTraversalState: locomotionOutcome.traversalState,
@@ -402,6 +401,11 @@ export class MetaverseFixedStepTraversalSimulation {
             surfaceColliderSnapshots: this.#dependencies.surfaceColliderSnapshots
           })
         ),
+      syncResolvedGroundedBodySnapshot: () => {
+        throw new Error(
+          "advanceMetaverseUnmountedTraversalBodyStep returned a grounded step while swimming"
+        );
+      },
       bodyControl: Object.freeze({
         boost: movementInput.boost,
         moveAxis: movementInput.moveAxis,

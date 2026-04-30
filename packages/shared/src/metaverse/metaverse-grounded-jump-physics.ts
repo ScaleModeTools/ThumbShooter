@@ -51,7 +51,7 @@ export function createMetaverseGroundedJumpPhysicsConfigSnapshot(
     ),
     jumpImpulseUnitsPerSecond: Math.max(
       0,
-      toFiniteNumber(input.jumpImpulseUnitsPerSecond ?? 6.8, 6.8)
+      toFiniteNumber(input.jumpImpulseUnitsPerSecond ?? 7.4, 7.4)
     )
   });
 }

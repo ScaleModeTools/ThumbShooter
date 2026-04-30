@@ -336,7 +336,9 @@ test("MetaverseRemoteWorldPresentationState keeps dead remote players presented 
     deltaSeconds: 0.05,
     localPlayerId,
     sampledFrame: createSampledFrame({
-      baseSnapshot: respawnedSnapshot
+      alpha: 0.75,
+      baseSnapshot: deadSnapshot,
+      nextSnapshot: respawnedSnapshot
     })
   });
 
@@ -356,6 +358,106 @@ test("MetaverseRemoteWorldPresentationState keeps dead remote players presented 
     Math.abs(
       (presentationState.remoteCharacterPresentations[0]?.presentation.position.z ??
         0) - 7
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (presentationState.remotePlayerBodyBlockers[0]?.position.x ?? 0) - 19
+    ) < 0.000001
+  );
+});
+
+test("MetaverseRemoteWorldPresentationState keeps respawn roots aligned when delayed root samples still point at the death pose", async () => {
+  const presentationState = await createPresentationState();
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-respawn-lag-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Respawn Lag Remote");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const deadSnapshot = createRealtimeWorldSnapshot({
+    currentTick: 11,
+    includeVehicle: false,
+    localPlayerId,
+    localUsername,
+    remoteCombat: {
+      alive: false,
+      health: 0,
+      respawnRemainingMs: 3_000
+    },
+    remotePlayerId,
+    remotePlayerX: 8,
+    remoteUsername,
+    serverTimeMs: 1_050,
+    snapshotSequence: 2,
+    vehicleSeatOccupantPlayerId: null,
+    yawRadians: 0
+  });
+  const respawnedSnapshot = createRealtimeWorldSnapshot({
+    currentTick: 12,
+    includeVehicle: false,
+    localPlayerId,
+    localUsername,
+    remoteCombat: {
+      alive: true,
+      health: 100,
+      spawnProtectionRemainingMs: 1_000
+    },
+    remotePlayerId,
+    remotePlayerX: 19,
+    remotePlayerZ: 7,
+    remoteUsername,
+    serverTimeMs: 1_100,
+    snapshotSequence: 3,
+    vehicleSeatOccupantPlayerId: null,
+    yawRadians: Math.PI * 0.25
+  });
+
+  presentationState.syncAuthoritativeSample({
+    deltaSeconds: 0.05,
+    localPlayerId,
+    sampledFrame: createSampledFrame({
+      baseSnapshot: deadSnapshot
+    })
+  });
+  presentationState.syncAuthoritativeSample({
+    deltaSeconds: 0.05,
+    localPlayerId,
+    remoteCharacterRootFrame: createSampledFrame({
+      baseSnapshot: deadSnapshot
+    }),
+    sampledFrame: createSampledFrame({
+      alpha: 0.75,
+      baseSnapshot: deadSnapshot,
+      nextSnapshot: respawnedSnapshot
+    })
+  });
+
+  assert.equal(presentationState.remoteCharacterPresentations.length, 1);
+  assert.equal(presentationState.remotePlayerBodyBlockers.length, 1);
+  assert.equal(
+    presentationState.remoteCharacterPresentations[0]?.combatAlive,
+    true
+  );
+  assert.ok(
+    Math.abs(
+      (presentationState.remoteCharacterPresentations[0]?.presentation.position.x ??
+        0) - 19
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (presentationState.remoteCharacterPresentations[0]?.presentation.position.z ??
+        0) - 7
+    ) < 0.000001
+  );
+  assert.ok(
+    Math.abs(
+      (presentationState.remotePlayerBodyBlockers[0]?.position.x ?? 0) - 19
     ) < 0.000001
   );
 });

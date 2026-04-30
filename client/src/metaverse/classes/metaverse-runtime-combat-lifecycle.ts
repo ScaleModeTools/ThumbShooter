@@ -18,6 +18,7 @@ interface MetaverseRuntimeCombatLifecycleRemoteWorldRuntime {
   ): {
     readonly combat: {
       readonly alive: boolean;
+      readonly deaths: number;
     } | null;
   } | null;
   readFreshAuthoritativeWorldSnapshot(
@@ -51,6 +52,7 @@ export class MetaverseRuntimeCombatLifecycle {
   } | null;
 
   #lastAuthoritativeAlive: boolean | null = null;
+  #lastAuthoritativeDeaths: number | null = null;
   #lastAuthoritativeMatchPhase:
     | "active"
     | "completed"
@@ -74,6 +76,7 @@ export class MetaverseRuntimeCombatLifecycle {
 
   reset(): void {
     this.#lastAuthoritativeAlive = null;
+    this.#lastAuthoritativeDeaths = null;
     this.#lastAuthoritativeMatchPhase = null;
     this.#clearLocalCombatDeathPresentation?.();
     this.#weaponPresentationRuntime?.setCombatPresentationSuppressed?.(false);
@@ -104,10 +107,20 @@ export class MetaverseRuntimeCombatLifecycle {
       this.#authoritativeWorldSync.armLocalSpawnBootstrap();
     }
 
+    const authoritativeDeaths = Number.isFinite(Number(combatSnapshot.deaths))
+      ? Math.max(0, Math.floor(Number(combatSnapshot.deaths)))
+      : 0;
+    const missedDeathWhileInactive =
+      combatSnapshot.alive &&
+      this.#lastAuthoritativeDeaths !== null &&
+      authoritativeDeaths > this.#lastAuthoritativeDeaths;
+    const respawnedAfterObservedDeath =
+      combatSnapshot.alive && this.#lastAuthoritativeAlive === false;
+
     if (combatSnapshot.alive) {
       this.#weaponPresentationRuntime?.setCombatPresentationSuppressed?.(false);
 
-      if (this.#lastAuthoritativeAlive === false) {
+      if (respawnedAfterObservedDeath || missedDeathWhileInactive) {
         this.#bootLifecycle.setDeathCameraSnapshot(null);
         this.#bootLifecycle.setRespawnControlLocked(false);
         this.#clearLocalCombatDeathPresentation?.();
@@ -121,6 +134,7 @@ export class MetaverseRuntimeCombatLifecycle {
     }
 
     this.#lastAuthoritativeAlive = combatSnapshot.alive;
+    this.#lastAuthoritativeDeaths = authoritativeDeaths;
     this.#lastAuthoritativeMatchPhase = matchPhase;
   }
 }

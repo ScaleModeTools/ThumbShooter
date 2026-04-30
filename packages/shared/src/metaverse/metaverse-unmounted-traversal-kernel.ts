@@ -202,6 +202,13 @@ export interface AdvanceMetaverseUnmountedSwimBodyStepInput {
   readonly waterlineHeightMeters: number;
 }
 
+export interface SyncResolvedMetaverseUnmountedGroundedBodySnapshotInput<
+  GroundedBodySnapshot extends MetaverseUnmountedGroundedBodySnapshot = MetaverseUnmountedGroundedBodySnapshot
+> {
+  readonly grounded: boolean;
+  readonly groundedBodySnapshot: GroundedBodySnapshot;
+}
+
 export interface AdvanceMetaverseUnmountedTraversalBodyStepInput<
   GroundedBodySnapshot extends MetaverseUnmountedGroundedBodySnapshot = MetaverseUnmountedGroundedBodySnapshot,
   SwimBodySnapshot extends MetaverseUnmountedSwimBodySnapshot = MetaverseUnmountedSwimBodySnapshot
@@ -213,6 +220,9 @@ export interface AdvanceMetaverseUnmountedTraversalBodyStepInput<
   readonly advanceSwimBodySnapshot: (
     input: AdvanceMetaverseUnmountedSwimBodyStepInput
   ) => SwimBodySnapshot;
+  readonly syncResolvedGroundedBodySnapshot: (
+    input: SyncResolvedMetaverseUnmountedGroundedBodySnapshotInput<GroundedBodySnapshot>
+  ) => GroundedBodySnapshot;
 }
 
 export interface AdvanceMetaverseUnmountedTraversalBodyStepSnapshot<
@@ -598,7 +608,6 @@ function resolveMetaverseUnmountedGroundedTraversalOutcome({
         } satisfies MetaverseTraversalStateDecision)
         } satisfies MetaverseTraversalStateResolutionSnapshot)
     : automaticSurfaceSnapshot;
-
   return Object.freeze({
     automaticSurfaceSnapshot: nextAutomaticSurfaceSnapshot,
     grounded,
@@ -852,6 +861,7 @@ export function advanceMetaverseUnmountedTraversalBodyStep<
 >({
   advanceGroundedBodySnapshot,
   advanceSwimBodySnapshot,
+  syncResolvedGroundedBodySnapshot,
   ...prepareInput
 }: AdvanceMetaverseUnmountedTraversalBodyStepInput<
   GroundedBodySnapshot,
@@ -880,13 +890,21 @@ export function advanceMetaverseUnmountedTraversalBodyStep<
       excludedOwnerEnvironmentAssetId:
         prepareInput.excludedOwnerEnvironmentAssetId ?? null
     });
+    const resolvedGroundedBodySnapshot =
+      locomotionOutcome.locomotionMode === "grounded" &&
+      groundedBodySnapshot.grounded !== locomotionOutcome.grounded
+        ? syncResolvedGroundedBodySnapshot({
+            grounded: locomotionOutcome.grounded,
+            groundedBodySnapshot
+          })
+        : groundedBodySnapshot;
     const transitionSnapshot = resolveMetaverseUnmountedTraversalTransition({
       locomotionOutcome,
       preparedTraversalStep
     });
 
     return Object.freeze({
-      groundedBodySnapshot,
+      groundedBodySnapshot: resolvedGroundedBodySnapshot,
       preparedTraversalStep,
       locomotionOutcome,
       swimBodySnapshot: null,

@@ -246,6 +246,53 @@ export class MetaverseRemoteWorldCommandTransport {
     });
   }
 
+  reloadWeapon(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+    readonly weaponId: string;
+  }): {
+    readonly actionSequence: number;
+    readonly weaponId: string;
+  } | null {
+    const worldClient = this.#readWorldClient();
+
+    if (
+      worldClient === null ||
+      this.#localPlayerIdentity === null ||
+      worldClient.issuePlayerAction === undefined
+    ) {
+      return null;
+    }
+
+    const intendedWeaponInstanceId = input.intendedWeaponInstanceId ?? null;
+    const requestedActiveSlotId = input.requestedActiveSlotId ?? null;
+    const actionSequence = worldClient.issuePlayerAction({
+      action: {
+        ...(intendedWeaponInstanceId === null
+          ? {}
+          : {
+              intendedWeaponInstanceId
+            }),
+        issuedAtAuthoritativeTimeMs: this.#readEstimatedServerTimeMs(
+          this.#readWallClockMs()
+        ),
+        kind: "reload-weapon",
+        requestedActiveSlotId,
+        weaponId: input.weaponId
+      },
+      playerId: this.#localPlayerIdentity.playerId
+    });
+
+    if (actionSequence === null || actionSequence === undefined) {
+      return null;
+    }
+
+    return Object.freeze({
+      actionSequence,
+      weaponId: input.weaponId
+    });
+  }
+
   switchActiveWeaponSlot(input: {
     readonly intendedWeaponId?: string | null;
     readonly intendedWeaponInstanceId?: string | null;

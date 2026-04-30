@@ -1,6 +1,5 @@
 import type {
   MetaverseRealtimeEnvironmentBodySnapshot,
-  MetaverseRealtimePlayerSnapshot,
   MetaverseRealtimeVehicleSnapshot
 } from "@webgpu-metaverse/shared";
 import {
@@ -18,6 +17,9 @@ import type {
   ConsumedAckedAuthoritativeLocalPlayerSample
 } from "../traversal/reconciliation/authoritative-local-player-reconciliation";
 import type {
+  MetaverseRealtimeAuthoritativeLocalPlayerSnapshot
+} from "../remote-world/metaverse-remote-world-authoritative-snapshot-state";
+import type {
   AuthoritativeLocalPlayerPoseSyncOptions
 } from "../traversal/reconciliation/classes/metaverse-local-authority-reconciliation-state";
 
@@ -34,7 +36,7 @@ interface MetaverseAuthoritativeWorldSyncRemoteWorldRuntime {
   ): AckedAuthoritativeLocalPlayerPose | null;
   readFreshAuthoritativeLocalPlayerSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
-  ): MetaverseRealtimePlayerSnapshot | null;
+  ): MetaverseRealtimeAuthoritativeLocalPlayerSnapshot | null;
   readFreshAuthoritativeVehicleSnapshot(
     environmentAssetId: string,
     maxAuthoritativeSnapshotAgeMs: number
@@ -57,6 +59,7 @@ interface MetaverseAuthoritativeWorldSyncTraversalRuntime {
   ): MountedEnvironmentSnapshot | null;
   syncAuthoritativeLocalPlayerPose(
     authoritativePlayerSnapshot:
+      | MetaverseRealtimeAuthoritativeLocalPlayerSnapshot
       | AckedAuthoritativeLocalPlayerPose
       | ConsumedAckedAuthoritativeLocalPlayerSample,
     syncOptions?: AuthoritativeLocalPlayerPoseSyncOptions
@@ -130,6 +133,8 @@ export class MetaverseAuthoritativeWorldSync {
 
   #mountedEnvironmentAuthorityMismatchKey: string | null = null;
   #mountedEnvironmentAuthorityMismatchSinceMs: number | null = null;
+  #lastLocalPlayerCombatAlive: boolean | null = null;
+  #lastLocalPlayerCombatDeaths: number | null = null;
   #pendingLocalSpawnBootstrap = true;
 
   constructor({
@@ -153,6 +158,8 @@ export class MetaverseAuthoritativeWorldSync {
 
   reset(): void {
     this.#resetMountedEnvironmentAuthorityMismatch();
+    this.#lastLocalPlayerCombatAlive = null;
+    this.#lastLocalPlayerCombatDeaths = null;
     this.armLocalSpawnBootstrap();
   }
 
@@ -277,6 +284,8 @@ export class MetaverseAuthoritativeWorldSync {
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
 
+    this.#syncLocalRespawnBootstrap(authoritativeLocalPlayerSnapshot);
+
     if (
       authoritativeLocalPlayerSnapshot?.locomotionMode === "mounted" ||
       authoritativeLocalPlayerSnapshot?.mountedOccupancy != null
@@ -284,7 +293,7 @@ export class MetaverseAuthoritativeWorldSync {
       return;
     }
 
-    const authoritativeLocalPlayerPose =
+    const ackedAuthoritativeLocalPlayerPose =
       this.#remoteWorldRuntime.consumeFreshAckedAuthoritativeLocalPlayerSample?.(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       ) ??
@@ -292,6 +301,9 @@ export class MetaverseAuthoritativeWorldSync {
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       ) ??
       null;
+    const authoritativeLocalPlayerPose =
+      ackedAuthoritativeLocalPlayerPose ??
+      (this.#pendingLocalSpawnBootstrap ? authoritativeLocalPlayerSnapshot : null);
 
     if (authoritativeLocalPlayerPose === null) {
       return;
@@ -310,6 +322,36 @@ export class MetaverseAuthoritativeWorldSync {
       authoritativeLocalPlayerPose,
       syncOptions
     );
+  }
+
+  #syncLocalRespawnBootstrap(
+    authoritativeLocalPlayerSnapshot:
+      | MetaverseRealtimeAuthoritativeLocalPlayerSnapshot
+      | null
+  ): void {
+    const combatSnapshot = authoritativeLocalPlayerSnapshot?.combat ?? null;
+
+    if (combatSnapshot === null) {
+      return;
+    }
+
+    const alive = combatSnapshot.alive;
+    const deaths = Number.isFinite(Number(combatSnapshot.deaths))
+      ? Math.max(0, Math.floor(Number(combatSnapshot.deaths)))
+      : 0;
+    const missedDeathWhileInactive =
+      alive &&
+      this.#lastLocalPlayerCombatDeaths !== null &&
+      deaths > this.#lastLocalPlayerCombatDeaths;
+    const respawnedAfterObservedDeath =
+      alive && this.#lastLocalPlayerCombatAlive === false;
+
+    if (missedDeathWhileInactive || respawnedAfterObservedDeath) {
+      this.armLocalSpawnBootstrap();
+    }
+
+    this.#lastLocalPlayerCombatAlive = alive;
+    this.#lastLocalPlayerCombatDeaths = deaths;
   }
 
   #syncMountedOccupancyAuthorityFromWorldSnapshots(): void {

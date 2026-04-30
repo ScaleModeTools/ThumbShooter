@@ -18,9 +18,15 @@ import type {
 import {
   readMetaverseCombatHitscanWorldImpactFx,
   readMetaverseCombatProjectileImpactPresentationEffect,
+  readMetaverseCombatReloadAudioCueId,
   readMetaverseCombatShotAudioCueId,
   readMetaverseCombatShotFx
 } from "../config/metaverse-combat-presentation-effects";
+import {
+  resolveMetaverseRespawnCountdownAudioCueId,
+  resolveMetaverseRespawnCountdownSecond,
+  type MetaverseRespawnCountdownSecond
+} from "../config/metaverse-respawn-presentation";
 import { MetaverseCombatHapticsRuntime } from "./metaverse-combat-haptics-runtime";
 
 interface MetaverseCombatFeedbackRuntimeDependencies {
@@ -116,6 +122,11 @@ const metaverseCombatHitSpatialProfile = Object.freeze({
   refDistanceMeters: 0.95,
   rolloffFactor: 1.85
 });
+const metaverseCombatReloadSpatialProfile = Object.freeze({
+  maxDistanceMeters: 22,
+  refDistanceMeters: 1.15,
+  rolloffFactor: 1.25
+});
 
 function createSpatialAudioOptions(
   position: { readonly x: number; readonly y: number; readonly z: number },
@@ -157,6 +168,26 @@ function readPlayerHitAudioPosition(
     y: activeBodySnapshot.position.y + (hitZone === "head" ? 1.72 : 1.12),
     z: activeBodySnapshot.position.z
   });
+}
+
+function readPlayerReloadAudioPosition(
+  playerSnapshot: MetaverseRealtimePlayerSnapshot
+) {
+  const activeBodySnapshot =
+    readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(playerSnapshot);
+
+  return Object.freeze({
+    x: activeBodySnapshot.position.x,
+    y: activeBodySnapshot.position.y + 1.18,
+    z: activeBodySnapshot.position.z
+  });
+}
+
+function createReloadingWeaponKey(input: {
+  readonly playerId: MetaversePlayerId;
+  readonly weaponId: string;
+}): string {
+  return `${input.playerId}:${input.weaponId}`;
 }
 
 function createDamageSourceDirectionWorld(
@@ -485,7 +516,9 @@ export class MetaverseCombatFeedbackRuntime {
   #lastCombatEventSequence: number | null = null;
   #lastCombatFeedSequence: number | null = null;
   #lastLocalPresentationEventSequence = 0;
+  #lastLocalRespawnCountdownSecond: MetaverseRespawnCountdownSecond | null = null;
   #playerAliveById = new Map<MetaversePlayerId, boolean>();
+  #reloadingWeaponKeys = new Set<string>();
 
   constructor(dependencies: MetaverseCombatFeedbackRuntimeDependencies) {
     this.#playAudioCue = dependencies.playAudioCue ?? null;
@@ -498,6 +531,7 @@ export class MetaverseCombatFeedbackRuntime {
     this.#lastCombatEventSequence = null;
     this.#lastCombatFeedSequence = null;
     this.#lastLocalPresentationEventSequence = 0;
+    this.#lastLocalRespawnCountdownSecond = null;
     this.#deathPresentationActiveByPlayerId.clear();
     this.#deathPresentationSequenceByPlayerId.clear();
     this.#deferredCombatEventsBySequence.clear();
@@ -506,6 +540,7 @@ export class MetaverseCombatFeedbackRuntime {
     this.#queuedVisualIntentByKey.clear();
     this.#queuedVisualIntentKeys.length = 0;
     this.#presentationVisualKeys.clear();
+    this.#reloadingWeaponKeys.clear();
   }
 
   registerPendingLocalShot(input: {
@@ -631,6 +666,8 @@ export class MetaverseCombatFeedbackRuntime {
     this.#syncCombatEvents(worldSnapshot, cameraSnapshot);
     this.#syncCombatFeed(worldSnapshot, cameraSnapshot);
     this.#syncAliveTransitions(worldSnapshot);
+    this.#syncLocalRespawnCountdown(worldSnapshot);
+    this.#syncReloadTransitions(worldSnapshot, cameraSnapshot);
     this.#initializedFromAuthoritativeSnapshot = true;
   }
 
@@ -1407,6 +1444,105 @@ export class MetaverseCombatFeedbackRuntime {
         );
       }
     }
+  }
+
+  #syncLocalRespawnCountdown(worldSnapshot: MetaverseRealtimeWorldSnapshot): void {
+    const localPlayerId = this.#readLocalPlayerId();
+    const localPlayerSnapshot =
+      localPlayerId === null ? null : readPlayerById(worldSnapshot, localPlayerId);
+    const combatSnapshot = localPlayerSnapshot?.combat ?? null;
+
+    if (combatSnapshot === null || combatSnapshot.alive) {
+      this.#lastLocalRespawnCountdownSecond = null;
+      return;
+    }
+
+    const countdownSecond = resolveMetaverseRespawnCountdownSecond(
+      Number(combatSnapshot.respawnRemainingMs)
+    );
+
+    if (countdownSecond === null) {
+      return;
+    }
+
+    if (!this.#initializedFromAuthoritativeSnapshot) {
+      this.#lastLocalRespawnCountdownSecond = countdownSecond;
+      return;
+    }
+
+    if (this.#lastLocalRespawnCountdownSecond === countdownSecond) {
+      return;
+    }
+
+    this.#lastLocalRespawnCountdownSecond = countdownSecond;
+    this.#playAudioCue?.(
+      resolveMetaverseRespawnCountdownAudioCueId(countdownSecond)
+    );
+  }
+
+  #syncReloadTransitions(
+    worldSnapshot: MetaverseRealtimeWorldSnapshot,
+    cameraSnapshot: MetaverseCameraSnapshot
+  ): void {
+    const nextReloadingWeaponKeys = new Set<string>();
+
+    for (const playerSnapshot of worldSnapshot.players) {
+      const combatSnapshot = playerSnapshot.combat;
+
+      if (combatSnapshot === null || !combatSnapshot.alive) {
+        continue;
+      }
+
+      const weaponSnapshots =
+        combatSnapshot.weaponInventory.length > 0
+          ? combatSnapshot.weaponInventory
+          : combatSnapshot.activeWeapon === null
+            ? []
+            : [combatSnapshot.activeWeapon];
+
+      for (const weaponSnapshot of weaponSnapshots) {
+        if (Number(weaponSnapshot.reloadRemainingMs) <= 0) {
+          continue;
+        }
+
+        const reloadKey = createReloadingWeaponKey({
+          playerId: playerSnapshot.playerId,
+          weaponId: weaponSnapshot.weaponId
+        });
+
+        if (nextReloadingWeaponKeys.has(reloadKey)) {
+          continue;
+        }
+
+        nextReloadingWeaponKeys.add(reloadKey);
+
+        if (
+          !this.#initializedFromAuthoritativeSnapshot ||
+          this.#reloadingWeaponKeys.has(reloadKey)
+        ) {
+          continue;
+        }
+
+        const reloadAudioCueId = readMetaverseCombatReloadAudioCueId(
+          weaponSnapshot.weaponId
+        );
+
+        if (reloadAudioCueId === null) {
+          continue;
+        }
+
+        this.#playAudioCue?.(
+          reloadAudioCueId,
+          createSpatialAudioOptions(
+            readPlayerReloadAudioPosition(playerSnapshot),
+            cameraSnapshot,
+            metaverseCombatReloadSpatialProfile
+          )
+        );
+      }
+    }
+
+    this.#reloadingWeaponKeys = nextReloadingWeaponKeys;
   }
 
   #triggerDeath(

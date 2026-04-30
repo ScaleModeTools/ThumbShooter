@@ -51,13 +51,13 @@ function sanitizeConfig(
       groundedJumpPhysics.airborneMovementDampingFactor,
     baseSpeedUnitsPerSecond: Math.max(
       0,
-      toFiniteNumber(config.baseSpeedUnitsPerSecond, 6)
+      toFiniteNumber(config.baseSpeedUnitsPerSecond, 5.4)
     ),
     boostCurveExponent: Math.max(
       0.1,
       toFiniteNumber(config.boostCurveExponent, 1.1)
     ),
-    boostMultiplier: Math.max(1, toFiniteNumber(config.boostMultiplier, 1.65)),
+    boostMultiplier: Math.max(1, toFiniteNumber(config.boostMultiplier, 1.2)),
     capsuleHalfHeightMeters: Math.max(
       0.05,
       toFiniteNumber(config.capsuleHalfHeightMeters, 0.48)

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 import type { MetaverseHudSnapshot } from "../types/metaverse-runtime";
+import { resolveMetaverseRespawnVisibleCountdownSecond } from "../config/metaverse-respawn-presentation";
 
 interface MetaverseTeamDeathmatchScoreboardHudProps {
   readonly combatSnapshot: MetaverseHudSnapshot["combat"];
@@ -202,6 +203,11 @@ export function MetaverseTeamDeathmatchScoreboardHud({
   combatSnapshot
 }: MetaverseTeamDeathmatchScoreboardHudProps) {
   const scoreboardSnapshot = combatSnapshot.scoreboard;
+  const respawnCountdownSecond = combatSnapshot.alive
+    ? null
+    : resolveMetaverseRespawnVisibleCountdownSecond(
+        combatSnapshot.respawnRemainingMs
+      );
 
   if (!scoreboardSnapshot.available) {
     return null;
@@ -210,12 +216,22 @@ export function MetaverseTeamDeathmatchScoreboardHud({
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-[var(--metaverse-hud-edge)]">
       <div
-        className="surface-game-overlay pointer-events-none w-[min(58rem,calc(100vw-2rem))] rounded-[var(--metaverse-hud-panel-radius)] p-[var(--metaverse-hud-panel-padding)] text-game-foreground shadow-[0_24px_72px_rgb(2_6_23_/_0.38)] [text-shadow:var(--game-text-shadow)]"
+        className="pointer-events-none flex w-[min(58rem,calc(100vw-2rem))] flex-col items-center gap-3"
         style={metaverseHardHudTextShadowStyle}
       >
-        <MetaverseTeamDeathmatchScoreboardTable
-          scoreboardSnapshot={scoreboardSnapshot}
-        />
+        <div className="surface-game-overlay w-full rounded-[var(--metaverse-hud-panel-radius)] p-[var(--metaverse-hud-panel-padding)] text-game-foreground shadow-[0_24px_72px_rgb(2_6_23_/_0.38)] [text-shadow:var(--game-text-shadow)]">
+          <MetaverseTeamDeathmatchScoreboardTable
+            scoreboardSnapshot={scoreboardSnapshot}
+          />
+        </div>
+        {respawnCountdownSecond === null ? null : (
+          <div
+            aria-live="polite"
+            className="surface-game-overlay min-w-[12rem] rounded-[var(--metaverse-hud-inset-radius)] px-4 py-2 text-center text-sm font-semibold uppercase text-game-foreground shadow-[0_12px_36px_rgb(2_6_23_/_0.32)] [text-shadow:var(--game-text-shadow)]"
+          >
+            Respawning in {respawnCountdownSecond}...
+          </div>
+        )}
       </div>
     </div>
   );

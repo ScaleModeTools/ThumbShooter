@@ -354,6 +354,17 @@ export class MetaverseRemoteWorldRuntime {
     return this.#commandTransport.fireWeapon(input);
   }
 
+  reloadWeapon(input: {
+    readonly intendedWeaponInstanceId?: string | null;
+    readonly requestedActiveSlotId?: MetaverseWeaponSlotId | null;
+    readonly weaponId: string;
+  }): {
+    readonly actionSequence: number;
+    readonly weaponId: string;
+  } | null {
+    return this.#commandTransport.reloadWeapon(input);
+  }
+
   switchActiveWeaponSlot(input: {
     readonly intendedWeaponId?: string | null;
     readonly intendedWeaponInstanceId?: string | null;

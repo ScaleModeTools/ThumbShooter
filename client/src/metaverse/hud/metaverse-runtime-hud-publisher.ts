@@ -386,8 +386,17 @@ function readNearestWeaponResourceInteraction(input: {
   let nearestResource:
     | MetaverseHudSnapshot["interaction"]["weaponResource"]
     | null = null;
+  const equippedWeaponIds = new Set(
+    input.localPlayerSnapshot.weaponState?.slots
+      .filter((slot) => slot.equipped)
+      .map((slot) => slot.weaponId) ?? []
+  );
 
   for (const resourceSpawn of input.worldSnapshot.resourceSpawns) {
+    if (equippedWeaponIds.has(resourceSpawn.weaponId)) {
+      continue;
+    }
+
     const distanceMeters = Math.hypot(
       input.localPosition.x - resourceSpawn.position.x,
       input.localPosition.y - resourceSpawn.position.y,

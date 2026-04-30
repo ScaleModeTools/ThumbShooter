@@ -50,6 +50,7 @@ interface MetaverseAuthoritativeCombatCommandHandler {
     command: MetaverseIssuePlayerActionCommand,
     nowMs: number
   ): void;
+  isPlayerAlive(playerId: MetaverseIssuePlayerActionCommand["playerId"]): boolean;
 }
 
 interface MetaverseAuthoritativeResourceCommandHandler {
@@ -167,32 +168,42 @@ export class MetaverseAuthoritativeWorldCommandIntake {
         }
         break;
       case "sync-driver-vehicle-control":
-        this.#dependencies.vehicleDriveAuthority.acceptSyncDriverVehicleControlCommand(
-          command,
-          normalizedNowMs
-        );
+        if (this.#isPlayerAlive(command.playerId)) {
+          this.#dependencies.vehicleDriveAuthority.acceptSyncDriverVehicleControlCommand(
+            command,
+            normalizedNowMs
+          );
+        }
         break;
       case "sync-mounted-occupancy":
-        this.#dependencies.mountedOccupancyAuthority.acceptSyncMountedOccupancyCommand(
-          command,
-          normalizedNowMs
-        );
+        if (this.#isPlayerAlive(command.playerId)) {
+          this.#dependencies.mountedOccupancyAuthority.acceptSyncMountedOccupancyCommand(
+            command,
+            normalizedNowMs
+          );
+        }
         break;
       case "sync-player-look-intent":
-        this.#dependencies.playerTraversalAuthority.acceptSyncPlayerLookIntentCommand(
-          command,
-          normalizedNowMs
-        );
+        if (this.#isPlayerAlive(command.playerId)) {
+          this.#dependencies.playerTraversalAuthority.acceptSyncPlayerLookIntentCommand(
+            command,
+            normalizedNowMs
+          );
+        }
         break;
       case "sync-player-traversal-intent":
-        this.#dependencies.playerTraversalAuthority.acceptSyncPlayerTraversalIntentCommand(
-          command,
-          normalizedNowMs
-        );
+        if (this.#isPlayerAlive(command.playerId)) {
+          this.#dependencies.playerTraversalAuthority.acceptSyncPlayerTraversalIntentCommand(
+            command,
+            normalizedNowMs
+          );
+        }
         break;
       case "sync-player-weapon-state":
-        this.#dependencies.playerWeaponStateAuthority
-          .acceptSyncPlayerWeaponStateCommand(command, normalizedNowMs);
+        if (this.#isPlayerAlive(command.playerId)) {
+          this.#dependencies.playerWeaponStateAuthority
+            .acceptSyncPlayerWeaponStateCommand(command, normalizedNowMs);
+        }
         break;
       default: {
         const exhaustiveCommand: never = command;
@@ -204,5 +215,11 @@ export class MetaverseAuthoritativeWorldCommandIntake {
     }
 
     return this.#dependencies.readWorldEvent(normalizedNowMs);
+  }
+
+  #isPlayerAlive(
+    playerId: MetaverseIssuePlayerActionCommand["playerId"]
+  ): boolean {
+    return this.#dependencies.combatAuthority.isPlayerAlive(playerId);
   }
 }

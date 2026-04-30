@@ -1178,6 +1178,7 @@ function createMovementInputFromTraversalIntent(
     secondaryAction: false,
     strafeAxis: traversalIntentInput.bodyControl?.strafeAxis ?? 0,
     weaponInteractPressedCount: 0,
+    weaponReloadPressedCount: 0,
     weaponSwitchPressedCount: 0,
     yawAxis: traversalIntentInput.bodyControl?.turnAxis ?? 0
   });

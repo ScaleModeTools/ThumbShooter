@@ -284,6 +284,15 @@ export class MetaverseAuthoritativeUnmountedPlayerSimulation<
             surfaceColliderSnapshots: authoritativeSurfaceColliders
           })
         ),
+      syncResolvedGroundedBodySnapshot: ({
+        grounded,
+        groundedBodySnapshot
+      }) =>
+        this.#syncGroundedBodySupportState(
+          playerRuntime,
+          groundedBodySnapshot,
+          grounded
+        ),
       bodyControl: Object.freeze({
         boost: traversalIntent?.bodyControl.boost === true,
         moveAxis,
@@ -563,5 +572,22 @@ export class MetaverseAuthoritativeUnmountedPlayerSimulation<
     return Object.freeze([
       ...traversalIntentSegments
     ]);
+  }
+
+  #syncGroundedBodySupportState(
+    playerRuntime: PlayerRuntime,
+    groundedBodySnapshot: MetaverseAuthoritativeGroundedBodyRuntime["snapshot"],
+    grounded: boolean
+  ): MetaverseAuthoritativeGroundedBodyRuntime["snapshot"] {
+    playerRuntime.groundedBodyRuntime.syncAuthoritativeState({
+      driveTarget: groundedBodySnapshot.driveTarget,
+      grounded,
+      interaction: groundedBodySnapshot.interaction,
+      linearVelocity: groundedBodySnapshot.linearVelocity,
+      position: groundedBodySnapshot.position,
+      yawRadians: groundedBodySnapshot.yawRadians
+    });
+
+    return playerRuntime.groundedBodyRuntime.snapshot;
   }
 }

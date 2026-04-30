@@ -484,6 +484,140 @@ test("MetaverseAuthoritativeWorldSync rearms the spawn bootstrap when a mid-sess
   });
 });
 
+test("MetaverseAuthoritativeWorldSync force-snaps to fresh respawn authority when the acked pose is unavailable", async () => {
+  const { MetaverseAuthoritativeWorldSync } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-authoritative-world-sync.ts"
+  );
+  const authoritativeLocalPlayerSamples = [
+    Object.freeze({
+      authoritativeSnapshotAgeMs: 0,
+      authoritativeTick: 10,
+      lastProcessedTraversalSequence: 3,
+      pose: Object.freeze({
+        look: Object.freeze({
+          pitchRadians: -0.2,
+          yawRadians: 1.25
+        })
+      }),
+      receivedAtWallClockMs: 1_000,
+      snapshotSequence: 1
+    }),
+    null
+  ];
+  let authoritativeLocalPlayerSampleIndex = 0;
+  const respawnSnapshot = Object.freeze({
+    combat: Object.freeze({
+      alive: true,
+      deaths: 1
+    }),
+    locomotionMode: "grounded",
+    mountedOccupancy: null,
+    position: Object.freeze({
+      x: 18,
+      y: 1.6,
+      z: -4
+    }),
+    yawRadians: 0.75
+  });
+  const authoritativeFreshLocalSnapshots = [
+    Object.freeze({
+      combat: Object.freeze({
+        alive: true,
+        deaths: 0
+      }),
+      locomotionMode: "grounded",
+      mountedOccupancy: null
+    }),
+    respawnSnapshot
+  ];
+  const authoritativeSyncCalls = [];
+
+  const worldSync = new MetaverseAuthoritativeWorldSync({
+    authoritativePlayerMovementEnabled: true,
+    dynamicEnvironmentPresentationRuntime: {
+      syncRemoteVehiclePresentationPose() {},
+      syncRemoteEnvironmentBodyPresentationPose() {}
+    },
+    environmentBodyCollisionRuntime: {
+      beginAuthoritativeEnvironmentBodyCollisionSync() {},
+      syncAuthoritativeEnvironmentBodyCollisionPose() {}
+    },
+    readWallClockMs: () => 1_250,
+    remoteWorldRuntime: {
+      remoteEnvironmentBodyPresentations: Object.freeze([]),
+      remoteVehiclePresentations: Object.freeze([]),
+      consumeFreshAckedAuthoritativeLocalPlayerSample() {
+        const authoritativeLocalPlayerSample =
+          authoritativeLocalPlayerSamples[authoritativeLocalPlayerSampleIndex] ??
+          null;
+
+        authoritativeLocalPlayerSampleIndex += 1;
+
+        return authoritativeLocalPlayerSample;
+      },
+      readFreshAuthoritativeLocalPlayerSnapshot() {
+        return (
+          authoritativeFreshLocalSnapshots[authoritativeLocalPlayerSampleIndex] ??
+          null
+        );
+      },
+      readFreshAuthoritativeEnvironmentBodySnapshots() {
+        return Object.freeze([]);
+      },
+      readFreshAuthoritativeVehicleSnapshot() {
+        return null;
+      }
+    },
+    traversalRuntime: {
+      mountedEnvironmentSnapshot: null,
+      boardEnvironment() {
+        throw new Error("boardEnvironment should stay idle for respawn fallback.");
+      },
+      leaveMountedEnvironment() {
+        throw new Error(
+          "leaveMountedEnvironment should stay idle for respawn fallback."
+        );
+      },
+      occupySeat() {
+        throw new Error("occupySeat should stay idle for respawn fallback.");
+      },
+      syncAuthoritativeLocalPlayerPose(
+        authoritativePlayerSnapshot,
+        syncOptions
+      ) {
+        authoritativeSyncCalls.push(
+          Object.freeze({
+            authoritativePlayerSnapshot,
+            syncOptions: syncOptions ?? null
+          })
+        );
+      },
+      syncAuthoritativeVehiclePose() {
+        throw new Error(
+          "syncAuthoritativeVehiclePose should stay idle for respawn fallback."
+        );
+      }
+    },
+    vehicleCollisionRuntime: {
+      syncAuthoritativeVehicleCollisionPose() {}
+    }
+  });
+
+  worldSync.syncAuthoritativeWorldSnapshots();
+  worldSync.syncAuthoritativeWorldSnapshots();
+
+  assert.equal(authoritativeSyncCalls.length, 2);
+  assert.equal(
+    authoritativeSyncCalls[1]?.authoritativePlayerSnapshot,
+    respawnSnapshot
+  );
+  assert.deepEqual(authoritativeSyncCalls[1]?.syncOptions, {
+    forceSnap: true,
+    intentionalDiscontinuityCause: "spawn",
+    syncAuthoritativeLook: true
+  });
+});
+
 test("MetaverseAuthoritativeWorldSync reconciles the locally mounted vehicle from fresh authoritative vehicle truth", async () => {
   const { MetaverseAuthoritativeWorldSync } = await clientLoader.load(
     "/src/metaverse/classes/metaverse-authoritative-world-sync.ts"

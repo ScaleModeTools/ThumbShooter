@@ -46,6 +46,7 @@ test("MetaverseRuntimeCombatLifecycle freezes on death, resets weapon presentati
   let weaponResetCount = 0;
   let combatSnapshot = Object.freeze({
     alive: true,
+    deaths: 0,
     health: 100
   });
   let combatMatchSnapshot = Object.freeze({
@@ -107,6 +108,7 @@ test("MetaverseRuntimeCombatLifecycle freezes on death, resets weapon presentati
 
   combatSnapshot = Object.freeze({
     alive: false,
+    deaths: 1,
     health: 0,
     respawnRemainingMs: 3_000
   });
@@ -135,6 +137,7 @@ test("MetaverseRuntimeCombatLifecycle freezes on death, resets weapon presentati
 
   combatSnapshot = Object.freeze({
     alive: true,
+    deaths: 1,
     health: 100,
     spawnProtectionRemainingMs: 1_000
   });
@@ -165,6 +168,7 @@ test("MetaverseRuntimeCombatLifecycle rearms the spawn snap when team deathmatch
   });
   const combatSnapshot = Object.freeze({
     alive: true,
+    deaths: 0,
     health: 100,
     spawnProtectionRemainingMs: 0
   });
@@ -208,4 +212,77 @@ test("MetaverseRuntimeCombatLifecycle rearms the spawn snap when team deathmatch
 
   combatLifecycle.syncLocalCombatState(liveCameraSnapshot);
   assert.equal(spawnBootstrapCount, 1);
+});
+
+test("MetaverseRuntimeCombatLifecycle rearms respawn when an inactive window misses the dead snapshot", async () => {
+  const { MetaverseRuntimeCombatLifecycle } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-runtime-combat-lifecycle.ts"
+  );
+  const deathCameraCalls = [];
+  const respawnLockCalls = [];
+  const weaponSuppressionCalls = [];
+  let clearLocalDeathPresentationCount = 0;
+  let spawnBootstrapCount = 0;
+  let combatSnapshot = Object.freeze({
+    alive: true,
+    deaths: 0,
+    health: 100
+  });
+  const combatLifecycle = new MetaverseRuntimeCombatLifecycle({
+    authoritativeWorldSync: {
+      armLocalSpawnBootstrap() {
+        spawnBootstrapCount += 1;
+      }
+    },
+    bootLifecycle: {
+      setDeathCameraSnapshot(snapshot) {
+        deathCameraCalls.push(snapshot);
+      },
+      setRespawnControlLocked(locked) {
+        respawnLockCalls.push(locked);
+      }
+    },
+    clearLocalCombatDeathPresentation() {
+      clearLocalDeathPresentationCount += 1;
+    },
+    remoteWorldRuntime: {
+      readFreshAuthoritativeLocalPlayerSnapshot() {
+        return Object.freeze({
+          combat: combatSnapshot
+        });
+      },
+      readFreshAuthoritativeWorldSnapshot() {
+        return Object.freeze({
+          combatMatch: Object.freeze({
+            phase: "active"
+          })
+        });
+      }
+    },
+    weaponPresentationRuntime: {
+      reset() {
+        throw new Error("weapon reset should only run on an observed death.");
+      },
+      setCombatPresentationSuppressed(suppressed) {
+        weaponSuppressionCalls.push(suppressed);
+      }
+    }
+  });
+  const liveCameraSnapshot = createCameraSnapshot();
+
+  combatLifecycle.syncLocalCombatState(liveCameraSnapshot);
+
+  combatSnapshot = Object.freeze({
+    alive: true,
+    deaths: 1,
+    health: 100,
+    spawnProtectionRemainingMs: 1_000
+  });
+  combatLifecycle.syncLocalCombatState(liveCameraSnapshot);
+
+  assert.deepEqual(deathCameraCalls, [null]);
+  assert.deepEqual(respawnLockCalls, [false]);
+  assert.deepEqual(weaponSuppressionCalls, [false, false]);
+  assert.equal(spawnBootstrapCount, 1);
+  assert.equal(clearLocalDeathPresentationCount, 1);
 });

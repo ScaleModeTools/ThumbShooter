@@ -279,7 +279,8 @@ export class MetaverseWorldPlayerActionSync {
     const firstInventoryActionIndex = this.#pendingPlayerActions.findIndex(
       (pendingAction) =>
         pendingAction.command.action.kind === "switch-active-weapon-slot" ||
-        pendingAction.command.action.kind === "interact-weapon-resource"
+        pendingAction.command.action.kind === "interact-weapon-resource" ||
+        pendingAction.command.action.kind === "reload-weapon"
     );
 
     if (firstInventoryActionIndex < 0) {
