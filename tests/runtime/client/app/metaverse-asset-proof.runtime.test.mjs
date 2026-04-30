@@ -51,7 +51,10 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
     metaverseAttachmentProofConfigs.map((attachmentProofConfig) => attachmentProofConfig.attachmentId),
     [
       "metaverse-service-pistol-v2",
+      "metaverse-compact-smg-v1",
       "metaverse-battle-rifle-v1",
+      "metaverse-breacher-shotgun-v1",
+      "metaverse-longshot-sniper-v1",
       "metaverse-rocket-launcher-v1"
     ]
   );
@@ -87,6 +90,17 @@ test("metaverse asset proof resolves a socket-compatible attachment config from 
   assert.deepEqual(
     metaverseAttachmentProofConfig.modules.map((module) => module.socketRole),
     ["sight.front", "sight.rear", "projectile.muzzle"],
+  );
+  const smgProofConfig = metaverseAttachmentProofConfigs.find(
+    (attachmentProofConfig) =>
+      attachmentProofConfig.attachmentId === "metaverse-compact-smg-v1"
+  );
+
+  assert.ok(smgProofConfig);
+  assert.ok(
+    smgProofConfig.modules.some(
+      (module) => module.moduleId === "metaverse-smg-reflex-optic-v1"
+    )
   );
   const battleRifleProofConfig = metaverseAttachmentProofConfigs.find(
     (attachmentProofConfig) =>

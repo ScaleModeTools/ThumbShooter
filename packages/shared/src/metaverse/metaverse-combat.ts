@@ -252,11 +252,13 @@ export interface MetaverseCombatWeaponAccuracySnapshotInput {
 export interface MetaverseCombatWeaponDamageSnapshot {
   readonly body: number;
   readonly head: number;
+  readonly pelletsPerShot: number;
 }
 
 export interface MetaverseCombatWeaponDamageSnapshotInput {
   readonly body?: number;
   readonly head?: number;
+  readonly pelletsPerShot?: number;
 }
 
 export interface MetaverseCombatWeaponAreaDamageSnapshot {
@@ -2419,7 +2421,11 @@ export function createMetaverseCombatWeaponProfileSnapshot(
     burst: createMetaverseCombatWeaponBurstSnapshot(input.burst, fireMode),
     damage: Object.freeze({
       body: normalizeFiniteNonNegativeNumber(input.damage.body, 0),
-      head: normalizeFiniteNonNegativeNumber(input.damage.head, 0)
+      head: normalizeFiniteNonNegativeNumber(input.damage.head, 0),
+      pelletsPerShot: normalizeFiniteNonNegativeInteger(
+        input.damage.pelletsPerShot,
+        1
+      )
     }),
     deliveryModel,
     fireMode,
@@ -3551,6 +3557,67 @@ export const metaverseCombatWeaponProfiles = Object.freeze([
       gravityUnitsPerSecondSquared: 0,
       projectileLifetimeMs: 2_000,
       projectileVelocityMetersPerSecond: 900,
+      spreadDegrees: 0.8
+    },
+    damage: {
+      body: 18,
+      head: 24
+    },
+    deliveryModel: "hitscan",
+    fireMode: "auto",
+    firingOriginOffset: {
+      forwardMeters: 0.7,
+      rightMeters: 0.14,
+      upMeters: 1.42
+    },
+    firingOriginHeightMeters: 1.62,
+    magazine: {
+      magazineCapacity: 32,
+      reloadDurationMs: 1_900,
+      reserveCapacity: 160
+    },
+    presentationDeliveryModel: "hitscan-tracer",
+    projectilePresentation: {
+      objectLocalPrimaryGripFrame: {
+        forwardMeters: 0.07,
+        rightMeters: 0,
+        upMeters: -0.02
+      },
+      objectLocalMuzzleFrame: {
+        forwardMeters: 0.68,
+        rightMeters: 0,
+        upMeters: 0.04
+      },
+      primaryGripAnchorOffset: {
+        forwardMeters: 0.06,
+        rightMeters: 0.14,
+        upMeters: 1.36
+      },
+      authoredMuzzleFromGrip: {
+        forwardMeters: 0.61,
+        rightMeters: 0,
+        upMeters: 0.06
+      },
+      semanticLaunchOriginOffset: {
+        forwardMeters: 0.7,
+        rightMeters: 0.14,
+        upMeters: 1.42
+      }
+    },
+    recoilPresentation: {
+      pitchDegrees: 1.8,
+      yawDegrees: 0.9
+    },
+    roundsPerMinute: 780,
+    weaponId: "metaverse-compact-smg-v1"
+  }),
+  createMetaverseCombatWeaponProfileSnapshot({
+    accuracy: {
+      adsAffectsAccuracy: false,
+      bloomDegrees: 0,
+      gravityUnitsPerSecondSquared: 0,
+      projectileLifetimeMs: 2_000,
+      projectileVelocityMetersPerSecond: 900,
       spreadDegrees: 0
     },
     burst: {
@@ -3608,6 +3675,129 @@ export const metaverseCombatWeaponProfiles = Object.freeze([
     },
     roundsPerMinute: 720,
     weaponId: "metaverse-battle-rifle-v1"
+  }),
+  createMetaverseCombatWeaponProfileSnapshot({
+    accuracy: {
+      adsAffectsAccuracy: false,
+      bloomDegrees: 0,
+      gravityUnitsPerSecondSquared: 0,
+      projectileLifetimeMs: 2_000,
+      projectileVelocityMetersPerSecond: 900,
+      spreadDegrees: 5.8
+    },
+    damage: {
+      body: 11,
+      head: 13,
+      pelletsPerShot: 12
+    },
+    deliveryModel: "hitscan",
+    fireMode: "semi",
+    firingOriginOffset: {
+      forwardMeters: 0.86,
+      rightMeters: 0.14,
+      upMeters: 1.42
+    },
+    firingOriginHeightMeters: 1.62,
+    magazine: {
+      magazineCapacity: 12,
+      reloadDurationMs: 6_600,
+      reserveCapacity: 36
+    },
+    presentationDeliveryModel: "hitscan-tracer",
+    projectilePresentation: {
+      objectLocalPrimaryGripFrame: {
+        forwardMeters: 0.08,
+        rightMeters: 0,
+        upMeters: -0.025
+      },
+      objectLocalMuzzleFrame: {
+        forwardMeters: 0.92,
+        rightMeters: 0,
+        upMeters: 0.045
+      },
+      primaryGripAnchorOffset: {
+        forwardMeters: 0.08,
+        rightMeters: 0.14,
+        upMeters: 1.35
+      },
+      authoredMuzzleFromGrip: {
+        forwardMeters: 0.84,
+        rightMeters: 0,
+        upMeters: 0.07
+      },
+      semanticLaunchOriginOffset: {
+        forwardMeters: 0.86,
+        rightMeters: 0.14,
+        upMeters: 1.42
+      }
+    },
+    recoilPresentation: {
+      pitchDegrees: 5.5,
+      yawDegrees: 1.2
+    },
+    roundsPerMinute: 80,
+    weaponId: "metaverse-breacher-shotgun-v1"
+  }),
+  createMetaverseCombatWeaponProfileSnapshot({
+    accuracy: {
+      adsAffectsAccuracy: false,
+      bloomDegrees: 0,
+      gravityUnitsPerSecondSquared: 0,
+      projectileLifetimeMs: 2_000,
+      projectileVelocityMetersPerSecond: 900,
+      spreadDegrees: 0.04
+    },
+    damage: {
+      body: 92,
+      head: 180
+    },
+    deliveryModel: "hitscan",
+    fireMode: "semi",
+    firingOriginOffset: {
+      forwardMeters: 0.96,
+      rightMeters: 0.14,
+      upMeters: 1.43
+    },
+    firingOriginHeightMeters: 1.62,
+    magazine: {
+      magazineCapacity: 5,
+      reloadDurationMs: 2_750,
+      reserveCapacity: 25
+    },
+    presentationDeliveryModel: "hitscan-tracer",
+    projectilePresentation: {
+      objectLocalPrimaryGripFrame: {
+        forwardMeters: 0.08,
+        rightMeters: 0,
+        upMeters: -0.02
+      },
+      objectLocalMuzzleFrame: {
+        forwardMeters: 1.05,
+        rightMeters: 0,
+        upMeters: 0.05
+      },
+      primaryGripAnchorOffset: {
+        forwardMeters: 0.09,
+        rightMeters: 0.14,
+        upMeters: 1.35
+      },
+      authoredMuzzleFromGrip: {
+        forwardMeters: 0.97,
+        rightMeters: 0,
+        upMeters: 0.07
+      },
+      semanticLaunchOriginOffset: {
+        forwardMeters: 0.96,
+        rightMeters: 0.14,
+        upMeters: 1.43
+      }
+    },
+    recoilPresentation: {
+      pitchDegrees: 3.9,
+      yawDegrees: 0.42
+    },
+    roundsPerMinute: 46,
+    weaponId: "metaverse-longshot-sniper-v1"
   }),
   createMetaverseCombatWeaponProfileSnapshot({
     accuracy: {

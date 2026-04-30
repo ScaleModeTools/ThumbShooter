@@ -23,6 +23,7 @@ import type {
 } from "../../types/metaverse-runtime";
 import type {
   HeldObjectAdsPolicyId,
+  HeldObjectFamilyId,
   HeldObjectPoseProfileId
 } from "@/assets/types/held-object-authoring-manifest";
 
@@ -40,11 +41,12 @@ interface LocalHeldObjectAttachmentRuntimeLike
   };
   readonly holdProfile: {
     readonly adsPolicy: HeldObjectAdsPolicyId;
+    readonly family: HeldObjectFamilyId;
     readonly poseProfileId: HeldObjectPoseProfileId;
   };
 }
 
-export function shouldUseScopedAdsAttachmentPresentation(
+export function shouldUseCleanAdsFirstPersonPresentation(
   attachmentRuntime: Pick<LocalHeldObjectAttachmentRuntimeLike, "holdProfile">,
   weaponState: Pick<MetaverseRealtimePlayerWeaponStateSnapshot, "aimMode"> | null
 ): boolean {
@@ -53,9 +55,16 @@ export function shouldUseScopedAdsAttachmentPresentation(
   }
 
   return (
-    attachmentRuntime.holdProfile.adsPolicy === "optic_anchor" ||
-    attachmentRuntime.holdProfile.adsPolicy === "shouldered_heavy"
+    attachmentRuntime.holdProfile.family === "long_gun" ||
+    attachmentRuntime.holdProfile.family === "shoulder_heavy"
   );
+}
+
+export function shouldUseScopedAdsAttachmentPresentation(
+  attachmentRuntime: Pick<LocalHeldObjectAttachmentRuntimeLike, "holdProfile">,
+  weaponState: Pick<MetaverseRealtimePlayerWeaponStateSnapshot, "aimMode"> | null
+): boolean {
+  return shouldUseCleanAdsFirstPersonPresentation(attachmentRuntime, weaponState);
 }
 
 export function syncLocalScopedAdsAttachmentPresentation(
@@ -67,6 +76,16 @@ export function syncLocalScopedAdsAttachmentPresentation(
 ): void {
   attachmentRuntime.presentationGroup.visible =
     !shouldUseScopedAdsAttachmentPresentation(attachmentRuntime, weaponState);
+}
+
+export function syncLocalCleanAdsCharacterPresentation(
+  characterRuntime: Pick<LocalCharacterPresentationRuntimeLike, "anchorGroup">,
+  attachmentRuntime: Pick<LocalHeldObjectAttachmentRuntimeLike, "holdProfile">,
+  weaponState: Pick<MetaverseRealtimePlayerWeaponStateSnapshot, "aimMode"> | null
+): void {
+  if (shouldUseCleanAdsFirstPersonPresentation(attachmentRuntime, weaponState)) {
+    characterRuntime.anchorGroup.visible = false;
+  }
 }
 
 export function advanceLocalCharacterAnimation<
@@ -231,6 +250,11 @@ export function syncLocalCharacterPresentation<
       bodyPresentation
     );
     syncLocalScopedAdsAttachmentPresentation(attachmentRuntime, weaponState);
+    syncLocalCleanAdsCharacterPresentation(
+      characterRuntime,
+      attachmentRuntime,
+      weaponState
+    );
   }
 
   return presentedCameraSnapshot;

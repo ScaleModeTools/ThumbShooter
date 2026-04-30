@@ -490,6 +490,20 @@ wait_for_watch_build_ready() {
   done
 }
 
+relay_server_runtime_stderr() {
+  local stderr_line
+
+  while IFS= read -r stderr_line; do
+    case "$stderr_line" in
+      *"quic_bug_12724_4: Tried to add writer into blocked list when it shouldn't be added"*)
+        ;;
+      *)
+        printf '%s\n' "$stderr_line" >&2
+        ;;
+    esac
+  done
+}
+
 resolve_existing_dev_server_pid() {
   if [[ ! -f "$server_pid_file" ]]; then
     return 1
@@ -745,7 +759,8 @@ node \
   --watch-preserve-output \
   --watch-path "$repo_root/packages/shared/dist" \
   --watch-path "$repo_root/server/dist" \
-  "$repo_root/server/dist/index.js" &
+  "$repo_root/server/dist/index.js" \
+  2> >(relay_server_runtime_stderr) &
 pids+=($!)
 
 wait -n "${pids[@]}"

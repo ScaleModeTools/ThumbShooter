@@ -257,6 +257,23 @@ function createBattleRifleWeaponState(playerId, activeSlotId = "primary") {
   });
 }
 
+function createSingleWeaponState(playerId, weaponId) {
+  return createMetaverseRealtimePlayerWeaponStateSnapshot({
+    activeSlotId: "primary",
+    aimMode: "hip-fire",
+    slots: [
+      {
+        attachmentId: weaponId,
+        equipped: true,
+        slotId: "primary",
+        weaponId,
+        weaponInstanceId: `${playerId}:primary:${weaponId}`
+      }
+    ],
+    weaponId
+  });
+}
+
 function createKillFloorVolume({
   centerY = -5,
   sizeX = 64,
@@ -1923,6 +1940,105 @@ test("MetaverseAuthoritativeCombatAuthority publishes one hitscan event per batt
       `${redPlayerId}:1:2`,
       `${redPlayerId}:1:3`,
       `${redPlayerId}:1:3`
+    ]
+  );
+});
+
+test("MetaverseAuthoritativeCombatAuthority resolves shotgun pellets as one ammo spend with multiple hitscan projectiles", () => {
+  const redPlayerId = createMetaversePlayerId("combat-shotgun-red-1");
+  const bluePlayerId = createMetaversePlayerId("combat-shotgun-blue-1");
+
+  assert.notEqual(redPlayerId, null);
+  assert.notEqual(bluePlayerId, null);
+
+  const redRootPosition = Object.freeze({ x: 0, y: 0, z: 0 });
+  const blueRootPosition = Object.freeze({ x: 0, y: 0, z: -9 });
+  const blueHurtVolumes = createMetaversePlayerCombatHurtVolumes({
+    activeBodyPosition: blueRootPosition
+  });
+  const blueUpperTorsoRegion = blueHurtVolumes.regions.find(
+    (region) => region.regionId === "upper_torso"
+  );
+
+  assert.notEqual(blueUpperTorsoRegion, undefined);
+
+  const blueBodyTarget = readHurtRegionCenter(blueUpperTorsoRegion);
+  const redWeaponState = createSingleWeaponState(
+    redPlayerId,
+    "metaverse-breacher-shotgun-v1"
+  );
+  const redPlayerRuntime = createPlayerRuntimeState(
+    redPlayerId,
+    "red",
+    redRootPosition,
+    0,
+    redWeaponState
+  );
+  const bluePlayerRuntime = createPlayerRuntimeState(
+    bluePlayerId,
+    "blue",
+    blueRootPosition
+  );
+  const combatAuthority = createCombatAuthorityForPlayers(
+    new Map([
+      [redPlayerId, redPlayerRuntime],
+      [bluePlayerId, bluePlayerRuntime]
+    ])
+  );
+  const origin = resolveWeaponTipOrigin(
+    redRootPosition,
+    0,
+    "metaverse-breacher-shotgun-v1"
+  );
+
+  combatAuthority.syncCombatState(0);
+  bluePlayerRuntime.positionX = blueRootPosition.x;
+  bluePlayerRuntime.positionY = blueRootPosition.y;
+  bluePlayerRuntime.positionZ = blueRootPosition.z;
+  combatAuthority.advanceCombatRuntimes(1.1, 1_100);
+  combatAuthority.acceptIssuePlayerActionCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 1_200,
+      origin,
+      playerId: redPlayerId,
+      target: blueBodyTarget,
+      weaponId: "metaverse-breacher-shotgun-v1"
+    }),
+    1_200
+  );
+
+  const redCombatSnapshot = combatAuthority.readPlayerCombatSnapshot(redPlayerId);
+  const blueCombatSnapshot = combatAuthority.readPlayerCombatSnapshot(bluePlayerId);
+  const shotgunStats = redCombatSnapshot?.weaponStats.find(
+    (weaponStats) => weaponStats.weaponId === "metaverse-breacher-shotgun-v1"
+  ) ?? null;
+  const events = combatAuthority.readCombatEventSnapshots();
+
+  assert.equal(
+    redCombatSnapshot?.activeWeapon?.weaponId,
+    "metaverse-breacher-shotgun-v1"
+  );
+  assert.equal(redCombatSnapshot?.activeWeapon?.ammoInMagazine, 11);
+  assert.equal(shotgunStats?.shotsFired, 12);
+  assert.ok((shotgunStats?.shotsHit ?? 0) > 0);
+  assert.ok((blueCombatSnapshot?.health ?? 100) < 100);
+  assert.deepEqual(
+    events.map((eventSnapshot) => eventSnapshot.eventKind),
+    [
+      "fire-accepted",
+      ...Array.from({ length: 12 }, () => "hitscan-resolved")
+    ]
+  );
+  assert.deepEqual(
+    events.map((eventSnapshot) => eventSnapshot.shotId),
+    [
+      `${redPlayerId}:1`,
+      `${redPlayerId}:1`,
+      ...Array.from(
+        { length: 11 },
+        (_unused, index) => `${redPlayerId}:1:${index + 2}`
+      )
     ]
   );
 });

@@ -823,7 +823,10 @@ test("shipped metaverse attachment hold profiles have configured held-object sol
     ),
     [
       "metaverse-service-pistol-v2",
+      "metaverse-compact-smg-v1",
       "metaverse-battle-rifle-v1",
+      "metaverse-breacher-shotgun-v1",
+      "metaverse-longshot-sniper-v1",
       "metaverse-rocket-launcher-v1"
     ]
   );
@@ -844,18 +847,35 @@ test("shipped metaverse attachment hold profiles have configured held-object sol
   }
 });
 
-test("local scoped ADS hides only optic and shouldered held weapon meshes", async () => {
-  const { syncLocalScopedAdsAttachmentPresentation } = await clientLoader.load(
-    "/src/metaverse/render/characters/metaverse-scene-local-character-presentation.ts"
-  );
+test("local long-gun ADS hides held meshes and local character hands", async () => {
+  const [
+    { Group },
+    {
+      syncLocalCleanAdsCharacterPresentation,
+      syncLocalScopedAdsAttachmentPresentation
+    }
+  ] = await Promise.all([
+    import("three/webgpu"),
+    clientLoader.load(
+      "/src/metaverse/render/characters/metaverse-scene-local-character-presentation.ts"
+    )
+  ]);
   const createAttachmentRuntime = (holdProfile) => ({
     holdProfile,
     presentationGroup: {
       visible: true
     }
   });
+  const createCharacterRuntime = () => ({
+    anchorGroup: new Group()
+  });
   const pistolAttachment = createAttachmentRuntime(
     createTestServicePistolHoldProfile()
+  );
+  const shotgunAttachment = createAttachmentRuntime(
+    createTestBattleRifleHoldProfile({
+      adsPolicy: "iron_sights"
+    })
   );
   const battleRifleAttachment = createAttachmentRuntime(
     createTestBattleRifleHoldProfile()
@@ -863,8 +883,15 @@ test("local scoped ADS hides only optic and shouldered held weapon meshes", asyn
   const rocketAttachment = createAttachmentRuntime(
     createTestRocketLauncherHoldProfile()
   );
+  const pistolCharacter = createCharacterRuntime();
+  const shotgunCharacter = createCharacterRuntime();
+  const battleRifleCharacter = createCharacterRuntime();
+  const rocketCharacter = createCharacterRuntime();
 
   syncLocalScopedAdsAttachmentPresentation(pistolAttachment, {
+    aimMode: "ads"
+  });
+  syncLocalScopedAdsAttachmentPresentation(shotgunAttachment, {
     aimMode: "ads"
   });
   syncLocalScopedAdsAttachmentPresentation(battleRifleAttachment, {
@@ -873,10 +900,35 @@ test("local scoped ADS hides only optic and shouldered held weapon meshes", asyn
   syncLocalScopedAdsAttachmentPresentation(rocketAttachment, {
     aimMode: "ads"
   });
+  syncLocalCleanAdsCharacterPresentation(
+    pistolCharacter,
+    pistolAttachment,
+    { aimMode: "ads" }
+  );
+  syncLocalCleanAdsCharacterPresentation(
+    shotgunCharacter,
+    shotgunAttachment,
+    { aimMode: "ads" }
+  );
+  syncLocalCleanAdsCharacterPresentation(
+    battleRifleCharacter,
+    battleRifleAttachment,
+    { aimMode: "ads" }
+  );
+  syncLocalCleanAdsCharacterPresentation(
+    rocketCharacter,
+    rocketAttachment,
+    { aimMode: "ads" }
+  );
 
   assert.equal(pistolAttachment.presentationGroup.visible, true);
+  assert.equal(shotgunAttachment.presentationGroup.visible, false);
   assert.equal(battleRifleAttachment.presentationGroup.visible, false);
   assert.equal(rocketAttachment.presentationGroup.visible, false);
+  assert.equal(pistolCharacter.anchorGroup.visible, true);
+  assert.equal(shotgunCharacter.anchorGroup.visible, false);
+  assert.equal(battleRifleCharacter.anchorGroup.visible, false);
+  assert.equal(rocketCharacter.anchorGroup.visible, false);
 
   syncLocalScopedAdsAttachmentPresentation(battleRifleAttachment, {
     aimMode: "hip-fire"

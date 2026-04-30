@@ -6,6 +6,9 @@ import {
 import {
   attachmentModelManifest,
   metaverseBattleRifleAttachmentAssetId,
+  metaverseBreacherShotgunAttachmentAssetId,
+  metaverseCompactSmgAttachmentAssetId,
+  metaverseLongshotSniperAttachmentAssetId,
   metaverseRocketLauncherAttachmentAssetId,
   metaverseServicePistolAttachmentAssetId,
 } from "@/assets/config/attachment-model-manifest";
@@ -410,7 +413,19 @@ export const metaverseAttachmentProofConfigs = Object.freeze([
   metaverseAttachmentProofConfig,
   resolveMetaverseAttachmentProofConfig(
     metaverseCharacterProofConfig,
+    metaverseCompactSmgAttachmentAssetId,
+  ),
+  resolveMetaverseAttachmentProofConfig(
+    metaverseCharacterProofConfig,
     metaverseBattleRifleAttachmentAssetId,
+  ),
+  resolveMetaverseAttachmentProofConfig(
+    metaverseCharacterProofConfig,
+    metaverseBreacherShotgunAttachmentAssetId,
+  ),
+  resolveMetaverseAttachmentProofConfig(
+    metaverseCharacterProofConfig,
+    metaverseLongshotSniperAttachmentAssetId,
   ),
   resolveMetaverseAttachmentProofConfig(
     metaverseCharacterProofConfig,

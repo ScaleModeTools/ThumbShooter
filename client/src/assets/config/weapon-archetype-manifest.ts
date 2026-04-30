@@ -10,13 +10,6 @@ import type {
   HeldObjectSocketRoleId,
 } from "../types/held-object-authoring-manifest";
 
-const unzoomedIronSights = Object.freeze([
-  Object.freeze({
-    label: "1x",
-    magnification: 1,
-  }),
-]);
-
 const sidearmZoomLevels = Object.freeze([
   Object.freeze({
     label: "1.5x",
@@ -387,7 +380,7 @@ export const weaponArchetypeManifest = defineWeaponArchetypeManifest([
       {
         slotId: "optic",
         socketRole: "module.optic",
-        defaultModuleId: "metaverse-micro-red-dot-v1",
+        defaultModuleId: "metaverse-smg-reflex-optic-v1",
         required: false,
       },
       {
@@ -462,7 +455,7 @@ export const weaponArchetypeManifest = defineWeaponArchetypeManifest([
       adsFovDegrees: 57,
       defaultReticleId: "precision-ring",
       reticleStyleId: "smg-dot",
-      zoomLevels: unzoomedIronSights,
+      zoomLevels: twoTimesZoom,
     },
   }),
   createWeaponBase({
@@ -847,7 +840,7 @@ export const weaponArchetypeManifest = defineWeaponArchetypeManifest([
       adsFovDegrees: 62,
       defaultReticleId: "default-ring",
       reticleStyleId: "shotgun-spread",
-      zoomLevels: unzoomedIronSights,
+      zoomLevels: twoTimesZoom,
     },
   }),
   createWeaponBase({

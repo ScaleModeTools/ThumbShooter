@@ -288,6 +288,45 @@ export const weaponModuleManifest = defineWeaponModuleManifest([
     }
   },
   {
+    id: "metaverse-smg-reflex-optic-v1",
+    label: "SMG reflex optic",
+    slotId: "optic",
+    compatibleFamilies: ["smg"],
+    defaultForFamilies: ["smg"],
+    unlock: {
+      kind: "starter",
+      label: "Included with compact SMG"
+    },
+    tags: ["optic", "close-quarters", "smg"],
+    aimOverrides: {
+      adsFovDegrees: 56,
+      defaultReticleId: "precision-ring",
+      reticleStyleId: "smg-dot",
+      zoomLevels: [
+        {
+          label: "1.35x",
+          magnification: 1.35
+        }
+      ]
+    },
+    statModifiers: {
+      accuracy: {
+        adsSpreadDegrees: { multiply: 0.9, clampMin: 0.01 },
+        hipSpreadDegrees: { multiply: 0.97, clampMin: 0.05 }
+      }
+    },
+    model: {
+      defaultTier: "high",
+      lods: [
+        {
+          tier: "high",
+          modelPath: "/models/metaverse/attachments/modules/metaverse-micro-red-dot.gltf",
+          maxDistanceMeters: null
+        }
+      ]
+    }
+  },
+  {
     id: "metaverse-2x-combat-optic-v1",
     label: "2x combat optic",
     slotId: "optic",

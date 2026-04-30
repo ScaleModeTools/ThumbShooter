@@ -306,12 +306,82 @@ function createOffsetVector(
   );
 }
 
+function createCrossProductVector(
+  left: Pick<PhysicsVector3Snapshot, "x" | "y" | "z">,
+  right: Pick<PhysicsVector3Snapshot, "x" | "y" | "z">
+): PhysicsVector3Snapshot {
+  return createPhysicsVector3Snapshot(
+    left.y * right.z - left.z * right.y,
+    left.z * right.x - left.x * right.z,
+    left.x * right.y - left.y * right.x
+  );
+}
+
 function resolveWeaponTriggerShotCount(
   weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>
 ): number {
   return weaponProfile.fireMode === "burst"
     ? Math.max(1, weaponProfile.burst?.roundsPerBurst ?? 3)
     : 1;
+}
+
+function resolveWeaponTriggerProjectileCount(
+  weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>
+): number {
+  return Math.max(1, Math.trunc(weaponProfile.damage.pelletsPerShot));
+}
+
+function resolveWeaponHitscanProjectileDirection(
+  direction: PhysicsVector3Snapshot,
+  weaponProfile: ReturnType<typeof readMetaverseCombatWeaponProfile>,
+  projectileIndex: number,
+  projectileCount: number
+): PhysicsVector3Snapshot {
+  if (
+    projectileIndex <= 0 ||
+    projectileCount <= 1 ||
+    weaponProfile.accuracy.spreadDegrees <= 0
+  ) {
+    return direction;
+  }
+
+  const spreadRadians =
+    (weaponProfile.accuracy.spreadDegrees * Math.PI) / 180;
+  const spreadSampleCount = Math.max(1, projectileCount - 1);
+  const spreadSampleIndex = projectileIndex - 1;
+  const referenceUp =
+    Math.abs(direction.y) > 0.96
+      ? createPhysicsVector3Snapshot(1, 0, 0)
+      : createPhysicsVector3Snapshot(0, 1, 0);
+  const right = normalizeDirection(
+    createCrossProductVector(referenceUp, direction)
+  );
+
+  if (right === null) {
+    return direction;
+  }
+
+  const up = normalizeDirection(createCrossProductVector(direction, right));
+
+  if (up === null) {
+    return direction;
+  }
+
+  const goldenAngleRadians = Math.PI * (3 - Math.sqrt(5));
+  const radius =
+    Math.sqrt((spreadSampleIndex + 0.5) / spreadSampleCount) *
+    Math.tan(spreadRadians);
+  const angle = spreadSampleIndex * goldenAngleRadians;
+  const horizontalOffset = Math.cos(angle) * radius;
+  const verticalOffset = Math.sin(angle) * radius;
+
+  return (
+    normalizeDirection({
+      x: direction.x + right.x * horizontalOffset + up.x * verticalOffset,
+      y: direction.y + right.y * horizontalOffset + up.y * verticalOffset,
+      z: direction.z + right.z * horizontalOffset + up.z * verticalOffset
+    }) ?? direction
+  );
 }
 
 function resolveWeaponBurstRoundIntervalMs(
@@ -1020,10 +1090,14 @@ export class MetaverseAuthoritativeCombatAuthority<
       weaponState.ammoInMagazine
     );
     const triggerShotIntervalMs = resolveWeaponBurstRoundIntervalMs(weaponProfile);
+    const projectilesPerTriggerShot =
+      weaponProfile.deliveryModel === "hitscan"
+        ? resolveWeaponTriggerProjectileCount(weaponProfile)
+        : 1;
 
     weaponState.ammoInMagazine -= triggerShotCount;
     weaponState.lastFireAtMs = nowMs;
-    weaponState.shotsFired += triggerShotCount;
+    weaponState.shotsFired += triggerShotCount * projectilesPerTriggerShot;
     combatState.activeWeaponId = weaponId;
 
     const issuedAtTimeMs = this.#resolveIssuedAtAuthoritativeTimeMs(
@@ -1044,10 +1118,11 @@ export class MetaverseAuthoritativeCombatAuthority<
       });
 
       for (let shotIndex = 0; shotIndex < triggerShotCount; shotIndex += 1) {
+        const projectileBaseIndex = shotIndex * projectilesPerTriggerShot;
         const combatEventBase = this.#createCombatEventBase({
           actionSequence: action.actionSequence,
           playerRuntime,
-          shotIndex,
+          shotIndex: projectileBaseIndex,
           weaponId,
           weaponProfile
         });
@@ -1063,19 +1138,42 @@ export class MetaverseAuthoritativeCombatAuthority<
           eventKind: "fire-accepted",
           semanticMuzzleWorld
         });
-        this.#resolveHitscanFireAction({
-          actionSequence: action.actionSequence,
-          attackerPlayerId: playerId,
-          direction: fireRay.direction,
-          firingReferenceOrigin,
-          combatState,
-          issuedAtTimeMs: shotIssuedAtTimeMs,
-          nowMs,
-          origin: fireRay.origin,
-          semanticMuzzleWorld,
-          shotId: combatEventBase.shotId,
-          weaponId
-        });
+
+        for (
+          let projectileIndex = 0;
+          projectileIndex < projectilesPerTriggerShot;
+          projectileIndex += 1
+        ) {
+          const projectileEventBase =
+            projectileIndex === 0
+              ? combatEventBase
+              : this.#createCombatEventBase({
+                  actionSequence: action.actionSequence,
+                  playerRuntime,
+                  shotIndex: projectileBaseIndex + projectileIndex,
+                  weaponId,
+                  weaponProfile
+                });
+
+          this.#resolveHitscanFireAction({
+            actionSequence: action.actionSequence,
+            attackerPlayerId: playerId,
+            direction: resolveWeaponHitscanProjectileDirection(
+              fireRay.direction,
+              weaponProfile,
+              projectileIndex,
+              projectilesPerTriggerShot
+            ),
+            firingReferenceOrigin,
+            combatState,
+            issuedAtTimeMs: shotIssuedAtTimeMs,
+            nowMs,
+            origin: fireRay.origin,
+            semanticMuzzleWorld,
+            shotId: projectileEventBase.shotId,
+            weaponId
+          });
+        }
       }
     } else {
       const combatEventBase = this.#createCombatEventBase({

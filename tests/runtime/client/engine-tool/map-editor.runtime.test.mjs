@@ -2058,7 +2058,7 @@ test("private-build TDM loads and previews the weapon resource layout", async ()
     "metaverse-tdm-pistol-rocket-layout"
   );
   assert.equal(project.selectedLaunchVariationId, "shell-team-deathmatch");
-  assert.equal(loadedBundle.bundle.resourceSpawns.length, 6);
+  assert.equal(loadedBundle.bundle.resourceSpawns.length, 12);
   assert.deepEqual(
     loadedBundle.bundle.resourceSpawns.map((resourceSpawn) => [
       resourceSpawn.spawnId,
@@ -2093,6 +2093,48 @@ test("private-build TDM loads and previews the weapon resource layout", async ()
         "private-build:resource:battle-rifle-southwest",
         "metaverse-battle-rifle-v1",
         108,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:smg-northwest",
+        "metaverse-compact-smg-v1",
+        160,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:smg-southeast",
+        "metaverse-compact-smg-v1",
+        160,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:shotgun-north",
+        "metaverse-breacher-shotgun-v1",
+        36,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:shotgun-south",
+        "metaverse-breacher-shotgun-v1",
+        36,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:sniper-west",
+        "metaverse-longshot-sniper-v1",
+        25,
+        35_000,
+        ["team-deathmatch"]
+      ],
+      [
+        "private-build:resource:sniper-east",
+        "metaverse-longshot-sniper-v1",
+        25,
         35_000,
         ["team-deathmatch"]
       ],
@@ -2135,7 +2177,7 @@ test("private-build TDM loads and previews the weapon resource layout", async ()
     previewResult.launchSelection?.weaponLayoutId,
     "metaverse-tdm-pistol-rocket-layout"
   );
-  assert.equal(previewBundle.bundle.resourceSpawns.length, 6);
+  assert.equal(previewBundle.bundle.resourceSpawns.length, 12);
 });
 
 test("map editor procedural build helpers export grid-canonical structures, gameplay volumes, and lights", async () => {

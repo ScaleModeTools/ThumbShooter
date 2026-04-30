@@ -86,6 +86,108 @@ export const privateBuildMapBundle = Object.freeze({
       yawRadians: 2.356194490192345
     }),
     Object.freeze({
+      ammoGrantRounds: 160,
+      assetId: "metaverse-compact-smg-v1",
+      label: "SMG northwest",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -14.2,
+        y: 0.6,
+        z: -22.2
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:smg-northwest",
+      weaponId: "metaverse-compact-smg-v1",
+      yawRadians: 0.7853981633974483
+    }),
+    Object.freeze({
+      ammoGrantRounds: 160,
+      assetId: "metaverse-compact-smg-v1",
+      label: "SMG southeast",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -2.2,
+        y: 0.6,
+        z: -7.4
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:smg-southeast",
+      weaponId: "metaverse-compact-smg-v1",
+      yawRadians: -2.356194490192345
+    }),
+    Object.freeze({
+      ammoGrantRounds: 36,
+      assetId: "metaverse-breacher-shotgun-v1",
+      label: "Shotgun north",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -8.2,
+        y: 0.6,
+        z: -18.5
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:shotgun-north",
+      weaponId: "metaverse-breacher-shotgun-v1",
+      yawRadians: 0
+    }),
+    Object.freeze({
+      ammoGrantRounds: 36,
+      assetId: "metaverse-breacher-shotgun-v1",
+      label: "Shotgun south",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -8.2,
+        y: 0.6,
+        z: -11.1
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:shotgun-south",
+      weaponId: "metaverse-breacher-shotgun-v1",
+      yawRadians: 3.141592653589793
+    }),
+    Object.freeze({
+      ammoGrantRounds: 25,
+      assetId: "metaverse-longshot-sniper-v1",
+      label: "Sniper west",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -14.2,
+        y: 0.6,
+        z: -18.5
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:sniper-west",
+      weaponId: "metaverse-longshot-sniper-v1",
+      yawRadians: 1.5707963267948966
+    }),
+    Object.freeze({
+      ammoGrantRounds: 25,
+      assetId: "metaverse-longshot-sniper-v1",
+      label: "Sniper east",
+      modeTags: Object.freeze(["team-deathmatch"]),
+      pickupRadiusMeters: 1.4,
+      position: Object.freeze({
+        x: -2.2,
+        y: 0.6,
+        z: -11.1
+      }),
+      resourceKind: "weapon-pickup" as const,
+      respawnCooldownMs: 35_000,
+      spawnId: "private-build:resource:sniper-east",
+      weaponId: "metaverse-longshot-sniper-v1",
+      yawRadians: -1.5707963267948966
+    }),
+    Object.freeze({
       ammoGrantRounds: 6,
       assetId: "metaverse-rocket-launcher-v1",
       label: "Rocket west",

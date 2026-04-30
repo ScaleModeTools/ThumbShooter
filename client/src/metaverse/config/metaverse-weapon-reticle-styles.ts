@@ -76,21 +76,21 @@ export const metaverseWeaponReticleStyles = Object.freeze({
   "shotgun-spread": Object.freeze({
     adsScale: 1,
     hipScale: 1.36,
-    scopedAdsOverlay: false,
+    scopedAdsOverlay: true,
     shape: "spread",
     sizePx: 64
   } satisfies MetaverseWeaponReticleStyleConfig),
   "smart-link-lock": Object.freeze({
     adsScale: 1,
     hipScale: 1.08,
-    scopedAdsOverlay: false,
+    scopedAdsOverlay: true,
     shape: "smart-link",
     sizePx: 52
   } satisfies MetaverseWeaponReticleStyleConfig),
   "smg-dot": Object.freeze({
     adsScale: 1,
     hipScale: 1.3,
-    scopedAdsOverlay: false,
+    scopedAdsOverlay: true,
     shape: "dot",
     sizePx: 46
   } satisfies MetaverseWeaponReticleStyleConfig),

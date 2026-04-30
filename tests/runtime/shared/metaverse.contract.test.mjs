@@ -182,6 +182,7 @@ test("metaverse rocket combat profile resolves projectile and splash values", ()
   assert.equal(rocketProfile.magazine.reloadDurationMs, 3_600);
   assert.equal(rocketProfile.damage.body, 180);
   assert.equal(rocketProfile.damage.head, 180);
+  assert.equal(rocketProfile.damage.pelletsPerShot, 1);
   assert.deepEqual(rocketProfile.firingOriginOffset, {
     forwardMeters: 0.95,
     rightMeters: 0.1,
@@ -212,9 +213,69 @@ test("metaverse battle rifle combat profile resolves burst hitscan values", () =
   assert.equal(battleRifleProfile.magazine.reserveCapacity, 108);
   assert.equal(battleRifleProfile.damage.body, 15);
   assert.equal(battleRifleProfile.damage.head, 24);
+  assert.equal(battleRifleProfile.damage.pelletsPerShot, 1);
   assert.equal(battleRifleProfile.areaDamage, null);
   assert.deepEqual(battleRifleProfile.firingOriginOffset, {
     forwardMeters: 0.82,
+    rightMeters: 0.14,
+    upMeters: 1.43
+  });
+});
+
+test("metaverse remaining TDM weapon profiles resolve authored hitscan values", () => {
+  const smgProfile = readMetaverseCombatWeaponProfile(
+    "metaverse-compact-smg-v1"
+  );
+  const shotgunProfile = readMetaverseCombatWeaponProfile(
+    "metaverse-breacher-shotgun-v1"
+  );
+  const sniperProfile = readMetaverseCombatWeaponProfile(
+    "metaverse-longshot-sniper-v1"
+  );
+
+  assert.equal(smgProfile.deliveryModel, "hitscan");
+  assert.equal(smgProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(smgProfile.fireMode, "auto");
+  assert.equal(smgProfile.roundsPerMinute, 780);
+  assert.equal(smgProfile.magazine.magazineCapacity, 32);
+  assert.equal(smgProfile.magazine.reserveCapacity, 160);
+  assert.equal(smgProfile.damage.body, 18);
+  assert.equal(smgProfile.damage.head, 24);
+  assert.equal(smgProfile.damage.pelletsPerShot, 1);
+  assert.deepEqual(smgProfile.firingOriginOffset, {
+    forwardMeters: 0.7,
+    rightMeters: 0.14,
+    upMeters: 1.42
+  });
+
+  assert.equal(shotgunProfile.deliveryModel, "hitscan");
+  assert.equal(shotgunProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(shotgunProfile.fireMode, "semi");
+  assert.equal(shotgunProfile.roundsPerMinute, 80);
+  assert.equal(shotgunProfile.magazine.magazineCapacity, 12);
+  assert.equal(shotgunProfile.magazine.reserveCapacity, 36);
+  assert.equal(shotgunProfile.magazine.reloadDurationMs, 6_600);
+  assert.equal(shotgunProfile.damage.body, 11);
+  assert.equal(shotgunProfile.damage.head, 13);
+  assert.equal(shotgunProfile.damage.pelletsPerShot, 12);
+  assert.equal(shotgunProfile.accuracy.spreadDegrees, 5.8);
+  assert.deepEqual(shotgunProfile.firingOriginOffset, {
+    forwardMeters: 0.86,
+    rightMeters: 0.14,
+    upMeters: 1.42
+  });
+
+  assert.equal(sniperProfile.deliveryModel, "hitscan");
+  assert.equal(sniperProfile.presentationDeliveryModel, "hitscan-tracer");
+  assert.equal(sniperProfile.fireMode, "semi");
+  assert.equal(sniperProfile.roundsPerMinute, 46);
+  assert.equal(sniperProfile.magazine.magazineCapacity, 5);
+  assert.equal(sniperProfile.magazine.reserveCapacity, 25);
+  assert.equal(sniperProfile.damage.body, 92);
+  assert.equal(sniperProfile.damage.head, 180);
+  assert.equal(sniperProfile.damage.pelletsPerShot, 1);
+  assert.deepEqual(sniperProfile.firingOriginOffset, {
+    forwardMeters: 0.96,
     rightMeters: 0.14,
     upMeters: 1.43
   });
