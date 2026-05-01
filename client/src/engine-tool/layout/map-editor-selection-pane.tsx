@@ -1,10 +1,12 @@
-import { useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 
 import { weaponArchetypeManifest } from "@/assets/config/weapon-archetype-manifest";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronDownIcon,
+  ClipboardPasteIcon,
+  CopyIcon,
   FocusIcon,
   MinusIcon,
   PaintbrushIcon,
@@ -74,6 +76,7 @@ import {
 import { MapEditorWorldSettingsPanel } from "@/engine-tool/panels/inspector/map-editor-world-settings-panel";
 import {
   bakeMapEditorProceduralTerrainPatch,
+  createMapEditorTerrainGenerationStyleSnapshot,
   defaultMapEditorTerrainGenerationConfig
 } from "@/engine-tool/project/map-editor-terrain-generation";
 import {
@@ -91,6 +94,7 @@ import {
   type MapEditorSurfaceMode,
   type MapEditorTerrainBrushMode,
   type MapEditorTerrainBrushSizeCells,
+  type MapEditorTerrainGenerationStyleSnapshot,
   type MapEditorViewportToolMode,
   type MapEditorWallToolPresetId
 } from "@/engine-tool/types/map-editor";
@@ -183,6 +187,128 @@ function resolvePrimaryTerrainMaterialId(
   }
 
   return selectedMaterialId;
+}
+
+function createTerrainGenerationStyleFromBuilderToolState(
+  builderToolState: MapEditorBuilderToolStateSnapshot,
+  groundElevationMeters: number
+): MapEditorTerrainGenerationStyleSnapshot {
+  return createMapEditorTerrainGenerationStyleSnapshot({
+    frequency: builderToolState.terrainGenerationFrequency,
+    groundElevationMeters,
+    maxElevationMeters: builderToolState.terrainGenerationMaxElevationMeters,
+    maxSlopeDegrees: builderToolState.terrainGenerationMaxSlopeDegrees,
+    minElevationMeters: builderToolState.terrainGenerationMinElevationMeters,
+    octaves: builderToolState.terrainGenerationOctaves,
+    seed: builderToolState.terrainNoiseSeed,
+    warpFrequency: builderToolState.terrainGenerationWarpFrequency,
+    warpStrengthMeters: builderToolState.terrainGenerationWarpStrengthMeters
+  });
+}
+
+function retargetTerrainGenerationStyleToGround(
+  style: MapEditorTerrainGenerationStyleSnapshot,
+  groundElevationMeters: number
+): MapEditorTerrainGenerationStyleSnapshot {
+  const minOffsetMeters = style.minElevationMeters - style.groundElevationMeters;
+  const maxOffsetMeters = style.maxElevationMeters - style.groundElevationMeters;
+
+  return createMapEditorTerrainGenerationStyleSnapshot({
+    ...style,
+    groundElevationMeters,
+    maxElevationMeters: groundElevationMeters + maxOffsetMeters,
+    minElevationMeters: groundElevationMeters + minOffsetMeters
+  });
+}
+
+function resolveTerrainPatchWorldHeightRange(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot
+): {
+  readonly maxElevationMeters: number;
+  readonly minElevationMeters: number;
+} {
+  if (terrainPatch.heightSamples.length === 0) {
+    return Object.freeze({
+      maxElevationMeters: terrainPatch.origin.y,
+      minElevationMeters: terrainPatch.origin.y
+    });
+  }
+
+  let minElevationMeters = Number.POSITIVE_INFINITY;
+  let maxElevationMeters = Number.NEGATIVE_INFINITY;
+
+  for (const heightSample of terrainPatch.heightSamples) {
+    const worldHeightMeters = terrainPatch.origin.y + heightSample;
+
+    minElevationMeters = Math.min(minElevationMeters, worldHeightMeters);
+    maxElevationMeters = Math.max(maxElevationMeters, worldHeightMeters);
+  }
+
+  return Object.freeze({
+    maxElevationMeters,
+    minElevationMeters
+  });
+}
+
+function createTerrainGenerationStyleFromTerrainPatch(
+  terrainPatch: MapEditorTerrainPatchDraftSnapshot,
+  fallbackBuilderToolState: MapEditorBuilderToolStateSnapshot
+): MapEditorTerrainGenerationStyleSnapshot {
+  if (terrainPatch.generationStyle !== null) {
+    return retargetTerrainGenerationStyleToGround(
+      terrainPatch.generationStyle,
+      terrainPatch.origin.y
+    );
+  }
+
+  const heightRange = resolveTerrainPatchWorldHeightRange(terrainPatch);
+
+  return createMapEditorTerrainGenerationStyleSnapshot({
+    ...createTerrainGenerationStyleFromBuilderToolState(
+      fallbackBuilderToolState,
+      terrainPatch.origin.y
+    ),
+    maxElevationMeters: heightRange.maxElevationMeters,
+    minElevationMeters: heightRange.minElevationMeters
+  });
+}
+
+function terrainGenerationStyleMatchesBuilderToolState(
+  builderToolState: MapEditorBuilderToolStateSnapshot,
+  style: MapEditorTerrainGenerationStyleSnapshot
+): boolean {
+  return builderToolState.terrainGenerationFrequency === style.frequency &&
+    builderToolState.terrainGenerationMaxElevationMeters ===
+      style.maxElevationMeters &&
+    builderToolState.terrainGenerationMaxSlopeDegrees === style.maxSlopeDegrees &&
+    builderToolState.terrainGenerationMinElevationMeters ===
+      style.minElevationMeters &&
+    builderToolState.terrainGenerationOctaves === style.octaves &&
+    builderToolState.terrainGenerationWarpFrequency === style.warpFrequency &&
+    builderToolState.terrainGenerationWarpStrengthMeters ===
+      style.warpStrengthMeters &&
+    builderToolState.terrainNoiseSeed === style.seed;
+}
+
+function applyTerrainGenerationStyleToBuilderToolState(
+  builderToolState: MapEditorBuilderToolStateSnapshot,
+  style: MapEditorTerrainGenerationStyleSnapshot
+): MapEditorBuilderToolStateSnapshot {
+  if (terrainGenerationStyleMatchesBuilderToolState(builderToolState, style)) {
+    return builderToolState;
+  }
+
+  return Object.freeze({
+    ...builderToolState,
+    terrainGenerationFrequency: style.frequency,
+    terrainGenerationMaxElevationMeters: style.maxElevationMeters,
+    terrainGenerationMaxSlopeDegrees: style.maxSlopeDegrees,
+    terrainGenerationMinElevationMeters: style.minElevationMeters,
+    terrainGenerationOctaves: style.octaves,
+    terrainGenerationWarpFrequency: style.warpFrequency,
+    terrainGenerationWarpStrengthMeters: style.warpStrengthMeters,
+    terrainNoiseSeed: style.seed
+  });
 }
 
 function readTerrainBrushMode(value: string): MapEditorTerrainBrushMode | null {
@@ -2488,6 +2614,24 @@ export function MapEditorSelectionPane({
           (terrainPatch) => terrainPatch.terrainPatchId === selectedEntityRef.id
         ) ?? null)
       : null;
+  const selectedTerrainPatchId = selectedTerrainPatch?.terrainPatchId ?? null;
+
+  useEffect(() => {
+    if (selectedTerrainPatch === null) {
+      return;
+    }
+
+    onBuilderToolStateChange((currentBuilderToolState) =>
+      applyTerrainGenerationStyleToBuilderToolState(
+        currentBuilderToolState,
+        createTerrainGenerationStyleFromTerrainPatch(
+          selectedTerrainPatch,
+          currentBuilderToolState
+        )
+      )
+    );
+  }, [selectedTerrainPatchId]);
+
   const selectedSceneObjectTitle =
     selectedSceneObject?.launchTarget === null ? "Scene Object" : "Portal";
   const selectedPathRampVisible =
@@ -4536,10 +4680,32 @@ export function MapEditorSelectionPane({
                       decimals={1}
                       id="selection-terrain-ground-elevation"
                       onValueChange={(nextValue) => {
+                        const nextGenerationStyle =
+                          retargetTerrainGenerationStyleToGround(
+                            createTerrainGenerationStyleFromTerrainPatch(
+                              selectedTerrainPatch,
+                              builderToolState
+                            ),
+                            nextValue
+                          );
+
+                        onBuilderToolStateChange((currentBuilderToolState) =>
+                          applyTerrainGenerationStyleToBuilderToolState(
+                            currentBuilderToolState,
+                            nextGenerationStyle
+                          )
+                        );
                         onUpdateTerrainPatch(
                           selectedTerrainPatch.terrainPatchId,
                           (draft) => ({
                             ...draft,
+                            generationStyle:
+                              draft.generationStyle === null
+                                ? null
+                                : retargetTerrainGenerationStyleToGround(
+                                    draft.generationStyle,
+                                    nextValue
+                                  ),
                             origin: {
                               ...draft.origin,
                               y: nextValue
@@ -4651,29 +4817,20 @@ export function MapEditorSelectionPane({
                       value={builderToolState.terrainGenerationWarpStrengthMeters}
                     />
                   </div>
-                  <div className="flex items-end gap-2">
+                  <div className="flex flex-wrap items-end gap-2">
                     <Button
                       onClick={() => {
+                        const generationStyle =
+                          createTerrainGenerationStyleFromBuilderToolState(
+                            builderToolState,
+                            selectedTerrainPatch.origin.y
+                          );
                         const generatedTerrainPatch =
                           conformMapEditorTerrainPatchDraftToSupportSurfaces(
                             project,
                             bakeMapEditorProceduralTerrainPatch(selectedTerrainPatch, {
                               ...defaultMapEditorTerrainGenerationConfig,
-                              frequency:
-                                builderToolState.terrainGenerationFrequency,
-                              groundElevationMeters: selectedTerrainPatch.origin.y,
-                              maxElevationMeters:
-                                builderToolState.terrainGenerationMaxElevationMeters,
-                              maxSlopeDegrees:
-                                builderToolState.terrainGenerationMaxSlopeDegrees,
-                              minElevationMeters:
-                                builderToolState.terrainGenerationMinElevationMeters,
-                              octaves: builderToolState.terrainGenerationOctaves,
-                              seed: builderToolState.terrainNoiseSeed,
-                              warpFrequency:
-                                builderToolState.terrainGenerationWarpFrequency,
-                              warpStrengthMeters:
-                                builderToolState.terrainGenerationWarpStrengthMeters
+                              ...generationStyle
                             })
                           );
 
@@ -4689,6 +4846,86 @@ export function MapEditorSelectionPane({
                       variant="outline"
                     >
                       Generate
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const copiedTerrainGenerationStyle =
+                          createTerrainGenerationStyleFromTerrainPatch(
+                            selectedTerrainPatch,
+                            builderToolState
+                          );
+
+                        onBuilderToolStateChange((currentBuilderToolState) => {
+                          const nextBuilderToolState =
+                            applyTerrainGenerationStyleToBuilderToolState(
+                              currentBuilderToolState,
+                              copiedTerrainGenerationStyle
+                            );
+
+                          return Object.freeze({
+                            ...nextBuilderToolState,
+                            copiedTerrainGenerationStyle
+                          });
+                        });
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <CopyIcon data-icon="inline-start" />
+                      Copy Style
+                    </Button>
+                    <Button
+                      disabled={
+                        builderToolState.copiedTerrainGenerationStyle === null
+                      }
+                      onClick={() => {
+                        const copiedTerrainGenerationStyle =
+                          builderToolState.copiedTerrainGenerationStyle;
+
+                        if (copiedTerrainGenerationStyle === null) {
+                          return;
+                        }
+
+                        const pastedTerrainGenerationStyle =
+                          retargetTerrainGenerationStyleToGround(
+                            copiedTerrainGenerationStyle,
+                            selectedTerrainPatch.origin.y
+                          );
+                        const generatedTerrainPatch =
+                          conformMapEditorTerrainPatchDraftToSupportSurfaces(
+                            project,
+                            bakeMapEditorProceduralTerrainPatch(selectedTerrainPatch, {
+                              ...defaultMapEditorTerrainGenerationConfig,
+                              ...pastedTerrainGenerationStyle
+                            })
+                          );
+
+                        onBuilderToolStateChange((currentBuilderToolState) => {
+                          const nextBuilderToolState =
+                            applyTerrainGenerationStyleToBuilderToolState(
+                              currentBuilderToolState,
+                              pastedTerrainGenerationStyle
+                            );
+
+                          return Object.freeze({
+                            ...nextBuilderToolState,
+                            copiedTerrainGenerationStyle:
+                              currentBuilderToolState.copiedTerrainGenerationStyle
+                          });
+                        });
+                        onUpdateTerrainPatch(
+                          selectedTerrainPatch.terrainPatchId,
+                          () => ({
+                            ...generatedTerrainPatch,
+                            waterLevelMeters: null
+                          })
+                        );
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <ClipboardPasteIcon data-icon="inline-start" />
+                      Paste Style
                     </Button>
                     <Button
                       onClick={() => {

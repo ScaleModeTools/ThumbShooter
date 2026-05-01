@@ -596,6 +596,17 @@ test("map editor UI prefs persist build-tool floor, path, and terrain brush sett
   const prefs = Object.freeze({
     builderToolState: Object.freeze({
       ...defaultMapEditorBuilderToolState,
+      copiedTerrainGenerationStyle: Object.freeze({
+        frequency: 0.16,
+        groundElevationMeters: 2,
+        maxElevationMeters: 9,
+        maxSlopeDegrees: 52,
+        minElevationMeters: -4,
+        octaves: 5,
+        seed: 912,
+        warpFrequency: 0.27,
+        warpStrengthMeters: 6
+      }),
       floorElevationMeters: 1.25,
       floorFootprintCellsX: 3,
       floorFootprintCellsZ: 5,
@@ -796,6 +807,7 @@ test("map editor semantic draft handles keep procedural structures, volumes, and
       ]),
       terrainPatchDrafts: Object.freeze([
         Object.freeze({
+          generationStyle: null,
           grid: Object.freeze({
             cellX: -1,
             cellZ: -1,
@@ -1114,6 +1126,17 @@ test("map editor terrain generation bakes deterministic height and material samp
 
   assert.deepEqual(bakedTerrainA.heightSamples, bakedTerrainB.heightSamples);
   assert.deepEqual(bakedTerrainA.materialLayers, bakedTerrainB.materialLayers);
+  assert.deepEqual(bakedTerrainA.generationStyle, {
+    frequency: 0.12,
+    groundElevationMeters: 2,
+    maxElevationMeters: 6,
+    maxSlopeDegrees: 32,
+    minElevationMeters: -3,
+    octaves: 4,
+    seed: 4242,
+    warpFrequency: 0.18,
+    warpStrengthMeters: 5
+  });
   assert.equal(bakedTerrainA.origin.y, 2);
   assert.equal(bakedTerrainA.waterLevelMeters, null);
   assertTerrainHeightSamplesRespectMaxSlope(

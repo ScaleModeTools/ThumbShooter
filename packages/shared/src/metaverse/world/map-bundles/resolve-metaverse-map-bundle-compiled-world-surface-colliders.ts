@@ -67,7 +67,9 @@ function resolveCompiledCollisionBoxSurfaceCollider(
       Math.max(0.01, Math.abs(box.size.y) * 0.5),
       Math.max(0.01, Math.abs(box.size.z) * 0.5)
     ),
+    ownerId: box.ownerId,
     ownerEnvironmentAssetId: null,
+    ownerKind: box.ownerKind,
     rotation: createYawQuaternion(box.rotationYRadians),
     rotationYRadians: box.rotationYRadians,
     shape: "box",
@@ -79,7 +81,7 @@ function resolveCompiledCollisionBoxSurfaceCollider(
 function resolveCompiledCollisionHeightfieldSurfaceCollider(
   heightfield: MetaverseMapBundleCompiledCollisionHeightfieldSnapshot
 ): MetaverseWorldPlacedSurfaceColliderSnapshot | null {
-  return createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
+  const collider = createMetaverseWorldPlacedSurfaceHeightfieldSupportSnapshot(
     null,
     {
       heightSamples: heightfield.heightSamples,
@@ -92,12 +94,20 @@ function resolveCompiledCollisionHeightfieldSurfaceCollider(
       yawRadians: heightfield.rotationYRadians
     }
   );
+
+  return collider === null
+    ? null
+    : Object.freeze({
+        ...collider,
+        ownerId: heightfield.ownerId,
+        ownerKind: heightfield.ownerKind
+      });
 }
 
 function resolveCompiledCollisionTriMeshSurfaceCollider(
   triMesh: MetaverseMapBundleCompiledCollisionTriMeshSnapshot
 ): MetaverseWorldPlacedSurfaceColliderSnapshot | null {
-  return createMetaverseWorldPlacedSurfaceTriMeshSnapshot(
+  const collider = createMetaverseWorldPlacedSurfaceTriMeshSnapshot(
     null,
     {
       indices: Uint32Array.from(triMesh.indices),
@@ -109,6 +119,14 @@ function resolveCompiledCollisionTriMeshSurfaceCollider(
     },
     triMesh.traversalAffordance
   );
+
+  return collider === null
+    ? null
+    : Object.freeze({
+        ...collider,
+        ownerId: triMesh.ownerId,
+        ownerKind: triMesh.ownerKind
+      });
 }
 
 export function resolveMetaverseMapBundleCompiledWorldSurfaceColliders(

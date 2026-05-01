@@ -17,8 +17,12 @@ import type {
   MetaverseMapBundleSemanticWorldSnapshot,
   MetaverseWorldSurfaceVector3Snapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
+import type {
+  MapEditorTerrainGenerationStyleSnapshot
+} from "@/engine-tool/types/map-editor";
 
 export interface MapEditorTerrainPatchDraftSnapshot {
+  readonly generationStyle: MapEditorTerrainGenerationStyleSnapshot | null;
   readonly grid: MetaverseMapBundleSemanticGridRectSnapshot;
   readonly heightSamples: readonly number[];
   readonly label: string;
@@ -144,6 +148,22 @@ function freezeVector3(
   });
 }
 
+function freezeTerrainGenerationStyle(
+  style: MapEditorTerrainGenerationStyleSnapshot
+): MapEditorTerrainGenerationStyleSnapshot {
+  return Object.freeze({
+    frequency: style.frequency,
+    groundElevationMeters: style.groundElevationMeters,
+    maxElevationMeters: style.maxElevationMeters,
+    maxSlopeDegrees: style.maxSlopeDegrees,
+    minElevationMeters: style.minElevationMeters,
+    octaves: style.octaves,
+    seed: style.seed,
+    warpFrequency: style.warpFrequency,
+    warpStrengthMeters: style.warpStrengthMeters
+  });
+}
+
 function resolveLoopBounds(
   loop: MetaverseMapBundleSemanticPlanarLoopSnapshot
 ): {
@@ -196,6 +216,10 @@ export function freezeTerrainPatchDraft(
 ): MapEditorTerrainPatchDraftSnapshot {
   return Object.freeze({
     ...draft,
+    generationStyle:
+      draft.generationStyle === null
+        ? null
+        : freezeTerrainGenerationStyle(draft.generationStyle),
     grid: Object.freeze({
       cellX: draft.grid.cellX,
       cellZ: draft.grid.cellZ,
@@ -344,6 +368,7 @@ export function createMapEditorTerrainPatchDrafts(
   return Object.freeze(
     semanticWorld.terrainPatches.map((terrainPatch) =>
       freezeTerrainPatchDraft({
+        generationStyle: null,
         grid: terrainPatch.grid,
         heightSamples: terrainPatch.heightSamples,
         label: terrainPatch.label,

@@ -11,6 +11,7 @@ import {
   type MapEditorSurfaceMode,
   type MapEditorTerrainBrushMode,
   type MapEditorTerrainBrushSizeCells,
+  type MapEditorTerrainGenerationStyleSnapshot,
   type MapEditorWallToolPresetId
 } from "@/engine-tool/types/map-editor";
 import type {
@@ -199,6 +200,77 @@ function readPositiveInteger(
     : fallback;
 }
 
+function readTerrainGenerationStyle(
+  value: unknown
+): MapEditorTerrainGenerationStyleSnapshot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const groundElevationMeters =
+    typeof value.groundElevationMeters === "number" &&
+    Number.isFinite(value.groundElevationMeters)
+      ? value.groundElevationMeters
+      : null;
+  const storedMinElevationMeters =
+    typeof value.minElevationMeters === "number" &&
+    Number.isFinite(value.minElevationMeters)
+      ? value.minElevationMeters
+      : null;
+  const storedMaxElevationMeters =
+    typeof value.maxElevationMeters === "number" &&
+    Number.isFinite(value.maxElevationMeters)
+      ? value.maxElevationMeters
+      : null;
+
+  if (
+    groundElevationMeters === null ||
+    storedMinElevationMeters === null ||
+    storedMaxElevationMeters === null
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    frequency:
+      typeof value.frequency === "number" && Number.isFinite(value.frequency)
+        ? Math.max(0.001, value.frequency)
+        : defaultMapEditorBuilderToolState.terrainGenerationFrequency,
+    groundElevationMeters,
+    maxElevationMeters: Math.max(
+      storedMinElevationMeters,
+      storedMaxElevationMeters
+    ),
+    maxSlopeDegrees:
+      typeof value.maxSlopeDegrees === "number" &&
+      Number.isFinite(value.maxSlopeDegrees)
+        ? Math.max(1, Math.min(89, value.maxSlopeDegrees))
+        : defaultMapEditorBuilderToolState.terrainGenerationMaxSlopeDegrees,
+    minElevationMeters: Math.min(
+      storedMinElevationMeters,
+      storedMaxElevationMeters
+    ),
+    octaves: readPositiveInteger(
+      value.octaves,
+      defaultMapEditorBuilderToolState.terrainGenerationOctaves
+    ),
+    seed:
+      typeof value.seed === "number" && Number.isFinite(value.seed)
+        ? Math.round(value.seed)
+        : defaultMapEditorBuilderToolState.terrainNoiseSeed,
+    warpFrequency:
+      typeof value.warpFrequency === "number" &&
+      Number.isFinite(value.warpFrequency)
+        ? Math.max(0.001, value.warpFrequency)
+        : defaultMapEditorBuilderToolState.terrainGenerationWarpFrequency,
+    warpStrengthMeters:
+      typeof value.warpStrengthMeters === "number" &&
+      Number.isFinite(value.warpStrengthMeters)
+        ? Math.max(0, value.warpStrengthMeters)
+        : defaultMapEditorBuilderToolState.terrainGenerationWarpStrengthMeters
+  });
+}
+
 function readBuilderToolState(value: unknown): MapEditorBuilderToolStateSnapshot {
   if (!isRecord(value)) {
     return defaultMapEditorBuilderToolState;
@@ -273,6 +345,9 @@ function readBuilderToolState(value: unknown): MapEditorBuilderToolStateSnapshot
     coverHeightCells: readPositiveInteger(
       value.coverHeightCells,
       defaultMapEditorBuilderToolState.coverHeightCells
+    ),
+    copiedTerrainGenerationStyle: readTerrainGenerationStyle(
+      value.copiedTerrainGenerationStyle
     ),
     floorElevationMeters:
       typeof value.floorElevationMeters === "number" &&

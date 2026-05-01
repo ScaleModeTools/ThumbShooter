@@ -2,6 +2,9 @@ import {
   metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians,
   type MetaverseMapBundleSemanticMaterialId
 } from "@webgpu-metaverse/shared/metaverse/world";
+import type {
+  MapEditorTerrainGenerationStyleSnapshot
+} from "@/engine-tool/types/map-editor";
 
 import type {
   MapEditorTerrainPatchDraftSnapshot
@@ -88,6 +91,44 @@ export const defaultMapEditorTerrainGenerationConfig =
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+type MapEditorTerrainGenerationStyleInput = Pick<
+  MapEditorTerrainGenerationConfigSnapshot,
+  | "frequency"
+  | "groundElevationMeters"
+  | "maxElevationMeters"
+  | "maxSlopeDegrees"
+  | "minElevationMeters"
+  | "octaves"
+  | "seed"
+  | "warpFrequency"
+  | "warpStrengthMeters"
+>;
+
+export function createMapEditorTerrainGenerationStyleSnapshot(
+  input: MapEditorTerrainGenerationStyleInput
+): MapEditorTerrainGenerationStyleSnapshot {
+  const minElevationMeters = Math.min(
+    input.minElevationMeters,
+    input.maxElevationMeters
+  );
+  const maxElevationMeters = Math.max(
+    input.minElevationMeters,
+    input.maxElevationMeters
+  );
+
+  return Object.freeze({
+    frequency: Math.max(0.001, input.frequency),
+    groundElevationMeters: input.groundElevationMeters,
+    maxElevationMeters,
+    maxSlopeDegrees: clamp(input.maxSlopeDegrees, 1, 89),
+    minElevationMeters,
+    octaves: Math.max(1, Math.min(8, Math.round(input.octaves))),
+    seed: Math.round(input.seed),
+    warpFrequency: Math.max(0.001, input.warpFrequency),
+    warpStrengthMeters: Math.max(0, input.warpStrengthMeters)
+  });
 }
 
 function fade(value: number): number {
@@ -379,20 +420,19 @@ export function bakeMapEditorProceduralTerrainPatch(
   draft: MapEditorTerrainPatchDraftSnapshot,
   config: MapEditorTerrainGenerationConfigSnapshot
 ): MapEditorTerrainPatchDraftSnapshot {
-  const octaves = Math.max(1, Math.min(8, Math.round(config.octaves)));
-  const frequency = Math.max(0.001, config.frequency);
-  const groundElevationMeters = config.groundElevationMeters;
-  const warpFrequency = Math.max(0.001, config.warpFrequency);
-  const minElevationMeters = Math.min(
-    config.minElevationMeters,
-    config.maxElevationMeters
-  );
-  const maxElevationMeters = Math.max(
-    config.minElevationMeters,
-    config.maxElevationMeters
-  );
-  const maxSlopeDegrees = clamp(config.maxSlopeDegrees, 1, 89);
-  const warpStrengthMeters = Math.max(0, config.warpStrengthMeters);
+  const generationStyle =
+    createMapEditorTerrainGenerationStyleSnapshot(config);
+  const {
+    frequency,
+    groundElevationMeters,
+    maxElevationMeters,
+    maxSlopeDegrees,
+    minElevationMeters,
+    octaves,
+    seed,
+    warpFrequency,
+    warpStrengthMeters
+  } = generationStyle;
   const halfX = (draft.sampleCountX - 1) * 0.5;
   const halfZ = (draft.sampleCountZ - 1) * 0.5;
   const heights = Array.from(
@@ -405,15 +445,15 @@ export function bakeMapEditorProceduralTerrainPatch(
       const worldZ =
         draft.origin.z + (sampleZ - halfZ) * draft.sampleSpacingMeters;
       const warpX =
-        sampleFractalNoise(worldX * warpFrequency, worldZ * warpFrequency, config.seed + 17, 2) *
+        sampleFractalNoise(worldX * warpFrequency, worldZ * warpFrequency, seed + 17, 2) *
         warpStrengthMeters;
       const warpZ =
-        sampleFractalNoise(worldX * warpFrequency, worldZ * warpFrequency, config.seed + 53, 2) *
+        sampleFractalNoise(worldX * warpFrequency, worldZ * warpFrequency, seed + 53, 2) *
         warpStrengthMeters;
       const terrainNoise = sampleFractalNoise(
         (worldX + warpX) * frequency,
         (worldZ + warpZ) * frequency,
-        config.seed,
+        seed,
         octaves
       );
       const shapedNoise =
@@ -440,6 +480,7 @@ export function bakeMapEditorProceduralTerrainPatch(
 
   return Object.freeze({
     ...draft,
+    generationStyle,
     heightSamples: slopeLimitedHeights,
     materialLayers: createGeneratedMaterialLayers(
       draft,

@@ -2210,6 +2210,7 @@ export function mergeMapEditorTerrainPatches(
     z: Math.max(mapEditorBuildGridUnitMeters, bounds.maxZ - bounds.minZ)
   });
   const mergedTerrainPatch = freezeTerrainPatchDraft({
+    generationStyle: terrainPatches[0]!.generationStyle,
     grid: createMapEditorStructuralGrid(mergedOrigin, mergedSize),
     heightSamples: Object.freeze(mergedHeights),
     label: terrainPatches[0]!.label,
@@ -4287,6 +4288,7 @@ export function addMapEditorTerrainPatchDraft(
     z: terrainCellsZ * mapEditorBuildGridUnitMeters
   });
   const nextTerrainPatch = Object.freeze({
+    generationStyle: null,
     grid: createMapEditorStructuralGrid(rectangle.center, patchSize),
     heightSamples: createTerrainPatchHeights(
       sampleCountX,
@@ -5342,6 +5344,15 @@ export function applyMapEditorTerrainBrush(
   const normalizedBrushSizeCells = normalizeTerrainBrushSizeCells(brushSizeCells);
   let nextProject = project;
   let terrainPatch = findTerrainPatchAtPosition(nextProject, snappedPosition);
+
+  if (terrainPatch === null) {
+    nextProject = addMapEditorTerrainPatchDraft(
+      nextProject,
+      snappedPosition,
+      materialId
+    );
+    terrainPatch = findTerrainPatchAtPosition(nextProject, snappedPosition);
+  }
 
   if (terrainPatch === null) {
     return nextProject;

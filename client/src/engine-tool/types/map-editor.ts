@@ -65,6 +65,18 @@ export type MapEditorWallToolPresetId =
   | "retaining-wall"
   | "wall";
 
+export interface MapEditorTerrainGenerationStyleSnapshot {
+  readonly frequency: number;
+  readonly groundElevationMeters: number;
+  readonly maxElevationMeters: number;
+  readonly maxSlopeDegrees: number;
+  readonly minElevationMeters: number;
+  readonly octaves: number;
+  readonly seed: number;
+  readonly warpFrequency: number;
+  readonly warpStrengthMeters: number;
+}
+
 export const defaultMapEditorMaterialPaletteIds =
   Object.freeze<readonly string[]>([
     "concrete",
@@ -132,6 +144,8 @@ export interface MapEditorBuilderToolStateSnapshot {
   readonly coverFootprintCellsX: number;
   readonly coverFootprintCellsZ: number;
   readonly coverHeightCells: number;
+  readonly copiedTerrainGenerationStyle:
+    MapEditorTerrainGenerationStyleSnapshot | null;
   readonly floorElevationMeters: number;
   readonly floorFootprintCellsX: number;
   readonly floorFootprintCellsZ: number;
@@ -181,6 +195,7 @@ export const defaultMapEditorBuilderToolState =
     coverFootprintCellsX: 1,
     coverFootprintCellsZ: 1,
     coverHeightCells: 1,
+    copiedTerrainGenerationStyle: null,
     floorElevationMeters: 0,
     floorFootprintCellsX: 1,
     floorFootprintCellsZ: 1,

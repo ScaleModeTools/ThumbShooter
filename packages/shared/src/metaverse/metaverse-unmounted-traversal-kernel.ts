@@ -49,6 +49,7 @@ import type {
 } from "./metaverse-world-surface-policy.js";
 import {
   metaverseWorldAutomaticSurfaceWaterlineThresholdMeters,
+  metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians,
   metaverseWorldSurfaceStepHeightLeewayMeters,
   constrainMetaverseWorldPlanarPositionAgainstBlockers,
   resolveMetaverseWorldGroundedAutostepHeightMeters,
@@ -449,6 +450,45 @@ function resolveMetaverseDeterministicGroundedMaxStepRiseMeters(
   );
 }
 
+function resolveMetaverseDeterministicGroundedMaxWalkableSlopeRiseMeters(input: {
+  readonly currentPosition: MetaverseWorldSurfaceVector3Snapshot;
+  readonly groundedBodyConfig: MetaverseGroundedBodyConfigSnapshot;
+  readonly nextPosition: MetaverseWorldSurfaceVector3Snapshot;
+  readonly surfacePolicyConfig: MetaverseWorldSurfacePolicyConfig;
+}): number {
+  const planarDistanceMeters = Math.hypot(
+    input.nextPosition.x - input.currentPosition.x,
+    input.nextPosition.z - input.currentPosition.z
+  );
+  const maxWalkableSlopeAngleRadians = clamp(
+    toFiniteNumber(
+      input.surfacePolicyConfig.maxWalkableSlopeAngleRadians ??
+        input.groundedBodyConfig.maxSlopeClimbAngleRadians,
+      metaverseWorldSurfaceDefaultMaxWalkableSlopeAngleRadians
+    ),
+    0,
+    Math.PI * 0.5 - 0.0001
+  );
+
+  return (
+    planarDistanceMeters * Math.tan(maxWalkableSlopeAngleRadians) +
+    metaverseWorldSurfaceStepHeightLeewayMeters
+  );
+}
+
+function resolveMetaverseDeterministicGroundedMaxSupportRiseMeters(input: {
+  readonly currentPosition: MetaverseWorldSurfaceVector3Snapshot;
+  readonly groundedBodyConfig: MetaverseGroundedBodyConfigSnapshot;
+  readonly maxStepRiseMeters: number;
+  readonly nextPosition: MetaverseWorldSurfaceVector3Snapshot;
+  readonly surfacePolicyConfig: MetaverseWorldSurfacePolicyConfig;
+}): number {
+  return Math.max(
+    input.maxStepRiseMeters,
+    resolveMetaverseDeterministicGroundedMaxWalkableSlopeRiseMeters(input)
+  );
+}
+
 function resolveMetaverseDeterministicGroundedCapsuleHeightMeters(
   input: Pick<
     AdvanceMetaverseDeterministicUnmountedGroundedBodyStepInput,
@@ -511,8 +551,17 @@ function resolveMetaverseDeterministicGroundedPlanarPosition(input: {
       input.stepInput.excludedOwnerEnvironmentAssetId ?? null,
       Object.freeze({
         currentRootHeightMeters: input.currentPosition.y,
+        maxSupportRiseMeters:
+          resolveMetaverseDeterministicGroundedMaxSupportRiseMeters({
+            currentPosition: input.currentPosition,
+            groundedBodyConfig: input.stepInput.groundedBodyConfig,
+            maxStepRiseMeters: input.maxStepRiseMeters,
+            nextPosition: input.nextPosition,
+            surfacePolicyConfig: input.stepInput.surfacePolicyConfig
+          }),
         maxStepRiseMeters: input.maxStepRiseMeters,
-        nextRootHeightMeters: input.nextPosition.y
+        nextRootHeightMeters: input.nextPosition.y,
+        surfacePolicyConfig: input.stepInput.surfacePolicyConfig
       })
     );
 
@@ -564,7 +613,7 @@ function hasDeterministicGroundedBodyVerticalMovementDivergence(
 
 function shouldAcceptMetaverseDeterministicGroundedSupport(input: {
   readonly currentPosition: MetaverseWorldSurfaceVector3Snapshot;
-  readonly maxStepRiseMeters: number;
+  readonly maxSupportRiseMeters: number;
   readonly preparedStep: ReturnType<typeof prepareMetaverseGroundedBodyStep>;
   readonly resolvedPlanarPosition: MetaverseWorldSurfaceVector3Snapshot;
   readonly snapToGroundDistanceMeters: number;
@@ -578,7 +627,7 @@ function shouldAcceptMetaverseDeterministicGroundedSupport(input: {
 
   if (
     supportHeightMeters >
-    input.currentPosition.y + input.maxStepRiseMeters
+    input.currentPosition.y + input.maxSupportRiseMeters
   ) {
     return false;
   }
@@ -634,6 +683,14 @@ export function advanceMetaverseDeterministicUnmountedGroundedBodyStep(
   );
   const maxStepRiseMeters =
     resolveMetaverseDeterministicGroundedMaxStepRiseMeters(input);
+  const maxSupportRiseMeters =
+    resolveMetaverseDeterministicGroundedMaxSupportRiseMeters({
+      currentPosition,
+      groundedBodyConfig: input.groundedBodyConfig,
+      maxStepRiseMeters,
+      nextPosition: desiredRootPosition,
+      surfacePolicyConfig: input.surfacePolicyConfig
+    });
   const resolvedPlanarPosition =
     resolveMetaverseDeterministicGroundedPlanarPosition({
       currentPosition,
@@ -659,12 +716,12 @@ export function advanceMetaverseDeterministicUnmountedGroundedBodyStep(
         toFiniteNumber(input.groundedBodyConfig.controllerOffsetMeters, 0)
       ),
     input.excludedOwnerEnvironmentAssetId ?? null,
-    Math.max(currentPosition.y, resolvedPlanarPosition.y) + maxStepRiseMeters,
+    Math.max(currentPosition.y, resolvedPlanarPosition.y) + maxSupportRiseMeters,
     input.preferredSupport ?? null
   );
   const grounded = shouldAcceptMetaverseDeterministicGroundedSupport({
     currentPosition,
-    maxStepRiseMeters,
+    maxSupportRiseMeters,
     preparedStep,
     resolvedPlanarPosition,
     snapToGroundDistanceMeters: Math.max(

@@ -101,6 +101,14 @@ interface AutomaticSurfaceProbeSupportSnapshot {
   readonly supportHeightMeters: number | null;
 }
 
+interface GroundedSupportObstacleConfig {
+  readonly currentRootHeightMeters: number;
+  readonly maxStepRiseMeters: number;
+  readonly maxSupportRiseMeters?: number;
+  readonly nextRootHeightMeters: number;
+  readonly surfacePolicyConfig?: MetaverseWorldSurfacePolicyConfig;
+}
+
 function toFiniteNumber(value: number, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
@@ -989,11 +997,7 @@ function isPlanarPositionBlocked(
   minHeightMeters: number,
   maxHeightMeters: number,
   excludedOwnerEnvironmentAssetId: string | null = null,
-  groundedSupportObstacleConfig: {
-    readonly currentRootHeightMeters: number;
-    readonly maxStepRiseMeters: number;
-    readonly nextRootHeightMeters: number;
-  } | null = null
+  groundedSupportObstacleConfig: GroundedSupportObstacleConfig | null = null
 ): boolean {
   for (const collider of surfaceColliderSnapshots) {
     if (
@@ -1061,7 +1065,7 @@ function isPlanarPositionBlocked(
       continue;
     }
 
-    if (
+    const blocked =
       collider.shape === "trimesh"
         ? isPlanarPositionBlockedByTriMeshCollider(
             collider,
@@ -1071,13 +1075,76 @@ function isPlanarPositionBlocked(
             minHeightMeters,
             maxHeightMeters
           )
-        : isPlanarPositionInsideCollider(collider, x, z, paddingMeters)
-    ) {
-      return true;
+        : isPlanarPositionInsideCollider(collider, x, z, paddingMeters);
+
+    if (!blocked) {
+      continue;
     }
+
+    if (
+      shouldIgnoreGroundedTerrainPatchSubsurfaceBlocker(
+        surfaceColliderSnapshots,
+        collider,
+        x,
+        z,
+        paddingMeters,
+        excludedOwnerEnvironmentAssetId,
+        groundedSupportObstacleConfig
+      )
+    ) {
+      continue;
+    }
+
+    return true;
   }
 
   return false;
+}
+
+function shouldIgnoreGroundedTerrainPatchSubsurfaceBlocker(
+  surfaceColliderSnapshots: readonly MetaverseWorldPlacedSurfaceColliderSnapshot[],
+  collider: MetaverseWorldPlacedSurfaceColliderSnapshot,
+  x: number,
+  z: number,
+  paddingMeters: number,
+  excludedOwnerEnvironmentAssetId: string | null,
+  groundedSupportObstacleConfig: GroundedSupportObstacleConfig | null
+): boolean {
+  if (
+    groundedSupportObstacleConfig === null ||
+    groundedSupportObstacleConfig.surfacePolicyConfig === undefined ||
+    collider.ownerKind !== "terrain-patch" ||
+    collider.shape !== "trimesh" ||
+    collider.traversalAffordance !== "blocker"
+  ) {
+    return false;
+  }
+
+  const maxSupportRiseMeters =
+    groundedSupportObstacleConfig.maxSupportRiseMeters ??
+    groundedSupportObstacleConfig.maxStepRiseMeters;
+  const supportCandidate = resolveSurfaceSupportCandidate(
+    surfaceColliderSnapshots,
+    groundedSupportObstacleConfig.surfacePolicyConfig,
+    x,
+    z,
+    paddingMeters,
+    excludedOwnerEnvironmentAssetId,
+    groundedSupportObstacleConfig.currentRootHeightMeters +
+      maxSupportRiseMeters
+  );
+
+  return (
+    supportCandidate !== null &&
+    supportCandidate.supportKind === "heightfield" &&
+    supportCandidate.supportHeightMeters >=
+      groundedSupportObstacleConfig.currentRootHeightMeters -
+        automaticSurfaceBlockingHeightToleranceMeters &&
+    supportCandidate.supportHeightMeters <=
+      groundedSupportObstacleConfig.currentRootHeightMeters +
+        maxSupportRiseMeters +
+        automaticSurfaceBlockingHeightToleranceMeters
+  );
 }
 
 function resolveAutomaticSurfaceProbeSupport(
@@ -1397,11 +1464,7 @@ export function constrainMetaverseWorldPlanarPositionAgainstBlockers(
   minHeightMeters: number,
   maxHeightMeters: number,
   excludedOwnerEnvironmentAssetId: string | null = null,
-  groundedSupportObstacleConfig: {
-    readonly currentRootHeightMeters: number;
-    readonly maxStepRiseMeters: number;
-    readonly nextRootHeightMeters: number;
-  } | null = null
+  groundedSupportObstacleConfig: GroundedSupportObstacleConfig | null = null
 ): MetaverseWorldSurfaceVector3Snapshot {
   if (
     !isPlanarPositionBlocked(

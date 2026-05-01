@@ -145,7 +145,16 @@ export interface MetaverseWorldPlacedSurfaceColliderSnapshot {
   readonly halfExtents: MetaverseWorldSurfaceVector3Snapshot;
   readonly heightSamples?: Float32Array;
   readonly indices?: Uint32Array;
+  readonly ownerId?: string | null;
   readonly ownerEnvironmentAssetId: string | null;
+  readonly ownerKind?:
+    | "connector"
+    | "edge"
+    | "module"
+    | "region"
+    | "structure"
+    | "terrain-patch"
+    | null;
   readonly rotation: MetaverseWorldSurfaceQuaternionSnapshot;
   readonly rotationYRadians: number;
   readonly sampleCountX?: number;
