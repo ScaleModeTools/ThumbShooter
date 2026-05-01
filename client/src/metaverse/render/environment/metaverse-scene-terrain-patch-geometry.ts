@@ -24,6 +24,19 @@ export function createMetaverseSceneTerrainPatchGeometry(
     (sampleZ - halfZ) * terrainPatch.sampleSpacingMeters;
   const readHeight = (sampleX: number, sampleZ: number): number =>
     terrainPatch.heightSamples[sampleZ * terrainPatch.sampleCountX + sampleX] ?? 0;
+  const readTerrainUv = (
+    x: number,
+    z: number
+  ): readonly [number, number] => [
+    terrainPatch.sampleCountX <= 1
+      ? 0
+      : (x / terrainPatch.sampleSpacingMeters + halfX) /
+        (terrainPatch.sampleCountX - 1),
+    terrainPatch.sampleCountZ <= 1
+      ? 0
+      : (z / terrainPatch.sampleSpacingMeters + halfZ) /
+        (terrainPatch.sampleCountZ - 1)
+  ] as const;
   const pushVertex = (
     x: number,
     y: number,
@@ -38,30 +51,18 @@ export function createMetaverseSceneTerrainPatchGeometry(
 
     return vertexIndex;
   };
-  const pushProjectedVertex = (
-    point: readonly [number, number, number],
-    verticalUv: boolean,
-    projectAcrossZ: boolean
-  ): void => {
-    const u = verticalUv
-      ? (projectAcrossZ ? point[2] : point[0]) / terrainPatch.sampleSpacingMeters
-      : point[0] / terrainPatch.sampleSpacingMeters;
-    const v = verticalUv
-      ? point[1] / terrainPatch.sampleSpacingMeters
-      : point[2] / terrainPatch.sampleSpacingMeters;
-
-    pushVertex(point[0], point[1], point[2], u, v);
-  };
   const pushTriangle = (
     a: readonly [number, number, number],
     b: readonly [number, number, number],
-    c: readonly [number, number, number],
-    verticalUv: boolean,
-    projectAcrossZ: boolean
+    c: readonly [number, number, number]
   ): void => {
-    pushProjectedVertex(a, verticalUv, projectAcrossZ);
-    pushProjectedVertex(b, verticalUv, projectAcrossZ);
-    pushProjectedVertex(c, verticalUv, projectAcrossZ);
+    const aUv = readTerrainUv(a[0], a[2]);
+    const bUv = readTerrainUv(b[0], b[2]);
+    const cUv = readTerrainUv(c[0], c[2]);
+
+    pushVertex(a[0], a[1], a[2], aUv[0], aUv[1]);
+    pushVertex(b[0], b[1], b[2], bUv[0], bUv[1]);
+    pushVertex(c[0], c[1], c[2], cUv[0], cUv[1]);
   };
   const pushTerrainQuad = (
     topLeft: readonly [number, number, number],
@@ -69,29 +70,8 @@ export function createMetaverseSceneTerrainPatchGeometry(
     topRight: readonly [number, number, number],
     bottomRight: readonly [number, number, number]
   ): void => {
-    const minY = Math.min(topLeft[1], bottomLeft[1], topRight[1], bottomRight[1]);
-    const maxY = Math.max(topLeft[1], bottomLeft[1], topRight[1], bottomRight[1]);
-    const rangeX = Math.max(
-      topLeft[0],
-      bottomLeft[0],
-      topRight[0],
-      bottomRight[0]
-    ) - Math.min(topLeft[0], bottomLeft[0], topRight[0], bottomRight[0]);
-    const rangeZ = Math.max(
-      topLeft[2],
-      bottomLeft[2],
-      topRight[2],
-      bottomRight[2]
-    ) - Math.min(topLeft[2], bottomLeft[2], topRight[2], bottomRight[2]);
-    const pitchRadians = Math.atan2(
-      maxY - minY,
-      Math.max(0.001, Math.min(Math.max(0.001, rangeX), Math.max(0.001, rangeZ)))
-    );
-    const verticalUv = pitchRadians >= 70 * (Math.PI / 180);
-    const projectAcrossZ = rangeZ >= rangeX;
-
-    pushTriangle(topLeft, bottomLeft, topRight, verticalUv, projectAcrossZ);
-    pushTriangle(topRight, bottomLeft, bottomRight, verticalUv, projectAcrossZ);
+    pushTriangle(topLeft, bottomLeft, topRight);
+    pushTriangle(topRight, bottomLeft, bottomRight);
   };
   const pushTerrainEdgeSkirt = (
     samples: readonly {
@@ -123,11 +103,9 @@ export function createMetaverseSceneTerrainPatchGeometry(
       ] as const;
       const bottomCurrent = [topCurrent[0], 0, topCurrent[2]] as const;
       const bottomNext = [topNext[0], 0, topNext[2]] as const;
-      const projectAcrossZ = Math.abs(topNext[2] - topCurrent[2]) >=
-        Math.abs(topNext[0] - topCurrent[0]);
 
-      pushTriangle(topCurrent, bottomCurrent, topNext, true, projectAcrossZ);
-      pushTriangle(topNext, bottomCurrent, bottomNext, true, projectAcrossZ);
+      pushTriangle(topCurrent, bottomCurrent, topNext);
+      pushTriangle(topNext, bottomCurrent, bottomNext);
     }
   };
 

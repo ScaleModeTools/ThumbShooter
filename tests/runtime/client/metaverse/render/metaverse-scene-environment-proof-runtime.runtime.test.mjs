@@ -254,6 +254,34 @@ test("loadMetaverseEnvironmentProofRuntime renders authored terrain and surface 
   assert.notEqual(surfaceMesh.geometry.getAttribute("uv") ?? null, null);
 });
 
+test("createMetaverseSceneTerrainPatchGeometry normalizes terrain texture UVs across the patch", async () => {
+  const { createMetaverseSceneTerrainPatchGeometry } = await clientLoader.load(
+    "/src/metaverse/render/environment/metaverse-scene-terrain-patch-geometry.ts"
+  );
+  const geometry = createMetaverseSceneTerrainPatchGeometry({
+    heightSamples: [0, 0.25, 0, 0.5, 1, 0.5, 0, 0.25, 0],
+    sampleCountX: 3,
+    sampleCountZ: 3,
+    sampleSpacingMeters: 4
+  });
+  const uvAttribute = geometry.getAttribute("uv");
+
+  assert.notEqual(uvAttribute ?? null, null);
+
+  const uvValues = Array.from(uvAttribute.array);
+
+  assert.ok(
+    uvValues.every((uvValue) => uvValue >= -0.000001 && uvValue <= 1.000001),
+    "terrain texture UVs should stay inside the generated patch texture"
+  );
+  assert.ok(
+    uvValues.some((uvValue) => Math.abs(uvValue - 0.5) <= 0.000001),
+    "interior terrain samples should map to interior texture coordinates"
+  );
+
+  geometry.dispose();
+});
+
 test("syncEnvironmentProofRuntime applies dynamic pose overrides through the loaded mount runtime", async () => {
   const [
     { loadMetaverseEnvironmentProofRuntime },
