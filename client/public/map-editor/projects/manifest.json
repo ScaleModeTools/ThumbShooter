@@ -46,7 +46,17 @@
       },
       "path": "/map-editor/projects/vibe-highlands.json",
       "sourceBundleId": "blank-template",
-      "updatedAt": "2026-05-01T12:46:55.716Z"
+      "updatedAt": "2026-05-01T13:00:52.641Z"
+    },
+    {
+      "bundleId": "vibe-highlands-fixed",
+      "label": "Vibe Highlands Fixed",
+      "mapEditorProjectSettings": {
+        "helperGridSizeMeters": 120
+      },
+      "path": "/map-editor/projects/vibe-highlands-fixed.json",
+      "sourceBundleId": "vibe-highlands",
+      "updatedAt": "2026-05-01T13:01:11.205Z"
     },
     {
       "bundleId": "vibjamprototype",

@@ -31371,7 +31371,7 @@
     }
   },
   "gameplayProfileId": "shell-default-gameplay",
-  "label": "Vibe Highlands",
+  "label": "Vibe Highlands Fixed",
   "launchVariations": [
     {
       "description": "",
@@ -31394,7 +31394,7 @@
       "weaponLayoutId": null
     }
   ],
-  "mapId": "vibe-highlands",
+  "mapId": "vibe-highlands-fixed",
   "playerSpawnNodes": [
     {
       "label": "Player Spawn 1",
