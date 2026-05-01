@@ -5,7 +5,6 @@ import {
   type MetaverseSurfaceTraversalConfig,
 } from "@webgpu-metaverse/shared/metaverse/traversal";
 import {
-  resolveMetaverseMapPlayerSpawnSupportPosition,
   resolveMetaverseMapPlayerSpawnNode,
   type MetaversePlayerTeamId,
   type MetaverseWorldSurfacePolicyConfig
@@ -1148,11 +1147,6 @@ export class MetaverseAuthoritativeWorldRuntime
       return requestedPose;
     }
 
-    const spawnPosition = resolveMetaverseMapPlayerSpawnSupportPosition({
-      compiledWorld: bundleInputs.bundle.compiledWorld,
-      spawnPosition: selectedSpawnNode.position
-    });
-
     return createMetaversePresencePoseSnapshot({
       animationVocabulary: requestedPose.animationVocabulary,
       look: {
@@ -1163,7 +1157,7 @@ export class MetaverseAuthoritativeWorldRuntime
       },
       locomotionMode: requestedPose.locomotionMode,
       mountedOccupancy: requestedPose.mountedOccupancy,
-      position: spawnPosition,
+      position: selectedSpawnNode.position,
       stateSequence: requestedPose.stateSequence,
       yawRadians: selectedSpawnNode.yawRadians
     });
@@ -1185,13 +1179,8 @@ export class MetaverseAuthoritativeWorldRuntime
         playerSpawnSelection: bundleInputs.bundle.playerSpawnSelection,
         playerTeamId
       }) ?? bundleInputs.defaultSpawn;
-    const spawnPosition = resolveMetaverseMapPlayerSpawnSupportPosition({
-      compiledWorld: bundleInputs.bundle.compiledWorld,
-      spawnPosition: selectedSpawnNode.position
-    });
-
     return Object.freeze({
-      position: spawnPosition,
+      position: selectedSpawnNode.position,
       yawRadians: selectedSpawnNode.yawRadians
     });
   }

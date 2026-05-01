@@ -218,6 +218,12 @@ export class MetaverseRemoteWorldRuntime {
     );
   }
 
+  readLatestAuthoritativeLocalPlayerSnapshot():
+    MetaverseRealtimeAuthoritativeLocalPlayerSnapshot | null {
+    return this.#remoteWorldAuthoritativeSnapshotState
+      .readLatestAuthoritativeLocalPlayerSnapshot();
+  }
+
   readFreshAckedAuthoritativeLocalPlayerSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
   ): MetaverseRealtimeAuthoritativeLocalPlayerSnapshot | null {
@@ -390,5 +396,10 @@ export class MetaverseRemoteWorldRuntime {
   ): MetaverseRealtimeWorldSnapshot | null {
     return this.#remoteWorldAuthoritativeSnapshotState
       .readFreshAuthoritativeWorldSnapshot(maxAuthoritativeSnapshotAgeMs);
+  }
+
+  readLatestAuthoritativeWorldSnapshot(): MetaverseRealtimeWorldSnapshot | null {
+    return this.#remoteWorldAuthoritativeSnapshotState
+      .readLatestAuthoritativeWorldSnapshot();
   }
 }

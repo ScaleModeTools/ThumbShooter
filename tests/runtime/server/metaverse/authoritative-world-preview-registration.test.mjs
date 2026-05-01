@@ -30,7 +30,8 @@ function createPreviewBundle(mapId) {
               ...spawnNode,
               position: Object.freeze({
                 ...spawnNode.position,
-                x: spawnNode.position.x + 18
+                x: spawnNode.position.x + 18,
+                y: spawnNode.position.y + 2.75
               })
             })
           : spawnNode

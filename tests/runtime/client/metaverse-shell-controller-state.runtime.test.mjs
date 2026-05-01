@@ -187,13 +187,24 @@ test("metaverse launch playlists default metaverse modes to vibe highlands", asy
   const {
     defaultMetaverseMapLaunchPlaylistSnapshot,
     normalizeMetaverseMapLaunchPlaylistSnapshot,
+    prioritizeTeamDeathmatchMap,
+    replaceMetaverseDefaultMap,
     resolveMetaverseMapLaunchSelection
   } = await clientLoader.load("/src/metaverse/world/playlists/index.ts");
+  const {
+    listMetaverseWorldBundleRegistryEntries
+  } = await clientLoader.load("/src/metaverse/world/bundle-registry/index.ts");
+  const listedBundleIds = listMetaverseWorldBundleRegistryEntries().map(
+    (entry) => entry.bundleId
+  );
 
   assert.equal(
     defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId,
     "vibe-highlands"
   );
+  assert.equal(listedBundleIds.includes("private-build"), true);
+  assert.equal(listedBundleIds.includes("staging-ground"), true);
+  assert.equal(listedBundleIds.includes("deathmatch"), true);
   assert.deepEqual(
     defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds,
     ["vibe-highlands"]
@@ -214,6 +225,30 @@ test("metaverse launch playlists default metaverse modes to vibe highlands", asy
       metaverseDefaultBundleId: "vibe-highlands",
       teamDeathmatchBundleIds: ["vibe-highlands"]
     }
+  );
+  assert.deepEqual(
+    normalizeMetaverseMapLaunchPlaylistSnapshot({
+      metaverseDefaultBundleId: "staging-ground",
+      teamDeathmatchBundleIds: ["deathmatch", "private-build"]
+    }),
+    {
+      metaverseDefaultBundleId: "vibe-highlands",
+      teamDeathmatchBundleIds: ["vibe-highlands"]
+    }
+  );
+  assert.deepEqual(
+    replaceMetaverseDefaultMap(
+      defaultMetaverseMapLaunchPlaylistSnapshot,
+      "private-build"
+    ),
+    defaultMetaverseMapLaunchPlaylistSnapshot
+  );
+  assert.deepEqual(
+    prioritizeTeamDeathmatchMap(
+      defaultMetaverseMapLaunchPlaylistSnapshot,
+      "deathmatch"
+    ),
+    defaultMetaverseMapLaunchPlaylistSnapshot
   );
   assert.deepEqual(
     resolveMetaverseMapLaunchSelection(

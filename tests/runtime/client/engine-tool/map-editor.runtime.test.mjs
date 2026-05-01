@@ -2003,6 +2003,10 @@ test("map editor export preserves authored spawn teams and team-proximity select
   const project = updateMapEditorPlayerSpawnSelectionDraft(
     updateMapEditorPlayerSpawnDraft(initialProject, spawnId, (spawnDraft) => ({
       ...spawnDraft,
+      position: {
+        ...spawnDraft.position,
+        y: spawnDraft.position.y + 2.75
+      },
       teamId: "blue"
     })),
     (spawnSelection) => ({
@@ -2014,6 +2018,10 @@ test("map editor export preserves authored spawn teams and team-proximity select
   const exportedBundle = exportMapEditorProjectToMetaverseMapBundle(project);
 
   assert.equal(exportedBundle.playerSpawnNodes[0]?.teamId, "blue");
+  assert.equal(
+    exportedBundle.playerSpawnNodes[0]?.position.y,
+    (initialProject.playerSpawnDrafts[0]?.position.y ?? 0) + 2.75
+  );
   assert.equal(exportedBundle.playerSpawnSelection.enemyAvoidanceRadiusMeters, 22);
   assert.equal(exportedBundle.playerSpawnSelection.homeTeamBiasMeters, 14);
 });
@@ -3011,6 +3019,7 @@ test("map editor preview registration pushes authored player spawns into the act
       position: {
         ...spawnDraft.position,
         x: spawnDraft.position.x + 9,
+        y: spawnDraft.position.y + 2.75,
         z: spawnDraft.position.z - 5
       },
       yawRadians: Math.PI * 0.5
@@ -3039,7 +3048,9 @@ test("map editor preview registration pushes authored player spawns into the act
   assert.equal(previewResult.registrationError, null);
   assert.notEqual(previewSpawn, undefined);
   assert.equal(runtimeConfig.groundedBody.spawnPosition.x, previewSpawn.position.x);
+  assert.equal(runtimeConfig.groundedBody.spawnPosition.y, previewSpawn.position.y);
   assert.equal(runtimeConfig.groundedBody.spawnPosition.z, previewSpawn.position.z);
+  assert.equal(runtimeConfig.camera.spawnPosition.y, previewSpawn.position.y + 1.62);
   assert.equal(
     runtimeConfig.camera.spawnPosition.x,
     previewSpawn.position.x

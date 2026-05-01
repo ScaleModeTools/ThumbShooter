@@ -23,10 +23,8 @@ export interface MetaverseMapLaunchSelectionSnapshot {
 const metaverseMapLaunchPlaylistStorageKey =
   "webgpu-metaverse.map-launch-playlists.v1" as const;
 const defaultMetaverseBundleId = "vibe-highlands" as const;
-const legacyMetaverseDefaultBundleId = "private-build" as const;
 const defaultFreeRoamLaunchVariationId =
   "vibe-highlands:scene-default" as const;
-const legacyTeamDeathmatchBundleId = "deathmatch" as const;
 const defaultTeamDeathmatchBundleId = defaultMetaverseBundleId;
 const defaultTeamDeathmatchLaunchVariationId =
   "vibe-highlands:variation:2" as const;
@@ -41,59 +39,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function normalizeBundleId(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalizedValue = value.trim();
-
-  return normalizedValue.length === 0 ? null : normalizedValue;
+function normalizeMetaverseDefaultBundleId(_value: unknown): string | null {
+  return defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId;
 }
 
-function normalizeBundleIds(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) {
-    return Object.freeze([]);
-  }
-
-  const bundleIds: string[] = [];
-
-  for (const candidate of value) {
-    const bundleId = normalizeBundleId(candidate);
-
-    if (bundleId !== null && !bundleIds.includes(bundleId)) {
-      bundleIds.push(bundleId);
-    }
-  }
-
-  return Object.freeze(bundleIds);
-}
-
-function normalizeMetaverseDefaultBundleId(value: unknown): string | null {
-  const bundleId = normalizeBundleId(value);
-
-  if (bundleId === legacyMetaverseDefaultBundleId) {
-    return defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId;
-  }
-
-  return (
-    bundleId ?? defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId
-  );
-}
-
-function normalizeTeamDeathmatchBundleIds(value: unknown): readonly string[] {
-  const bundleIds = normalizeBundleIds(value);
-
-  if (
-    bundleIds.length === 0 ||
-    (bundleIds.length === 1 &&
-      (bundleIds[0] === legacyTeamDeathmatchBundleId ||
-        bundleIds[0] === legacyMetaverseDefaultBundleId))
-  ) {
-    return defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds;
-  }
-
-  return bundleIds;
+function normalizeTeamDeathmatchBundleIds(_value: unknown): readonly string[] {
+  return defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds;
 }
 
 export function normalizeMetaverseMapLaunchPlaylistSnapshot(
@@ -141,11 +92,13 @@ export function saveMetaverseMapLaunchPlaylistSnapshot(
     return;
   }
 
+  const normalizedPlaylist = normalizeMetaverseMapLaunchPlaylistSnapshot(playlist);
+
   storage.setItem(
     metaverseMapLaunchPlaylistStorageKey,
     JSON.stringify({
-      metaverseDefaultBundleId: playlist.metaverseDefaultBundleId,
-      teamDeathmatchBundleIds: [...playlist.teamDeathmatchBundleIds]
+      metaverseDefaultBundleId: normalizedPlaylist.metaverseDefaultBundleId,
+      teamDeathmatchBundleIds: [...normalizedPlaylist.teamDeathmatchBundleIds]
     })
   );
 }
@@ -211,12 +164,14 @@ export function resolveMetaverseMapLaunchSelection(
   playlist: MetaverseMapLaunchPlaylistSnapshot,
   matchMode: MetaverseMatchModeId
 ): MetaverseMapLaunchSelectionSnapshot {
+  const normalizedPlaylist =
+    normalizeMetaverseMapLaunchPlaylistSnapshot(playlist);
   const configuredBundleIds =
     matchMode === "team-deathmatch"
-      ? playlist.teamDeathmatchBundleIds
-      : playlist.metaverseDefaultBundleId === null
+      ? normalizedPlaylist.teamDeathmatchBundleIds
+      : normalizedPlaylist.metaverseDefaultBundleId === null
         ? Object.freeze([])
-        : Object.freeze([playlist.metaverseDefaultBundleId]);
+        : Object.freeze([normalizedPlaylist.metaverseDefaultBundleId]);
   const configuredSelection = resolveFirstSupportedLaunchSelection(
     configuredBundleIds,
     matchMode
@@ -241,9 +196,14 @@ export function replaceMetaverseDefaultMap(
   playlist: MetaverseMapLaunchPlaylistSnapshot,
   bundleId: string
 ): MetaverseMapLaunchPlaylistSnapshot {
+  const normalizedPlaylist = normalizeMetaverseMapLaunchPlaylistSnapshot(playlist);
+
   return Object.freeze({
-    ...playlist,
-    metaverseDefaultBundleId: bundleId
+    ...normalizedPlaylist,
+    metaverseDefaultBundleId:
+      bundleId === defaultMetaverseBundleId
+        ? defaultMetaverseBundleId
+        : defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId
   });
 }
 
@@ -251,17 +211,16 @@ export function toggleTeamDeathmatchMap(
   playlist: MetaverseMapLaunchPlaylistSnapshot,
   bundleId: string
 ): MetaverseMapLaunchPlaylistSnapshot {
-  const enabled = playlist.teamDeathmatchBundleIds.includes(bundleId);
+  const normalizedPlaylist = normalizeMetaverseMapLaunchPlaylistSnapshot(playlist);
+
+  if (bundleId !== defaultTeamDeathmatchBundleId) {
+    return normalizedPlaylist;
+  }
 
   return Object.freeze({
-    ...playlist,
-    teamDeathmatchBundleIds: enabled
-      ? Object.freeze(
-          playlist.teamDeathmatchBundleIds.filter(
-            (candidateBundleId) => candidateBundleId !== bundleId
-          )
-        )
-      : Object.freeze([...playlist.teamDeathmatchBundleIds, bundleId])
+    ...normalizedPlaylist,
+    teamDeathmatchBundleIds:
+      defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds
   });
 }
 
@@ -269,13 +228,15 @@ export function prioritizeTeamDeathmatchMap(
   playlist: MetaverseMapLaunchPlaylistSnapshot,
   bundleId: string
 ): MetaverseMapLaunchPlaylistSnapshot {
+  const normalizedPlaylist = normalizeMetaverseMapLaunchPlaylistSnapshot(playlist);
+
+  if (bundleId !== defaultTeamDeathmatchBundleId) {
+    return normalizedPlaylist;
+  }
+
   return Object.freeze({
-    ...playlist,
-    teamDeathmatchBundleIds: Object.freeze([
-      bundleId,
-      ...playlist.teamDeathmatchBundleIds.filter(
-        (candidateBundleId) => candidateBundleId !== bundleId
-      )
-    ])
+    ...normalizedPlaylist,
+    teamDeathmatchBundleIds:
+      defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds
   });
 }

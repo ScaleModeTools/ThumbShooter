@@ -300,6 +300,7 @@ interface MetaverseRuntimeFrameRemoteWorldRuntime {
   readFreshAuthoritativeWorldSnapshot?(
     maxAuthoritativeSnapshotAgeMs: number
   ): MetaverseRealtimeWorldSnapshot | null;
+  readLatestAuthoritativeWorldSnapshot?(): MetaverseRealtimeWorldSnapshot | null;
   syncConnection(presenceJoined: boolean): void;
   syncLocalDriverVehicleControl(
     controlIntentSnapshot: RoutedDriverVehicleControlIntentSnapshot | null
@@ -704,10 +705,13 @@ export class MetaverseRuntimeFrameLoop {
     const remoteCharacterPresentations =
       this.#remoteWorldRuntime.remoteCharacterPresentations;
 
-    const authoritativeWorldSnapshot =
+    const freshAuthoritativeWorldSnapshot =
       this.#remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot?.(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       ) ?? null;
+    const authoritativeWorldSnapshot =
+      this.#remoteWorldRuntime.readLatestAuthoritativeWorldSnapshot?.() ??
+      freshAuthoritativeWorldSnapshot;
     const authoritativeObserverPlayerId =
       authoritativeWorldSnapshot?.observerPlayer?.playerId ?? null;
     const authoritativeObserverPlayer =

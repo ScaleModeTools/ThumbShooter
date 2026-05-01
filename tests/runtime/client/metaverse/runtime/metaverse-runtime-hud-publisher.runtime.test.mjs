@@ -266,6 +266,101 @@ test("MetaverseRuntimeHudPublisher suppresses pickup prompts for already held we
   );
 });
 
+test("MetaverseRuntimeHudPublisher keeps latest combat and pickup HUD while fresh authority expires", async () => {
+  const { MetaverseRuntimeHudPublisher } = await clientLoader.load(
+    "/src/metaverse/hud/metaverse-runtime-hud-publisher.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("hud-latest-authority-local");
+  const localUsername = createUsername("Hud Latest Authority Local");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(localUsername, null);
+
+  const dependencies = createFakeHudPublisherDependencies(() => 2_000);
+  dependencies.presenceRuntime.isJoined = true;
+  dependencies.remoteWorldRuntime.isConnected = true;
+
+  const localPlayerSnapshot = createMetaverseRealtimePlayerSnapshot({
+    characterId: "mesh2motion-humanoid-v1",
+    combat: {
+      activeWeapon: {
+        ammoInMagazine: 7,
+        ammoInReserve: 21,
+        reloadRemainingMs: 0,
+        weaponId: "metaverse-service-pistol-v2"
+      },
+      alive: true,
+      health: 82,
+      maxHealth: 100,
+      weaponStats: []
+    },
+    groundedBody: {
+      linearVelocity: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      position: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      yawRadians: 0
+    },
+    look: {
+      pitchRadians: 0,
+      yawRadians: 0
+    },
+    playerId: localPlayerId,
+    teamId: "blue",
+    username: localUsername
+  });
+  const worldSnapshot = createMetaverseRealtimeWorldSnapshot({
+    players: [localPlayerSnapshot],
+    resourceSpawns: [
+      {
+        pickupRadiusMeters: 2,
+        position: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        spawnId: "resource:battle-rifle",
+        weaponId: "metaverse-battle-rifle-v1",
+        yawRadians: 0
+      }
+    ],
+    tick: {
+      currentTick: 12,
+      emittedAtServerTimeMs: 1_900,
+      simulationTimeMs: 1_900,
+      tickIntervalMs: 50
+    },
+    vehicles: []
+  });
+
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot =
+    () => null;
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot =
+    () => null;
+  dependencies.remoteWorldRuntime.readLatestAuthoritativeLocalPlayerSnapshot =
+    () => localPlayerSnapshot;
+  dependencies.remoteWorldRuntime.readLatestAuthoritativeWorldSnapshot =
+    () => worldSnapshot;
+
+  const publisher = new MetaverseRuntimeHudPublisher(dependencies);
+
+  publisher.publishSnapshot(createPublishInput(), true, 2_000);
+
+  assert.equal(publisher.hudSnapshot.combat.available, true);
+  assert.equal(publisher.hudSnapshot.combat.health, 82);
+  assert.equal(publisher.hudSnapshot.combat.ammoInMagazine, 7);
+  assert.equal(
+    publisher.hudSnapshot.interaction.weaponResource?.weaponId,
+    "metaverse-battle-rifle-v1"
+  );
+});
+
 test("MetaverseRuntimeHudPublisher keeps in-range radar contacts live from smoothed remote presentations", async () => {
   const { MetaverseRuntimeHudPublisher } = await clientLoader.load(
     "/src/metaverse/hud/metaverse-runtime-hud-publisher.ts"

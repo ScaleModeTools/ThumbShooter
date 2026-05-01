@@ -575,14 +575,20 @@ export class MetaverseRuntimeHudPublisher {
   ): void {
     const resolvedNowMs = nowMs ?? this.#readNowMs();
     const presenceSnapshot = this.#presenceRuntime.resolveHudSnapshot();
-    const worldSnapshot =
+    const freshWorldSnapshot =
       this.#remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
-    const localPlayerSnapshot =
+    const worldSnapshot =
+      this.#remoteWorldRuntime.readLatestAuthoritativeWorldSnapshot() ??
+      freshWorldSnapshot;
+    const freshLocalPlayerSnapshot =
       this.#remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot(
         metaverseLocalAuthorityReconciliationConfig.maxAuthoritativeSnapshotAgeMs
       );
+    const localPlayerSnapshot =
+      this.#remoteWorldRuntime.readLatestAuthoritativeLocalPlayerSnapshot() ??
+      freshLocalPlayerSnapshot;
 
     this.#hudSnapshot = freezeHudSnapshot(
       input.lifecycle,

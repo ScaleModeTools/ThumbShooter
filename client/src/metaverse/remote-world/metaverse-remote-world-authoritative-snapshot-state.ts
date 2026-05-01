@@ -32,7 +32,7 @@ interface MetaverseRemoteWorldAuthoritativeSnapshotStateDependencies {
   readonly readWorldSnapshotBuffer: () => readonly MetaverseRealtimeWorldSnapshot[];
 }
 
-interface FreshLocalPlayerSnapshot {
+interface AuthoritativeLocalPlayerSnapshotContext {
   readonly latestWorldSnapshot: MetaverseRealtimeWorldSnapshot;
   readonly observerPlayerSnapshot:
     NonNullable<MetaverseRealtimeWorldSnapshot["observerPlayer"]>;
@@ -118,6 +118,15 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
     return freshLocalPlayerSnapshot === null
       ? null
       : this.#composeAuthoritativeLocalPlayerSnapshot(freshLocalPlayerSnapshot);
+  }
+
+  readLatestAuthoritativeLocalPlayerSnapshot():
+    MetaverseRealtimeAuthoritativeLocalPlayerSnapshot | null {
+    const localPlayerSnapshot = this.#readLatestLocalPlayerSnapshot();
+
+    return localPlayerSnapshot === null
+      ? null
+      : this.#composeAuthoritativeLocalPlayerSnapshot(localPlayerSnapshot);
   }
 
   readFreshAckedAuthoritativeLocalPlayerSnapshot(
@@ -267,22 +276,27 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
     return this.#readFreshLatestWorldSnapshot(maxAuthoritativeSnapshotAgeMs);
   }
 
+  readLatestAuthoritativeWorldSnapshot(): MetaverseRealtimeWorldSnapshot | null {
+    return this.#readLatestWorldSnapshot();
+  }
+
+  #readLatestWorldSnapshot(): MetaverseRealtimeWorldSnapshot | null {
+    const worldSnapshotBuffer = this.#readWorldSnapshotBuffer();
+
+    return worldSnapshotBuffer[worldSnapshotBuffer.length - 1] ?? null;
+  }
+
   #readFreshLatestWorldSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
   ): MetaverseRealtimeWorldSnapshot | null {
     const worldSnapshotBuffer = this.#readWorldSnapshotBuffer();
-
-    if (worldSnapshotBuffer.length <= 0) {
-      return null;
-    }
-
     const localWallClockMs = this.#readWallClockMs();
-    const latestWorldSnapshot =
-      worldSnapshotBuffer[worldSnapshotBuffer.length - 1] ?? null;
+    const latestWorldSnapshot = this.#readLatestWorldSnapshot();
 
     if (latestWorldSnapshot === null) {
       return null;
     }
+
     return resolveMetaverseRemoteWorldFreshLatestSnapshot(
       worldSnapshotBuffer,
       this.#resolveAuthoritativeSimulationTimeMs(
@@ -295,13 +309,31 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
 
   #readFreshLocalPlayerSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
-  ): FreshLocalPlayerSnapshot | null {
+  ): AuthoritativeLocalPlayerSnapshotContext | null {
     const latestWorldSnapshot = this.#readFreshLatestWorldSnapshot(
       maxAuthoritativeSnapshotAgeMs
     );
+
+    return latestWorldSnapshot === null
+      ? null
+      : this.#readLocalPlayerSnapshot(latestWorldSnapshot);
+  }
+
+  #readLatestLocalPlayerSnapshot():
+    AuthoritativeLocalPlayerSnapshotContext | null {
+    const latestWorldSnapshot = this.#readLatestWorldSnapshot();
+
+    return latestWorldSnapshot === null
+      ? null
+      : this.#readLocalPlayerSnapshot(latestWorldSnapshot);
+  }
+
+  #readLocalPlayerSnapshot(
+    latestWorldSnapshot: MetaverseRealtimeWorldSnapshot
+  ): AuthoritativeLocalPlayerSnapshotContext | null {
     const localPlayerId = this.#readLocalPlayerId();
 
-    if (latestWorldSnapshot === null || localPlayerId === null) {
+    if (localPlayerId === null) {
       return null;
     }
 
@@ -335,7 +367,7 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
 
   #readFreshAckedLocalPlayerSnapshot(
     maxAuthoritativeSnapshotAgeMs: number
-  ): FreshLocalPlayerSnapshot | null {
+  ): AuthoritativeLocalPlayerSnapshotContext | null {
     const freshLocalPlayerSnapshot = this.#readFreshLocalPlayerSnapshot(
       maxAuthoritativeSnapshotAgeMs
     );
@@ -366,7 +398,8 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
     latestWorldSnapshot,
     observerPlayerSnapshot,
     playerSnapshot
-  }: FreshLocalPlayerSnapshot): ConsumedAckedAuthoritativeLocalPlayerSample {
+  }: AuthoritativeLocalPlayerSnapshotContext):
+    ConsumedAckedAuthoritativeLocalPlayerSample {
     const receivedAtWallClockMs = this.#readWallClockMs();
     const authoritativeSnapshotAgeMs = this.#resolveAuthoritativeSnapshotAgeMs(
       latestWorldSnapshot,
@@ -446,7 +479,8 @@ export class MetaverseRemoteWorldAuthoritativeSnapshotState {
   #composeAuthoritativeLocalPlayerSnapshot({
     observerPlayerSnapshot,
     playerSnapshot
-  }: FreshLocalPlayerSnapshot): MetaverseRealtimeAuthoritativeLocalPlayerSnapshot {
+  }: AuthoritativeLocalPlayerSnapshotContext):
+    MetaverseRealtimeAuthoritativeLocalPlayerSnapshot {
     return Object.freeze({
       highestProcessedPlayerActionSequence:
         observerPlayerSnapshot.highestProcessedPlayerActionSequence,

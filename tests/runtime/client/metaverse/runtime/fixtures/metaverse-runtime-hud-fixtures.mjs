@@ -78,7 +78,13 @@ function createFakeHudPublisherDependencies(readNowMs) {
     readFreshAuthoritativeLocalPlayerSnapshot() {
       return null;
     },
+    readLatestAuthoritativeLocalPlayerSnapshot() {
+      return null;
+    },
     readFreshAuthoritativeWorldSnapshot() {
+      return null;
+    },
+    readLatestAuthoritativeWorldSnapshot() {
       return null;
     },
     reliableTransportStatusSnapshot: Object.freeze({

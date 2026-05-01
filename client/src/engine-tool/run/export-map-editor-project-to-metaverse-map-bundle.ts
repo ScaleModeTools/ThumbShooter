@@ -1,12 +1,10 @@
 import {
   compileMetaverseMapBundleSemanticWorld,
   type MetaverseMapBundleLaunchVariationSnapshot,
-  type MetaverseMapBundleCompiledWorldSnapshot,
   type MetaverseMapBundleResourceSpawnSnapshot,
   type MetaverseMapBundleSceneObjectSnapshot,
   type MetaverseMapBundleSnapshot,
-  type MetaverseMapBundleSpawnNodeSnapshot,
-  resolveMetaverseMapPlayerSpawnSupportPosition
+  type MetaverseMapBundleSpawnNodeSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
 import {
@@ -38,28 +36,22 @@ function toReadonlyRgbTuple(
 }
 
 function resolvePlayerSpawnNodes(
-  project: MapEditorProjectSnapshot,
-  compiledWorld: MetaverseMapBundleCompiledWorldSnapshot
+  project: MapEditorProjectSnapshot
 ): readonly MetaverseMapBundleSpawnNodeSnapshot[] {
   return Object.freeze(
-    project.playerSpawnDrafts.map((spawnDraft) => {
-      const position = resolveMetaverseMapPlayerSpawnSupportPosition({
-        compiledWorld,
-        spawnPosition: spawnDraft.position
-      });
-
-      return Object.freeze({
+    project.playerSpawnDrafts.map((spawnDraft) =>
+      Object.freeze({
         label: spawnDraft.label,
         position: Object.freeze({
-          x: position.x,
-          y: position.y,
-          z: position.z
+          x: spawnDraft.position.x,
+          y: spawnDraft.position.y,
+          z: spawnDraft.position.z
         }),
         spawnId: spawnDraft.spawnId,
         teamId: spawnDraft.teamId,
         yawRadians: spawnDraft.yawRadians
-      } satisfies MetaverseMapBundleSpawnNodeSnapshot);
-    })
+      } satisfies MetaverseMapBundleSpawnNodeSnapshot)
+    )
   );
 }
 
@@ -167,7 +159,7 @@ export function exportMapEditorProjectToMetaverseMapBundle(
     label: project.bundleLabel,
     launchVariations: resolveLaunchVariations(project),
     mapId: project.bundleId,
-    playerSpawnNodes: resolvePlayerSpawnNodes(project, compiledWorld),
+    playerSpawnNodes: resolvePlayerSpawnNodes(project),
     playerSpawnSelection: Object.freeze({
       enemyAvoidanceRadiusMeters:
         project.playerSpawnSelectionDraft.enemyAvoidanceRadiusMeters,

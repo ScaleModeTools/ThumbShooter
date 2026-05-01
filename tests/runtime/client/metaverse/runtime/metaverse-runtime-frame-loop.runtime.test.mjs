@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 
+import {
+  createMetaverseRealtimeWorldSnapshot
+} from "@webgpu-metaverse/shared";
+
 import { createClientModuleLoader } from "../../load-client-module.mjs";
 
 let clientLoader;
@@ -336,6 +340,143 @@ test("MetaverseRuntimeFrameLoop owns the live frame sequencing and frame state o
   assert.equal(frameLoop.frameDeltaMs, 18);
   assert.equal(frameLoop.frameRate, 1000 / 18);
   assert.equal(frameLoop.renderedFrameCount, 3);
+});
+
+test("MetaverseRuntimeFrameLoop keeps resource spawns from the latest world snapshot when fresh authority expires", async () => {
+  const { MetaverseRuntimeFrameLoop } = await clientLoader.load(
+    "/src/metaverse/classes/metaverse-runtime-frame-loop.ts"
+  );
+  const renderer = createFakeRenderer([]);
+  const resourceSpawn = Object.freeze({
+    pickupRadiusMeters: 1.4,
+    position: Object.freeze({
+      x: 2,
+      y: 1,
+      z: -3
+    }),
+    spawnId: "resource:latest-battle-rifle",
+    weaponId: "metaverse-battle-rifle-v1",
+    yawRadians: 0
+  });
+  const latestWorldSnapshot = createMetaverseRealtimeWorldSnapshot({
+    players: [],
+    resourceSpawns: [resourceSpawn],
+    tick: {
+      currentTick: 20,
+      emittedAtServerTimeMs: 1_000,
+      tickIntervalMs: 50
+    },
+    vehicles: []
+  });
+  let syncedResourceSpawns = null;
+
+  const frameLoop = new MetaverseRuntimeFrameLoop({
+    authoritativeWorldSync: {
+      syncAuthoritativeWorldSnapshots() {}
+    },
+    bootLifecycle: {
+      resolveRuntimeCameraPhaseState({ liveCameraSnapshot, liveFocusedPortal }) {
+        return {
+          blocksMovementInput: false,
+          hidesLocalCharacter: false,
+          phaseId: "live",
+          presentationSnapshot: {
+            cameraSnapshot: liveCameraSnapshot,
+            focusedPortal: liveFocusedPortal
+          },
+          suppressesInteractionFocus: false
+        };
+      }
+    },
+    devicePixelRatio: 1,
+    environmentPhysicsRuntime: {
+      syncDynamicEnvironmentBodyPresentations() {},
+      syncSampledRemotePlayerBlockers() {}
+    },
+    flightInputRuntime: {
+      readSnapshot() {
+        return Object.freeze({
+          boost: false,
+          jump: false,
+          moveAxis: 0,
+          pitchAxis: 0,
+          primaryAction: false,
+          secondaryAction: false,
+          strafeAxis: 0,
+          yawAxis: 0
+        });
+      }
+    },
+    portals: Object.freeze([]),
+    presenceRuntime: {
+      connectionRequired: false,
+      isJoined: true,
+      syncPresencePose() {},
+      syncRemoteCharacterPresentations() {}
+    },
+    remoteWorldRuntime: {
+      connectionRequired: false,
+      isConnected: true,
+      readFreshAuthoritativeWorldSnapshot() {
+        return null;
+      },
+      readLatestAuthoritativeWorldSnapshot() {
+        return latestWorldSnapshot;
+      },
+      remoteCharacterPresentations: Object.freeze([]),
+      remotePlayerBodyBlockers: Object.freeze([]),
+      previewLocalTraversalIntent() {
+        return null;
+      },
+      sampleRemoteWorld() {},
+      syncConnection() {},
+      syncLocalDriverVehicleControl() {},
+      syncLocalPlayerLook() {},
+      syncLocalTraversalIntent() {
+        return null;
+      }
+    },
+    sceneRuntime: {
+      camera: {
+        kind: "render-camera"
+      },
+      scene: {
+        kind: "scene"
+      },
+      syncPresentation() {
+        return {
+          focusedMountable: null
+        };
+      },
+      syncResourceSpawns(resourceSpawns) {
+        syncedResourceSpawns = resourceSpawns;
+      },
+      syncViewport() {}
+    },
+    traversalRuntime: {
+      cameraSnapshot: createCameraSnapshot(),
+      characterPresentationSnapshot: null,
+      locomotionMode: "grounded",
+      mountedEnvironmentSnapshot: null,
+      routedDriverVehicleControlIntentSnapshot: null,
+      resolveLocalTraversalIntentInput() {
+        return null;
+      },
+      advance() {},
+      syncIssuedTraversalIntentSnapshot() {}
+    }
+  });
+
+  frameLoop.syncFrame({
+    canvas: {
+      clientHeight: 720,
+      clientWidth: 1280
+    },
+    nowMs: 1_000,
+    renderer
+  });
+
+  assert.equal(syncedResourceSpawns, latestWorldSnapshot.resourceSpawns);
 });
 
 test("MetaverseRuntimeFrameLoop keeps blocked camera-phase frames neutral and suppresses live interaction focus", async () => {

@@ -209,6 +209,55 @@ test("MetaverseRemoteWorldAuthoritativeSnapshotState returns the latest authorit
   );
 });
 
+test("MetaverseRemoteWorldAuthoritativeSnapshotState keeps latest presentation snapshots available after freshness expires", async () => {
+  const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
+  const remotePlayerId = createMetaversePlayerId("remote-sailor-2");
+  const localUsername = createUsername("Harbor Pilot");
+  const remoteUsername = createUsername("Remote Sailor");
+  const currentWallClockMs = 1_500;
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(remotePlayerId, null);
+  assert.notEqual(localUsername, null);
+  assert.notEqual(remoteUsername, null);
+
+  const { authoritativeSnapshotState } =
+    await createAuthoritativeSnapshotHarness({
+      latestAcceptedSnapshotReceivedAtMs: 1_000,
+      localPlayerId,
+      readWallClockMs: () => currentWallClockMs,
+      worldSnapshots: [
+        createRealtimeWorldSnapshot({
+          currentTick: 10,
+          localPlayerId,
+          localUsername,
+          remotePlayerId,
+          remotePlayerX: 10,
+          remoteUsername,
+          serverTimeMs: 1_000,
+          snapshotSequence: 1,
+          vehicleX: 10,
+          yawRadians: 0
+        })
+      ]
+    });
+
+  assert.equal(
+    authoritativeSnapshotState.readFreshAuthoritativeWorldSnapshot(120),
+    null
+  );
+  assert.equal(
+    authoritativeSnapshotState.readLatestAuthoritativeWorldSnapshot()
+      ?.snapshotSequence,
+    1
+  );
+  assert.equal(
+    authoritativeSnapshotState.readLatestAuthoritativeLocalPlayerSnapshot()
+      ?.playerId,
+    localPlayerId
+  );
+});
+
 test("MetaverseRemoteWorldAuthoritativeSnapshotState preserves the latest authoritative local processed-input ack and freshness gate", async () => {
   const localPlayerId = createMetaversePlayerId("harbor-pilot-1");
   const remotePlayerId = createMetaversePlayerId("remote-sailor-2");

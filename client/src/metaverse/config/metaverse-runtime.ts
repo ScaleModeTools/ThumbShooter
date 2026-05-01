@@ -4,7 +4,6 @@ import {
   type MetaversePlayerTeamId
 } from "@webgpu-metaverse/shared";
 import {
-  resolveMetaverseMapPlayerSpawnSupportPosition,
   resolveMetaverseMapPlayerSpawnNode,
   resolveMetaverseWorldPlacedWaterRegions,
   type MetaverseMapBundleSpawnNodeSnapshot
@@ -142,22 +141,12 @@ function resolveClientDefaultSpawnNode(
     return null;
   }
 
-  const resolveSupportedSpawnNode = (
+  const resolveSpawnNode = (
     spawnNode: MetaverseMapBundleSpawnNodeSnapshot
-  ): MetaverseMapBundleSpawnNodeSnapshot => {
-    const position = resolveMetaverseMapPlayerSpawnSupportPosition({
-      compiledWorld: loadedBundle.bundle.compiledWorld,
-      spawnPosition: spawnNode.position
-    });
-
-    return Object.freeze({
-      ...spawnNode,
-      position
-    });
-  };
+  ): MetaverseMapBundleSpawnNodeSnapshot => spawnNode;
 
   if (localPlayerTeamId === null) {
-    return resolveSupportedSpawnNode(
+    return resolveSpawnNode(
       loadedBundle.bundle.playerSpawnNodes.find(
         (spawnNode) => spawnNode.teamId === "neutral"
       ) ?? fallbackSpawnNode
@@ -165,10 +154,10 @@ function resolveClientDefaultSpawnNode(
   }
 
   if (localPlayerId === null) {
-    return resolveSupportedSpawnNode(fallbackSpawnNode);
+    return resolveSpawnNode(fallbackSpawnNode);
   }
 
-  return resolveSupportedSpawnNode(
+  return resolveSpawnNode(
     resolveMetaverseMapPlayerSpawnNode({
       occupiedPlayerSnapshots: Object.freeze([]),
       playerId: localPlayerId,

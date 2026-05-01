@@ -5,7 +5,6 @@ import {
 import {
   resolveMetaverseGameplayProfile,
   resolveMetaverseMapBundleCompiledWorldSurfaceColliders,
-  resolveMetaverseMapPlayerSpawnSupportPosition,
   resolveMetaverseWorldDynamicSurfaceCollidersForAsset,
   resolveMetaverseWorldPlacedSurfaceColliders,
   resolveMetaverseWorldPlacedWaterRegions,
@@ -159,13 +158,8 @@ function createDefaultSpawn(
     );
   }
 
-  const position = resolveMetaverseMapPlayerSpawnSupportPosition({
-    compiledWorld: loadedBundle.bundle.compiledWorld,
-    spawnPosition: defaultSpawnNode.position
-  });
-
   return Object.freeze({
-    position,
+    position: defaultSpawnNode.position,
     spawnId: defaultSpawnNode.spawnId,
     yawRadians: defaultSpawnNode.yawRadians
   });
