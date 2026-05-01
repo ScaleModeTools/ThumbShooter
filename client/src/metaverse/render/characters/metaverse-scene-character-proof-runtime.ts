@@ -37,6 +37,7 @@ import type {
 
 const humanoidV2GripSocketBlendAlpha = 0.72;
 const humanoidV2PalmSocketBlendAlpha = 0.45;
+const humanoidV2PrimaryGripSocketFingerRetreatMeters = 0.08;
 const humanoidV2SupportSocketBlendAlpha = humanoidV2PalmSocketBlendAlpha;
 const humanoidV2SupportSocketBackwardOffsetMeters = 0.07;
 const humanoidV2SupportSocketPalmNormalOffsetMeters = 0.11;
@@ -227,12 +228,22 @@ function synthesizeHumanoidV2PalmSockets(
       .clone()
       .cross(palmForwardAxis)
       .normalize();
+    const usesPrimaryGripBasis =
+      palmSocketDescriptor.synthesizedSocketName === "palm_r_socket";
     const palmLocalPosition = sourceSocketNode.position
       .clone()
-      .lerp(knuckleBaseCentroid, humanoidV2PalmSocketBlendAlpha);
+      .lerp(knuckleBaseCentroid, humanoidV2PalmSocketBlendAlpha)
+      .addScaledVector(
+        palmForwardAxis,
+        usesPrimaryGripBasis ? -humanoidV2PrimaryGripSocketFingerRetreatMeters : 0
+      );
     const gripLocalPosition = sourceSocketNode.position
       .clone()
-      .lerp(knuckleBaseCentroid, humanoidV2GripSocketBlendAlpha);
+      .lerp(knuckleBaseCentroid, humanoidV2GripSocketBlendAlpha)
+      .addScaledVector(
+        palmForwardAxis,
+        usesPrimaryGripBasis ? -humanoidV2PrimaryGripSocketFingerRetreatMeters : 0
+      );
     const supportLocalPosition = sourceSocketNode.position
       .clone()
       .lerp(knuckleBaseCentroid, humanoidV2SupportSocketBlendAlpha)
@@ -250,8 +261,10 @@ function synthesizeHumanoidV2PalmSockets(
       );
     const synthesizedHandQuaternion = new Quaternion().setFromRotationMatrix(
       new Matrix4().makeBasis(
-        palmForwardAxis,
-        correctedPalmUpAxis,
+        usesPrimaryGripBasis ? correctedPalmUpAxis : palmForwardAxis,
+        usesPrimaryGripBasis
+          ? palmForwardAxis.clone().multiplyScalar(-1)
+          : correctedPalmUpAxis,
         palmSideAxis
       )
     );

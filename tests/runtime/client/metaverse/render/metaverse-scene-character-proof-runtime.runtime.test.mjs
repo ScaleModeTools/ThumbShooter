@@ -305,7 +305,8 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     indexBaseLocalPosition,
     middleBaseLocalPosition,
     ringBaseLocalPosition,
-    pinkyBaseLocalPosition
+    pinkyBaseLocalPosition,
+    primaryGripFingerRetreatMeters = 0
   ) => {
     const knuckleCentroid = indexBaseLocalPosition
       .clone()
@@ -319,22 +320,26 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     upAxis.addScaledVector(forwardAxis, -upAxis.dot(forwardAxis));
     upAxis.normalize();
 
+    const sideAxis = forwardAxis.clone().cross(upAxis).normalize();
+
     return {
       forwardAxis,
       gripLocalPosition: sourceSocketLocalPosition
         .clone()
-        .lerp(knuckleCentroid, 0.72),
+        .lerp(knuckleCentroid, 0.72)
+        .addScaledVector(forwardAxis, -primaryGripFingerRetreatMeters),
       knuckleCentroid,
       palmLocalPosition: sourceSocketLocalPosition
         .clone()
-        .lerp(knuckleCentroid, 0.45),
-      sideAxis: forwardAxis.clone().cross(upAxis).normalize(),
+        .lerp(knuckleCentroid, 0.45)
+        .addScaledVector(forwardAxis, -primaryGripFingerRetreatMeters),
+      sideAxis,
       supportLocalPosition: sourceSocketLocalPosition
         .clone()
         .lerp(knuckleCentroid, 0.45)
         .addScaledVector(forwardAxis, -0.07)
         .addScaledVector(upAxis, 0.03)
-        .addScaledVector(forwardAxis.clone().cross(upAxis).normalize(), 0.11),
+        .addScaledVector(sideAxis, 0.11),
       upAxis
     };
   };
@@ -352,12 +357,15 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     new Vector3(0.1, 0, 0.03),
     new Vector3(0.11, 0, 0),
     new Vector3(0.1, 0, -0.03),
-    new Vector3(0.08, 0, -0.05)
+    new Vector3(0.08, 0, -0.05),
+    0.08
   );
   const resolveSocketForwardAxis = (socketNode) =>
     new Vector3(1, 0, 0).applyQuaternion(socketNode.quaternion).normalize();
   const resolveSocketUpAxis = (socketNode) =>
     new Vector3(0, 1, 0).applyQuaternion(socketNode.quaternion).normalize();
+  const resolveSocketSideAxis = (socketNode) =>
+    new Vector3(0, 0, 1).applyQuaternion(socketNode.quaternion).normalize();
 
   assert.ok(handLSocket);
   assert.ok(handSocket);
@@ -414,14 +422,20 @@ test("createMetaverseScene synthesizes mirrored humanoid_v2 palm and grip socket
     "Synthesized humanoid_v2 left palm socket should point up toward the thumb"
   );
   assert.ok(
-    resolveSocketForwardAxis(palmSocket).angleTo(rightExpectedPalmBasis.forwardAxis) <
+    resolveSocketForwardAxis(palmSocket).angleTo(rightExpectedPalmBasis.upAxis) <
       0.000001,
-    "Synthesized humanoid_v2 right palm socket should point forward along the knuckle line"
+    "Synthesized humanoid_v2 right palm socket should map pistol barrel aim to the thumb-side grip axis"
   );
   assert.ok(
-    resolveSocketUpAxis(palmSocket).angleTo(rightExpectedPalmBasis.upAxis) <
+    resolveSocketUpAxis(palmSocket).angleTo(
+      rightExpectedPalmBasis.forwardAxis.clone().multiplyScalar(-1)
+    ) < 0.000001,
+    "Synthesized humanoid_v2 right palm socket should map pistol grip vertical to the finger line"
+  );
+  assert.ok(
+    resolveSocketSideAxis(palmSocket).angleTo(rightExpectedPalmBasis.sideAxis) <
       0.000001,
-    "Synthesized humanoid_v2 right palm socket should point up toward the thumb"
+    "Synthesized humanoid_v2 right palm socket should keep the palm plane parallel to the pistol grip side"
   );
   assertQuaternionArraysEquivalent(
     leftGripSocket.quaternion.toArray(),

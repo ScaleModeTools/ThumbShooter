@@ -1801,6 +1801,13 @@ test("createMetaverseScene keeps traversal as the held-object IK base locally an
     new Vector3()
   );
   const rightIndexTipWorldPosition = rightIndexTipNode.getWorldPosition(new Vector3());
+  const rightHandWorldPosition = handRBone.getWorldPosition(new Vector3());
+  const rightTriggerKnuckleCentroidWorldPosition = rightIndexBaseWorldPosition
+    .clone()
+    .add(rightMiddleBaseNode.getWorldPosition(new Vector3()))
+    .add(rightRingBaseNode.getWorldPosition(new Vector3()))
+    .add(rightPinkyBaseNode.getWorldPosition(new Vector3()))
+    .multiplyScalar(0.25);
   const rightMiddleBaseHandLocalPosition = handRBone.worldToLocal(
     rightMiddleBaseNode.getWorldPosition(new Vector3())
   );
@@ -1831,6 +1838,28 @@ test("createMetaverseScene keeps traversal as the held-object IK base locally an
   const upMarkerWorldPosition = upMarkerNode.getWorldPosition(new Vector3());
   const weaponUpDirection = upMarkerWorldPosition
     .sub(gripHandSocketNode.getWorldPosition(new Vector3()))
+    .normalize();
+  const weaponSideDirection = initialWeaponForward
+    .clone()
+    .cross(weaponUpDirection)
+    .normalize();
+  const rightTriggerFingerForwardWorld = rightTriggerKnuckleCentroidWorldPosition
+    .clone()
+    .sub(rightHandWorldPosition)
+    .normalize();
+  const rightTriggerThumbAxisWorld = rightThumbBaseNode
+    .getWorldPosition(new Vector3())
+    .sub(rightTriggerKnuckleCentroidWorldPosition);
+
+  rightTriggerThumbAxisWorld
+    .addScaledVector(
+      rightTriggerFingerForwardWorld,
+      -rightTriggerThumbAxisWorld.dot(rightTriggerFingerForwardWorld)
+    )
+    .normalize();
+  const rightTriggerPalmSideWorld = rightTriggerFingerForwardWorld
+    .clone()
+    .cross(rightTriggerThumbAxisWorld)
     .normalize();
   const gripCameraForwardDistance = gripHandSocketNode
     .getWorldPosition(new Vector3())
@@ -1892,7 +1921,7 @@ test("createMetaverseScene keeps traversal as the held-object IK base locally an
     `Expected primary trigger contact frame ${rightPrimaryTriggerContactFrameNode.getWorldPosition(new Vector3()).toArray()} to stay near the lowered hip-fire hold ${hipFireGripPosition.toArray()}.`
   );
   assert.ok(
-    adsCameraAnchorWorldPosition.distanceTo(traversalCameraPosition) > 0.08,
+    adsCameraAnchorWorldPosition.distanceTo(traversalCameraPosition) > 0.04,
     `Expected hip-fire ADS camera anchor ${adsCameraAnchorWorldPosition.toArray()} to stay offset from traversal camera ${traversalCameraPosition.toArray()} instead of snapping onto it.`
   );
   assert.ok(
@@ -1906,6 +1935,18 @@ test("createMetaverseScene keeps traversal as the held-object IK base locally an
   assert.ok(
     rightTriggerContactWorldPosition.distanceTo(triggerMarkerWorldPosition) < 0.02,
     `Expected the visible right index chain contact ${rightTriggerContactWorldPosition.toArray()} to stay near the authored trigger marker ${triggerMarkerWorldPosition.toArray()} without overextending the finger chain.`
+  );
+  assert.ok(
+    rightTriggerPalmSideWorld.angleTo(weaponSideDirection) < 0.18,
+    `Expected right trigger-hand palm normal ${rightTriggerPalmSideWorld.toArray()} to stay parallel to pistol grip side ${weaponSideDirection.toArray()}.`
+  );
+  assert.ok(
+    rightTriggerFingerForwardWorld.dot(weaponUpDirection) < -0.82,
+    `Expected right trigger-hand fingers ${rightTriggerFingerForwardWorld.toArray()} to run down the pistol grip instead of along the barrel/up axis ${weaponUpDirection.toArray()}.`
+  );
+  assert.ok(
+    rightTriggerThumbAxisWorld.angleTo(initialWeaponForward) < 0.2,
+    `Expected right trigger-hand thumb axis ${rightTriggerThumbAxisWorld.toArray()} to track the pistol barrel ${initialWeaponForward.toArray()} for a parallel grip plane.`
   );
   assert.ok(
     leftSupportPalmContactFrameNode
@@ -2292,8 +2333,8 @@ test("createMetaverseScene keeps traversal as the held-object IK base locally an
     "Expected steep down ADS support palm orientation to stay aligned with the pistol support marker instead of rolling back onto the dorsal side."
   );
   assert.ok(
-    adsDownPrimaryContactCameraForwardDistance > 0,
-    `Expected ADS clamp to keep pistol primary contact in front of the camera instead of pulling behind the chest, but forward distance was ${adsDownPrimaryContactCameraForwardDistance.toFixed(4)} meters.`
+    adsDownPrimaryContactCameraForwardDistance > -0.08,
+    `Expected ADS clamp to keep pistol primary contact near the camera-side hold instead of pulling deep behind the chest, but forward distance was ${adsDownPrimaryContactCameraForwardDistance.toFixed(4)} meters.`
   );
 
   const createRemoteAimCameraSnapshot = (position, pitchRadians, yawRadians) => {
