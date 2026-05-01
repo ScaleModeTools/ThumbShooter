@@ -110,7 +110,9 @@ interface LocaldevHttp3ServerLike {
   stopServer(): void;
 }
 
-interface LocaldevWebTransportServerConfig {
+export type WebTransportServerRuntimeMode = "localdev" | "production";
+
+export interface WebTransportServerConfig {
   readonly certificatePem: string;
   readonly host: string;
   readonly port: number;
@@ -118,17 +120,22 @@ interface LocaldevWebTransportServerConfig {
   readonly secret: string;
 }
 
-export interface ResolvedLocaldevWebTransportServerConfig {
-  readonly certificateSha256Hex: string;
+export interface ResolvedWebTransportServerConfig {
+  readonly certificateSha256Hex: string | null;
   readonly clientEnvFilePath: string | null;
   readonly clientHost: string;
-  readonly serverConfig: LocaldevWebTransportServerConfig;
+  readonly mode: WebTransportServerRuntimeMode;
+  readonly serverConfig: WebTransportServerConfig;
   readonly selfCheckHost: string;
 }
 
+export type LocaldevWebTransportServerConfig = WebTransportServerConfig;
+export type ResolvedLocaldevWebTransportServerConfig =
+  ResolvedWebTransportServerConfig;
+
 interface LocaldevWebTransportServerDependencies {
   readonly createHttp3Server?: (
-    config: LocaldevWebTransportServerConfig
+    config: WebTransportServerConfig
   ) => LocaldevHttp3ServerLike;
   readonly logError?: (message: string, error?: unknown) => void;
   readonly readWallClockMs?: () => number;
@@ -152,7 +159,7 @@ interface LocaldevWebTransportClientConstructorOptions {
   }[];
 }
 
-interface LocaldevWebTransportHandshakeProbeDependencies {
+interface WebTransportHandshakeProbeDependencies {
   readonly createWebTransportClient?: (
     url: string,
     options?: LocaldevWebTransportClientConstructorOptions
@@ -558,12 +565,18 @@ function resolveRequiredEnvValue(
   return resolvedValue;
 }
 
+function resolveOptionalSha256Hex(rawValue: string | undefined): string | null {
+  const resolvedValue = resolveOptionalNonEmptyEnvValue(rawValue);
+
+  return resolvedValue === null ? null : validateSha256Hex(resolvedValue);
+}
+
 function resolvePortEnvValue(env: NodeJS.ProcessEnv, envName: string): number {
   const rawValue = resolveRequiredEnvValue(env, envName);
   const port = Number.parseInt(rawValue, 10);
 
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-    throw new Error(`Invalid localdev WebTransport port: ${envName}`);
+    throw new Error(`Invalid WebTransport port: ${envName}`);
   }
 
   return port;
@@ -574,11 +587,71 @@ function validateSha256Hex(rawValue: string): string {
 
   if (!/^[0-9a-f]{64}$/u.test(normalizedValue)) {
     throw new Error(
-      "Localdev WebTransport certificate hash must be a 64-character SHA-256 hex string."
+      "WebTransport certificate hash must be a 64-character SHA-256 hex string."
     );
   }
 
   return normalizedValue;
+}
+
+function resolveProductionWebTransportServerConfigFromEnvironment(
+  env: NodeJS.ProcessEnv,
+  readTextFile: (path: string) => string
+): ResolvedWebTransportServerConfig | null {
+  if (resolveOptionalNonEmptyEnvValue(env.WEBGPU_METAVERSE_WEBTRANSPORT_ENABLED) !== "1") {
+    return null;
+  }
+
+  const certificateFilePath = resolveRequiredEnvValue(
+    env,
+    "WEBGPU_METAVERSE_WEBTRANSPORT_CERT_FILE"
+  );
+  const privateKeyFilePath = resolveRequiredEnvValue(
+    env,
+    "WEBGPU_METAVERSE_WEBTRANSPORT_KEY_FILE"
+  );
+  const bindHost = resolveRequiredEnvValue(
+    env,
+    "WEBGPU_METAVERSE_WEBTRANSPORT_HOST"
+  );
+  const clientHost =
+    resolveOptionalNonEmptyEnvValue(
+      env.WEBGPU_METAVERSE_WEBTRANSPORT_CLIENT_HOST
+    ) ?? bindHost;
+
+  return Object.freeze({
+    certificateSha256Hex: resolveOptionalSha256Hex(
+      env.WEBGPU_METAVERSE_WEBTRANSPORT_CERT_SHA256
+    ),
+    clientEnvFilePath: null,
+    clientHost,
+    mode: "production",
+    serverConfig: Object.freeze({
+      certificatePem: readTextFile(certificateFilePath),
+      host: bindHost,
+      port: resolvePortEnvValue(env, "WEBGPU_METAVERSE_WEBTRANSPORT_PORT"),
+      privateKeyPem: readTextFile(privateKeyFilePath),
+      secret: resolveRequiredEnvValue(
+        env,
+        "WEBGPU_METAVERSE_WEBTRANSPORT_SECRET"
+      )
+    }),
+    selfCheckHost:
+      resolveOptionalNonEmptyEnvValue(
+        env.WEBGPU_METAVERSE_WEBTRANSPORT_SELF_CHECK_HOST
+      ) ?? clientHost
+  });
+}
+
+export function resolveWebTransportServerConfigFromEnvironment(
+  env: NodeJS.ProcessEnv,
+  readTextFile: (path: string) => string = (path) =>
+    readFileSync(path, "utf8")
+): ResolvedWebTransportServerConfig | null {
+  return (
+    resolveProductionWebTransportServerConfigFromEnvironment(env, readTextFile) ??
+    resolveLocaldevWebTransportServerConfigFromEnvironment(env, readTextFile)
+  );
 }
 
 export function resolveLocaldevWebTransportServerConfigFromEnvironment(
@@ -614,6 +687,7 @@ export function resolveLocaldevWebTransportServerConfigFromEnvironment(
     clientEnvFilePath: resolveOptionalNonEmptyEnvValue(
       env.WEBGPU_METAVERSE_LOCALDEV_CLIENT_ENV_FILE
     ),
+    mode: "localdev",
     serverConfig: Object.freeze({
       certificatePem: readTextFile(certificateFilePath),
       host: resolveRequiredEnvValue(
@@ -677,7 +751,27 @@ export async function verifyLocaldevWebTransportServerHandshake(
     readonly port: number;
     readonly timeoutMs?: number;
   },
-  dependencies: LocaldevWebTransportHandshakeProbeDependencies = {}
+  dependencies: WebTransportHandshakeProbeDependencies = {}
+): Promise<void> {
+  await verifyWebTransportServerHandshake(
+    {
+      ...config,
+      failureLabel: "Localdev WebTransport"
+    },
+    dependencies
+  );
+}
+
+export async function verifyWebTransportServerHandshake(
+  config: {
+    readonly certificateSha256Hex?: string | null;
+    readonly failureLabel?: string;
+    readonly host: string;
+    readonly path?: string;
+    readonly port: number;
+    readonly timeoutMs?: number;
+  },
+  dependencies: WebTransportHandshakeProbeDependencies = {}
 ): Promise<void> {
   const createWebTransportClient =
     dependencies.createWebTransportClient ??
@@ -694,7 +788,7 @@ export async function verifyLocaldevWebTransportServerHandshake(
       () => {
         reject(
           new Error(
-            `Timed out waiting for the localdev WebTransport handshake to open within ${timeoutMs}ms.`
+            `Timed out waiting for the WebTransport handshake to open within ${timeoutMs}ms.`
           )
         );
       },
@@ -710,22 +804,30 @@ export async function verifyLocaldevWebTransportServerHandshake(
   await (dependencies.quicheLoadedPromise ?? quicheLoaded);
 
   try {
-    transport = createWebTransportClient(targetUrl, {
-      serverCertificateHashes: [
-        Object.freeze({
-          algorithm: "sha-256" as const,
-          value: decodeSha256Hex(config.certificateSha256Hex)
-        })
-      ]
-    });
+    const connectionOptions: LocaldevWebTransportClientConstructorOptions | undefined =
+      config.certificateSha256Hex === undefined ||
+      config.certificateSha256Hex === null
+        ? undefined
+        : {
+            serverCertificateHashes: [
+              Object.freeze({
+                algorithm: "sha-256" as const,
+                value: decodeSha256Hex(config.certificateSha256Hex)
+              })
+            ]
+          };
+
+    transport = createWebTransportClient(targetUrl, connectionOptions);
 
     await Promise.race([
       transport.ready ?? Promise.resolve(),
       timeoutPromise
     ]);
   } catch (error) {
+    const failureLabel = config.failureLabel ?? "WebTransport";
+
     throw new Error(
-      `Localdev WebTransport self-check failed for ${targetUrl}: ${resolveErrorMessage(
+      `${failureLabel} self-check failed for ${targetUrl}: ${resolveErrorMessage(
         error,
         "Opening handshake failed."
       )}`
@@ -744,10 +846,12 @@ export async function verifyLocaldevWebTransportServerHandshake(
   }
 }
 
+export { LocaldevWebTransportServer as WebTransportServer };
+
 export class LocaldevWebTransportServer {
-  readonly #config: LocaldevWebTransportServerConfig;
+  readonly #config: WebTransportServerConfig;
   readonly #createHttp3Server: (
-    config: LocaldevWebTransportServerConfig
+    config: WebTransportServerConfig
   ) => LocaldevHttp3ServerLike;
   readonly #decoder: TextDecoder;
   readonly #duckHuntReliableRoute: ReliableRoute<
@@ -781,7 +885,7 @@ export class LocaldevWebTransportServer {
   #startPromise: Promise<LocaldevHttp3ServerAddress> | null = null;
 
   constructor(
-    config: LocaldevWebTransportServerConfig,
+    config: WebTransportServerConfig,
     adapters: {
       readonly duckHuntDatagramAdapter: DuckHuntCoopRoomWebTransportDatagramAdapter;
       readonly duckHuntReliableAdapter: DuckHuntCoopRoomWebTransportAdapter;

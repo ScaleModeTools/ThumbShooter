@@ -22,15 +22,18 @@ export interface MetaverseMapLaunchSelectionSnapshot {
 
 const metaverseMapLaunchPlaylistStorageKey =
   "webgpu-metaverse.map-launch-playlists.v1" as const;
-const defaultFreeRoamLaunchVariationId = "shell-free-roam" as const;
+const defaultMetaverseBundleId = "vibe-highlands" as const;
+const legacyMetaverseDefaultBundleId = "private-build" as const;
+const defaultFreeRoamLaunchVariationId =
+  "vibe-highlands:scene-default" as const;
 const legacyTeamDeathmatchBundleId = "deathmatch" as const;
-const defaultTeamDeathmatchBundleId = "private-build" as const;
+const defaultTeamDeathmatchBundleId = defaultMetaverseBundleId;
 const defaultTeamDeathmatchLaunchVariationId =
-  "shell-team-deathmatch" as const;
+  "vibe-highlands:variation:2" as const;
 
 export const defaultMetaverseMapLaunchPlaylistSnapshot =
   Object.freeze({
-    metaverseDefaultBundleId: null,
+    metaverseDefaultBundleId: defaultMetaverseBundleId,
     teamDeathmatchBundleIds: Object.freeze([defaultTeamDeathmatchBundleId])
   } satisfies MetaverseMapLaunchPlaylistSnapshot);
 
@@ -66,12 +69,26 @@ function normalizeBundleIds(value: unknown): readonly string[] {
   return Object.freeze(bundleIds);
 }
 
+function normalizeMetaverseDefaultBundleId(value: unknown): string | null {
+  const bundleId = normalizeBundleId(value);
+
+  if (bundleId === legacyMetaverseDefaultBundleId) {
+    return defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId;
+  }
+
+  return (
+    bundleId ?? defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId
+  );
+}
+
 function normalizeTeamDeathmatchBundleIds(value: unknown): readonly string[] {
   const bundleIds = normalizeBundleIds(value);
 
   if (
     bundleIds.length === 0 ||
-    (bundleIds.length === 1 && bundleIds[0] === legacyTeamDeathmatchBundleId)
+    (bundleIds.length === 1 &&
+      (bundleIds[0] === legacyTeamDeathmatchBundleId ||
+        bundleIds[0] === legacyMetaverseDefaultBundleId))
   ) {
     return defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds;
   }
@@ -87,9 +104,9 @@ export function normalizeMetaverseMapLaunchPlaylistSnapshot(
   }
 
   return Object.freeze({
-    metaverseDefaultBundleId:
-      normalizeBundleId(value.metaverseDefaultBundleId) ??
-      defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId,
+    metaverseDefaultBundleId: normalizeMetaverseDefaultBundleId(
+      value.metaverseDefaultBundleId
+    ),
     teamDeathmatchBundleIds: normalizeTeamDeathmatchBundleIds(
       value.teamDeathmatchBundleIds
     )

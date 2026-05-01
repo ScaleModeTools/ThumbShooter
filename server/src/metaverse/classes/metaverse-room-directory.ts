@@ -43,11 +43,12 @@ interface ResolvedRoomLaunchSelection {
   readonly launchVariationId: string;
 }
 
-const defaultFreeRoamBundleId = "private-build" as const;
-const defaultFreeRoamLaunchVariationId = "shell-free-roam" as const;
-const defaultTeamDeathmatchBundleId = "private-build" as const;
+const defaultFreeRoamBundleId = "vibe-highlands" as const;
+const defaultFreeRoamLaunchVariationId =
+  "vibe-highlands:scene-default" as const;
+const defaultTeamDeathmatchBundleId = "vibe-highlands" as const;
 const defaultTeamDeathmatchLaunchVariationId =
-  "shell-team-deathmatch" as const;
+  "vibe-highlands:variation:2" as const;
 const roomSessionBootSequence = Date.now();
 
 function normalizeCapacity(rawValue: number | undefined, fallbackValue: number): number {

@@ -108,8 +108,11 @@ test("metaverse entry and tool preview auto-confirm a guest profile when none is
   assert.equal(state.hasConfirmedProfile, true);
   assert.equal(state.profile?.snapshot.username, "Unknown");
   assert.equal(state.shellStage, "metaverse");
-  assert.equal(state.activeMetaverseBundleId, "private-build");
-  assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "vibe-highlands");
+  assert.equal(
+    state.activeMetaverseLaunchVariationId,
+    "vibe-highlands:variation:2"
+  );
 
   state = reduceMetaverseShellControllerState(state, {
     type: "toolPreviewRequested",
@@ -180,23 +183,47 @@ test("deathmatch bundle removes the Duck Hunt portal and keeps the shell TDM lau
   );
 });
 
-test("metaverse launch playlists default team deathmatch to private-build", async () => {
+test("metaverse launch playlists default metaverse modes to vibe highlands", async () => {
   const {
     defaultMetaverseMapLaunchPlaylistSnapshot,
     normalizeMetaverseMapLaunchPlaylistSnapshot,
     resolveMetaverseMapLaunchSelection
   } = await clientLoader.load("/src/metaverse/world/playlists/index.ts");
 
+  assert.equal(
+    defaultMetaverseMapLaunchPlaylistSnapshot.metaverseDefaultBundleId,
+    "vibe-highlands"
+  );
   assert.deepEqual(
     defaultMetaverseMapLaunchPlaylistSnapshot.teamDeathmatchBundleIds,
-    ["private-build"]
+    ["vibe-highlands"]
   );
   assert.deepEqual(
     normalizeMetaverseMapLaunchPlaylistSnapshot({
       metaverseDefaultBundleId: null,
       teamDeathmatchBundleIds: ["deathmatch"]
     }).teamDeathmatchBundleIds,
-    ["private-build"]
+    ["vibe-highlands"]
+  );
+  assert.deepEqual(
+    normalizeMetaverseMapLaunchPlaylistSnapshot({
+      metaverseDefaultBundleId: "private-build",
+      teamDeathmatchBundleIds: ["private-build"]
+    }),
+    {
+      metaverseDefaultBundleId: "vibe-highlands",
+      teamDeathmatchBundleIds: ["vibe-highlands"]
+    }
+  );
+  assert.deepEqual(
+    resolveMetaverseMapLaunchSelection(
+      defaultMetaverseMapLaunchPlaylistSnapshot,
+      "free-roam"
+    ),
+    {
+      bundleId: "vibe-highlands",
+      launchVariationId: "vibe-highlands:scene-default"
+    }
   );
   assert.deepEqual(
     resolveMetaverseMapLaunchSelection(
@@ -204,8 +231,8 @@ test("metaverse launch playlists default team deathmatch to private-build", asyn
       "team-deathmatch"
     ),
     {
-      bundleId: "private-build",
-      launchVariationId: "shell-team-deathmatch"
+      bundleId: "vibe-highlands",
+      launchVariationId: "vibe-highlands:variation:2"
     }
   );
 });
@@ -336,8 +363,11 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
 
   assert.equal(state.shellStage, "metaverse");
   assert.equal(state.activeExperienceId, null);
-  assert.equal(state.activeMetaverseBundleId, "private-build");
-  assert.equal(state.activeMetaverseLaunchVariationId, "shell-free-roam");
+  assert.equal(state.activeMetaverseBundleId, "vibe-highlands");
+  assert.equal(
+    state.activeMetaverseLaunchVariationId,
+    "vibe-highlands:scene-default"
+  );
 
   state = reduceMetaverseShellControllerState(state, {
     type: "experienceLaunchRequested",
@@ -390,8 +420,11 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   });
 
   assert.equal(state.matchMode, "team-deathmatch");
-  assert.equal(state.activeMetaverseBundleId, "private-build");
-  assert.equal(state.activeMetaverseLaunchVariationId, "shell-team-deathmatch");
+  assert.equal(state.activeMetaverseBundleId, "vibe-highlands");
+  assert.equal(
+    state.activeMetaverseLaunchVariationId,
+    "vibe-highlands:variation:2"
+  );
 
   state = reduceMetaverseShellControllerState(state, {
     bundleId: "deathmatch",
@@ -439,5 +472,5 @@ test("reduceMetaverseShellControllerState keeps hub and experience mutations beh
   assert.equal(state.matchMode, "team-deathmatch");
   assert.equal(state.shellStage, "main-menu");
   assert.equal(state.activeExperienceId, null);
-  assert.equal(state.activeMetaverseBundleId, "private-build");
+  assert.equal(state.activeMetaverseBundleId, "vibe-highlands");
 });

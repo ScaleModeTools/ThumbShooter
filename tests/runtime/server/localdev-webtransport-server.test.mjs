@@ -8,7 +8,9 @@ import {
   localdevMetaversePresenceWebTransportPath,
   localdevMetaverseWorldWebTransportPath,
   resolveLocaldevWebTransportServerConfigFromEnvironment,
-  verifyLocaldevWebTransportServerHandshake
+  resolveWebTransportServerConfigFromEnvironment,
+  verifyLocaldevWebTransportServerHandshake,
+  verifyWebTransportServerHandshake
 } from "../../../server/dist/adapters/localdev-webtransport-server.js";
 
 function createDeferred() {
@@ -265,6 +267,51 @@ test("resolveLocaldevWebTransportServerConfigFromEnvironment defaults client and
   assert.equal(resolvedConfig?.selfCheckHost, "127.0.0.1");
 });
 
+test("resolveWebTransportServerConfigFromEnvironment resolves production WebTransport config from env", () => {
+  const resolvedConfig = resolveWebTransportServerConfigFromEnvironment(
+    {
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_CERT_FILE: "/tmp/local-cert.pem",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_CERT_SHA256:
+        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_ENABLED: "1",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_HOST: "127.0.0.1",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_KEY_FILE: "/tmp/local-key.pem",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_PORT: "3211",
+      WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_SECRET: "localdev-secret",
+      WEBGPU_METAVERSE_WEBTRANSPORT_CERT_FILE: "/etc/letsencrypt/live/wt.solfeggio.pro/fullchain.pem",
+      WEBGPU_METAVERSE_WEBTRANSPORT_CLIENT_HOST: "wt.solfeggio.pro",
+      WEBGPU_METAVERSE_WEBTRANSPORT_ENABLED: "1",
+      WEBGPU_METAVERSE_WEBTRANSPORT_HOST: "0.0.0.0",
+      WEBGPU_METAVERSE_WEBTRANSPORT_KEY_FILE: "/etc/letsencrypt/live/wt.solfeggio.pro/privkey.pem",
+      WEBGPU_METAVERSE_WEBTRANSPORT_PORT: "443",
+      WEBGPU_METAVERSE_WEBTRANSPORT_SECRET: "production-secret"
+    },
+    (filePath) => {
+      if (filePath.endsWith("fullchain.pem")) {
+        return "PUBLIC CERTIFICATE";
+      }
+
+      if (filePath.endsWith("privkey.pem")) {
+        return "PUBLIC PRIVATE KEY";
+      }
+
+      throw new Error(`Unexpected file path: ${filePath}`);
+    }
+  );
+
+  assert.notEqual(resolvedConfig, null);
+  assert.equal(resolvedConfig?.certificateSha256Hex, null);
+  assert.equal(resolvedConfig?.clientHost, "wt.solfeggio.pro");
+  assert.equal(resolvedConfig?.clientEnvFilePath, null);
+  assert.equal(resolvedConfig?.mode, "production");
+  assert.equal(resolvedConfig?.serverConfig.certificatePem, "PUBLIC CERTIFICATE");
+  assert.equal(resolvedConfig?.serverConfig.host, "0.0.0.0");
+  assert.equal(resolvedConfig?.serverConfig.port, 443);
+  assert.equal(resolvedConfig?.serverConfig.privateKeyPem, "PUBLIC PRIVATE KEY");
+  assert.equal(resolvedConfig?.serverConfig.secret, "production-secret");
+  assert.equal(resolvedConfig?.selfCheckHost, "wt.solfeggio.pro");
+});
+
 test("createLocaldevWebTransportClientEnvFileContents writes localdev WebTransport URLs and certificate hashes", () => {
   const clientEnvContents = createLocaldevWebTransportClientEnvFileContents({
     certificateSha256Hex:
@@ -351,6 +398,42 @@ test("verifyLocaldevWebTransportServerHandshake resolves after a successful self
       )
     )
   );
+});
+
+test("verifyWebTransportServerHandshake uses public PKI when no certificate hash is configured", async () => {
+  const recordedCalls = [];
+  const closed = createDeferred();
+
+  await verifyWebTransportServerHandshake(
+    {
+      host: "wt.solfeggio.pro",
+      port: 443
+    },
+    {
+      createWebTransportClient(url, options) {
+        recordedCalls.push({
+          options,
+          url
+        });
+
+        return {
+          close() {
+            closed.resolve();
+          },
+          closed: closed.promise,
+          ready: Promise.resolve()
+        };
+      },
+      quicheLoadedPromise: Promise.resolve()
+    }
+  );
+
+  assert.equal(recordedCalls.length, 1);
+  assert.equal(
+    recordedCalls[0]?.url,
+    "https://wt.solfeggio.pro:443/metaverse/world"
+  );
+  assert.equal(recordedCalls[0]?.options, undefined);
 });
 
 test("verifyLocaldevWebTransportServerHandshake surfaces self-check failures with the target URL", async () => {

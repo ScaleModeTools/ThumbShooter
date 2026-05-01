@@ -71,3 +71,4 @@ export { resolveMetaversePlayerTeamId } from "../../metaverse-player-team.js";
 export { deathmatchMapBundle } from "./deathmatch/index.js";
 export { privateBuildMapBundle } from "./private-build/index.js";
 export { stagingGroundMapBundle } from "./staging-ground/index.js";
+export { vibeHighlandsMapBundle } from "./vibe-highlands/index.js";

@@ -77,7 +77,7 @@ test("WebGpuMetaverseRuntime starts from an idle snapshot and rejects missing na
   assert.equal(runtime.hudSnapshot.lifecycle, "failed");
 });
 
-test("default metaverse private-build spawn resolves to grounded floor support in the shipped environment slice", async () => {
+test("default metaverse vibe highlands spawn resolves to grounded floor support in the shipped environment slice", async () => {
   const [
     { metaverseRuntimeConfig },
     { metaverseEnvironmentProofConfig },
@@ -93,13 +93,16 @@ test("default metaverse private-build spawn resolves to grounded floor support i
     clientLoader.load("/src/metaverse/traversal/policies/surface-routing.ts")
   ]);
 
-  const surfaceColliderSnapshots = Object.freeze(
-    metaverseEnvironmentProofConfig.assets.flatMap((environmentAsset) =>
+  const assetSurfaceColliderSnapshots = metaverseEnvironmentProofConfig.assets.flatMap(
+    (environmentAsset) =>
       environmentAsset.placement === "dynamic"
         ? []
         : resolvePlacedCuboidColliders(environmentAsset)
-    )
   );
+  const surfaceColliderSnapshots = Object.freeze([
+    ...metaverseEnvironmentProofConfig.surfaceColliders,
+    ...assetSurfaceColliderSnapshots
+  ]);
   const spawnPosition = Object.freeze({
     x: metaverseRuntimeConfig.groundedBody.spawnPosition.x,
     y: metaverseRuntimeConfig.groundedBody.spawnPosition.y,
@@ -502,7 +505,7 @@ test("WebGpuMetaverseRuntime prewarms the booted scene before the first render w
     assert.equal(startSnapshot.telemetry.renderedFrameCount, 1);
     assert.equal(renderer.initCalls, 1);
     assert.equal(renderer.compileAsyncCalls.length, 2);
-    assert.equal(renderer.renderCalls, 4);
+    assert.equal(renderer.renderCalls, 3);
     assert.equal(renderer.pixelRatio, 1.5);
     assert.deepEqual(renderer.sizes.at(0), [1280, 720]);
     assert.equal(renderer.compileAsyncCalls[0]?.scene?.isScene, true);

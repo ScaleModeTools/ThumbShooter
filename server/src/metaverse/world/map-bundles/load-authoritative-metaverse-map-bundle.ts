@@ -3,6 +3,7 @@ import {
   parseMetaverseMapBundleSnapshot,
   privateBuildMapBundle,
   stagingGroundMapBundle,
+  vibeHighlandsMapBundle,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
@@ -13,6 +14,11 @@ export interface LoadedAuthoritativeMetaverseMapBundleSnapshot {
 }
 
 const authoritativeMetaverseMapBundleEntries = Object.freeze([
+  Object.freeze({
+    bundle: vibeHighlandsMapBundle,
+    bundleId: vibeHighlandsMapBundle.mapId,
+    sourceBundleId: vibeHighlandsMapBundle.mapId
+  } satisfies LoadedAuthoritativeMetaverseMapBundleSnapshot),
   Object.freeze({
     bundle: privateBuildMapBundle,
     bundleId: privateBuildMapBundle.mapId,

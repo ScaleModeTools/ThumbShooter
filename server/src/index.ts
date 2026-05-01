@@ -6,6 +6,7 @@ import {
 } from "node:http";
 import { dirname } from "node:path";
 
+import { resolveServerRuntimeConfigFromEnvironment } from "./config/server-runtime-config.js";
 import { DuckHuntCoopRoomWebTransportDatagramAdapter } from "./experiences/duck-hunt/adapters/duck-hunt-coop-room-webtransport-datagram-adapter.js";
 import { DuckHuntCoopRoomHttpAdapter } from "./experiences/duck-hunt/adapters/duck-hunt-coop-room-http-adapter.js";
 import { DuckHuntCoopRoomWebTransportAdapter } from "./experiences/duck-hunt/adapters/duck-hunt-coop-room-webtransport-adapter.js";
@@ -13,9 +14,9 @@ import { CoopRoomDirectory } from "./experiences/duck-hunt/classes/coop-room-dir
 import {
   createLocaldevWebTransportClientFailureEnvFileContents,
   createLocaldevWebTransportClientEnvFileContents,
-  LocaldevWebTransportServer,
-  resolveLocaldevWebTransportServerConfigFromEnvironment,
-  verifyLocaldevWebTransportServerHandshake
+  resolveWebTransportServerConfigFromEnvironment,
+  verifyWebTransportServerHandshake,
+  WebTransportServer
 } from "./adapters/localdev-webtransport-server.js";
 import { MetaversePresenceHttpAdapter } from "./metaverse/adapters/metaverse-presence-http-adapter.js";
 import { MetaversePresenceWebTransportAdapter } from "./metaverse/adapters/metaverse-presence-webtransport-adapter.js";
@@ -29,10 +30,8 @@ import { MetaverseSessionHttpAdapter } from "./metaverse/adapters/metaverse-sess
 import { MetaverseSessionRuntime } from "./metaverse/classes/metaverse-session-runtime.js";
 import type { ServerRuntimeConfig } from "./types/server-runtime-config.js";
 
-const runtimeConfig: ServerRuntimeConfig = {
-  host: "127.0.0.1",
-  port: 3210
-};
+const runtimeConfig: ServerRuntimeConfig =
+  resolveServerRuntimeConfigFromEnvironment(process.env);
 
 const coopRoomDirectory = new CoopRoomDirectory();
 const duckHuntCoopRoomHttpAdapter = new DuckHuntCoopRoomHttpAdapter(
@@ -67,8 +66,8 @@ const metaverseSessionRuntime = new MetaverseSessionRuntime();
 const metaverseSessionHttpAdapter = new MetaverseSessionHttpAdapter(
   metaverseSessionRuntime
 );
-const resolvedLocaldevWebTransportConfig =
-  resolveLocaldevWebTransportServerConfigFromEnvironment(process.env);
+const resolvedWebTransportConfig =
+  resolveWebTransportServerConfigFromEnvironment(process.env);
 const localdevClientEnvFilePath = resolveOptionalEnvValue(
   process.env.WEBGPU_METAVERSE_LOCALDEV_CLIENT_ENV_FILE
 );
@@ -82,7 +81,7 @@ const localdevWebTransportBootError = resolveOptionalEnvValue(
   process.env.WEBGPU_METAVERSE_LOCALDEV_WEBTRANSPORT_BOOT_ERROR
 );
 
-let localdevWebTransportServer: LocaldevWebTransportServer | null = null;
+let webTransportServer: WebTransportServer | null = null;
 let metaverseWorldTickHandle: ReturnType<typeof setInterval> | null = null;
 let duckHuntRoomTickHandle: ReturnType<typeof setInterval> | null = null;
 let shuttingDown = false;
@@ -141,16 +140,16 @@ function publishLocaldevClientEnvFile(contents: string | null): void {
   writeOptionalFile(localdevClientEnvFilePath, contents);
 }
 
-function stopLocaldevWebTransportServer(): void {
+function stopWebTransportServer(): void {
   try {
-    localdevWebTransportServer?.stop();
+    webTransportServer?.stop();
   } catch (error) {
     console.error(
-      "WebGPU Metaverse localdev WebTransport shutdown failed.",
+      "WebGPU Metaverse WebTransport shutdown failed.",
       error
     );
   } finally {
-    localdevWebTransportServer = null;
+    webTransportServer = null;
   }
 }
 
@@ -208,7 +207,7 @@ async function shutdownServer(signal: NodeJS.Signals): Promise<void> {
 
   shuttingDown = true;
   stopAuthoritativeTickOwners();
-  stopLocaldevWebTransportServer();
+  stopWebTransportServer();
 
   try {
     await closeHttpServer();
@@ -350,7 +349,7 @@ server.listen(runtimeConfig.port, runtimeConfig.host, () => {
   );
 
   void (async () => {
-    if (resolvedLocaldevWebTransportConfig === null) {
+    if (resolvedWebTransportConfig === null) {
       publishLocaldevClientEnvFile(
         localdevWebTransportBootStatus === "self-check-failed" &&
           localdevWebTransportBootError !== null
@@ -364,8 +363,8 @@ server.listen(runtimeConfig.port, runtimeConfig.host, () => {
     }
 
     try {
-      localdevWebTransportServer = new LocaldevWebTransportServer(
-        resolvedLocaldevWebTransportConfig.serverConfig,
+      webTransportServer = new WebTransportServer(
+        resolvedWebTransportConfig.serverConfig,
         {
           duckHuntDatagramAdapter: duckHuntCoopRoomWebTransportDatagramAdapter,
           duckHuntReliableAdapter: duckHuntCoopRoomWebTransportAdapter,
@@ -376,23 +375,27 @@ server.listen(runtimeConfig.port, runtimeConfig.host, () => {
         }
       );
 
-      const webTransportAddress = await localdevWebTransportServer.start();
-      await verifyLocaldevWebTransportServerHandshake({
-        certificateSha256Hex:
-          resolvedLocaldevWebTransportConfig.certificateSha256Hex,
-        host: resolvedLocaldevWebTransportConfig.selfCheckHost,
+      const webTransportAddress = await webTransportServer.start();
+      await verifyWebTransportServerHandshake({
+        certificateSha256Hex: resolvedWebTransportConfig.certificateSha256Hex,
+        host: resolvedWebTransportConfig.selfCheckHost,
         port: webTransportAddress.port
       });
-      publishLocaldevClientEnvFile(
-        createLocaldevWebTransportClientEnvFileContents({
-          certificateSha256Hex:
-            resolvedLocaldevWebTransportConfig.certificateSha256Hex,
-          host: resolvedLocaldevWebTransportConfig.clientHost,
-          port: webTransportAddress.port
-        })
-      );
+      if (
+        resolvedWebTransportConfig.mode === "localdev" &&
+        resolvedWebTransportConfig.certificateSha256Hex !== null
+      ) {
+        publishLocaldevClientEnvFile(
+          createLocaldevWebTransportClientEnvFileContents({
+            certificateSha256Hex:
+              resolvedWebTransportConfig.certificateSha256Hex,
+            host: resolvedWebTransportConfig.clientHost,
+            port: webTransportAddress.port
+          })
+        );
+      }
       console.log(
-        `WebGPU Metaverse localdev WebTransport listening on https://${resolvedLocaldevWebTransportConfig.clientHost}:${webTransportAddress.port} (bound on ${webTransportAddress.host}:${webTransportAddress.port})`
+        `WebGPU Metaverse ${resolvedWebTransportConfig.mode} WebTransport listening on https://${resolvedWebTransportConfig.clientHost}:${webTransportAddress.port} (bound on ${webTransportAddress.host}:${webTransportAddress.port})`
       );
     } catch (error) {
       publishLocaldevClientEnvFile(
@@ -404,11 +407,11 @@ server.listen(runtimeConfig.port, runtimeConfig.host, () => {
         })
       );
       console.error(
-        "WebGPU Metaverse localdev WebTransport could not start or pass its self-check. Continuing with HTTP-only localdev boot.",
+        "WebGPU Metaverse WebTransport could not start or pass its self-check. Continuing with HTTP-only boot.",
         error
       );
 
-      stopLocaldevWebTransportServer();
+      stopWebTransportServer();
     } finally {
       publishLocaldevReadyFile();
     }

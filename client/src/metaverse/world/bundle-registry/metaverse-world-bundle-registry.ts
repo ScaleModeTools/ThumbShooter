@@ -2,6 +2,7 @@ import {
   deathmatchMapBundle,
   privateBuildMapBundle,
   stagingGroundMapBundle,
+  vibeHighlandsMapBundle,
   type MetaverseMapBundleSnapshot
 } from "@webgpu-metaverse/shared/metaverse/world";
 
@@ -19,6 +20,15 @@ export interface MetaverseWorldBundleRegistryEntry {
 }
 
 const metaverseWorldBundleRegistryEntries = Object.freeze([
+  Object.freeze({
+    bundle: vibeHighlandsMapBundle,
+    bundleId: vibeHighlandsMapBundle.mapId,
+    label: vibeHighlandsMapBundle.label,
+    mapEditorProjectSettings: Object.freeze({
+      helperGridSizeMeters: 120
+    }),
+    sourceBundleId: vibeHighlandsMapBundle.mapId
+  } satisfies MetaverseWorldBundleRegistryEntry),
   Object.freeze({
     bundle: privateBuildMapBundle,
     bundleId: privateBuildMapBundle.mapId,

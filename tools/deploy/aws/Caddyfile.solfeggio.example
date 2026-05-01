@@ -1,0 +1,11 @@
+www.solfeggio.pro {
+	root * /opt/webgpu-metaverse/client/dist
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}
+
+api.solfeggio.pro {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3210
+}
