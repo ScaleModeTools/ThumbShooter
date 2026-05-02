@@ -367,6 +367,61 @@ function createCombatScoreboardSnapshot(
   });
 }
 
+function createMatchStatusFeedEntry(
+  worldSnapshot: MetaverseRealtimeWorldSnapshot
+): MetaverseHudSnapshot["combat"]["killFeed"][number] | null {
+  const matchSnapshot = worldSnapshot.combatMatch;
+
+  if (matchSnapshot === null) {
+    return null;
+  }
+
+  if (matchSnapshot.phase === "waiting-for-players") {
+    const playerCount = matchSnapshot.teams.reduce(
+      (total, teamSnapshot) => total + teamSnapshot.playerIds.length,
+      0
+    );
+    const missingPlayerCount = Math.max(0, 2 - playerCount);
+
+    if (missingPlayerCount <= 0) {
+      return Object.freeze({
+        ageMs: 0,
+        local: true,
+        sequence: Number.MAX_SAFE_INTEGER,
+        summary: "Match Status: Waiting For match start",
+        type: "status"
+      });
+    }
+
+    return Object.freeze({
+      ageMs: 0,
+      local: true,
+      sequence: Number.MAX_SAFE_INTEGER,
+      summary: `Match Status: Waiting For ${missingPlayerCount} ${
+        missingPlayerCount === 1 ? "Player" : "Players"
+      } to start match`,
+      type: "status"
+    });
+  }
+
+  if (matchSnapshot.phase === "starting") {
+    const countdownSeconds = Math.max(
+      1,
+      Math.ceil(Number(matchSnapshot.timeRemainingMs) / 1_000)
+    );
+
+    return Object.freeze({
+      ageMs: 0,
+      local: true,
+      sequence: Number.MAX_SAFE_INTEGER,
+      summary: `Match Status: Starting in ${countdownSeconds}`,
+      type: "status"
+    });
+  }
+
+  return null;
+}
+
 function readNearestWeaponResourceInteraction(input: {
   readonly localPlayerSnapshot: MetaverseRealtimePlayerSnapshot;
   readonly localPosition: {
@@ -768,51 +823,55 @@ export class MetaverseRuntimeHudPublisher {
       playerId === localPlayerSnapshot.playerId
         ? "You"
         : playerSnapshotById.get(playerId)?.username ?? playerId;
+    const matchStatusFeedEntry = createMatchStatusFeedEntry(worldSnapshot);
     const killFeed = Object.freeze(
-      worldSnapshot.combatFeed.slice(-4).map((eventSnapshot) => {
-        const eventAgeMs = Math.max(
-          0,
-          Number(worldSnapshot.tick.simulationTimeMs) - Number(eventSnapshot.timeMs)
-        );
+      [
+        ...(matchStatusFeedEntry === null ? [] : [matchStatusFeedEntry]),
+        ...worldSnapshot.combatFeed.slice(-4).map((eventSnapshot) => {
+          const eventAgeMs = Math.max(
+            0,
+            Number(worldSnapshot.tick.simulationTimeMs) - Number(eventSnapshot.timeMs)
+          );
 
-        switch (eventSnapshot.type) {
-          case "damage":
-            return Object.freeze({
-              ageMs: eventAgeMs,
-              local:
-                eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId ||
-                eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId,
-              sequence: eventSnapshot.sequence,
-              summary: `${summarizePlayer(eventSnapshot.attackerPlayerId)} hit ${summarizePlayer(eventSnapshot.targetPlayerId)} for ${eventSnapshot.damage}`,
-              type: eventSnapshot.type
-            });
-          case "kill":
-            return Object.freeze({
-              ageMs: eventAgeMs,
-              local:
-                eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId ||
-                eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId,
-              sequence: eventSnapshot.sequence,
-              summary:
-                eventSnapshot.attackerPlayerId === eventSnapshot.targetPlayerId
-                  ? `${summarizePlayer(eventSnapshot.targetPlayerId)} fell`
-                  : eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId
-                    ? `You killed ${summarizePlayer(eventSnapshot.targetPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`
-                    : eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId
-                      ? `You were killed by ${summarizePlayer(eventSnapshot.attackerPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`
-                      : `${summarizePlayer(eventSnapshot.targetPlayerId)} was killed by ${summarizePlayer(eventSnapshot.attackerPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`,
-              type: eventSnapshot.type
-            });
-          case "spawn":
-            return Object.freeze({
-              ageMs: eventAgeMs,
-              local: eventSnapshot.playerId === localPlayerSnapshot.playerId,
-              sequence: eventSnapshot.sequence,
-              summary: `${summarizePlayer(eventSnapshot.playerId)} spawned`,
-              type: eventSnapshot.type
-            });
-        }
-      })
+          switch (eventSnapshot.type) {
+            case "damage":
+              return Object.freeze({
+                ageMs: eventAgeMs,
+                local:
+                  eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId ||
+                  eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId,
+                sequence: eventSnapshot.sequence,
+                summary: `${summarizePlayer(eventSnapshot.attackerPlayerId)} hit ${summarizePlayer(eventSnapshot.targetPlayerId)} for ${eventSnapshot.damage}`,
+                type: eventSnapshot.type
+              });
+            case "kill":
+              return Object.freeze({
+                ageMs: eventAgeMs,
+                local:
+                  eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId ||
+                  eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId,
+                sequence: eventSnapshot.sequence,
+                summary:
+                  eventSnapshot.attackerPlayerId === eventSnapshot.targetPlayerId
+                    ? `${summarizePlayer(eventSnapshot.targetPlayerId)} fell`
+                    : eventSnapshot.attackerPlayerId === localPlayerSnapshot.playerId
+                      ? `You killed ${summarizePlayer(eventSnapshot.targetPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`
+                      : eventSnapshot.targetPlayerId === localPlayerSnapshot.playerId
+                        ? `You were killed by ${summarizePlayer(eventSnapshot.attackerPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`
+                        : `${summarizePlayer(eventSnapshot.targetPlayerId)} was killed by ${summarizePlayer(eventSnapshot.attackerPlayerId)}${eventSnapshot.headshot ? " (headshot)" : ""}`,
+                type: eventSnapshot.type
+              });
+            case "spawn":
+              return Object.freeze({
+                ageMs: eventAgeMs,
+                local: eventSnapshot.playerId === localPlayerSnapshot.playerId,
+                sequence: eventSnapshot.sequence,
+                summary: `${summarizePlayer(eventSnapshot.playerId)} spawned`,
+                type: eventSnapshot.type
+              });
+          }
+        })
+      ]
     );
     const localBodySnapshot =
       readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(localPlayerSnapshot);

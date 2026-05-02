@@ -133,6 +133,7 @@ function createTeamDeathmatchWorldSessionContext() {
   const roomDirectory = new MetaverseRoomDirectory({
     runtimeConfig: {
       playerInactivityTimeoutMs: createMilliseconds(5_000),
+      teamDeathmatchStartCountdownMs: createMilliseconds(0),
       tickIntervalMs: createMilliseconds(50)
     }
   });

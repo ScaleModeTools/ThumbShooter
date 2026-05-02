@@ -18,6 +18,8 @@
     "test": "./tools/test",
     "bench": "./tools/bench",
     "verify": "./tools/verify",
+    "sync": "./tools/sync",
+    "sync:install": "WEBGPU_METAVERSE_SYNC_NPM_CI=1 ./tools/sync",
     "dev": "./tools/dev",
     "dev:client": "./tools/dev-client",
     "dev:server": "./tools/dev-server",

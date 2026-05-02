@@ -126,14 +126,18 @@ function createInteractionPrompts(
 function createRecentCombatMessages(
   hudSnapshot: MetaverseHudSnapshot
 ): readonly MetaverseHudCombatFeedEntrySnapshot[] {
+  const statusMessages = hudSnapshot.combat.killFeed.filter(
+    (entry) => entry.type === "status"
+  );
+  const killMessages = hudSnapshot.combat.killFeed
+    .filter(
+      (entry) => entry.type === "kill" && entry.ageMs <= recentCombatMessageMaxAgeMs
+    )
+    .slice(-maxRecentCombatMessages)
+    .reverse();
+
   return Object.freeze(
-    hudSnapshot.combat.killFeed
-      .filter(
-        (entry) =>
-          entry.type === "kill" && entry.ageMs <= recentCombatMessageMaxAgeMs
-      )
-      .slice(-maxRecentCombatMessages)
-      .reverse()
+    [...statusMessages, ...killMessages].slice(0, maxRecentCombatMessages)
   );
 }
 

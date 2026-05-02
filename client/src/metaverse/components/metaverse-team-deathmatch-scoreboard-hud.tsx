@@ -13,7 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 
 import type { MetaverseHudSnapshot } from "../types/metaverse-runtime";
-import { resolveMetaverseRespawnVisibleCountdownSecond } from "../config/metaverse-respawn-presentation";
+import {
+  resolveMetaverseMatchStartVisibleCountdownSecond,
+  resolveMetaverseRespawnVisibleCountdownSecond
+} from "../config/metaverse-respawn-presentation";
 
 interface MetaverseTeamDeathmatchScoreboardHudProps {
   readonly combatSnapshot: MetaverseHudSnapshot["combat"];
@@ -207,6 +210,12 @@ function MetaverseTeamDeathmatchScoreboardTable({
 export function MetaverseTeamDeathmatchRespawnCountdownHud({
   combatSnapshot
 }: MetaverseTeamDeathmatchRespawnCountdownHudProps) {
+  const matchStartCountdownSecond =
+    combatSnapshot.available && combatSnapshot.matchPhase === "starting"
+      ? resolveMetaverseMatchStartVisibleCountdownSecond(
+          combatSnapshot.timeRemainingMs ?? 0
+        )
+      : null;
   const respawnCountdownSecond =
     combatSnapshot.available &&
     !combatSnapshot.alive &&
@@ -215,8 +224,11 @@ export function MetaverseTeamDeathmatchRespawnCountdownHud({
           combatSnapshot.respawnRemainingMs
         )
       : null;
+  const countdownLabel =
+    matchStartCountdownSecond !== null ? "Match starts in" : "Respawning in";
+  const countdownSecond = matchStartCountdownSecond ?? respawnCountdownSecond;
 
-  if (respawnCountdownSecond === null) {
+  if (countdownSecond === null) {
     return null;
   }
 
@@ -229,12 +241,12 @@ export function MetaverseTeamDeathmatchRespawnCountdownHud({
         style={metaverseHardHudTextShadowStyle}
       >
         <span className="type-game-banner text-game-foreground">
-          Respawning in
+          {countdownLabel}
         </span>
         <StableInlineText
           className="type-game-value mt-1 text-game-foreground"
           reserveTexts={["1", "2", "3"]}
-          text={`${respawnCountdownSecond}`}
+          text={`${countdownSecond}`}
         />
       </div>
     </div>

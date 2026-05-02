@@ -176,6 +176,7 @@ interface MutableMetaverseCombatMatchRuntimeState {
   phase: MetaverseCombatMatchSnapshot["phase"];
   respawnDelayMs: number;
   scoreLimit: number;
+  startingStartedAtTimeMs: number | null;
   readonly teamScoresByTeamId: Map<MetaversePlayerTeamId, number>;
   timeLimitMs: number;
   timeRemainingMs: number;
@@ -201,6 +202,7 @@ interface MetaverseAuthoritativeCombatAuthorityDependencies<
   readonly killFloorVolumes?:
     readonly MetaverseMapBundleSemanticGameplayVolumeSnapshot[];
   readonly matchMode?: MetaverseMatchModeId | null;
+  readonly matchStartCountdownMs?: number;
   readonly physicsRuntime: MetaverseAuthoritativeRapierPhysicsRuntime;
   readonly playerTraversalColliderHandles: ReadonlySet<RapierColliderHandle>;
   readonly playersById: ReadonlyMap<MetaversePlayerId, PlayerRuntime>;
@@ -216,6 +218,10 @@ interface MetaverseAuthoritativeCombatAuthorityDependencies<
     readonly position: PhysicsVector3Snapshot;
     readonly yawRadians: number;
   };
+  readonly resetPlayerWeaponStateForMatchStart?: (
+    playerRuntime: PlayerRuntime
+  ) => void;
+  readonly resetWorldResourceSpawnsForMatchStart?: () => void;
   readonly syncAuthoritativePlayerLookToCurrentFacing: (
     playerRuntime: PlayerRuntime
   ) => void;
@@ -237,6 +243,7 @@ const combatHurtVolumeHistoryWindowMs = 200;
 const combatRayOriginMaxDistanceFromFiringReferenceMeters = 3;
 const combatSplashLineOfSightOriginBiasMeters = 0.08;
 const combatDroppedWeaponPickupRadiusMeters = 1.4;
+const defaultMatchStartCountdownMs = 0;
 const killFloorCombatWeaponId = "metaverse-environment-kill-floor-v1" as const;
 const projectileRetentionAfterResolutionMs = 250;
 const spawnProtectionDurationMs = 1_000;
@@ -495,6 +502,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     MutableMetaverseCombatProjectileRuntimeState
   >();
   readonly #matchMode: MetaverseMatchModeId | null;
+  readonly #matchStartCountdownMs: number;
 
   #combatEventSequence = 0;
   #feedSequence = 0;
@@ -507,6 +515,10 @@ export class MetaverseAuthoritativeCombatAuthority<
       dependencies.matchMode === undefined
         ? "team-deathmatch"
         : dependencies.matchMode;
+    this.#matchStartCountdownMs = normalizeFiniteNonNegativeNumber(
+      dependencies.matchStartCountdownMs,
+      defaultMatchStartCountdownMs
+    );
     this.#matchState = {
       assistDamageThreshold: 50,
       completedAtTimeMs: null,
@@ -515,6 +527,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       respawnDelayMs: 5_000,
       scoreLimit: 50,
       startedAtTimeMs: null,
+      startingStartedAtTimeMs: null,
       teamScoresByTeamId: new Map([
         ["red", 0],
         ["blue", 0]
@@ -616,7 +629,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       return { accepted: false };
     }
 
-    if (this.#matchState.phase !== "active") {
+    if (this.#matchState.phase === "completed") {
       this.#publishInteractWeaponResourceActionReceipt(combatState, {
         action: input.action,
         nowMs: input.nowMs,
@@ -972,7 +985,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
-    if (this.#matchState.phase !== "active") {
+    if (this.#matchState.phase === "completed") {
       this.#publishReloadWeaponActionReceipt(combatState, {
         action,
         nowMs,
@@ -1134,7 +1147,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
-    if (this.#matchState.phase !== "active") {
+    if (this.#matchState.phase === "completed") {
       this.#publishFireWeaponActionReceipt(combatState, {
         actionSequence: action.actionSequence,
         nowMs,
@@ -1997,8 +2010,32 @@ export class MetaverseAuthoritativeCombatAuthority<
       this.#matchState.phase === "waiting-for-players" &&
       this.#dependencies.playersById.size >= 2
     ) {
-      this.#startMatch(nowMs);
+      this.#beginMatchStartFlow(nowMs);
       this.#dependencies.incrementSnapshotSequence();
+      return;
+    }
+
+    if (this.#matchState.phase === "starting") {
+      if (this.#dependencies.playersById.size < 2) {
+        this.#resetMatchToWaitingForPlayers(nowMs);
+        this.#dependencies.incrementSnapshotSequence();
+        return;
+      }
+
+      const startingStartedAtTimeMs =
+        this.#matchState.startingStartedAtTimeMs ?? nowMs;
+      const elapsedMs = Math.max(0, nowMs - startingStartedAtTimeMs);
+
+      this.#matchState.timeRemainingMs = Math.max(
+        0,
+        this.#matchStartCountdownMs - elapsedMs
+      );
+
+      if (this.#matchState.timeRemainingMs <= 0) {
+        this.#startMatch(nowMs);
+        this.#dependencies.incrementSnapshotSequence();
+      }
+
       return;
     }
 
@@ -2038,7 +2075,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       return true;
     }
 
-    this.#startMatch(normalizedNowMs);
+    this.#beginMatchStartFlow(normalizedNowMs);
     this.#dependencies.incrementSnapshotSequence();
     return true;
   }
@@ -2428,7 +2465,10 @@ export class MetaverseAuthoritativeCombatAuthority<
       combatState.respawnRemainingMs - tickIntervalSeconds * 1_000
     );
 
-    if (combatState.respawnRemainingMs > 0 || this.#matchState.phase !== "active") {
+    if (
+      combatState.respawnRemainingMs > 0 ||
+      this.#matchState.phase === "completed"
+    ) {
       return;
     }
 
@@ -2565,12 +2605,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       );
     }
 
-    if (
-      (this.#matchState.teamScoresByTeamId.get("red") ?? 0) >=
-        this.#matchState.scoreLimit ||
-      (this.#matchState.teamScoresByTeamId.get("blue") ?? 0) >=
-        this.#matchState.scoreLimit
-    ) {
+    if (this.#isMatchScoreLimitReached()) {
       this.#completeMatch(nowMs);
     }
   }
@@ -2616,12 +2651,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       null
     );
 
-    if (
-      (this.#matchState.teamScoresByTeamId.get("red") ?? 0) >=
-        this.#matchState.scoreLimit ||
-      (this.#matchState.teamScoresByTeamId.get("blue") ?? 0) >=
-        this.#matchState.scoreLimit
-    ) {
+    if (this.#isMatchScoreLimitReached()) {
       this.#completeMatch(nowMs);
     }
   }
@@ -2733,25 +2763,33 @@ export class MetaverseAuthoritativeCombatAuthority<
       return;
     }
 
+    const scoringActive = this.#matchState.phase === "active";
+    const killDelta = scoringActive ? input.killDelta : 0;
+    const teamScoreDelta = scoringActive ? input.teamScoreDelta : 0;
+
     targetCombatState.alive = false;
-    targetCombatState.deaths += 1;
+    targetCombatState.deaths += scoringActive ? 1 : 0;
     targetCombatState.health = 0;
     targetCombatState.respawnRemainingMs = this.#matchState.respawnDelayMs;
     targetCombatState.spawnProtectionRemainingMs = 0;
-    attackerCombatState.kills += input.killDelta;
+    attackerCombatState.kills += killDelta;
 
-    if (input.headshot && input.attackerPlayerId !== input.targetPlayerId) {
+    if (
+      scoringActive &&
+      input.headshot &&
+      input.attackerPlayerId !== input.targetPlayerId
+    ) {
       attackerCombatState.headshotKills += 1;
     }
 
     this.#matchState.teamScoresByTeamId.set(
       attackerRuntime.teamId,
       (this.#matchState.teamScoresByTeamId.get(attackerRuntime.teamId) ?? 0) +
-        input.teamScoreDelta
+        teamScoreDelta
     );
 
     const assisterPlayerIds =
-      input.killDelta <= 0
+      killDelta <= 0
         ? Object.freeze([]) as readonly MetaversePlayerId[]
         : Object.freeze(
             [...targetCombatState.damageLedgerByAttackerId.entries()]
@@ -2767,7 +2805,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       const assisterCombatState =
         this.#playerCombatStateByPlayerId.get(assisterPlayerId) ?? null;
 
-      if (assisterCombatState !== null) {
+      if (scoringActive && assisterCombatState !== null) {
         assisterCombatState.assists += 1;
       }
     }
@@ -2826,7 +2864,7 @@ export class MetaverseAuthoritativeCombatAuthority<
 
   #advanceKillFloorEliminations(nowMs: number): void {
     if (
-      this.#matchState.phase !== "active" ||
+      this.#matchState.phase === "completed" ||
       (this.#dependencies.killFloorVolumes?.length ?? 0) === 0
     ) {
       return;
@@ -2870,12 +2908,7 @@ export class MetaverseAuthoritativeCombatAuthority<
       });
       this.#dependencies.incrementSnapshotSequence();
 
-      if (
-        (this.#matchState.teamScoresByTeamId.get("red") ?? 0) >=
-          this.#matchState.scoreLimit ||
-        (this.#matchState.teamScoresByTeamId.get("blue") ?? 0) >=
-          this.#matchState.scoreLimit
-      ) {
+      if (this.#isMatchScoreLimitReached()) {
         this.#completeMatch(nowMs);
         this.#dependencies.incrementSnapshotSequence();
         return;
@@ -2893,12 +2926,39 @@ export class MetaverseAuthoritativeCombatAuthority<
     );
   }
 
+  #isMatchScoreLimitReached(): boolean {
+    return (
+      this.#matchState.phase === "active" &&
+      ((this.#matchState.teamScoresByTeamId.get("red") ?? 0) >=
+        this.#matchState.scoreLimit ||
+        (this.#matchState.teamScoresByTeamId.get("blue") ?? 0) >=
+          this.#matchState.scoreLimit)
+    );
+  }
+
+  #beginMatchStartFlow(nowMs: number): void {
+    if (this.#matchStartCountdownMs <= 0) {
+      this.#startMatch(nowMs);
+      return;
+    }
+
+    this.#matchState.completedAtTimeMs = null;
+    this.#matchState.phase = "starting";
+    this.#matchState.startedAtTimeMs = null;
+    this.#matchState.startingStartedAtTimeMs = nowMs;
+    this.#matchState.teamScoresByTeamId.set("red", 0);
+    this.#matchState.teamScoresByTeamId.set("blue", 0);
+    this.#matchState.timeRemainingMs = this.#matchStartCountdownMs;
+    this.#matchState.winnerTeamId = null;
+  }
+
   #completeMatch(nowMs: number): void {
     const redScore = this.#matchState.teamScoresByTeamId.get("red") ?? 0;
     const blueScore = this.#matchState.teamScoresByTeamId.get("blue") ?? 0;
 
     this.#matchState.completedAtTimeMs = nowMs;
     this.#matchState.phase = "completed";
+    this.#matchState.startingStartedAtTimeMs = null;
     this.#matchState.timeRemainingMs = 0;
     this.#matchState.winnerTeamId =
       redScore === blueScore ? null : redScore > blueScore ? "red" : "blue";
@@ -3253,6 +3313,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     this.#matchState.completedAtTimeMs = null;
     this.#matchState.phase = "active";
     this.#matchState.startedAtTimeMs = nowMs;
+    this.#matchState.startingStartedAtTimeMs = null;
     this.#matchState.teamScoresByTeamId.set("red", 0);
     this.#matchState.teamScoresByTeamId.set("blue", 0);
     this.#matchState.timeRemainingMs = this.#matchState.timeLimitMs;
@@ -3263,10 +3324,21 @@ export class MetaverseAuthoritativeCombatAuthority<
     this.#feedSequence = 0;
     this.#hurtVolumeHistoryByPlayerId.clear();
     this.#projectilesById.clear();
+    this.#dependencies.resetWorldResourceSpawnsForMatchStart?.();
 
     for (const playerRuntime of this.#dependencies.playersById.values()) {
+      this.#dependencies.resetPlayerWeaponStateForMatchStart?.(playerRuntime);
+
       const combatState = this.#ensurePlayerCombatState(playerRuntime);
 
+      combatState.weaponsById.clear();
+      combatState.activeWeaponId = this.#resolveActiveWeaponId(playerRuntime);
+      if (
+        tryReadMetaverseCombatWeaponProfile(combatState.activeWeaponId) !== null
+      ) {
+        this.#ensureWeaponRuntimeState(combatState, combatState.activeWeaponId);
+      }
+      this.#syncEquippedWeaponRuntimeStates(combatState, playerRuntime);
       combatState.assists = 0;
       combatState.deaths = 0;
       combatState.headshotKills = 0;
@@ -3276,6 +3348,10 @@ export class MetaverseAuthoritativeCombatAuthority<
       combatState.recentPlayerActionReceiptsBySequence.clear();
       combatState.damageLedgerByAttackerId.clear();
       this.#respawnPlayer(playerRuntime, combatState, nowMs);
+      for (const weaponState of combatState.weaponsById.values()) {
+        weaponState.shotsFired = 0;
+        weaponState.shotsHit = 0;
+      }
     }
   }
 
@@ -3283,6 +3359,7 @@ export class MetaverseAuthoritativeCombatAuthority<
     this.#matchState.completedAtTimeMs = null;
     this.#matchState.phase = "waiting-for-players";
     this.#matchState.startedAtTimeMs = null;
+    this.#matchState.startingStartedAtTimeMs = null;
     this.#matchState.teamScoresByTeamId.set("red", 0);
     this.#matchState.teamScoresByTeamId.set("blue", 0);
     this.#matchState.timeRemainingMs = this.#matchState.timeLimitMs;
@@ -3293,10 +3370,21 @@ export class MetaverseAuthoritativeCombatAuthority<
     this.#feedSequence = 0;
     this.#hurtVolumeHistoryByPlayerId.clear();
     this.#projectilesById.clear();
+    this.#dependencies.resetWorldResourceSpawnsForMatchStart?.();
 
     for (const playerRuntime of this.#dependencies.playersById.values()) {
+      this.#dependencies.resetPlayerWeaponStateForMatchStart?.(playerRuntime);
+
       const combatState = this.#ensurePlayerCombatState(playerRuntime);
 
+      combatState.weaponsById.clear();
+      combatState.activeWeaponId = this.#resolveActiveWeaponId(playerRuntime);
+      if (
+        tryReadMetaverseCombatWeaponProfile(combatState.activeWeaponId) !== null
+      ) {
+        this.#ensureWeaponRuntimeState(combatState, combatState.activeWeaponId);
+      }
+      this.#syncEquippedWeaponRuntimeStates(combatState, playerRuntime);
       combatState.assists = 0;
       combatState.deaths = 0;
       combatState.headshotKills = 0;
@@ -3306,6 +3394,10 @@ export class MetaverseAuthoritativeCombatAuthority<
       combatState.recentPlayerActionReceiptsBySequence.clear();
       combatState.damageLedgerByAttackerId.clear();
       this.#respawnPlayer(playerRuntime, combatState, nowMs);
+      for (const weaponState of combatState.weaponsById.values()) {
+        weaponState.shotsFired = 0;
+        weaponState.shotsHit = 0;
+      }
     }
   }
 

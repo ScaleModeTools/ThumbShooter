@@ -161,12 +161,14 @@ function resolveDirectoryEntryPriority(
     switch (roomEntry.phase) {
       case "active":
         return 0;
-      case "waiting-for-players":
+      case "starting":
         return 1;
-      case "completed":
+      case "waiting-for-players":
         return 2;
-      default:
+      case "completed":
         return 3;
+      default:
+        return 4;
     }
   }
 

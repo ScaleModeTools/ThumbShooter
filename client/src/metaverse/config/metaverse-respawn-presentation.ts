@@ -32,6 +32,22 @@ export function resolveMetaverseRespawnVisibleCountdownSecond(
     : null;
 }
 
+export function resolveMetaverseMatchStartVisibleCountdownSecond(
+  startRemainingMs: number
+): MetaverseRespawnVisibleCountdownSecond | null {
+  if (!Number.isFinite(startRemainingMs) || startRemainingMs <= 0) {
+    return null;
+  }
+
+  const countdownSecond = Math.ceil(startRemainingMs / 1_000);
+
+  return countdownSecond === 1 ||
+    countdownSecond === 2 ||
+    countdownSecond === 3
+    ? countdownSecond
+    : null;
+}
+
 export function resolveMetaverseRespawnCountdownAudioCueId(
   countdownSecond: MetaverseRespawnCountdownSecond
 ): MetaverseCombatAudioCueId {

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+remote_host="${WEBGPU_METAVERSE_SYNC_HOST:-ubuntu@34.232.143.88}"
+ssh_key="${WEBGPU_METAVERSE_SYNC_KEY:-$HOME/.ssh/webgpu-metaverse-prod.pem}"
+remote_stage="${WEBGPU_METAVERSE_SYNC_STAGE:-/tmp/webgpu-metaverse}"
+remote_app="${WEBGPU_METAVERSE_SYNC_APP:-/opt/webgpu-metaverse}"
+run_npm_ci="${WEBGPU_METAVERSE_SYNC_NPM_CI:-0}"
+
+if [[ ! -f "$ssh_key" ]]; then
+  echo "Missing deploy SSH key: $ssh_key"
+  echo "Set WEBGPU_METAVERSE_SYNC_KEY to override the key path."
+  exit 1
+fi
+
+cd "$repo_root"
+
+rsync_excludes=(
+  --exclude "node_modules"
+  --exclude ".git"
+  --exclude ".local-dev"
+  --exclude "dist"
+  --exclude ".vite"
+  --exclude ".cache"
+  --exclude ".vscode"
+  --exclude "avatar_rig_kit"
+  --exclude "docs"
+  --exclude "examples"
+  --exclude "weapon_authoring_audit"
+  --exclude "modular-weapon-builder-v4-sniper-pass"
+)
+
+echo "Uploading WebGPU Metaverse to $remote_host:$remote_stage ..."
+rsync -az --delete --delete-excluded \
+  "${rsync_excludes[@]}" \
+  -e "ssh -i $ssh_key" \
+  "$repo_root/" \
+  "$remote_host:$remote_stage/"
+
+echo "Promoting uploaded files into $remote_app ..."
+ssh -i "$ssh_key" "$remote_host" \
+  "sudo rsync -a '$remote_stage/' '$remote_app/'; sudo chown -R webgpu-metaverse:webgpu-metaverse '$remote_app'"
+
+remote_build_command="cd '$remote_app' && "
+
+if [[ "$run_npm_ci" == "1" ]]; then
+  remote_build_command+="sudo -u webgpu-metaverse npm ci && "
+fi
+
+remote_build_command+="sudo -u webgpu-metaverse npm run build:workspaces && sudo systemctl restart webgpu-metaverse-server && sudo systemctl reload caddy"
+
+echo "Building and restarting production services ..."
+ssh -i "$ssh_key" "$remote_host" "$remote_build_command"
+
+echo "Production service status:"
+ssh -i "$ssh_key" "$remote_host" \
+  "sudo systemctl status webgpu-metaverse-server --no-pager"

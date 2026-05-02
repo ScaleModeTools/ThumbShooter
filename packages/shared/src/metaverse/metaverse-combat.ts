@@ -27,6 +27,7 @@ import type {
 
 export const metaverseCombatMatchPhaseIds = [
   "waiting-for-players",
+  "starting",
   "active",
   "completed"
 ] as const;

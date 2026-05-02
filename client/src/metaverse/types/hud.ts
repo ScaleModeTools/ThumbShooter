@@ -93,7 +93,7 @@ export interface MetaverseHudCombatFeedEntrySnapshot {
   readonly local: boolean;
   readonly sequence: number;
   readonly summary: string;
-  readonly type: "damage" | "kill" | "spawn";
+  readonly type: "damage" | "kill" | "spawn" | "status";
 }
 
 export interface MetaverseHudDamageIndicatorSnapshot {
@@ -129,7 +129,12 @@ export interface MetaverseHudCombatScoreboardTeamSnapshot {
 
 export interface MetaverseHudCombatScoreboardSnapshot {
   readonly available: boolean;
-  readonly phase: "active" | "completed" | "waiting-for-players" | null;
+  readonly phase:
+    | "active"
+    | "completed"
+    | "starting"
+    | "waiting-for-players"
+    | null;
   readonly scoreLimit: number | null;
   readonly teams: readonly MetaverseHudCombatScoreboardTeamSnapshot[];
   readonly timeRemainingMs: number | null;
@@ -151,7 +156,12 @@ export interface MetaverseHudCombatSnapshot {
   readonly health: number;
   readonly killFeed: readonly MetaverseHudCombatFeedEntrySnapshot[];
   readonly kills: number;
-  readonly matchPhase: "active" | "completed" | "waiting-for-players" | null;
+  readonly matchPhase:
+    | "active"
+    | "completed"
+    | "starting"
+    | "waiting-for-players"
+    | null;
   readonly maxHealth: number;
   readonly reloadRemainingMs: number;
   readonly respawnRemainingMs: number;

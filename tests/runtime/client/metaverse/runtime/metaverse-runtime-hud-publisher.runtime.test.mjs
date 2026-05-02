@@ -813,6 +813,107 @@ test("MetaverseRuntimeHudPublisher exposes recent local damage direction indicat
   assert.ok(Math.abs(damageIndicator.intensity - 0.8) < 0.000001);
 });
 
+test("MetaverseRuntimeHudPublisher adds team deathmatch waiting and starting status feed entries", async () => {
+  const { MetaverseRuntimeHudPublisher } = await clientLoader.load(
+    "/src/metaverse/hud/metaverse-runtime-hud-publisher.ts"
+  );
+  const localPlayerId = createMetaversePlayerId("hud-match-status-local");
+  const localUsername = createUsername("Hud Match Status");
+
+  assert.notEqual(localPlayerId, null);
+  assert.notEqual(localUsername, null);
+
+  const dependencies = createFakeHudPublisherDependencies(() => 2_000);
+  dependencies.remoteWorldRuntime.isConnected = true;
+  dependencies.presenceRuntime.isJoined = true;
+  dependencies.presenceRuntime.localTeamId = "blue";
+
+  const localPlayerSnapshot = createMetaverseRealtimePlayerSnapshot({
+    characterId: "mesh2motion-humanoid-v1",
+    combat: {
+      activeWeapon: {
+        ammoInMagazine: 9,
+        ammoInReserve: 36,
+        reloadRemainingMs: 0,
+        weaponId: "metaverse-service-pistol-v2"
+      },
+      alive: true,
+      health: 100,
+      maxHealth: 100
+    },
+    groundedBody: {
+      linearVelocity: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      position: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      yawRadians: 0
+    },
+    look: {
+      pitchRadians: 0,
+      yawRadians: 0
+    },
+    playerId: localPlayerId,
+    teamId: "blue",
+    username: localUsername
+  });
+  const createWorldSnapshot = (phase, timeRemainingMs = 600_000) =>
+    createMetaverseRealtimeWorldSnapshot({
+      combatMatch: {
+        phase,
+        teams: [
+          {
+            playerIds: [],
+            score: 0,
+            teamId: "red"
+          },
+          {
+            playerIds: [localPlayerId],
+            score: 0,
+            teamId: "blue"
+          }
+        ],
+        timeRemainingMs
+      },
+      players: [localPlayerSnapshot],
+      tick: {
+        currentTick: 40,
+        emittedAtServerTimeMs: 2_000,
+        simulationTimeMs: 2_000,
+        tickIntervalMs: 50
+      },
+      vehicles: []
+    });
+
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeLocalPlayerSnapshot =
+    () => localPlayerSnapshot;
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot =
+    () => createWorldSnapshot("waiting-for-players");
+
+  const publisher = new MetaverseRuntimeHudPublisher(dependencies);
+
+  publisher.publishSnapshot(createPublishInput(), true, 2_000);
+
+  assert.equal(
+    publisher.hudSnapshot.combat.killFeed[0]?.summary,
+    "Match Status: Waiting For 1 Player to start match"
+  );
+
+  dependencies.remoteWorldRuntime.readFreshAuthoritativeWorldSnapshot =
+    () => createWorldSnapshot("starting", 2_100);
+  publisher.publishSnapshot(createPublishInput(), true, 2_000);
+
+  assert.equal(
+    publisher.hudSnapshot.combat.killFeed[0]?.summary,
+    "Match Status: Starting in 3"
+  );
+});
+
 test("MetaverseRuntimeHudPublisher displays optimistic selected weapon inventory", async () => {
   const { MetaverseRuntimeHudPublisher } = await clientLoader.load(
     "/src/metaverse/hud/metaverse-runtime-hud-publisher.ts"

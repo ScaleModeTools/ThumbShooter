@@ -181,7 +181,7 @@ export class MetaverseFireWeaponActionPolicy {
 
         if (
           localPlayerSnapshot.combatMatchPhase !== null &&
-          localPlayerSnapshot.combatMatchPhase !== "active"
+          localPlayerSnapshot.combatMatchPhase === "completed"
         ) {
           return null;
         }

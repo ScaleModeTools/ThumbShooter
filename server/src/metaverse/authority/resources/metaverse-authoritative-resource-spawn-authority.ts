@@ -95,9 +95,19 @@ export class MetaverseAuthoritativeResourceSpawnAuthority<
     dependencies: MetaverseAuthoritativeResourceSpawnAuthorityDependencies<PlayerRuntime>
   ) {
     this.#dependencies = dependencies;
+    this.resetResourceSpawns();
+  }
 
-    for (const resourceSpawn of dependencies.resourceSpawns) {
-      if (!shouldEnableResourceSpawn(resourceSpawn, dependencies.matchMode)) {
+  resetResourceSpawns(): void {
+    this.#resourceSpawnStatesById.clear();
+
+    for (const resourceSpawn of this.#dependencies.resourceSpawns) {
+      if (
+        !shouldEnableResourceSpawn(
+          resourceSpawn,
+          this.#dependencies.matchMode
+        )
+      ) {
         continue;
       }
 

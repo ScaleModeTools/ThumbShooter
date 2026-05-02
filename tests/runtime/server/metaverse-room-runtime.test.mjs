@@ -137,7 +137,7 @@ test("MetaverseRoomRuntime exposes assignment and directory metadata for team de
 
   const assignmentSnapshot = roomRuntime.readAssignmentSnapshot(2);
   const directoryEntry = roomRuntime.readDirectoryEntry(0, 2, "available");
-  const worldSnapshot = roomRuntime.readWorldSnapshot(0);
+  const worldSnapshot = roomRuntime.readWorldSnapshot(3_300);
   const firstPlayerActiveBody =
     readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(
       readPlayerSnapshot(worldSnapshot, firstPlayerId)
@@ -155,10 +155,118 @@ test("MetaverseRoomRuntime exposes assignment and directory metadata for team de
     directoryEntry.redTeamPlayerCount + directoryEntry.blueTeamPlayerCount,
     2
   );
-  assert.equal(directoryEntry.phase, "active");
+  assert.equal(directoryEntry.phase, "starting");
   assert.equal(firstPlayerActiveBody.position.x, 0.8);
   assert.equal(firstPlayerActiveBody.position.y, 0.6);
   assert.equal(firstPlayerActiveBody.position.z, -22.2);
+});
+
+test("MetaverseRoomRuntime keeps solo team deathmatch warmup playable before match reset", () => {
+  const roomRuntime = createTeamDeathmatchRoomRuntime();
+  const firstPlayerId = requireValue(
+    createMetaversePlayerId("tdm-solo-warmup"),
+    "firstPlayerId"
+  );
+  const secondPlayerId = requireValue(
+    createMetaversePlayerId("tdm-warmup-starter"),
+    "secondPlayerId"
+  );
+  const weaponId = "metaverse-service-pistol-v2";
+  const weaponProfile = readMetaverseCombatWeaponProfile(weaponId);
+
+  roomRuntime.acceptPresenceCommand(
+    createGroundedJoinPresenceCommand(
+      firstPlayerId,
+      requireValue(createUsername("warmup"), "warmupUsername"),
+      0,
+      "red"
+    ),
+    0
+  );
+
+  const waitingWorldSnapshot = roomRuntime.readWorldSnapshot(0, firstPlayerId);
+  const waitingPlayerSnapshot = readPlayerSnapshot(
+    waitingWorldSnapshot,
+    firstPlayerId
+  );
+  const waitingBody =
+    readMetaverseRealtimePlayerActiveBodyKinematicSnapshot(waitingPlayerSnapshot);
+
+  assert.equal(waitingWorldSnapshot.combatMatch?.phase, "waiting-for-players");
+
+  roomRuntime.acceptWorldCommand(
+    createFireWeaponPlayerActionCommand({
+      actionSequence: 1,
+      issuedAtAuthoritativeTimeMs: 100,
+      origin: {
+        x: waitingBody.position.x,
+        y: waitingBody.position.y + weaponProfile.firingOriginHeightMeters,
+        z: waitingBody.position.z
+      },
+      playerId: firstPlayerId,
+      target: {
+        x: waitingBody.position.x,
+        y: waitingBody.position.y + weaponProfile.firingOriginHeightMeters,
+        z: waitingBody.position.z - 20
+      },
+      weaponId
+    }),
+    100
+  );
+
+  const warmupWorldSnapshot = roomRuntime.readWorldSnapshot(100, firstPlayerId);
+  const warmupPlayerSnapshot = readPlayerSnapshot(
+    warmupWorldSnapshot,
+    firstPlayerId
+  );
+  const warmupFireReceipt =
+    warmupWorldSnapshot.observerPlayer?.recentPlayerActionReceipts.find(
+      (receipt) => receipt.kind === "fire-weapon" && receipt.actionSequence === 1
+    ) ?? null;
+  const warmupWeaponStats =
+    warmupPlayerSnapshot.combat?.weaponStats.find(
+      (candidateStats) => candidateStats.weaponId === weaponId
+    ) ?? null;
+
+  assert.equal(warmupWorldSnapshot.combatMatch?.phase, "waiting-for-players");
+  assert.equal(warmupFireReceipt?.status, "accepted");
+  assert.equal(warmupWeaponStats?.shotsFired, 1);
+  assert.equal(
+    warmupPlayerSnapshot.combat?.activeWeapon?.ammoInMagazine,
+    weaponProfile.magazine.magazineCapacity - 1
+  );
+
+  roomRuntime.acceptPresenceCommand(
+    createGroundedJoinPresenceCommand(
+      secondPlayerId,
+      requireValue(createUsername("starter"), "starterUsername"),
+      4,
+      "blue"
+    ),
+    200
+  );
+
+  const startingWorldSnapshot = roomRuntime.readWorldSnapshot(200, firstPlayerId);
+
+  assert.equal(startingWorldSnapshot.combatMatch?.phase, "starting");
+  assert.equal(Number(startingWorldSnapshot.combatMatch?.timeRemainingMs), 3_000);
+
+  const activeWorldSnapshot = roomRuntime.readWorldSnapshot(3_300, firstPlayerId);
+  const activePlayerSnapshot = readPlayerSnapshot(
+    activeWorldSnapshot,
+    firstPlayerId
+  );
+  const activeWeaponStats =
+    activePlayerSnapshot.combat?.weaponStats.find(
+      (candidateStats) => candidateStats.weaponId === weaponId
+    ) ?? null;
+
+  assert.equal(activeWorldSnapshot.combatMatch?.phase, "active");
+  assert.equal(
+    activePlayerSnapshot.combat?.activeWeapon?.ammoInMagazine,
+    weaponProfile.magazine.magazineCapacity
+  );
+  assert.equal(activeWeaponStats?.shotsFired, 0);
 });
 
 test("MetaverseRoomRuntime balances same-lane team deathmatch joins before combat authority resolves hits", () => {

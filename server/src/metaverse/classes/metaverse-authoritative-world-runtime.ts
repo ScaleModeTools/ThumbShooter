@@ -456,6 +456,9 @@ export class MetaverseAuthoritativeWorldRuntime
       playerInactivityTimeoutMs:
         config.playerInactivityTimeoutMs ??
         metaverseAuthoritativeWorldRuntimeConfig.playerInactivityTimeoutMs,
+      teamDeathmatchStartCountdownMs:
+        config.teamDeathmatchStartCountdownMs ??
+        metaverseAuthoritativeWorldRuntimeConfig.teamDeathmatchStartCountdownMs,
       tickIntervalMs:
         config.tickIntervalMs ??
         metaverseAuthoritativeWorldRuntimeConfig.tickIntervalMs
@@ -822,6 +825,7 @@ export class MetaverseAuthoritativeWorldRuntime
         )
       ),
       matchMode: launchVariation?.matchMode ?? null,
+      matchStartCountdownMs: Number(this.#config.teamDeathmatchStartCountdownMs),
       physicsRuntime: this.#physicsRuntime,
       playerTraversalColliderHandles: this.#playerTraversalColliderHandles,
       playersById: this.#playersById,
@@ -831,6 +835,14 @@ export class MetaverseAuthoritativeWorldRuntime
       readTickIntervalMs: () => Number(this.#config.tickIntervalMs),
       resolveRespawnPose: (playerId, teamId) =>
         this.#resolveRespawnPose(playerId, teamId, bundleInputs),
+      resetPlayerWeaponStateForMatchStart: (playerRuntime) => {
+        playerRuntime.weaponState = createPlayerWeaponStateFromLayout(
+          weaponLayout,
+          playerRuntime.playerId
+        );
+      },
+      resetWorldResourceSpawnsForMatchStart: () =>
+        this.#resourceSpawnAuthority.resetResourceSpawns(),
       syncAuthoritativePlayerLookToCurrentFacing: (playerRuntime) =>
         this.#playerStateSync.syncAuthoritativePlayerLookToCurrentFacing(
           playerRuntime

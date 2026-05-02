@@ -188,7 +188,8 @@ test("MetaverseRoomDirectory advances completed TDM rooms into the next match in
   const roomDirectory = new MetaverseRoomDirectory({
     playerBindingTimeoutMs: 1_000_000,
     runtimeConfig: {
-      playerInactivityTimeoutMs: 1_000_000
+      playerInactivityTimeoutMs: 1_000_000,
+      teamDeathmatchStartCountdownMs: 0
     }
   });
   const roomId = requireValue(createMetaverseRoomId("tdm-loop"), "roomId");

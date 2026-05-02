@@ -25,7 +25,7 @@ interface MetaverseRuntimeCombatLifecycleRemoteWorldRuntime {
     maxAuthoritativeSnapshotAgeMs: number
   ): {
     readonly combatMatch: {
-      readonly phase: "active" | "completed" | "waiting-for-players";
+      readonly phase: "active" | "completed" | "starting" | "waiting-for-players";
     } | null;
   } | null;
 }
@@ -56,6 +56,7 @@ export class MetaverseRuntimeCombatLifecycle {
   #lastAuthoritativeMatchPhase:
     | "active"
     | "completed"
+    | "starting"
     | "waiting-for-players"
     | null = null;
 
@@ -101,7 +102,8 @@ export class MetaverseRuntimeCombatLifecycle {
 
     if (
       combatSnapshot.alive &&
-      this.#lastAuthoritativeMatchPhase === "waiting-for-players" &&
+      (this.#lastAuthoritativeMatchPhase === "waiting-for-players" ||
+        this.#lastAuthoritativeMatchPhase === "starting") &&
       matchPhase === "active"
     ) {
       this.#authoritativeWorldSync.armLocalSpawnBootstrap();
